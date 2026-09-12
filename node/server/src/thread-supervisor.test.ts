@@ -121,14 +121,36 @@ describe("SystemInfoSupervisor", () => {
     git: undefined,
   };
   it("injects once, and again after a reset", async () => {
-    const sup = new SystemInfoSupervisor(systemInfo, {
+    const sup = SystemInfoSupervisor.create({
+      systemInfo,
       alreadyInjected: false,
     });
-    expect((await sup.onBeforeRequest()).type).toBe("inject");
-    expect((await sup.onBeforeRequest()).type).toBe("none");
+    expect((await sup.onBeforeRequest(context)).type).toBe("inject");
+    expect((await sup.onBeforeRequest(context)).type).toBe("none");
     sup.onReset();
-    expect((await sup.onBeforeRequest()).type).toBe("inject");
-    expect((await sup.onBeforeRequest()).type).toBe("none");
+    expect((await sup.onBeforeRequest(context)).type).toBe("inject");
+    expect((await sup.onBeforeRequest(context)).type).toBe("none");
+  });
+
+  it("restores whether the preamble existed at the clone point", async () => {
+    const source = SystemInfoSupervisor.create({
+      systemInfo,
+      alreadyInjected: false,
+    });
+    await source.onBeforeRequest({
+      ...context,
+      nativeMessageIdx: 2 as NativeMessageIdx,
+    });
+    const before = SystemInfoSupervisor.clone({
+      source,
+      nativeMessageIdx: 1 as NativeMessageIdx,
+    });
+    const through = SystemInfoSupervisor.clone({
+      source,
+      nativeMessageIdx: 2 as NativeMessageIdx,
+    });
+    expect((await before.onBeforeRequest(context)).type).toBe("inject");
+    expect((await through.onBeforeRequest(context)).type).toBe("none");
   });
 });
 

@@ -6,6 +6,7 @@ import type {
   StopReason,
   ToolResults,
 } from "./providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import {
   formatSystemInfo,
   type SystemInfo,
@@ -232,29 +233,41 @@ function containsYieldTag(
  * get it — the compaction thread, whose content its caller composes exactly,
  * does not. */
 export class SystemInfoSupervisor implements ThreadSupervisor {
-  /** `alreadyInjected` is required rather than defaulted: a thread forked
-   * from another starts from a log that already carries the preamble, and a
-   * new call site that forgets to say so would silently repeat it. */
-  constructor(
+  private constructor(
     private readonly systemInfo: SystemInfo,
-    { alreadyInjected }: { alreadyInjected: boolean },
-  ) {
-    this.injected = alreadyInjected;
+    private injectedAt: NativeMessageIdx | undefined,
+  ) {}
+
+  static create(args: {
+    systemInfo: SystemInfo;
+    alreadyInjected: boolean;
+  }): SystemInfoSupervisor {
+    return new SystemInfoSupervisor(
+      args.systemInfo,
+      args.alreadyInjected ? PLACEHOLDER_NATIVE_MESSAGE_IDX : undefined,
+    );
   }
 
-  /** The preamble is once per conversation, so which request carries it is
-   * this supervisor's own bookkeeping rather than something the request has to
-   * describe itself as. Compaction re-arms it: the replacement log starts
-   * empty. */
-  private injected: boolean;
+  static clone(args: {
+    source: SystemInfoSupervisor;
+    nativeMessageIdx: NativeMessageIdx;
+  }): SystemInfoSupervisor {
+    return new SystemInfoSupervisor(
+      args.source.systemInfo,
+      args.source.injectedAt !== undefined &&
+        args.source.injectedAt <= args.nativeMessageIdx
+        ? args.source.injectedAt
+        : undefined,
+    );
+  }
 
   onReset(): void {
-    this.injected = false;
+    this.injectedAt = undefined;
   }
 
-  async onBeforeRequest(): Promise<SupervisorAction> {
-    if (this.injected) return { type: "none" };
-    this.injected = true;
+  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
+    if (this.injectedAt !== undefined) return { type: "none" };
+    this.injectedAt = context.nativeMessageIdx;
     return injectText(formatSystemInfo(this.systemInfo));
   }
 }

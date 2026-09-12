@@ -1,6 +1,8 @@
 import type { GitClient, GitState } from "../capabilities/git-client.ts";
 import { formatGitHead } from "../capabilities/git-client.ts";
 import type { Logger } from "../logger.ts";
+import type { NativeMessageIdx } from "../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 
 export type GitContextUpdate = {
   previous: GitState | undefined;
@@ -23,30 +25,63 @@ function coarseChanged(
   );
 }
 
-export class GitTracker {
-  /** What the agent has been told about git state. */
-  private agentView: GitState | undefined;
+type GitViewEntry = {
+  readonly nativeMessageIdx: NativeMessageIdx;
+  state: GitState | undefined;
+};
 
-  constructor(
-    private gitClient: GitClient,
-    initialState: GitState | undefined,
-    private logger: Logger,
-  ) {
-    this.agentView = initialState;
+function cloneState(state: GitState | undefined): GitState | undefined {
+  return state ? { ...state } : undefined;
+}
+
+export class GitTracker {
+  private constructor(
+    private readonly gitClient: GitClient,
+    private readonly logger: Logger,
+    private readonly history: GitViewEntry[],
+  ) {}
+
+  static create(args: {
+    gitClient: GitClient;
+    initialState: GitState | undefined;
+    logger: Logger;
+  }): GitTracker {
+    return new GitTracker(args.gitClient, args.logger, [
+      {
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        state: cloneState(args.initialState),
+      },
+    ]);
+  }
+
+  static clone(args: {
+    source: GitTracker;
+    nativeMessageIdx: NativeMessageIdx;
+  }): GitTracker {
+    return new GitTracker(
+      args.source.gitClient,
+      args.source.logger,
+      args.source.history
+        .filter((entry) => entry.nativeMessageIdx <= args.nativeMessageIdx)
+        .map((entry) => ({
+          nativeMessageIdx: entry.nativeMessageIdx,
+          state: cloneState(entry.state),
+        })),
+    );
   }
 
   getAgentView(): GitState | undefined {
-    return this.agentView;
+    return cloneState(this.history.at(-1)?.state);
   }
 
-  /** Polls current git state and, if the coarse identity changed since the
-   * agent last saw it, commits the new state to the agent view and returns the
-   * update. Returns undefined when nothing worth reporting changed. */
   /** Whether `getUpdate` would report something right now, without committing
    * the agent view. A probe for a request that may never be issued. */
   async hasUpdate(): Promise<boolean> {
     try {
-      return coarseChanged(this.agentView, await this.gitClient.getState());
+      return coarseChanged(
+        this.getAgentView(),
+        await this.gitClient.getState(),
+      );
     } catch (error) {
       this.logger.error(
         `GitTracker failed to read git state: ${String(error)}`,
@@ -55,7 +90,10 @@ export class GitTracker {
     }
   }
 
-  async getUpdate(): Promise<GitContextUpdate | undefined> {
+  /** Polls current git state and commits the state this request will reveal. */
+  async getUpdate(
+    nativeMessageIdx: NativeMessageIdx,
+  ): Promise<GitContextUpdate | undefined> {
     let current: GitState | undefined;
     try {
       current = await this.gitClient.getState();
@@ -66,15 +104,21 @@ export class GitTracker {
       return undefined;
     }
 
-    if (!coarseChanged(this.agentView, current)) {
-      // Keep counts fresh without reporting, so the agent view stays accurate.
-      this.agentView = current;
+    const previous = this.getAgentView();
+    if (!coarseChanged(previous, current)) {
+      const latest = this.history.at(-1);
+      if (latest) latest.state = cloneState(current);
       return undefined;
     }
 
-    const previous = this.agentView;
-    this.agentView = current;
-    return { previous, current };
+    const previousIdx = this.history.at(-1)?.nativeMessageIdx;
+    if (previousIdx !== undefined && nativeMessageIdx < previousIdx) {
+      throw new Error(
+        `Git view history must be monotonic: ${nativeMessageIdx} < ${previousIdx}`,
+      );
+    }
+    this.history.push({ nativeMessageIdx, state: cloneState(current) });
+    return { previous, current: cloneState(current) };
   }
 }
 
@@ -108,19 +152,43 @@ import { injectText } from "../thread-supervisor.ts";
  * `GitTracker.getUpdate` commits the agent view as a side effect, which is
  * correct here: an injection is applied unconditionally. */
 export class GitSupervisor implements ThreadSupervisor {
-  readonly gitTracker: GitTracker;
-  private readonly onSent: ((update: GitContextUpdate) => void) | undefined;
+  private constructor(
+    readonly gitTracker: GitTracker,
+    private readonly onSent: ((update: GitContextUpdate) => void) | undefined,
+  ) {}
 
-  constructor(args: {
-    gitTracker: GitTracker;
+  static create(args: {
+    gitClient: GitClient;
+    initialGitState: GitState | undefined;
+    logger: Logger;
     onSent?: (update: GitContextUpdate) => void;
-  }) {
-    this.gitTracker = args.gitTracker;
-    this.onSent = args.onSent;
+  }): GitSupervisor {
+    return new GitSupervisor(
+      GitTracker.create({
+        gitClient: args.gitClient,
+        initialState: args.initialGitState,
+        logger: args.logger,
+      }),
+      args.onSent,
+    );
   }
 
-  async onBeforeRequest(_context: RequestContext): Promise<SupervisorAction> {
-    const update = await this.gitTracker.getUpdate();
+  static clone(args: {
+    source: GitSupervisor;
+    nativeMessageIdx: NativeMessageIdx;
+    onSent?: (update: GitContextUpdate) => void;
+  }): GitSupervisor {
+    return new GitSupervisor(
+      GitTracker.clone({
+        source: args.source.gitTracker,
+        nativeMessageIdx: args.nativeMessageIdx,
+      }),
+      args.onSent,
+    );
+  }
+
+  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
+    const update = await this.gitTracker.getUpdate(context.nativeMessageIdx);
     if (!update) return { type: "none" };
     this.onSent?.(update);
     return injectText(gitUpdateToText(update));

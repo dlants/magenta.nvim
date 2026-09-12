@@ -242,7 +242,6 @@ export class Thread {
       id: newId,
       context,
       nativeMessageIdx,
-      sourceBusy: sourceThread.isBusy,
       callbacks: {
         onUpdate: () => cloned.handleUpdate(),
         getHooks: () => cloned.hooks,

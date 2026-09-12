@@ -6,7 +6,10 @@ import { FsFileIO } from "./capabilities/file-io.ts";
 import type { GitState } from "./capabilities/git-client.ts";
 import { runSubmission } from "./compaction/index.ts";
 import type { MockStream } from "./providers/mock-anthropic-client.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
+import {
+  type NativeMessageIdx,
+  PLACEHOLDER_NATIVE_MESSAGE_IDX,
+} from "./providers/provider-types.ts";
 import { resolveAsText } from "./submission/index.ts";
 import { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import {
@@ -236,10 +239,76 @@ describe("Thread-owned context delivery", () => {
       await f.cleanup();
     }
   });
+  it("rewinding before a git update makes the clone deliver it again", async () => {
+    const f = await fixture();
+    let fork: Thread | undefined;
+    try {
+      await f.request();
+      const forkPoint = f.thread.inferenceManager.getNativeMessageIdx();
+      f.setGit();
+      expect(await f.request(f.thread, "observe changed git")).toContain(
+        "replacement-branch",
+      );
+      fork = await Thread.clone({
+        sourceThread: f.thread,
+        newId: uniqueThreadId("git-rewind"),
+        nativeMessageIdx: forkPoint,
+        context: f.thread.context,
+        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+      });
+      expect(await f.request(fork, "continue before git update")).toContain(
+        "replacement-branch",
+      );
+    } finally {
+      if (fork) {
+        await fork.destroy();
+        await fork.awaitArchiveFlush();
+        await cleanupArchive(fork.id);
+      }
+      await f.cleanup();
+    }
+  });
+
+  it("restores system-info delivery at the clone's effective index", async () => {
+    const f = await fixture();
+    const forks: Thread[] = [];
+    try {
+      await f.request();
+      const head = await Thread.clone({
+        sourceThread: f.thread,
+        newId: uniqueThreadId("system-info-head"),
+        nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
+        context: f.thread.context,
+        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+      });
+      forks.push(head);
+      const headText = await f.request(head, "continue at head");
+      expect(headText.match(/<system-info>/g)).toHaveLength(1);
+
+      const before = await Thread.clone({
+        sourceThread: f.thread,
+        newId: uniqueThreadId("system-info-before"),
+        nativeMessageIdx: -1 as NativeMessageIdx,
+        context: f.thread.context,
+        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+      });
+      forks.push(before);
+      const beforeText = await f.request(before, "start before preamble");
+      expect(beforeText.match(/<system-info>/g)).toHaveLength(1);
+    } finally {
+      for (const fork of forks) {
+        await fork.destroy();
+        await fork.awaitArchiveFlush();
+        await cleanupArchive(fork.id);
+      }
+      await f.cleanup();
+    }
+  });
+
   it.each([
     false,
     true,
-  ])("tip fork preserves delivery only while idle (busy=%s)", async (busy) => {
+  ])("tip fork preserves delivery through its effective clone point (busy=%s)", async (busy) => {
     const f = await fixture();
     let fork: Thread | undefined;
     try {
@@ -269,15 +338,15 @@ describe("Thread-owned context delivery", () => {
       });
       const tracker = fork.core.fileSupervisor;
       expect(tracker).not.toBe(f.manager);
+      expect(tracker.files[f.file].agentView).toEqual(
+        f.manager.files[f.file].agentView,
+      );
+      expect(tracker.getPendingUpdates()).toEqual({});
       if (busy) {
-        expect(tracker.files[f.file].agentView).toBeUndefined();
+        expect(await tracker.hasPendingContent()).toBe(false);
         await f.thread.abort();
         await sent;
       } else {
-        expect(tracker.files[f.file].agentView).toEqual(
-          f.manager.files[f.file].agentView,
-        );
-        expect(tracker.getPendingUpdates()).toEqual({});
         expect(await tracker.hasPendingContent()).toBe(true);
         expect(tracker.getPendingUpdates()).toEqual(
           f.manager.getPendingUpdates(),

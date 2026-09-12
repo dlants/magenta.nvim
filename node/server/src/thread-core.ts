@@ -7,7 +7,6 @@ import {
 import {
   type GitContextUpdate,
   GitSupervisor,
-  GitTracker,
 } from "./supervisors/git-supervisor.ts";
 import {
   composeSupervisors,
@@ -83,6 +82,7 @@ export class ThreadCore {
   pendingSeed: AgentInput[] = [];
   private disposed = false;
   readonly gitSupervisor: GitSupervisor | undefined;
+  readonly systemInfoSupervisor: SystemInfoSupervisor | undefined;
   private readonly contextHooks: ThreadHooks;
 
   async hasPendingContext(): Promise<boolean> {
@@ -97,8 +97,9 @@ export class ThreadCore {
     readonly toolSpecs: ProviderToolSpec[],
     readonly edlRegisters: EdlRegisters,
     readonly fileSupervisor: FileSupervisor,
+    gitSupervisor: GitSupervisor | undefined,
+    systemInfoSupervisor: SystemInfoSupervisor | undefined,
   ) {
-    const delivery = context.contextDelivery;
     for (const event of [
       "fileAdded",
       "fileRemoved",
@@ -109,28 +110,12 @@ export class ThreadCore {
     }
     this.fileSupervisor.start();
     this.systemReminders = this.createReminderSupervisor();
-    if (delivery) {
-      this.gitSupervisor = new GitSupervisor({
-        gitTracker: new GitTracker(
-          context.gitClient,
-          delivery.initialGitState,
-          context.logger,
-        ),
-        onSent: (update) => {
-          if (this.isActive) delivery.onGitSent?.(update);
-        },
-      });
-    }
+    this.gitSupervisor = gitSupervisor;
+    this.systemInfoSupervisor = systemInfoSupervisor;
     const supervisors = [
       ...(this.gitSupervisor ? [this.gitSupervisor] : []),
       ...(context.threadType !== "compact" ? [this.fileSupervisor] : []),
-      ...(delivery && context.threadType !== "compact"
-        ? [
-            new SystemInfoSupervisor(context.systemInfo, {
-              alreadyInjected: this.manager.log.messages.length > 0,
-            }),
-          ]
-        : []),
+      ...(this.systemInfoSupervisor ? [this.systemInfoSupervisor] : []),
     ];
     this.contextHooks = composeSupervisors(() => supervisors);
   }
@@ -167,6 +152,23 @@ export class ThreadCore {
         if (core?.isActive) delivery?.onFilesSent?.(updates);
       },
     });
+    const gitSupervisor = delivery
+      ? GitSupervisor.create({
+          gitClient: context.gitClient,
+          initialGitState: delivery.initialGitState,
+          logger: context.logger,
+          onSent: (update) => {
+            if (core?.isActive) delivery.onGitSent?.(update);
+          },
+        })
+      : undefined;
+    const systemInfoSupervisor =
+      delivery && context.threadType !== "compact"
+        ? SystemInfoSupervisor.create({
+            systemInfo: context.systemInfo,
+            alreadyInjected: manager.log.messages.length > 0,
+          })
+        : undefined;
     core = new ThreadCore(
       id,
       context,
@@ -175,6 +177,8 @@ export class ThreadCore {
       toolSpecs,
       edlRegisters,
       fileSupervisor,
+      gitSupervisor,
+      systemInfoSupervisor,
     );
     return core;
   }
@@ -185,14 +189,12 @@ export class ThreadCore {
     context,
     callbacks,
     nativeMessageIdx,
-    sourceBusy = false,
   }: {
     source: ThreadCore;
     id: ThreadId;
     context: ThreadContext;
     callbacks: ThreadCoreCallbacks;
     nativeMessageIdx: NativeMessageIdx;
-    sourceBusy?: boolean;
   }): ThreadCore {
     const toolSpecs = getToolSpecs(
       context.threadType,
@@ -206,26 +208,34 @@ export class ThreadCore {
     );
     const manager = source.manager.clone();
     manager.truncateMessages(nativeMessageIdx);
-    const preserve =
-      source.isActive &&
-      !sourceBusy &&
-      !source.activity &&
-      nativeMessageIdx === source.manager.getNativeMessageIdx() &&
-      manager.getNativeMessageIdx() === source.manager.getNativeMessageIdx();
+    const effectiveNativeMessageIdx = manager.getNativeMessageIdx();
     const delivery = context.contextDelivery;
     let clone: ThreadCore | undefined;
     const fileSupervisor = FileSupervisor.clone({
       source: source.fileSupervisor,
-      history: preserve
-        ? {
-            type: "truncate",
-            nativeMessageIdx: source.manager.getNativeMessageIdx(),
-          }
-        : { type: "reseed" },
+      history: {
+        type: "truncate",
+        nativeMessageIdx: effectiveNativeMessageIdx,
+      },
       onSent: (updates) => {
         if (clone?.isActive) delivery?.onFilesSent?.(updates);
       },
     });
+    const gitSupervisor = source.gitSupervisor
+      ? GitSupervisor.clone({
+          source: source.gitSupervisor,
+          nativeMessageIdx: effectiveNativeMessageIdx,
+          onSent: (update) => {
+            if (clone?.isActive) delivery?.onGitSent?.(update);
+          },
+        })
+      : undefined;
+    const systemInfoSupervisor = source.systemInfoSupervisor
+      ? SystemInfoSupervisor.clone({
+          source: source.systemInfoSupervisor,
+          nativeMessageIdx: effectiveNativeMessageIdx,
+        })
+      : undefined;
     clone = new ThreadCore(
       id,
       context,
@@ -237,10 +247,11 @@ export class ThreadCore {
         nextSavedId: source.edlRegisters.nextSavedId,
       },
       fileSupervisor,
+      gitSupervisor,
+      systemInfoSupervisor,
     );
     return clone;
   }
-
   get isActive(): boolean {
     return !this.disposed;
   }

@@ -38,10 +38,14 @@ function setup(current: GitState, initial: GitState | undefined) {
   const gitClient: GitClient = {
     getState: () => Promise.resolve(current),
   } as unknown as GitClient;
-  const tracker = new GitTracker(gitClient, initial, noopLogger);
   const onSent = vi.fn<(u: GitContextUpdate) => void>();
   return {
-    supervisor: new GitSupervisor({ gitTracker: tracker, onSent }),
+    supervisor: GitSupervisor.create({
+      gitClient,
+      initialGitState: initial,
+      logger: noopLogger,
+      onSent,
+    }),
     onSent,
   };
 }
@@ -163,39 +167,40 @@ const base: GitState = {
   untrackedCount: 0,
 };
 
+function trackerFor(
+  states: (GitState | undefined)[],
+  initialState: GitState | undefined = base,
+): GitTracker {
+  return GitTracker.create({
+    gitClient: clientFor(states),
+    initialState,
+    logger: noopLogger,
+  });
+}
+
 describe("GitTracker", () => {
   it("does not report when only file counts change", async () => {
-    const tracker = new GitTracker(
-      clientFor([{ ...base, untrackedCount: 5 }]),
-      base,
-      noopLogger,
-    );
-    expect(await tracker.getUpdate()).toBeUndefined();
+    const tracker = trackerFor([{ ...base, untrackedCount: 5 }]);
+    expect(await tracker.getUpdate(1 as NativeMessageIdx)).toBeUndefined();
   });
 
   it("reports when the branch changes", async () => {
-    const tracker = new GitTracker(
-      clientFor([{ ...base, branch: "feature" }]),
-      base,
-      noopLogger,
-    );
-    const update = await tracker.getUpdate();
+    const tracker = trackerFor([{ ...base, branch: "feature" }]);
+    const update = await tracker.getUpdate(1 as NativeMessageIdx);
     expect(update?.current?.branch).toBe("feature");
     expect(update?.previous?.branch).toBe("main");
   });
 
   it("reports when HEAD moves", async () => {
-    const tracker = new GitTracker(
-      clientFor([{ ...base, headSha: "sha2", headSubject: "second" }]),
-      base,
-      noopLogger,
-    );
-    expect(await tracker.getUpdate()).toBeDefined();
+    const tracker = trackerFor([
+      { ...base, headSha: "sha2", headSubject: "second" },
+    ]);
+    expect(await tracker.getUpdate(1 as NativeMessageIdx)).toBeDefined();
   });
 
   it("reports leaving a repository", async () => {
-    const tracker = new GitTracker(clientFor([undefined]), base, noopLogger);
-    const update = await tracker.getUpdate();
+    const tracker = trackerFor([undefined]);
+    const update = await tracker.getUpdate(1 as NativeMessageIdx);
     expect(update?.current).toBeUndefined();
     expect(gitUpdateToText(update!)).toContain(
       "no longer inside a git repository",
@@ -204,31 +209,58 @@ describe("GitTracker", () => {
 
   it("peeks a pending update without committing the agent view", async () => {
     const changed = { ...base, branch: "feature" };
-    const tracker = new GitTracker(clientFor([changed]), base, noopLogger);
+    const tracker = trackerFor([changed]);
     expect(await tracker.hasUpdate()).toBe(true);
     expect(await tracker.hasUpdate()).toBe(true);
-    expect((await tracker.getUpdate())?.current?.branch).toBe("feature");
+    expect(
+      (await tracker.getUpdate(1 as NativeMessageIdx))?.current?.branch,
+    ).toBe("feature");
   });
+
   it("peeks false when nothing worth reporting changed", async () => {
-    const tracker = new GitTracker(
-      clientFor([{ ...base, untrackedCount: 5 }]),
-      base,
-      noopLogger,
-    );
+    const tracker = trackerFor([{ ...base, untrackedCount: 5 }]);
     expect(await tracker.hasUpdate()).toBe(false);
   });
+
   it("peeks false when reading git state throws", async () => {
-    const tracker = new GitTracker(
-      { getState: () => Promise.reject(new Error("git is down")) },
-      base,
-      noopLogger,
-    );
+    const tracker = GitTracker.create({
+      gitClient: {
+        getState: () => Promise.reject(new Error("git is down")),
+      },
+      initialState: base,
+      logger: noopLogger,
+    });
     expect(await tracker.hasUpdate()).toBe(false);
   });
+
   it("commits the agent view so a change is reported only once", async () => {
     const changed = { ...base, branch: "feature" };
-    const tracker = new GitTracker(clientFor([changed]), base, noopLogger);
-    expect(await tracker.getUpdate()).toBeDefined();
-    expect(await tracker.getUpdate()).toBeUndefined();
+    const tracker = trackerFor([changed]);
+    expect(await tracker.getUpdate(1 as NativeMessageIdx)).toBeDefined();
+    expect(await tracker.getUpdate(2 as NativeMessageIdx)).toBeUndefined();
+  });
+
+  it("a clone before a delivered update reports it again", async () => {
+    const changed = { ...base, branch: "feature" };
+    const tracker = trackerFor([changed]);
+    await tracker.getUpdate(3 as NativeMessageIdx);
+    const clone = GitTracker.clone({
+      source: tracker,
+      nativeMessageIdx: 2 as NativeMessageIdx,
+    });
+    expect(
+      (await clone.getUpdate(4 as NativeMessageIdx))?.current?.branch,
+    ).toBe("feature");
+  });
+
+  it("a clone through a delivered update does not report it again", async () => {
+    const changed = { ...base, branch: "feature" };
+    const tracker = trackerFor([changed]);
+    await tracker.getUpdate(3 as NativeMessageIdx);
+    const clone = GitTracker.clone({
+      source: tracker,
+      nativeMessageIdx: 3 as NativeMessageIdx,
+    });
+    expect(await clone.getUpdate(4 as NativeMessageIdx)).toBeUndefined();
   });
 });

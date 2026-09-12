@@ -1222,7 +1222,8 @@ describe("system-info preamble", () => {
     );
     // One instance, not one per consultation: the supervisor's own state is
     // what decides which request carries the preamble.
-    const systemInfo = new SystemInfoSupervisor(core.systemInfo, {
+    const systemInfo = SystemInfoSupervisor.create({
+      systemInfo: core.systemInfo,
       alreadyInjected: false,
     });
     core.hooks = composeSupervisors(() => [systemInfo]);

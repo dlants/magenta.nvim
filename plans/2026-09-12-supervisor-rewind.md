@@ -341,13 +341,55 @@ SystemInfoSupervisor.clone({ source, nativeMessageIdx });
   - A file added to context after idx N is still tracked by the clone but is sent whole.
   - A file deleted on disk after the clone point reports `file-deleted` against the restored snapshot.
 
-## GitSupervisor history + ThreadCore wiring
+## GitSupervisor history + ThreadCore wiring — **DONE**
 
-- Goal: `GitTracker` keeps history; `ThreadCore.clone` clones the git, file, and system-info supervisors from the source at `nativeMessageIdx` instead of rebuilding them, and the `preserve`/`sourceBusy` heuristic is deleted.
-- Tests:
-  - Cloning a thread at an idx before a git update was injected re-injects the git update on the next request.
-  - Cloning at the head of a thread that has already seen the system-info preamble does not repeat it; cloning at idx 0 does.
-  - `fork-thread.test.ts` still passes; extend it with a fork-at-an-earlier-message case that asserts re-delivery of file context.
+### What was done
+
+- `GitTracker` now owns an index-keyed history of agent-visible git states.
+  Coarse branch/HEAD/repository changes append at the request's
+  `nativeMessageIdx`; count-only refreshes update the latest entry without
+  manufacturing an agent-visible history event.
+- `GitSupervisor.create` and `GitSupervisor.clone` construct fresh and rewound
+  trackers respectively. Clones deep-copy and inclusively truncate history, so
+  a git update after the fork point is delivered again while one at the fork
+  point is retained.
+- `SystemInfoSupervisor.create` / `clone` replaced its boolean with
+  `injectedAt`. `onBeforeRequest` records the actual pending user-message idx,
+  clone retains it only through an inclusive boundary, and reset clears it.
+- `ThreadCore` now receives its git and system-info supervisors as owned
+  collaborators. `create` constructs them fresh; `clone` truncates the cloned
+  manager first, reads back `manager.getNativeMessageIdx()`, and uses that
+  effective index to clone file, git, and system-info state.
+- Removed `sourceBusy` and the preserve/reseed heuristic. Busy forks now retain
+  every context fact already committed to the native log, matching idle forks.
+- Added tracker and supervisor rewind coverage, Thread-level git and system-info
+  restoration tests, retained the earlier-message file-context fork coverage,
+  and updated busy-fork snapshots to stop expecting redundant git delivery.
+
+### Decisions and deviations
+
+- The initial git view is stored at `PLACEHOLDER_NATIVE_MESSAGE_IDX`: it is
+  seeded from `initialGitState` rather than learned by a supervisor hook. Every
+  real message boundary therefore retains the seed, while subsequent delivered
+  changes remain normally rewindable.
+- `SystemInfoSupervisor.create({ alreadyInjected: true })` likewise uses the
+  placeholder index because callers only know that a replacement log already
+  describes the preamble, not which original request carried it. Normal live
+  delivery always records the exact hook-supplied index.
+- The plan's illustrative "clone at idx 0 repeats system info" is not valid for
+  an Anthropic opening request: Stage 1 established that the preamble merges
+  into the user message at idx 0, and clone boundaries are inclusive. Tests
+  therefore assert that cloning at the injection idx retains it and cloning at
+  the effective empty-log boundary (`-1`) re-arms it.
+- `FileHistoryClone` keeps its explicit `reseed` variant for reset/direct file
+  supervisor use, but `ThreadCore.clone` no longer uses it; thread forks always
+  truncate against the manager's effective index.
+
+### Validation (stage 3)
+
+- Focused supervisor, context, and fork suites pass.
+- The full `npx vitest run` passes 1,675 tests (2 skipped, 1 todo).
+- `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
 
 ## SystemReminderSupervisor
 
