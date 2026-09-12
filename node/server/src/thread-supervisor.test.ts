@@ -12,6 +12,7 @@ import {
 } from "./thread-supervisor.ts";
 
 const context: RequestContext = {
+  status: "pending",
   inputTokenCount: 400000,
   outputTokenCount: 0,
   nativeMessageIdx: 0 as NativeMessageIdx,
@@ -162,6 +163,7 @@ describe("AutoCompactSupervisor", () => {
     });
     expect(
       await sup.onBeforeRequest({
+        status: "pending",
         inputTokenCount: 300000,
         outputTokenCount: 0,
         nativeMessageIdx: 0 as NativeMessageIdx,
@@ -172,6 +174,7 @@ describe("AutoCompactSupervisor", () => {
     });
     expect(
       await sup.onBeforeRequest({
+        status: "pending",
         inputTokenCount: 400000,
         outputTokenCount: 0,
         nativeMessageIdx: 0 as NativeMessageIdx,
@@ -189,6 +192,7 @@ describe("AutoCompactSupervisor", () => {
     });
     expect(
       await sup.onBeforeRequest({
+        status: "pending",
         inputTokenCount: 299999,
         outputTokenCount: 0,
         nativeMessageIdx: 0 as NativeMessageIdx,
@@ -196,6 +200,7 @@ describe("AutoCompactSupervisor", () => {
     ).toEqual({ type: "none" });
     expect(
       await sup.onBeforeRequest({
+        status: "pending",
         inputTokenCount: undefined,
         outputTokenCount: 0,
         nativeMessageIdx: 0 as NativeMessageIdx,
@@ -226,6 +231,7 @@ describe("AutoCompactSupervisor", () => {
     const sup = new AutoCompactSupervisor({ nextPrompt: "go" });
     expect(
       await sup.onBeforeRequest({
+        status: "pending",
         inputTokenCount: 300000,
         outputTokenCount: 0,
         nativeMessageIdx: 0 as NativeMessageIdx,
@@ -236,6 +242,7 @@ describe("AutoCompactSupervisor", () => {
     });
     expect(
       await sup.onBeforeRequest({
+        status: "pending",
         inputTokenCount: 299999,
         outputTokenCount: 0,
         nativeMessageIdx: 0 as NativeMessageIdx,

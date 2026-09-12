@@ -270,7 +270,7 @@ export class Thread {
     return cloned;
   }
   get activeReminders(): ReadonlySet<string> {
-    return this.core.systemReminders.activeReminders;
+    return this.core.systemReminders?.activeReminders ?? new Set();
   }
   /** Busy from the first request of a submission until the loop comes to
    * rest, which spans the gaps between turns. */
@@ -400,7 +400,10 @@ export class Thread {
       };
     }
     for (const text of resolved.reminders) {
-      this.core.systemReminders.activateReminder(text);
+      this.core.systemReminders?.activateReminder(
+        text,
+        this.core.manager.getPendingUserMessageIdx(),
+      );
     }
     return this.sendMessages(resolved.messages);
   }
@@ -460,7 +463,11 @@ export class Thread {
     for (let i = 0; i < count; i++) {
       const entry = this.queue(delivery).shift();
       if (entry === undefined) break;
-      const resolved = await this.resolveQueued(entry, isCurrent);
+      const resolved = await this.resolveQueued(
+        entry,
+        isCurrent,
+        this.core.manager.getPendingUserMessageIdx(),
+      );
       if (!isCurrent()) return { type: "messages", messages: [] };
       if (!resolved) continue;
       if (resolved.compact) {
@@ -483,7 +490,9 @@ export class Thread {
    * hand the transcript over from — so it is detected before resolution and
    * genuinely not delivered: it and everything behind it move to the `next`
    * queue, where the following stop picks them up. */
-  private async flushMidTurn(): Promise<AgentInput[]> {
+  private async flushMidTurn(
+    nativeMessageIdx: NativeMessageIdx,
+  ): Promise<AgentInput[]> {
     const isCurrent = this.currentLoopGuard();
     const count = this.nextRequestQueue.length;
     const messages: AgentInput[] = [];
@@ -497,7 +506,11 @@ export class Thread {
         );
         return messages;
       }
-      const resolved = await this.resolveQueued(entry, isCurrent);
+      const resolved = await this.resolveQueued(
+        entry,
+        isCurrent,
+        nativeMessageIdx,
+      );
       if (!isCurrent()) return [];
       if (resolved) messages.push(...resolved.messages);
     }
@@ -519,6 +532,7 @@ export class Thread {
   private async resolveQueued(
     entry: PendingMessage | AgentInput,
     isCurrent: () => boolean,
+    nativeMessageIdx: NativeMessageIdx,
   ) {
     if (typeof entry !== "string")
       return { compact: false, messages: [entry], reminders: [] };
@@ -526,7 +540,7 @@ export class Thread {
       const resolved = await this.callbacks.resolve(entry);
       if (!isCurrent()) return undefined;
       for (const text of resolved.reminders) {
-        this.core.systemReminders.activateReminder(text);
+        this.core.systemReminders?.activateReminder(text, nativeMessageIdx);
       }
       return resolved;
     } catch (error) {
@@ -548,7 +562,7 @@ export class Thread {
       return { type: "none" };
     return {
       type: "inject",
-      content: await this.flushMidTurn(),
+      content: await this.flushMidTurn(ctx.nativeMessageIdx),
     };
   }
   async send(

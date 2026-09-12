@@ -94,16 +94,7 @@ export type QueuedMessage = {
 };
 
 /** What the agent tells its owner about the request it is about to issue. */
-export type AgentRequestContext = RequestContext &
-  (
-    | { status: "pending" }
-    /** An earlier hook has already suspended this request, so it will never be
-     * issued. Later hooks are still consulted — a stop is a fact each of them
-     * may need to record — but one whose contribution commits state (draining
-     * a queue, marking a once-per-conversation reminder as sent) must
-     * decline. `reason` is the winning suspension. */
-    | { status: "suspended"; reason: SuspendReason }
-  );
+export type AgentRequestContext = RequestContext;
 
 /** One entry at the before-request point. An object rather than a function so
  * `Agent` can read `requestPreflightTokenCount` *without* invoking it, and so

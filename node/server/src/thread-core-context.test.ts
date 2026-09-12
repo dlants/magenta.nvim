@@ -19,6 +19,7 @@ import {
   uniqueThreadId,
 } from "./test-helpers.ts";
 import { Thread } from "./thread.ts";
+import { composeSupervisors } from "./thread-supervisor.ts";
 import {
   type AbsFilePath,
   FileCategory,
@@ -78,7 +79,7 @@ async function fixture() {
     const stream = await awaitNextStream(mockClient, previous);
     previous = stream;
     stream.streamText("done");
-    stream.finishResponse("end_turn");
+    stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
     await sent;
     return JSON.stringify(stream.messages);
   }
@@ -301,6 +302,96 @@ describe("Thread-owned context delivery", () => {
         await fork.awaitArchiveFlush();
         await cleanupArchive(fork.id);
       }
+      await f.cleanup();
+    }
+  });
+
+  it("a head fork retains standing and activated reminder history", async () => {
+    const f = await fixture();
+    let fork: Thread | undefined;
+    try {
+      const sourceText = await f.request();
+      expect(sourceText.match(/Remember the skills/g)).toHaveLength(1);
+      const forkPoint = f.thread.inferenceManager.getNativeMessageIdx();
+      f.thread.core.systemReminders?.activateReminder(
+        "retain this reminder",
+        forkPoint,
+      );
+
+      fork = await Thread.clone({
+        sourceThread: f.thread,
+        newId: uniqueThreadId("reminder-head"),
+        nativeMessageIdx: forkPoint,
+        context: f.thread.context,
+        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+      });
+      expect(fork.activeReminders).toEqual(new Set(["retain this reminder"]));
+      const forkText = await f.request(fork, "continue at head");
+      expect(forkText.match(/Remember the skills/g)).toHaveLength(1);
+    } finally {
+      if (fork) {
+        await fork.destroy();
+        await fork.awaitArchiveFlush();
+        await cleanupArchive(fork.id);
+      }
+      await f.cleanup();
+    }
+  });
+
+  it("a suspended request commits no context or reminder delivery", async () => {
+    const f = await fixture();
+    try {
+      f.setGit();
+      let suspend = true;
+      f.thread.hooks = composeSupervisors(() => [
+        {
+          onBeforeRequest: () =>
+            Promise.resolve(
+              suspend
+                ? {
+                    type: "suspend" as const,
+                    reason: { kind: "stop" as const, message: "halt" },
+                  }
+                : { type: "none" as const },
+            ),
+        },
+      ]);
+
+      expect(
+        await f.thread.send([
+          {
+            type: "text",
+            text: "start",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          },
+        ]),
+      ).toEqual({
+        type: "suspended",
+        reason: { kind: "stop", message: "halt" },
+      });
+      expect(f.mockClient.streams).toHaveLength(0);
+      expect(f.manager.files[f.file].agentView).toBeUndefined();
+      expect(
+        f.thread.core.gitSupervisor?.gitTracker.getAgentView()?.branch,
+      ).toBe("initial-branch");
+
+      suspend = false;
+      const sent = f.thread.send([
+        {
+          type: "text",
+          text: "resume",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ]);
+      const stream = await f.mockClient.awaitStream();
+      const text = JSON.stringify(stream.messages);
+      expect(text).toContain("original tracked content");
+      expect(text).toContain("replacement-branch");
+      expect(text).toContain("<system-info>");
+      expect(text).toContain("Remember the skills");
+      stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
+      await sent;
+    } finally {
       await f.cleanup();
     }
   });

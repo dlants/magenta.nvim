@@ -55,6 +55,7 @@ describe("GitSupervisor", () => {
     const { supervisor, onSent } = setup(state("feature"), state("main"));
 
     const action = await supervisor.onBeforeRequest({
+      status: "pending",
       inputTokenCount: 0,
       outputTokenCount: 0,
       nativeMessageIdx: 0 as NativeMessageIdx,
@@ -71,6 +72,7 @@ describe("GitSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
+          status: "pending",
           inputTokenCount: 0,
           outputTokenCount: 0,
           nativeMessageIdx: 0 as NativeMessageIdx,
@@ -85,6 +87,7 @@ describe("GitSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
+          status: "pending",
           inputTokenCount: 0,
           outputTokenCount: 0,
           nativeMessageIdx: 0 as NativeMessageIdx,

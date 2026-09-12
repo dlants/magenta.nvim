@@ -186,7 +186,12 @@ export type RequestContext = {
   outputTokenCount: number;
   /** The idx of the message that will carry this request's injections. */
   nativeMessageIdx: NativeMessageIdx;
-};
+} & (
+  | { status: "pending" }
+  /** An earlier hook has already suspended this request, so it will never be
+   * issued. A supervisor that commits agent-visible state must decline. */
+  | { status: "suspended"; reason: SuspendReason }
+);
 
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
@@ -266,7 +271,8 @@ export class SystemInfoSupervisor implements ThreadSupervisor {
   }
 
   async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
-    if (this.injectedAt !== undefined) return { type: "none" };
+    if (context.status === "suspended" || this.injectedAt !== undefined)
+      return { type: "none" };
     this.injectedAt = context.nativeMessageIdx;
     return injectText(formatSystemInfo(this.systemInfo));
   }

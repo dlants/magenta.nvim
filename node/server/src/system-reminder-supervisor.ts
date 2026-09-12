@@ -1,7 +1,10 @@
 import { extractSystemReminderBlock } from "./agents/agents.ts";
 import type { ContextTracker } from "./capabilities/context-tracker.ts";
 import type { SubagentConfig } from "./chat-types.ts";
-import type { ToolResults } from "./providers/provider-types.ts";
+import type {
+  NativeMessageIdx,
+  ToolResults,
+} from "./providers/provider-types.ts";
 import {
   buildSystemReminder,
   type ReminderKind,
@@ -11,6 +14,7 @@ import {
   injectText,
   type RequestContext,
   type SupervisorAction,
+  type ThreadSupervisor,
 } from "./thread-supervisor.ts";
 import {
   structuredResultFor,
@@ -21,111 +25,182 @@ import {
 /** Minimum output tokens between standing system reminders. */
 const SYSTEM_REMINDER_MIN_TOKEN_INTERVAL = 2000;
 
-/** What `Thread` needs of a reminder supervisor. Compact threads use
- * `noReminders` so callers never have to handle an absent one. */
-export interface ReminderSupervisor {
-  readonly activeReminders: ReadonlySet<string>;
-  activateReminder(text: string): void;
-  onToolResults(
-    results: ToolResults,
-    structured: ReadonlyMap<ToolRequestId, ToolStructuredResult>,
-  ): void;
-  onBeforeRequest(context: RequestContext): SupervisorAction;
-}
-
-export const noReminders: ReminderSupervisor = {
-  activeReminders: new Set(),
-  activateReminder() {},
-  onToolResults() {},
-  onBeforeRequest: () => ({ type: "none" }),
+type StandingReminderEntry = {
+  readonly nativeMessageIdx: NativeMessageIdx;
+  readonly outputTokenCount: number;
 };
 
-/** Owns everything about system reminders: which ones are active, when they
- * fire, and what they say. The agent knows nothing about any of it — it only
- * reports tool results and its cumulative output token count, and this turns
- * that into content injected before a request.
- *
- * Not a `ThreadSupervisor`: the owning `Thread` consults it directly, after
- * the externally-composed supervisors, so its injection always lands last —
- * immediately before the user's own text. */
-export class SystemReminderSupervisor implements ReminderSupervisor {
-  /** Transient reminders: activated by a resolved user message or a
-   * `get_files` read, and deduped on text. */
-  private readonly reminders = new Set<string>();
-  private pendingBashReminder = false;
-  /** The output token total the last standing reminder went out at. */
-  private tokensAtLastReminder = 0;
-  /** The opening request of a thread carries the standing reminder outright:
-   * the system prompt does not repeat it, so waiting for the token interval
-   * would leave the model without it for the whole first stretch of work. */
-  private standingReminderSent = false;
+type BashReminderEntry = {
+  readonly nativeMessageIdx: NativeMessageIdx;
+  readonly state: "armed" | "fired";
+};
 
-  constructor(
-    private readonly opts: {
-      threadType: ReminderThreadType;
-      subagentConfig?: SubagentConfig | undefined;
-      contextTracker: ContextTracker;
-    },
+type ActivatedReminderEntry = {
+  readonly nativeMessageIdx: NativeMessageIdx;
+  readonly text: string;
+};
+
+type SystemReminderDeps = {
+  threadType: ReminderThreadType;
+  subagentConfig?: SubagentConfig | undefined;
+  contextTracker: ContextTracker;
+  getStructuredResults: () => ReadonlyMap<ToolRequestId, ToolStructuredResult>;
+};
+
+function retainedThrough<T extends { nativeMessageIdx: NativeMessageIdx }>(
+  history: ReadonlyArray<T>,
+  nativeMessageIdx: NativeMessageIdx,
+): T[] {
+  return history
+    .filter((entry) => entry.nativeMessageIdx <= nativeMessageIdx)
+    .map((entry) => ({ ...entry }));
+}
+
+function appendMonotonic<T extends { nativeMessageIdx: NativeMessageIdx }>(
+  history: T[],
+  entry: T,
+  name: string,
+): void {
+  const previousIdx = history.at(-1)?.nativeMessageIdx;
+  if (previousIdx !== undefined && entry.nativeMessageIdx < previousIdx) {
+    throw new Error(
+      `${name} history must be monotonic: ${entry.nativeMessageIdx} < ${previousIdx}`,
+    );
+  }
+  history.push(entry);
+}
+
+/** Owns everything about system reminders: which ones are active, when they
+ * fire, and what they say. */
+export class SystemReminderSupervisor implements ThreadSupervisor {
+  private constructor(
+    private readonly deps: SystemReminderDeps,
+    private readonly standingHistory: StandingReminderEntry[],
+    private readonly bashHistory: BashReminderEntry[],
+    private readonly reminderHistory: ActivatedReminderEntry[],
   ) {}
 
-  get activeReminders(): ReadonlySet<string> {
-    return this.reminders;
+  static create(deps: SystemReminderDeps): SystemReminderSupervisor {
+    return new SystemReminderSupervisor(deps, [], [], []);
   }
 
-  activateReminder(text: string): void {
-    this.reminders.add(text);
+  static clone({
+    source,
+    nativeMessageIdx,
+    contextTracker,
+    getStructuredResults,
+  }: {
+    source: SystemReminderSupervisor;
+    nativeMessageIdx: NativeMessageIdx;
+    contextTracker: ContextTracker;
+    getStructuredResults: SystemReminderDeps["getStructuredResults"];
+  }): SystemReminderSupervisor {
+    return new SystemReminderSupervisor(
+      {
+        threadType: source.deps.threadType,
+        subagentConfig: source.deps.subagentConfig,
+        contextTracker,
+        getStructuredResults,
+      },
+      retainedThrough(source.standingHistory, nativeMessageIdx),
+      retainedThrough(source.bashHistory, nativeMessageIdx),
+      retainedThrough(source.reminderHistory, nativeMessageIdx),
+    );
+  }
+
+  get activeReminders(): ReadonlySet<string> {
+    return new Set(this.reminderHistory.map((entry) => entry.text));
+  }
+
+  activateReminder(text: string, nativeMessageIdx: NativeMessageIdx): void {
+    appendMonotonic(
+      this.reminderHistory,
+      { nativeMessageIdx, text },
+      "Activated reminder",
+    );
   }
 
   onToolResults(
     results: ToolResults,
-    structuredResults: ReadonlyMap<ToolRequestId, ToolStructuredResult>,
+    nativeMessageIdx: NativeMessageIdx,
   ): void {
+    const structuredResults = this.deps.getStructuredResults();
     for (const [id, result] of results) {
       if (result.status !== "ok") continue;
       const structured = structuredResults.get(id);
       const bash = structuredResultFor(structured, "bash_command");
-      if (bash?.wasAbbreviated) this.pendingBashReminder = true;
+      if (bash?.wasAbbreviated) {
+        appendMonotonic(
+          this.bashHistory,
+          { nativeMessageIdx, state: "armed" },
+          "Bash reminder",
+        );
+      }
       const getFiles = structuredResultFor(structured, "get_files");
       for (const file of getFiles?.files ?? []) {
-        if (file.systemReminder) this.activateReminder(file.systemReminder);
+        if (file.systemReminder) {
+          this.activateReminder(file.systemReminder, nativeMessageIdx);
+        }
       }
     }
   }
 
-  onBeforeRequest(context: RequestContext): SupervisorAction {
+  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
+    if (context.status === "suspended") return { type: "none" };
+
+    const lastStanding = this.standingHistory.at(-1);
     const standingFires =
-      !this.standingReminderSent ||
-      context.outputTokenCount - this.tokensAtLastReminder >=
+      !lastStanding ||
+      context.outputTokenCount - lastStanding.outputTokenCount >=
         SYSTEM_REMINDER_MIN_TOKEN_INTERVAL;
-    if (!standingFires && !this.pendingBashReminder) return { type: "none" };
+    const bashFires = this.bashHistory.at(-1)?.state === "armed";
+    if (!standingFires && !bashFires) return { type: "none" };
+
     const kinds: [ReminderKind, ...ReminderKind[]] = standingFires
-      ? this.pendingBashReminder
+      ? bashFires
         ? ["standing", "bashSummary"]
         : ["standing"]
       : ["bashSummary"];
-
     const reminder = buildSystemReminder({
-      threadType: this.opts.threadType,
-      subagentConfig: this.opts.subagentConfig,
+      threadType: this.deps.threadType,
+      subagentConfig: this.deps.subagentConfig,
       kinds,
       extraReminders: this.extraReminders(),
     });
 
     if (standingFires) {
-      this.tokensAtLastReminder = context.outputTokenCount;
-      this.standingReminderSent = true;
+      appendMonotonic(
+        this.standingHistory,
+        {
+          nativeMessageIdx: context.nativeMessageIdx,
+          outputTokenCount: context.outputTokenCount,
+        },
+        "Standing reminder",
+      );
     }
-    this.pendingBashReminder = false;
+    if (bashFires) {
+      appendMonotonic(
+        this.bashHistory,
+        { nativeMessageIdx: context.nativeMessageIdx, state: "fired" },
+        "Bash reminder",
+      );
+    }
 
     return injectText(reminder);
   }
 
-  /** The union of the transient reminders and reminders derived from markdown
+  onReset(): void {
+    this.standingHistory.length = 0;
+    this.bashHistory.length = 0;
+    this.reminderHistory.length = 0;
+  }
+
+  /** The union of transient reminders and reminders derived from markdown
    * files currently in context, deduped on text. */
   private extraReminders(): string[] {
-    const reminders = new Set(this.reminders);
+    const reminders = new Set(this.activeReminders);
     for (const [key, fileInfo] of Object.entries(
-      this.opts.contextTracker.files,
+      this.deps.contextTracker.files,
     )) {
       if (!fileInfo) continue;
       if (!key.toLowerCase().endsWith(".md")) continue;

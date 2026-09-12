@@ -188,6 +188,7 @@ export class GitSupervisor implements ThreadSupervisor {
   }
 
   async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
+    if (context.status === "suspended") return { type: "none" };
     const update = await this.gitTracker.getUpdate(context.nativeMessageIdx);
     if (!update) return { type: "none" };
     this.onSent?.(update);

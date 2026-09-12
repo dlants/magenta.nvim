@@ -400,16 +400,56 @@ SystemInfoSupervisor.clone({ source, nativeMessageIdx });
 - The full `npx vitest run` passes 1,677 tests (2 skipped, 1 todo).
 - `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
 
-## SystemReminderSupervisor
+## SystemReminderSupervisor — **DONE**
 
-- Goal: it implements `ThreadSupervisor`, `ReminderSupervisor`/`noReminders`/`reminderAction` are gone, `RequestContext` carries `status`, and its state is idx-keyed and cloned against the clone's own file supervisor.
-- Tests:
-  - A fork at head does not re-send the standing reminder, and keeps reminders activated before the fork point.
-  - A fork at an idx before a `get_files` that activated a reminder does not carry that reminder.
-  - A bash reminder armed after the fork point is not pending in the clone.
-  - Token-interval gating still measures from the last *surviving* standing reminder.
-  - A request suspended by an earlier hook does not consume the standing reminder, the pending bash reminder, the file supervisor's agent view, or the git agent view — the next request that is actually issued still carries all of them.
-  - A compact thread, which now has no reminder supervisor at all rather than `noReminders`, still issues requests with no reminder content.
+### What was done
+
+- `SystemReminderSupervisor` now implements `ThreadSupervisor` and is part of
+  `ThreadCore`'s composed context-supervisor list. `ReminderSupervisor`,
+  `noReminders`, `ThreadCore.reminderAction`, and the separate tool-result hook
+  were removed; compact threads hold no reminder supervisor.
+- Standing reminders, abbreviated-bash reminders, and activated reminders now
+  use independent append-only histories keyed by `NativeMessageIdx`.
+  `SystemReminderSupervisor.clone` inclusively truncates all three histories and
+  receives the clone's own `FileSupervisor` plus a clone-local structured-result
+  accessor.
+- `RequestContext` now carries `status`. System-info, file, git, and reminder
+  supervisors decline suspended requests before committing agent-visible state.
+- Reminder activation from immediate submissions is keyed to
+  `manager.getPendingUserMessageIdx()`. Stop-time queued resolutions use the
+  same pending-message calculation, while mid-turn queued resolutions use the
+  hook's exact `ctx.nativeMessageIdx`.
+- `ThreadCore.agentHooks()` now runs owner before-request gates before the
+  context supervisor group. The reminder remains the final context supervisor,
+  followed only by queue flushing and token-count recording, so it still lands
+  after context updates and immediately before queued/user content.
+- Added unit coverage for standing-interval rewind, bash-arm rewind,
+  get-files/activated-reminder rewind, deduplication, and suspended reminder
+  delivery. Added Thread-level coverage that a head fork retains reminder state
+  without resending the standing reminder and that suspension preserves file,
+  git, system-info, and reminder delivery for the next issued request. Existing
+  compact-thread coverage verifies requests contain no reminder content.
+
+### Decisions and deviations
+
+- The owner before-request hooks were moved ahead of the context supervisor
+  group. Merely adding `status` checks cannot protect a committing supervisor
+  that runs before the hook that suspends; built-in owner supervisors do not
+  inject request content, so this preserves reminder placement while making the
+  suspension guarantee enforceable.
+- Activated reminders use the message index they actually ride rather than the
+  plan's illustrative `getNativeMessageIdx() + 1`. This matters for Anthropic
+  continuations, where queue content can merge into the trailing tool-result
+  user message, and matches the Stage 1 pending-user-index rule.
+- `onReset` clears all reminder histories for direct supervisor use. Thread
+  reset/compaction already replaces the whole `ThreadCore`, so the replacement
+  supervisor starts empty and re-derives markdown reminders from the newly
+  reset file supervisor.
+
+### Validation (stage 4)
+
+- The full `npx vitest run` passes 1,683 tests (2 skipped, 1 todo).
+- `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
 
 ## Uniform create/clone for the remaining supervisors
 

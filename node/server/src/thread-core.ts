@@ -37,11 +37,7 @@ import type {
   ToolResults,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import {
-  noReminders,
-  type ReminderSupervisor,
-  SystemReminderSupervisor,
-} from "./system-reminder-supervisor.ts";
+import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
 import type { ThreadContext } from "./thread.ts";
 import type {
   AgentHooks,
@@ -78,7 +74,7 @@ export class ThreadCore {
     ToolRequestId,
     ToolStructuredResult
   >();
-  readonly systemReminders: ReminderSupervisor;
+  readonly systemReminders: SystemReminderSupervisor | undefined;
   pendingSeed: AgentInput[] = [];
   private disposed = false;
   readonly gitSupervisor: GitSupervisor | undefined;
@@ -99,6 +95,7 @@ export class ThreadCore {
     readonly fileSupervisor: FileSupervisor,
     gitSupervisor: GitSupervisor | undefined,
     systemInfoSupervisor: SystemInfoSupervisor | undefined,
+    systemReminders: SystemReminderSupervisor | undefined,
   ) {
     for (const event of [
       "fileAdded",
@@ -109,13 +106,14 @@ export class ThreadCore {
       this.fileSupervisor.on(event, () => this.handleUpdate());
     }
     this.fileSupervisor.start();
-    this.systemReminders = this.createReminderSupervisor();
+    this.systemReminders = systemReminders;
     this.gitSupervisor = gitSupervisor;
     this.systemInfoSupervisor = systemInfoSupervisor;
     const supervisors = [
       ...(this.gitSupervisor ? [this.gitSupervisor] : []),
       ...(context.threadType !== "compact" ? [this.fileSupervisor] : []),
       ...(this.systemInfoSupervisor ? [this.systemInfoSupervisor] : []),
+      ...(this.systemReminders ? [this.systemReminders] : []),
     ];
     this.contextHooks = composeSupervisors(() => supervisors);
   }
@@ -169,6 +167,16 @@ export class ThreadCore {
             alreadyInjected: manager.log.messages.length > 0,
           })
         : undefined;
+    const systemReminders =
+      context.threadType === "compact"
+        ? undefined
+        : SystemReminderSupervisor.create({
+            threadType: context.threadType,
+            subagentConfig: context.subagentConfig,
+            contextTracker: fileSupervisor,
+            getStructuredResults: () =>
+              core?.structuredToolResults ?? new Map(),
+          });
     core = new ThreadCore(
       id,
       context,
@@ -179,6 +187,7 @@ export class ThreadCore {
       fileSupervisor,
       gitSupervisor,
       systemInfoSupervisor,
+      systemReminders,
     );
     return core;
   }
@@ -236,6 +245,14 @@ export class ThreadCore {
           nativeMessageIdx: effectiveNativeMessageIdx,
         })
       : undefined;
+    const systemReminders = source.systemReminders
+      ? SystemReminderSupervisor.clone({
+          source: source.systemReminders,
+          nativeMessageIdx: effectiveNativeMessageIdx,
+          contextTracker: fileSupervisor,
+          getStructuredResults: () => clone?.structuredToolResults ?? new Map(),
+        })
+      : undefined;
     clone = new ThreadCore(
       id,
       context,
@@ -249,6 +266,7 @@ export class ThreadCore {
       fileSupervisor,
       gitSupervisor,
       systemInfoSupervisor,
+      systemReminders,
     );
     return clone;
   }
@@ -275,15 +293,6 @@ export class ThreadCore {
     this.fileSupervisor.destroy();
     if (this.toolBatch.type === "running") this.toolBatch.executor.abortAll();
     await this.abortAgentTurn();
-  }
-
-  private createReminderSupervisor(): ReminderSupervisor {
-    if (this.context.threadType === "compact") return noReminders;
-    return new SystemReminderSupervisor({
-      threadType: this.context.threadType,
-      subagentConfig: this.context.subagentConfig,
-      contextTracker: this.fileSupervisor,
-    });
   }
 
   private onToolApplied: OnToolApplied = (absFilePath, tool, fileTypeInfo) => {
@@ -431,11 +440,12 @@ export class ThreadCore {
     const ownerHooks = this.hooks;
     return {
       onBeforeRequest: [
-        ...this.contextHooks.onBeforeRequest,
+        // Owner gates run first, so a suspension is visible to every
+        // conversation-state supervisor before it can commit a delivery.
         ...ownerHooks.onBeforeRequest,
-        // Last, so the reminder sits after every other injection and
-        // immediately before the user's own content.
-        { run: (ctx) => Promise.resolve(this.reminderAction(ctx)) },
+        // The reminder is the last context supervisor, so its injection sits
+        // after context updates and immediately before queued/user content.
+        ...this.contextHooks.onBeforeRequest,
         { run: (ctx) => this.callbacks.flushQueue(ctx) },
         // After every hook that might have asked for a count, so it records
         // the one this request was decided on — and never forces one.
@@ -448,14 +458,8 @@ export class ThreadCore {
       ],
       onToolResults: [
         (results) => this.yieldGate(results),
+        ...this.contextHooks.onToolResults,
         ...ownerHooks.onToolResults,
-        (results) => {
-          this.systemReminders.onToolResults(
-            results,
-            this.structuredToolResults,
-          );
-          return undefined;
-        },
       ],
     };
   }
@@ -474,10 +478,6 @@ export class ThreadCore {
       return { kind: "yield", value };
     }
     return undefined;
-  }
-  private reminderAction(ctx: AgentRequestContext): RequestAction {
-    if (ctx.status === "suspended") return { type: "none" };
-    return this.systemReminders.onBeforeRequest(ctx) ?? { type: "none" };
   }
   async runTurn(messages: AgentInput[]): Promise<SendResult> {
     if (!this.isActive) return { type: "aborted" };

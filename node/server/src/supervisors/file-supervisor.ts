@@ -317,6 +317,7 @@ export class FileSupervisor
   }
 
   async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
+    if (context.status === "suspended") return { type: "none" };
     const revision = this.revision;
     const updates = await this.getContextUpdate(context.nativeMessageIdx);
     if (!this.isCurrent(revision) || Object.keys(updates).length === 0)

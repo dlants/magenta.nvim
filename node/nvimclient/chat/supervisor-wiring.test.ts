@@ -135,6 +135,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
       const ask = async (sup: AutoCompactSupervisor, inputTokenCount: number) =>
         (
           await sup.onBeforeRequest({
+            status: "pending",
             inputTokenCount,
             outputTokenCount: 0,
             nativeMessageIdx: 0 as NativeMessageIdx,
