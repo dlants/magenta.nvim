@@ -11,7 +11,6 @@ import {
   type AgentInput,
   type CompactionRunId,
   type ContextFiles,
-  composeSupervisors,
   type FileSupervisor,
   type GitSupervisor,
   loadAgents,
@@ -265,9 +264,18 @@ export class NvimThread {
     return this.core.inferenceManager;
   }
 
-  /** The supervisor list this thread's hooks were composed from. Kept so the
-   * wiring is inspectable; the core only ever sees the composed hooks. */
-  public supervisors: ThreadSupervisor[] = [];
+  private _supervisors: ThreadSupervisor[] = [];
+  /** The supervisors this thread contributes. Assigning re-composes the
+   * core's hook set, so wiring can land after construction. */
+  get supervisors(): ThreadSupervisor[] {
+    return this._supervisors;
+  }
+  set supervisors(supervisors: ThreadSupervisor[]) {
+    this._supervisors = supervisors;
+    // A truncated response is not a stop, so this is consulted before any
+    // supervisor can read one as a refusal to yield.
+    this.core.supervisors = [MaxTokensSupervisor.create(), ...supervisors];
+  }
 
   get isSandboxBypassed(): boolean {
     const sandboxRoot = this.context.getSandboxRoot?.();
@@ -397,10 +405,7 @@ export class NvimThread {
     // chunk boundary has to repaint even though nothing on the thread moved.
     this.compactor?.on("transition", () => this.onCoreUpdate());
 
-    this.core.hooks = composeSupervisors([
-      MaxTokensSupervisor.create(),
-      ...this.supervisors,
-    ]);
+    this.supervisors = [];
 
     this.rebuildToolResultMap();
   }

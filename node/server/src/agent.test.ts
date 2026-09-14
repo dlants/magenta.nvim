@@ -52,7 +52,6 @@ import type {
 } from "./thread-api.ts";
 import {
   AutoCompactSupervisor,
-  composeSupervisors,
   injectText,
   MaxTokensSupervisor,
   SubagentSupervisor,
@@ -427,14 +426,14 @@ describe("Thread turn loop", () => {
   it("delivers a queued message before an end-turn supervisor can suspend", async () => {
     const threadId = uniqueThreadId("queue-beats-suspend");
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onEndTurnWithoutYield: () => ({
           type: "suspend" as const,
           reason: { kind: "stop" as const, message: "halt" },
         }),
       },
-    ]);
+    ];
     const sent = core.send([
       {
         type: "text",
@@ -466,7 +465,7 @@ describe("Thread turn loop", () => {
       undefined,
       uniqueThreadId("continuation-failure"),
     );
-    core.hooks = composeSupervisors([MaxTokensSupervisor.create()]);
+    core.supervisors = [MaxTokensSupervisor.create()];
     const sent = core.send([
       {
         type: "text",
@@ -531,7 +530,7 @@ describe("runSubmission across a compaction handoff", () => {
   /** Suspends once, at the first stop. */
   const compactOnce = (core: Thread, nextPrompt: string | undefined) => {
     let asked = false;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onEndTurnWithoutYield: () => {
           if (asked) return { type: "none" as const };
@@ -542,7 +541,7 @@ describe("runSubmission across a compaction handoff", () => {
           };
         },
       },
-    ]);
+    ];
   };
 
   it("stays pending until the post-compaction turn comes to rest", async () => {
@@ -641,7 +640,7 @@ describe("runSubmission across a compaction handoff", () => {
     try {
       const prompts = ["first continuation", "second continuation"];
       let handoffs = 0;
-      core.hooks = composeSupervisors([
+      core.supervisors = [
         {
           onEndTurnWithoutYield: () => {
             if (handoffs >= prompts.length) return { type: "none" as const };
@@ -653,7 +652,7 @@ describe("runSubmission across a compaction handoff", () => {
             };
           },
         },
-      ]);
+      ];
       const calls: (string | undefined)[] = [];
       const compactor: Compactor = {
         run: (_messages, nextPrompt) => {
@@ -746,7 +745,7 @@ describe("runSubmission across a compaction handoff", () => {
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
       let asked = false;
-      core.hooks = composeSupervisors([
+      core.supervisors = [
         {
           onEndTurnWithoutYield: () => {
             if (asked) return { type: "none" as const };
@@ -757,7 +756,7 @@ describe("runSubmission across a compaction handoff", () => {
             };
           },
         },
-      ]);
+      ];
       const compactor = stubCompactor();
       const result = runSubmission({
         thread: core,
@@ -1061,7 +1060,7 @@ describe("MaxTokensSupervisor", () => {
 
   it("continues a truncated text-only response", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors([MaxTokensSupervisor.create()]);
+    core.supervisors = [MaxTokensSupervisor.create()];
 
     void core.send([
       {
@@ -1081,10 +1080,7 @@ describe("MaxTokensSupervisor", () => {
   it("is the only supervisor to speak on max_tokens, and spends no restart", async () => {
     const { core, mockClient } = createAgentWithMock();
     const unsupervised = UnsupervisedSupervisor.create();
-    core.hooks = composeSupervisors([
-      MaxTokensSupervisor.create(),
-      unsupervised,
-    ]);
+    core.supervisors = [MaxTokensSupervisor.create(), unsupervised];
 
     void core.send([
       {
@@ -1113,10 +1109,10 @@ describe("MaxTokensSupervisor", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       MaxTokensSupervisor.create(),
       SubagentSupervisor.create(),
-    ]);
+    ];
     void core.send([
       {
         type: "text",
@@ -1210,9 +1206,9 @@ describe("yield_to_parent as an ordinary tool", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-    ]);
+    ];
     mockClient.mockInputTokenCount = 50;
     const compactions = trackCompactions(core);
     const sent = core.send([
@@ -1452,7 +1448,7 @@ describe("SubagentSupervisor yield tag detection", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.hooks = composeSupervisors([SubagentSupervisor.create()]);
+    core.supervisors = [SubagentSupervisor.create()];
 
     void core.send([
       {
@@ -1492,7 +1488,7 @@ describe("SubagentSupervisor yield tag detection", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.hooks = composeSupervisors([SubagentSupervisor.create()]);
+    core.supervisors = [SubagentSupervisor.create()];
 
     void core.send([
       {
@@ -1520,9 +1516,9 @@ function countOccurrences(value: unknown, needle: string): number {
 describe("AutoCompactSupervisor integration", () => {
   it("compacts at the gate of the request whose conversation breaches the threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-    ]);
+    ];
     mockClient.mockInputTokenCount = 50;
 
     const compactions = trackCompactions(core);
@@ -1566,9 +1562,9 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("does not trigger compaction when input tokens are below the threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       AutoCompactSupervisor.create({ threshold: 100000, nextPrompt: "go" }),
-    ]);
+    ];
     mockClient.mockInputTokenCount = 50;
 
     const compactions = trackCompactions(core);
@@ -1597,9 +1593,9 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createAgentWithMock({
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-    ]);
+    ];
     mockClient.mockInputTokenCount = 50;
 
     const compactions = trackCompactions(core);
@@ -1629,10 +1625,10 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("compacts at the gate of the continuation a max_tokens stop asks for", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       MaxTokensSupervisor.create(),
       AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-    ]);
+    ];
     mockClient.mockInputTokenCount = 50;
 
     const compactions = trackCompactions(core);
@@ -1661,7 +1657,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("appends an injected text to the message log", async () => {
     const { core, mockClient } = createAgentWithMock();
     let injected = false;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: () => {
           if (injected) return Promise.resolve({ type: "none" as const });
@@ -1669,7 +1665,7 @@ describe("AutoCompactSupervisor integration", () => {
           return Promise.resolve(injectText("remember this"));
         },
       },
-    ]);
+    ];
     void core.send([
       {
         type: "text",
@@ -1704,7 +1700,7 @@ describe("AutoCompactSupervisor integration", () => {
     });
     let injected = false;
     let requests = 0;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: () => {
           // The opening request is skipped: the injection belongs on the
@@ -1730,7 +1726,7 @@ describe("AutoCompactSupervisor integration", () => {
           });
         },
       },
-    ]);
+    ];
     void core.send([
       {
         type: "text",
@@ -1755,7 +1751,7 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createAgentWithMock();
     let asked = false;
     let requests = 0;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       // max_tokens plans a continuation, so the stop reaches the
       // before-request supervisors at all.
       MaxTokensSupervisor.create(),
@@ -1781,7 +1777,7 @@ describe("AutoCompactSupervisor integration", () => {
               : { type: "none" as const },
           ),
       },
-    ]);
+    ];
     const compactions = trackCompactions(core);
     void core.send([
       {
@@ -1811,7 +1807,7 @@ describe("AutoCompactSupervisor integration", () => {
     });
     let asked = false;
     let requests = 0;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: () => {
           requests++;
@@ -1833,7 +1829,7 @@ describe("AutoCompactSupervisor integration", () => {
               : { type: "none" as const },
           ),
       },
-    ]);
+    ];
     const compactions = trackCompactions(core);
     void core.send([
       {
@@ -1858,7 +1854,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("keeps an injection in the log when the next request fails", async () => {
     const { core, mockClient } = createAgentWithMock();
     let injected = false;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: () => {
           if (injected) return Promise.resolve({ type: "none" as const });
@@ -1866,7 +1862,7 @@ describe("AutoCompactSupervisor integration", () => {
           return Promise.resolve(injectText("survive the failure"));
         },
       },
-    ]);
+    ];
     void core.send([
       {
         type: "text",
@@ -1912,7 +1908,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("keeps an injection in the log when the next request is aborted", async () => {
     const { core, mockClient } = createAgentWithMock();
     let injected = false;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: () => {
           if (injected) return Promise.resolve({ type: "none" as const });
@@ -1920,7 +1916,7 @@ describe("AutoCompactSupervisor integration", () => {
           return Promise.resolve(injectText("survive the abort"));
         },
       },
-    ]);
+    ];
     void core.send([
       {
         type: "text",
@@ -1992,7 +1988,7 @@ describe("AutoCompactSupervisor integration", () => {
         };
       },
     };
-    core.hooks = composeSupervisors([first, second, third]);
+    core.supervisors = [first, second, third];
 
     const compactions = trackCompactions(core);
 
@@ -2019,7 +2015,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("injects on the opening request of a send, ahead of the user content", async () => {
     const { core, mockClient } = createAgentWithMock();
     let requests = 0;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: () => {
           requests++;
@@ -2030,7 +2026,7 @@ describe("AutoCompactSupervisor integration", () => {
           );
         },
       },
-    ]);
+    ];
 
     void core.send([
       {
@@ -2055,7 +2051,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("consults onBeforeRequest exactly once per request across a handoff", async () => {
     const { core, mockClient } = createAgentWithMock();
     let requests = 0;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       MaxTokensSupervisor.create(),
       {
         onBeforeRequest: () => {
@@ -2063,7 +2059,7 @@ describe("AutoCompactSupervisor integration", () => {
           return Promise.resolve({ type: "none" as const });
         },
       },
-    ]);
+    ];
 
     void core.send([
       {
@@ -2095,14 +2091,14 @@ describe("AutoCompactSupervisor integration", () => {
   it("does not consult onBeforeRequest at a stop that issues no request", async () => {
     const { core, mockClient } = createAgentWithMock();
     let requests = 0;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: () => {
           requests++;
           return Promise.resolve({ type: "none" as const });
         },
       },
-    ]);
+    ];
     void core.send([
       {
         type: "text",
@@ -2141,29 +2137,23 @@ describe("AutoCompactSupervisor integration", () => {
     const events: string[] = [];
     let continuationOutputTokens: number | undefined;
     let requests = 0;
-    core.hooks = {
-      ...agentHooks({
-        onToolResults: [
-          (results) => {
-            events.push(`results:${results.size}`);
-          },
-        ],
-        onBeforeRequest: [
-          {
-            run: (ctx) => {
-              events.push("request");
-              requests++;
-              // Only a continuation has a finished assistant message behind it.
-              if (requests > 1) {
-                continuationOutputTokens = ctx.outputTokenCount;
-              }
-              return Promise.resolve({ type: "none" as const });
-            },
-          },
-        ],
-      }),
-      hasPendingContent: () => Promise.resolve(false),
-    };
+    core.supervisors = [
+      {
+        onToolResults: (results) => {
+          events.push(`results:${results.size}`);
+        },
+        onBeforeRequest: (ctx) => {
+          events.push("request");
+          requests++;
+          // Only a continuation has a finished assistant message behind it.
+          if (requests > 1) {
+            continuationOutputTokens = ctx.outputTokenCount;
+          }
+          return Promise.resolve({ type: "none" as const });
+        },
+        hasPendingContent: () => Promise.resolve(false),
+      },
+    ];
     void core.send([
       {
         type: "text",
@@ -2206,24 +2196,18 @@ describe("AutoCompactSupervisor integration", () => {
       } as unknown as ThreadContext["fileIO"],
     });
     const events: string[] = [];
-    core.hooks = {
-      ...agentHooks({
-        onToolResults: [
-          (results) => {
-            events.push(`results:${results.size}`);
-          },
-        ],
-        onBeforeRequest: [
-          {
-            run: () => {
-              events.push("request");
-              return Promise.resolve({ type: "none" as const });
-            },
-          },
-        ],
-      }),
-      hasPendingContent: () => Promise.resolve(false),
-    };
+    core.supervisors = [
+      {
+        onToolResults: (results) => {
+          events.push(`results:${results.size}`);
+        },
+        onBeforeRequest: () => {
+          events.push("request");
+          return Promise.resolve({ type: "none" as const });
+        },
+        hasPendingContent: () => Promise.resolve(false),
+      },
+    ];
     void core.send([
       {
         type: "text",
@@ -2253,24 +2237,18 @@ describe("AutoCompactSupervisor integration", () => {
       threadType: "subagent",
     });
     const events: string[] = [];
-    core.hooks = {
-      ...agentHooks({
-        onToolResults: [
-          (results) => {
-            events.push(`results:${results.size}`);
-          },
-        ],
-        onBeforeRequest: [
-          {
-            run: () => {
-              events.push("request");
-              return Promise.resolve({ type: "none" as const });
-            },
-          },
-        ],
-      }),
-      hasPendingContent: () => Promise.resolve(false),
-    };
+    core.supervisors = [
+      {
+        onToolResults: (results) => {
+          events.push(`results:${results.size}`);
+        },
+        onBeforeRequest: () => {
+          events.push("request");
+          return Promise.resolve({ type: "none" as const });
+        },
+        hasPendingContent: () => Promise.resolve(false),
+      },
+    ];
     void core.send([
       {
         type: "text",
@@ -2297,14 +2275,14 @@ describe("AutoCompactSupervisor integration", () => {
   it("drops a submission aborted while its before-request hooks are in flight", async () => {
     const { core, mockClient } = createAgentWithMock();
     const gate = new Defer<void>();
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: async () => {
           await gate.promise;
           return injectText("late note");
         },
       },
-    ]);
+    ];
     const sent = core.send([
       {
         type: "text",
@@ -2323,12 +2301,12 @@ describe("AutoCompactSupervisor integration", () => {
   });
   it("issues a request for a submission-time injection with no user content", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         hasPendingContent: () => Promise.resolve(true),
         onBeforeRequest: () => Promise.resolve(injectText("solo note")),
       },
-    ]);
+    ];
 
     void core.send([]);
     const stream = await mockClient.awaitStream();
@@ -2339,9 +2317,9 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("compacts from a plain send, exactly once, when already over threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-    ]);
+    ];
     mockClient.mockInputTokenCount = 200;
 
     const compactions = trackCompactions(core);
@@ -2385,7 +2363,7 @@ describe("ThreadHooks.onToolApplied", () => {
         applied.push({ supervisor, path: absFilePath, type: tool.type });
       },
     });
-    core.hooks = composeSupervisors([collector(0), collector(1)]);
+    core.supervisors = [collector(0), collector(1)];
 
     void core.send([
       {
@@ -2428,13 +2406,13 @@ describe("ThreadHooks.onToolApplied", () => {
     const { core, mockClient } = createAgentWithMock({
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onToolApplied: () => {
           throw new Error("subscriber blew up");
         },
       },
-    ]);
+    ];
 
     void core.send([
       {
@@ -4126,14 +4104,14 @@ describe("nativeMessageIdx plumbing", () => {
   it("onBeforeRequest reports the idx its injection lands at, on the opening request", async () => {
     const { core, mockClient } = createAgentWithMock();
     const seen: NativeMessageIdx[] = [];
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: (ctx) => {
           seen.push(ctx.nativeMessageIdx);
           return Promise.resolve(injectText("INJECTED-OPENING"));
         },
       },
-    ]);
+    ];
     void core.send([
       {
         type: "text",
@@ -4161,7 +4139,7 @@ describe("nativeMessageIdx plumbing", () => {
     });
     const requestIdx: NativeMessageIdx[] = [];
     const resultIdx: NativeMessageIdx[] = [];
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: (ctx) => {
           requestIdx.push(ctx.nativeMessageIdx);
@@ -4173,7 +4151,7 @@ describe("nativeMessageIdx plumbing", () => {
           resultIdx.push(nativeMessageIdx);
         },
       },
-    ]);
+    ];
     void core.send([
       {
         type: "text",
@@ -4207,7 +4185,7 @@ describe("nativeMessageIdx plumbing", () => {
     });
     const appliedIdx: NativeMessageIdx[] = [];
     const resultIdx: NativeMessageIdx[] = [];
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onToolApplied: ({ nativeMessageIdx }) => {
           appliedIdx.push(nativeMessageIdx);
@@ -4216,7 +4194,7 @@ describe("nativeMessageIdx plumbing", () => {
           resultIdx.push(nativeMessageIdx);
         },
       },
-    ]);
+    ];
     void core.send([
       {
         type: "text",
@@ -4258,7 +4236,7 @@ describe("nativeMessageIdx plumbing", () => {
     });
     const appliedIdx: NativeMessageIdx[] = [];
     const resultIdx: NativeMessageIdx[] = [];
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onToolApplied: ({ nativeMessageIdx }) => {
           appliedIdx.push(nativeMessageIdx);
@@ -4267,7 +4245,7 @@ describe("nativeMessageIdx plumbing", () => {
           resultIdx.push(nativeMessageIdx);
         },
       },
-    ]);
+    ];
     void core.send([
       {
         type: "text",

@@ -25,11 +25,7 @@ import {
 } from "./test-helpers.ts";
 import { Thread, type ThreadContext, threadCloneContext } from "./thread.ts";
 import type { QueuedMessage } from "./thread-api.ts";
-import {
-  composeSupervisors,
-  injectText,
-  SystemInfoSupervisor,
-} from "./thread-supervisor.ts";
+import { injectText, SystemInfoSupervisor } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
 
@@ -382,7 +378,7 @@ describe("deferred submissions", () => {
       uniqueThreadId("deferred-yield-rejection"),
     );
     let rejected = false;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onYield: async () => {
           if (rejected) return { type: "none" as const };
@@ -390,7 +386,7 @@ describe("deferred submissions", () => {
           return { type: "reject" as const, message: "not done yet" };
         },
       },
-    ]);
+    ];
     void core.send([
       {
         type: "text",
@@ -543,7 +539,7 @@ describe("deferred submissions", () => {
       // Not the opening request of the send: the one the stop-time flush
       // produces.
       let requests = 0;
-      core.hooks = composeSupervisors([
+      core.supervisors = [
         {
           onBeforeRequest: () =>
             Promise.resolve(
@@ -555,7 +551,7 @@ describe("deferred submissions", () => {
                 : { type: "none" as const },
             ),
         },
-      ]);
+      ];
       const first = core.send([
         {
           type: "text",
@@ -596,7 +592,7 @@ describe("deferred submissions", () => {
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
       let suspend = true;
-      core.hooks = composeSupervisors([
+      core.supervisors = [
         {
           onBeforeRequest: () =>
             Promise.resolve(
@@ -608,7 +604,7 @@ describe("deferred submissions", () => {
                 : { type: "none" as const },
             ),
         },
-      ]);
+      ];
       expect(
         await core.send([
           {
@@ -667,7 +663,7 @@ describe("deferred submissions", () => {
     try {
       let compacted = false;
       let requests = 0;
-      core.hooks = composeSupervisors([
+      core.supervisors = [
         {
           onBeforeRequest: () =>
             Promise.resolve(
@@ -679,7 +675,7 @@ describe("deferred submissions", () => {
                 : { type: "none" as const },
             ),
         },
-      ]);
+      ];
       let queueAtHandoff = -1;
       let callsAtHandoff = -1;
       const compactor: Compactor = {
@@ -789,7 +785,7 @@ describe("Thread aborts the tools it owns", () => {
       },
       uniqueThreadId(threadId),
     );
-    core.hooks.onToolResults = [onToolResults];
+    core.supervisors = [{ onToolResults }];
     const sent = core.send([
       {
         type: "text",
@@ -1095,14 +1091,14 @@ describe("Thread.abort between turns", () => {
     );
     const stopConsultations: string[] = [];
     let requests = 0;
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         onBeforeRequest: () => {
           if (++requests > 1) stopConsultations.push("continuation");
           return Promise.resolve({ type: "none" as const });
         },
       },
-    ]);
+    ];
     const sent = core.send([
       {
         type: "text",
@@ -1242,13 +1238,18 @@ describe("system-info preamble", () => {
       undefined,
       uniqueThreadId("system-info-preamble"),
     );
-    // One instance, not one per consultation: the supervisor's own state is
-    // what decides which request carries the preamble.
-    const systemInfo = SystemInfoSupervisor.create({
-      systemInfo: core.systemInfo,
-      alreadyInjected: false,
-    });
-    core.hooks = composeSupervisors([systemInfo]);
+    // One instance per core generation, not one per consultation: the
+    // supervisor's own state is what decides which request carries the
+    // preamble.
+    const armSystemInfo = () => {
+      core.supervisors = [
+        SystemInfoSupervisor.create({
+          systemInfo: core.systemInfo,
+          alreadyInjected: false,
+        }),
+      ];
+    };
+    armSystemInfo();
     const first = core.send([
       {
         type: "text",
@@ -1276,6 +1277,7 @@ describe("system-info preamble", () => {
     // The replacement agent starts from an empty log, so the preamble is due
     // again — the supervisor list survives the swap and has to be re-armed.
     await core.reset({ seed: [], archive: { type: "none" } });
+    armSystemInfo();
     const third = core.send([
       {
         type: "text",
@@ -1293,12 +1295,12 @@ describe("system-info preamble", () => {
 describe("empty send gate", () => {
   it("issues a request for an empty send when a supervisor has content", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         hasPendingContent: () => Promise.resolve(true),
         onBeforeRequest: () => Promise.resolve(injectText("# context update")),
       },
-    ]);
+    ];
     const sent = core.send([]);
     const stream = await mockClient.awaitStream();
     expect(userTexts(core)).toContain("# context update");
@@ -1308,9 +1310,7 @@ describe("empty send gate", () => {
 
   it("issues no request for an empty send when nothing is pending", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors([
-      { hasPendingContent: () => Promise.resolve(false) },
-    ]);
+    core.supervisors = [{ hasPendingContent: () => Promise.resolve(false) }];
     expect(await core.send([])).toEqual({ type: "empty" });
     expect(mockClient.streams.length).toBe(0);
   });
@@ -1334,9 +1334,7 @@ describe("empty send gate", () => {
           reminders: ["stay on task"],
         }),
     );
-    core.hooks = composeSupervisors([
-      { hasPendingContent: () => Promise.resolve(false) },
-    ]);
+    core.supervisors = [{ hasPendingContent: () => Promise.resolve(false) }];
     expect(await core.submit(pendingMessage(""))).toEqual({ type: "empty" });
     expect(mockClient.streams.length).toBe(0);
 
@@ -1357,9 +1355,7 @@ describe("empty send gate", () => {
   it("supersedes an empty send whose probe is still in flight", async () => {
     const { core, mockClient } = createAgentWithMock();
     const probe = new Defer<boolean>();
-    core.hooks = composeSupervisors([
-      { hasPendingContent: () => probe.promise },
-    ]);
+    core.supervisors = [{ hasPendingContent: () => probe.promise }];
     const first = core.send([]);
     const second = core.send([
       {
@@ -1389,7 +1385,7 @@ describe("empty send gate", () => {
             : { type: "none" as const },
         ),
     };
-    core.hooks = composeSupervisors([supervisor]);
+    core.supervisors = [supervisor];
     await core.send([]);
     expect(mockClient.streams.length).toBe(0);
 
@@ -1438,7 +1434,7 @@ describe("replaceable conversation core", () => {
     original.edlRegisters.nextSavedId = 4;
     original.preflightTokenCount = 42;
     const probe = new Defer<boolean>();
-    core.hooks.hasPendingContent = () => probe.promise;
+    core.supervisors = [{ hasPendingContent: () => probe.promise }];
     const sent = core.send([]);
     await core.submit(pendingMessage("later"), "next");
     await core.reset({
@@ -1481,7 +1477,7 @@ describe("replaceable conversation core", () => {
   it("an old probe cannot finish the replacement's first loop", async () => {
     const { core, mockClient } = createAgentWithMock();
     const probe = new Defer<boolean>();
-    core.hooks.hasPendingContent = () => probe.promise;
+    core.supervisors = [{ hasPendingContent: () => probe.promise }];
     const first = core.send([]);
     await core.reset({ seed: [], archive: { type: "none" } });
     const second = core.send([
@@ -1510,10 +1506,12 @@ describe("replaceable conversation core", () => {
     });
     const entered = new Defer<void>();
     const decision = new Defer<{ type: "accept" }>();
-    core.hooks.onYield = [
-      () => {
-        entered.resolve();
-        return decision.promise;
+    core.supervisors = [
+      {
+        onYield: () => {
+          entered.resolve();
+          return decision.promise;
+        },
       },
     ];
     const sent = core.send([
@@ -1650,14 +1648,14 @@ describe("stale outer submissions", () => {
     const entered = new Defer<void>();
     const pending = new Defer<boolean>();
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors([
+    core.supervisors = [
       {
         hasPendingContent: () => {
           entered.resolve();
           return pending.promise;
         },
       },
-    ]);
+    ];
     const first = core.send([]);
     await entered.promise;
     if (action === "reset")
@@ -1760,10 +1758,12 @@ describe("stale outer submissions", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent",
     });
-    core.hooks.onYield = [
-      () => {
-        entered.resolve();
-        return gate.promise;
+    core.supervisors = [
+      {
+        onYield: () => {
+          entered.resolve();
+          return gate.promise;
+        },
       },
     ];
     const first = core.send([
@@ -1803,7 +1803,7 @@ describe("stale outer submissions", () => {
       "yield_to_parent" as ToolName,
       { result: "new result" },
     );
-    core.hooks.onYield = [];
+    core.supervisors = [];
     replacement.finishResponse("tool_use");
     const expected = {
       type: "yielded",

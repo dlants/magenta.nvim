@@ -123,7 +123,7 @@ export class SystemReminderSupervisor implements ThreadSupervisor {
   onToolResults(
     results: ToolResults,
     nativeMessageIdx: NativeMessageIdx,
-  ): void {
+  ): undefined {
     const structuredResults = this.deps.getStructuredResults();
     for (const [id, result] of results) {
       if (result.status !== "ok") continue;

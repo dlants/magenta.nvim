@@ -137,14 +137,13 @@ export type AgentHooks = {
   onToolResults: ToolResultsHook[];
 };
 
-/** What the owning `Thread` answers. A superset of `AgentHooks`: the turn
- * loop's outer half lives in `Thread`, so the end-of-turn question is asked
- * there and the agent never sees it. */
+/** What one composed supervisor list answers. A superset of `AgentHooks`: the
+ * turn loop's outer half lives in `Thread`, so the end-of-turn question is
+ * asked there and the agent never sees it. Produced only by
+ * `composeSupervisors`, from a single ordered list — request injections land
+ * in that order, so "the user's queued content goes last" is expressed by
+ * putting its supervisor last. */
 export type ThreadHooks = AgentHooks & {
-  /** Registered after every context supervisor the core owns, so whatever
-   * this contributes lands last in the message the request carries. The
-   * owner's queued user content is the only thing that belongs here. */
-  onBeforeRequestLast: BeforeRequestHook[];
   /** The model called yield_to_parent and the agent settled on it. The first
    * `accept`/`reject` wins; `send-message` texts concatenate. */
   onYield: YieldHook[];

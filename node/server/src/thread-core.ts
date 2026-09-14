@@ -1,10 +1,7 @@
 import type { GitState } from "./capabilities/git-client.ts";
 import { FileSupervisor, type Files } from "./supervisors/file-supervisor.ts";
 import { GitSupervisor } from "./supervisors/git-supervisor.ts";
-import {
-  composeSupervisors,
-  SystemInfoSupervisor,
-} from "./thread-supervisor.ts";
+import { SystemInfoSupervisor } from "./thread-supervisor.ts";
 
 /** How this conversation's context supervisors are seeded. Construction
  * parameters only: what a supervisor delivers is reported on its own `sent`
@@ -28,7 +25,6 @@ import type {
   NonEmptyRequestedTools,
   ProviderMessageContent,
   ProviderToolSpec,
-  ToolResults,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
@@ -40,7 +36,7 @@ import type {
   ToolInvocationState,
   YieldValue,
 } from "./thread-api.ts";
-import type { SuspendReason } from "./thread-supervisor.ts";
+import type { ThreadSupervisor } from "./thread-supervisor.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
 import type {
   ToolInvocation,
@@ -55,18 +51,28 @@ import type { AbsFilePath } from "./utils/files.ts";
 
 export interface ThreadCoreCallbacks {
   onUpdate: () => void;
-  getHooks: () => ThreadHooks;
 }
 
 export class ThreadCore {
   editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[] = [];
   preflightTokenCount: number | undefined;
   private disposed = false;
-  private readonly contextHooks: ThreadHooks;
 
-  async hasPendingContext(): Promise<boolean> {
-    return this.isActive && (await this.contextHooks.hasPendingContent());
-  }
+  /** The composed answer of every supervisor consulted on this conversation,
+   * owner's included. The owner composes it — it is the only actor that knows
+   * the whole list — and re-composes it whenever the list or the core
+   * changes. */
+  hooks: ThreadHooks = {
+    onBeforeRequest: [],
+    onToolResults: [],
+    onYield: [],
+    hasPendingContent: () => Promise.resolve(false),
+  };
+
+  /** The supervisors whose lifetime is this conversation's. Handed to the
+   * owner so it can compose them in one ordered list with its own; the
+   * instances are created, cloned and disposed here. */
+  readonly contextSupervisors: ReadonlyArray<ThreadSupervisor>;
 
   private constructor(
     readonly id: ThreadId,
@@ -97,14 +103,47 @@ export class ThreadCore {
     }
     this.fileSupervisor.start();
     // Files are tracked for every conversation but only *delivered* where
-    // reminders are, so the two appear and disappear together.
-    this.contextHooks = composeSupervisors([
+    // reminders are, so the two appear and disappear together. The reminder
+    // is last, so its injection sits after every context update.
+    this.contextSupervisors = [
+      this.preflightRecorder,
+      this.yieldGate,
       ...(gitSupervisor ? [gitSupervisor] : []),
       ...(systemReminders ? [fileSupervisor] : []),
       ...(systemInfoSupervisor ? [systemInfoSupervisor] : []),
       ...(systemReminders ? [systemReminders] : []),
-    ]);
+    ];
   }
+
+  /** Records the count this request was decided on, whoever asked for it —
+   * and never forces one, since it does not declare
+   * `requestPreflightTokenCount`. */
+  private readonly preflightRecorder: ThreadSupervisor = {
+    onBeforeRequest: (ctx) => {
+      this.preflightTokenCount = ctx.inputTokenCount;
+      return Promise.resolve({ type: "none" as const });
+    },
+  };
+
+  /** yield_to_parent has landed in the log: stop the turn and hand the value
+   * to the owner, which is the only actor that can settle a yield. */
+  private readonly yieldGate: ThreadSupervisor = {
+    onToolResults: (results) => {
+      for (const id of results.keys()) {
+        const structured = structuredResultFor(
+          this.structuredToolResults.get(id),
+          "yield_to_parent",
+        );
+        if (!structured) continue;
+        const value: YieldValue =
+          this.context.yieldSchema !== undefined
+            ? { type: "structured", value: structured.input }
+            : { type: "text", text: structured.input.result ?? "" };
+        return { kind: "yield", value };
+      }
+      return undefined;
+    },
+  };
 
   /** Content that leads the next turn: the hand-off a reset supplies, or a
    * nudge aimed at this conversation rather than at the thread. Drained by
@@ -272,11 +311,14 @@ export class ThreadCore {
       systemReminders,
     );
   }
+  /** A disposed conversation has no say any more: its tools may still be
+   * settling, but nothing they report can reach a supervisor. */
+  private get activeHooks(): AgentHooks {
+    if (this.disposed) return { onBeforeRequest: [], onToolResults: [] };
+    return this.hooks;
+  }
   get isActive(): boolean {
     return !this.disposed;
-  }
-  private get hooks(): ThreadHooks {
-    return this.callbacks.getHooks();
   }
   private handleUpdate(): void {
     if (!this.disposed) this.callbacks.onUpdate();
@@ -304,12 +346,6 @@ export class ThreadCore {
     // fact this tool established will be revealed by the next message.
     const nativeMessageIdx = this.pendingResultMessageIdx;
     try {
-      this.contextHooks.onToolApplied?.({
-        absFilePath,
-        tool,
-        fileTypeInfo,
-        nativeMessageIdx,
-      });
       this.hooks.onToolApplied?.({
         absFilePath,
         tool,
@@ -375,7 +411,7 @@ export class ThreadCore {
     const executor = new ToolExecutorHost({
       logger: this.context.logger,
       createTool: (request) => this.invokeTool(request),
-      getHooks: () => this.agentHooks(),
+      getHooks: () => this.activeHooks,
       getPendingResultMessageIdx: (requested) =>
         this.manager.getPendingResultMessageIdx(requested),
       publishTools,
@@ -432,52 +468,6 @@ export class ThreadCore {
     return this.toolBatch.executor.resultMessageIdx;
   }
 
-  private agentHooks(): AgentHooks {
-    if (this.disposed) return { onBeforeRequest: [], onToolResults: [] };
-    const ownerHooks = this.hooks;
-    return {
-      onBeforeRequest: [
-        // Owner gates run first, so a suspension is visible to every
-        // conversation-state supervisor before it can commit a delivery.
-        ...ownerHooks.onBeforeRequest,
-        // The reminder is the last context supervisor, so its injection sits
-        // after context updates and immediately before queued/user content.
-        ...this.contextHooks.onBeforeRequest,
-        // Registered after every context supervisor: the owner's queued
-        // content is the user's own, and it lands last in the message.
-        ...ownerHooks.onBeforeRequestLast,
-        // After every hook that might have asked for a count, so it records
-        // the one this request was decided on — and never forces one.
-        {
-          run: (ctx) => {
-            this.preflightTokenCount = ctx.inputTokenCount;
-            return Promise.resolve({ type: "none" as const });
-          },
-        },
-      ],
-      onToolResults: [
-        (results) => this.yieldGate(results),
-        ...this.contextHooks.onToolResults,
-        ...ownerHooks.onToolResults,
-      ],
-    };
-  }
-
-  private yieldGate(results: ToolResults): SuspendReason | undefined {
-    for (const id of results.keys()) {
-      const structured = structuredResultFor(
-        this.structuredToolResults.get(id),
-        "yield_to_parent",
-      );
-      if (!structured) continue;
-      const value: YieldValue =
-        this.context.yieldSchema !== undefined
-          ? { type: "structured", value: structured.input }
-          : { type: "text", text: structured.input.result ?? "" };
-      return { kind: "yield", value };
-    }
-    return undefined;
-  }
   async runTurn(submitted: AgentInput[]): Promise<SendResult> {
     if (!this.isActive) return { type: "aborted" };
     const messages = [...this.pendingSeed, ...submitted];
@@ -488,7 +478,7 @@ export class ThreadCore {
         manager: this.manager,
         executeTools: (requests, publishTools) =>
           this.executeTools(requests, publishTools),
-        getHooks: () => this.agentHooks(),
+        getHooks: () => this.activeHooks,
         onUpdate: () => this.handleUpdate(),
       },
       messages,

@@ -58,10 +58,14 @@ describe("compaction generation ownership", () => {
     const { core: thread, mockClient } = createAgentWithMock();
     const entered = new Defer<void>();
     const probe = new Defer<boolean>();
-    thread.hooks.hasPendingContent = () => {
-      entered.resolve();
-      return probe.promise;
-    };
+    thread.supervisors = [
+      {
+        hasPendingContent: () => {
+          entered.resolve();
+          return probe.promise;
+        },
+      },
+    ];
     const previous = thread.send([]);
     await entered.promise;
     thread.callbacks.resolve = async () => ({

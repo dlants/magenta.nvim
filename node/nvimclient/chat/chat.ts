@@ -801,8 +801,8 @@ export class Chat implements ThreadManager {
             });
           },
         }),
+        ...autoCompact,
       ];
-      thread.supervisors.push(...autoCompact);
     } else if (
       threadType === "subagent" ||
       threadType === "docker_root" ||

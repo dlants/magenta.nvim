@@ -43,7 +43,6 @@ import type {
   RestResult,
   SendOptions,
   SendResult,
-  ThreadHooks,
   ThreadResult,
   ThreadSendResult,
   YieldValue,
@@ -52,7 +51,13 @@ import { renderYieldValue } from "./thread-api.ts";
 import { type ThreadContextDelivery, ThreadCore } from "./thread-core.ts";
 
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
-import type { RequestAction, SuspendReason } from "./thread-supervisor.ts";
+import type {
+  RequestAction,
+  RequestContext,
+  SuspendReason,
+  ThreadSupervisor,
+} from "./thread-supervisor.ts";
+import { composeSupervisors } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
@@ -188,13 +193,17 @@ export class Thread {
     this.cancelSubmission();
     await this.core.abortAgentTurn();
   }
-  public hooks: ThreadHooks = {
-    onBeforeRequest: [],
-    onBeforeRequestLast: [],
-    onToolResults: [],
-    onYield: [],
-    hasPendingContent: () => Promise.resolve(false),
-  };
+  private _supervisors: ThreadSupervisor[] = [];
+  /** The owner's supervisors. They lead the list — a suspension one of them
+   * raises has to be visible to every context supervisor before any of those
+   * can commit a delivery. */
+  get supervisors(): ThreadSupervisor[] {
+    return this._supervisors;
+  }
+  set supervisors(supervisors: ThreadSupervisor[]) {
+    this._supervisors = supervisors;
+    this.composeHooks(this.core);
+  }
   private threadLogger: ThreadLogger;
 
   constructor(
@@ -225,22 +234,29 @@ export class Thread {
     this._core = core ?? this.createCore();
   }
 
-  /** The owner-side hook set the core consults. `hooks` is the supervisors',
-   * set by whoever owns this thread; the async queue flush is the thread's
-   * own and has to ride the tail of the request, after context updates. */
-  private coreHooks(): ThreadHooks {
-    return {
-      ...this.hooks,
-      onBeforeRequestLast: [
-        ...this.hooks.onBeforeRequestLast,
-        { run: (ctx) => this.queueFlushAction(ctx) },
-      ],
-    };
+  /** The thread's own contribution to a request: the queued user content. It
+   * is last in the list because it must land last in the message, after every
+   * context update. */
+  private readonly queueFlush: ThreadSupervisor = {
+    onBeforeRequest: (ctx: RequestContext) => this.queueFlushAction(ctx),
+  };
+
+  /** The whole ordered list, in one place: owner gates, then the
+   * conversation's own context supervisors, then the user's queued content.
+   * Re-composed per core generation, since the context supervisors live and
+   * die with the core. */
+  private composeHooks(core: ThreadCore): void {
+    core.hooks = composeSupervisors([
+      ...this._supervisors,
+      ...core.contextSupervisors,
+      this.queueFlush,
+    ]);
   }
 
   /** A context supervisor lives and dies with the core, so each generation is
    * subscribed to as it is built and a stale one can never report. */
-  private watchContextDeliveries(core: ThreadCore): void {
+  private adoptCore(core: ThreadCore): void {
+    this.composeHooks(core);
     core.fileSupervisor.on("sent", (updates) => {
       if (this.core === core) this.callbacks.onFilesSent?.(updates);
     });
@@ -278,7 +294,6 @@ export class Thread {
       context,
       callbacks: {
         onUpdate: () => this.handleUpdate(),
-        getHooks: () => this.coreHooks(),
       },
       manager,
       toolSpecs,
@@ -288,7 +303,7 @@ export class Thread {
         ? { structuredResults: opts.structuredResults }
         : {}),
     });
-    this.watchContextDeliveries(core);
+    this.adoptCore(core);
     return core;
   }
 
@@ -307,7 +322,6 @@ export class Thread {
       nativeMessageIdx,
       callbacks: {
         onUpdate: () => cloned.handleUpdate(),
-        getHooks: () => cloned.coreHooks(),
       },
     });
     const cloned = new Thread(
@@ -323,7 +337,7 @@ export class Thread {
       },
       core,
     );
-    cloned.watchContextDeliveries(core);
+    cloned.adoptCore(core);
     return cloned;
   }
   get activeReminders(): ReadonlySet<string> {
@@ -692,11 +706,10 @@ export class Thread {
    * not consume anything, since the request may never be issued. */
   private async hasPendingContent(): Promise<boolean> {
     const core = this.core;
-    const hooks = this.hooks;
+    if (!core.isActive) return false;
     const isCurrent = this.currentLoopGuard();
-    const pending = await core.hasPendingContext();
-    if (!isCurrent()) return false;
-    return pending || (await hooks.hasPendingContent());
+    const pending = await core.hooks.hasPendingContent();
+    return isCurrent() && pending;
   }
   /** Outer hooks may outlive cancellation. Each submission captures its own
    * signal so a late continuation cannot act on the replacement submission. */
@@ -805,7 +818,7 @@ export class Thread {
   > {
     const rendered = renderYieldValue(value);
     const texts: string[] = [];
-    for (const hook of this.hooks.onYield) {
+    for (const hook of this.core.hooks.onYield) {
       const action = await hook(value);
       if (!isCurrent()) return { type: "settled", result: { type: "aborted" } };
       if (action.type === "accept") {
@@ -943,7 +956,7 @@ export class Thread {
     ) {
       return { type: "queues" };
     }
-    const action = this.hooks.onEndTurn?.({
+    const action = this.core.hooks.onEndTurn?.({
       stopReason,
       inputTokenCount: this.core.preflightTokenCount,
       lastAssistantMessage: this.core.lastAssistantMessage,

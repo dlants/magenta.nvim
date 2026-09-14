@@ -19,7 +19,6 @@ import {
   uniqueThreadId,
 } from "./test-helpers.ts";
 import { Thread, threadCloneContext } from "./thread.ts";
-import { composeSupervisors } from "./thread-supervisor.ts";
 import {
   type AbsFilePath,
   FileCategory,
@@ -344,7 +343,7 @@ describe("Thread-owned context delivery", () => {
     try {
       f.setGit();
       let suspend = true;
-      f.thread.hooks = composeSupervisors([
+      f.thread.supervisors = [
         {
           onBeforeRequest: () =>
             Promise.resolve(
@@ -356,7 +355,7 @@ describe("Thread-owned context delivery", () => {
                 : { type: "none" as const },
             ),
         },
-      ]);
+      ];
 
       expect(
         await f.thread.send([

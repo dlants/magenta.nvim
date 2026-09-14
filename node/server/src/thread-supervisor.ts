@@ -102,14 +102,7 @@ export function composeSupervisors(
     }
 
     const toolResults = sup.onToolResults?.bind(sup);
-    // Supervisors observe tool results; only the thread's own yield gate
-    // stops a turn here.
-    if (toolResults) {
-      onToolResults.push((results, nativeMessageIdx) => {
-        toolResults(results, nativeMessageIdx);
-        return undefined;
-      });
-    }
+    if (toolResults) onToolResults.push(toolResults);
 
     const yieldHook = sup.onYield?.bind(sup);
     // The built-in supervisors predate structured yields and read text.
@@ -124,9 +117,6 @@ export function composeSupervisors(
 
   return {
     onBeforeRequest,
-    // Supervisors contribute to the request, never to the tail of it: that
-    // slot is the owner's own.
-    onBeforeRequestLast: [],
     onToolResults,
     onYield,
     onEndTurn: (context) => {
@@ -188,12 +178,15 @@ export type RequestContext = {
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: string): Promise<YieldAction>;
-  /** Every requested tool has settled and its results are about to be written. Fire-and-forget. */
+  /** Every requested tool has settled and its results are about to be
+   * written. Observation, normally: the results are already final. A
+   * supervisor may stop the turn here over a well-formed log by returning a
+   * reason; the first one wins. */
   onToolResults?(
     results: ToolResults,
     /** The idx of the message that will hold these results. */
     nativeMessageIdx: NativeMessageIdx,
-  ): void;
+  ): SuspendReason | undefined;
   /** This supervisor reads `context.inputTokenCount` in `onBeforeRequest` and
    * needs it to describe the request it is deciding about, so the agent
    * counts the conversation before consulting it. Declaring it is what makes
