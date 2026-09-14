@@ -1,5 +1,6 @@
 import type { GitClient, GitState } from "../capabilities/git-client.ts";
 import { formatGitHead } from "../capabilities/git-client.ts";
+import { Emitter } from "../emitter.ts";
 import type { Logger } from "../logger.ts";
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
@@ -151,17 +152,23 @@ import { injectText } from "../thread-supervisor.ts";
 /** Contributes the git status update to the request that is about to go out.
  * `GitTracker.getUpdate` commits the agent view as a side effect, which is
  * correct here: an injection is applied unconditionally. */
-export class GitSupervisor implements ThreadSupervisor {
-  private constructor(
-    readonly gitTracker: GitTracker,
-    private readonly onSent: ((update: GitContextUpdate) => void) | undefined,
-  ) {}
+export type GitSupervisorEvents = {
+  /** A git update was just committed into the request going out. */
+  sent: [update: GitContextUpdate];
+};
+
+export class GitSupervisor
+  extends Emitter<GitSupervisorEvents>
+  implements ThreadSupervisor
+{
+  private constructor(readonly gitTracker: GitTracker) {
+    super();
+  }
 
   static create(args: {
     gitClient: GitClient;
     initialGitState: GitState | undefined;
     logger: Logger;
-    onSent?: (update: GitContextUpdate) => void;
   }): GitSupervisor {
     return new GitSupervisor(
       GitTracker.create({
@@ -169,21 +176,18 @@ export class GitSupervisor implements ThreadSupervisor {
         initialState: args.initialGitState,
         logger: args.logger,
       }),
-      args.onSent,
     );
   }
 
   static clone(args: {
     source: GitSupervisor;
     nativeMessageIdx: NativeMessageIdx;
-    onSent?: (update: GitContextUpdate) => void;
   }): GitSupervisor {
     return new GitSupervisor(
       GitTracker.clone({
         source: args.source.gitTracker,
         nativeMessageIdx: args.nativeMessageIdx,
       }),
-      args.onSent,
     );
   }
 
@@ -191,7 +195,7 @@ export class GitSupervisor implements ThreadSupervisor {
     if (context.status === "suspended") return { type: "none" };
     const update = await this.gitTracker.getUpdate(context.nativeMessageIdx);
     if (!update) return { type: "none" };
-    this.onSent?.(update);
+    this.emit("sent", update);
     return injectText(gitUpdateToText(update));
   }
 

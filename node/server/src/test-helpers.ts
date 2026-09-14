@@ -275,10 +275,12 @@ function baseTestContext(provider: Provider): ThreadContext {
 }
 
 /** Fill in the hook points a test does not care about. */
-type TestHooks = AgentHooks & Pick<ThreadHooks, "onYield">;
+type TestHooks = AgentHooks &
+  Pick<ThreadHooks, "onYield" | "onBeforeRequestLast">;
 export function agentHooks(partial: Partial<TestHooks> = {}): TestHooks {
   return {
     onBeforeRequest: [],
+    onBeforeRequestLast: [],
     onToolResults: [],
     onYield: [],
     ...partial,

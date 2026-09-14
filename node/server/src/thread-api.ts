@@ -141,6 +141,10 @@ export type AgentHooks = {
  * loop's outer half lives in `Thread`, so the end-of-turn question is asked
  * there and the agent never sees it. */
 export type ThreadHooks = AgentHooks & {
+  /** Registered after every context supervisor the core owns, so whatever
+   * this contributes lands last in the message the request carries. The
+   * owner's queued user content is the only thing that belongs here. */
+  onBeforeRequestLast: BeforeRequestHook[];
   /** The model called yield_to_parent and the agent settled on it. The first
    * `accept`/`reject` wins; `send-message` texts concatenate. */
   onYield: YieldHook[];
@@ -150,8 +154,6 @@ export type ThreadHooks = AgentHooks & {
   onToolApplied?: OnToolAppliedHook;
   /** The agent stopped without yielding. */
   onEndTurn?: (ctx: EndTurnContext) => EndTurnAction;
-  /** The thread's log was thrown away and it starts over. */
-  onReset?: () => void;
   /** Whether any supervisor would contribute content to a request issued
    * right now. Must not commit any "sent" state. */
   hasPendingContent: () => Promise<boolean>;

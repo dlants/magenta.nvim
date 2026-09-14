@@ -269,7 +269,6 @@ export {
   type ThreadContextDelivery,
   ThreadCore,
   type ThreadCoreCallbacks,
-  type ThreadCoreSupervision,
 } from "./thread-core.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {

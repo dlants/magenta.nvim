@@ -382,7 +382,7 @@ describe("deferred submissions", () => {
       uniqueThreadId("deferred-yield-rejection"),
     );
     let rejected = false;
-    core.hooks = composeSupervisors(() => [
+    core.hooks = composeSupervisors([
       {
         onYield: async () => {
           if (rejected) return { type: "none" as const };
@@ -543,7 +543,7 @@ describe("deferred submissions", () => {
       // Not the opening request of the send: the one the stop-time flush
       // produces.
       let requests = 0;
-      core.hooks = composeSupervisors(() => [
+      core.hooks = composeSupervisors([
         {
           onBeforeRequest: () =>
             Promise.resolve(
@@ -596,7 +596,7 @@ describe("deferred submissions", () => {
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
       let suspend = true;
-      core.hooks = composeSupervisors(() => [
+      core.hooks = composeSupervisors([
         {
           onBeforeRequest: () =>
             Promise.resolve(
@@ -667,7 +667,7 @@ describe("deferred submissions", () => {
     try {
       let compacted = false;
       let requests = 0;
-      core.hooks = composeSupervisors(() => [
+      core.hooks = composeSupervisors([
         {
           onBeforeRequest: () =>
             Promise.resolve(
@@ -856,8 +856,8 @@ describe("Thread aborts the tools it owns", () => {
     await stopping;
     expect(await sent).toEqual({ type: "aborted" });
     expect(onToolResults).toHaveBeenCalledTimes(action === "abort" ? 1 : 0);
-    expect(core.structuredToolResults).toBe(archive);
     expect(archive.size).toBe(0);
+    expect(core.structuredToolResults.size).toBe(0);
     expect(oldCore.structuredToolResults.size).toBe(0);
     await core.destroy();
   });
@@ -1095,7 +1095,7 @@ describe("Thread.abort between turns", () => {
     );
     const stopConsultations: string[] = [];
     let requests = 0;
-    core.hooks = composeSupervisors(() => [
+    core.hooks = composeSupervisors([
       {
         onBeforeRequest: () => {
           if (++requests > 1) stopConsultations.push("continuation");
@@ -1248,7 +1248,7 @@ describe("system-info preamble", () => {
       systemInfo: core.systemInfo,
       alreadyInjected: false,
     });
-    core.hooks = composeSupervisors(() => [systemInfo]);
+    core.hooks = composeSupervisors([systemInfo]);
     const first = core.send([
       {
         type: "text",
@@ -1293,7 +1293,7 @@ describe("system-info preamble", () => {
 describe("empty send gate", () => {
   it("issues a request for an empty send when a supervisor has content", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors(() => [
+    core.hooks = composeSupervisors([
       {
         hasPendingContent: () => Promise.resolve(true),
         onBeforeRequest: () => Promise.resolve(injectText("# context update")),
@@ -1308,7 +1308,7 @@ describe("empty send gate", () => {
 
   it("issues no request for an empty send when nothing is pending", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors(() => [
+    core.hooks = composeSupervisors([
       { hasPendingContent: () => Promise.resolve(false) },
     ]);
     expect(await core.send([])).toEqual({ type: "empty" });
@@ -1334,7 +1334,7 @@ describe("empty send gate", () => {
           reminders: ["stay on task"],
         }),
     );
-    core.hooks = composeSupervisors(() => [
+    core.hooks = composeSupervisors([
       { hasPendingContent: () => Promise.resolve(false) },
     ]);
     expect(await core.submit(pendingMessage(""))).toEqual({ type: "empty" });
@@ -1357,7 +1357,7 @@ describe("empty send gate", () => {
   it("supersedes an empty send whose probe is still in flight", async () => {
     const { core, mockClient } = createAgentWithMock();
     const probe = new Defer<boolean>();
-    core.hooks = composeSupervisors(() => [
+    core.hooks = composeSupervisors([
       { hasPendingContent: () => probe.promise },
     ]);
     const first = core.send([]);
@@ -1389,7 +1389,7 @@ describe("empty send gate", () => {
             : { type: "none" as const },
         ),
     };
-    core.hooks = composeSupervisors(() => [supervisor]);
+    core.hooks = composeSupervisors([supervisor]);
     await core.send([]);
     expect(mockClient.streams.length).toBe(0);
 
@@ -1571,7 +1571,8 @@ describe("replaceable conversation core", () => {
       value: { type: "text", text: "finished" },
     });
     expect(core.yielded?.value).toEqual({ type: "text", text: "finished" });
-    expect(core.core.structuredToolResults.size).toBe(0);
+    // One archive, carried onto the replacement conversation.
+    expect(core.core.structuredToolResults.size).toBe(1);
     expect(
       core.structuredToolResults.get("yield-result" as ToolRequestId),
     ).toEqual({
@@ -1611,7 +1612,7 @@ describe("replaceable conversation core", () => {
     expect(fork.structuredToolResults).not.toBe(core.structuredToolResults);
     expect(fork.structuredToolResults.get(id)).toEqual(original);
     expect(fork.structuredToolResults.get(id)).not.toBe(original);
-    expect(fork.core.structuredToolResults.size).toBe(0);
+    expect(fork.core.structuredToolResults.size).toBe(1);
     await core.reset({ seed: [], archive: { type: "none" } });
     expect(core.structuredToolResults.get(id)).toBe(original);
     await core.destroy();
@@ -1649,7 +1650,7 @@ describe("stale outer submissions", () => {
     const entered = new Defer<void>();
     const pending = new Defer<boolean>();
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors(() => [
+    core.hooks = composeSupervisors([
       {
         hasPendingContent: () => {
           entered.resolve();

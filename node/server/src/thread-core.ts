@@ -1,24 +1,18 @@
 import type { GitState } from "./capabilities/git-client.ts";
-import {
-  FileSupervisor,
-  type Files,
-  type FileUpdates,
-} from "./supervisors/file-supervisor.ts";
-import {
-  type GitContextUpdate,
-  GitSupervisor,
-} from "./supervisors/git-supervisor.ts";
+import { FileSupervisor, type Files } from "./supervisors/file-supervisor.ts";
+import { GitSupervisor } from "./supervisors/git-supervisor.ts";
 import {
   composeSupervisors,
   SystemInfoSupervisor,
 } from "./thread-supervisor.ts";
 
+/** How this conversation's context supervisors are seeded. Construction
+ * parameters only: what a supervisor delivers is reported on its own `sent`
+ * event, which the owning `Thread` subscribes to. */
 export interface ThreadContextDelivery {
   initialFiles?: Files;
   pollIntervalMs?: number;
   initialGitState?: GitState | undefined;
-  onFilesSent?: (updates: FileUpdates) => void;
-  onGitSent?: (update: GitContextUpdate) => void;
 }
 
 import { type AgentTurn, runAgentLoop, type ToolExecution } from "./agent.ts";
@@ -38,21 +32,15 @@ import type {
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
-import type {
-  CompactThreadContext,
-  ReminderThreadContext,
-  ThreadCloneContext,
-  ThreadContext,
-} from "./thread.ts";
+import type { ThreadCloneContext, ThreadContext } from "./thread.ts";
 import type {
   AgentHooks,
-  AgentRequestContext,
   SendResult,
   ThreadHooks,
   ToolInvocationState,
   YieldValue,
 } from "./thread-api.ts";
-import type { RequestAction, SuspendReason } from "./thread-supervisor.ts";
+import type { SuspendReason } from "./thread-supervisor.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
 import type {
   ToolInvocation,
@@ -65,63 +53,15 @@ import { createTool } from "./tools/create-tool.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 
-export type ThreadCoreSupervision =
-  | {
-      readonly type: "compact";
-      readonly context: CompactThreadContext;
-    }
-  | {
-      readonly type: "enabled";
-      readonly context: ReminderThreadContext;
-      readonly systemReminders: SystemReminderSupervisor;
-    };
-
-type ClonedSupervisionContext =
-  | {
-      readonly type: "compact";
-      readonly context: CompactThreadContext;
-    }
-  | {
-      readonly type: "enabled";
-      readonly context: ReminderThreadContext;
-      readonly sourceSystemReminders: SystemReminderSupervisor;
-    };
-
-function supervisionContextForClone(
-  source: ThreadCoreSupervision,
-  cloneContext: ThreadCloneContext,
-): ClonedSupervisionContext {
-  if (source.type === "compact") {
-    return {
-      type: "compact",
-      context: { ...cloneContext, threadType: "compact" },
-    };
-  }
-  return {
-    type: "enabled",
-    context: { ...cloneContext, threadType: source.context.threadType },
-    sourceSystemReminders: source.systemReminders,
-  };
-}
-
 export interface ThreadCoreCallbacks {
   onUpdate: () => void;
   getHooks: () => ThreadHooks;
-  onStructuredResult: (id: ToolRequestId, result: ToolStructuredResult) => void;
-  flushQueue: (ctx: AgentRequestContext) => Promise<RequestAction>;
 }
 
 export class ThreadCore {
   editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[] = [];
   preflightTokenCount: number | undefined;
-  readonly structuredToolResults = new Map<
-    ToolRequestId,
-    ToolStructuredResult
-  >();
-  pendingSeed: AgentInput[] = [];
   private disposed = false;
-  readonly gitSupervisor: GitSupervisor | undefined;
-  readonly systemInfoSupervisor: SystemInfoSupervisor | undefined;
   private readonly contextHooks: ThreadHooks;
 
   async hasPendingContext(): Promise<boolean> {
@@ -130,14 +70,22 @@ export class ThreadCore {
 
   private constructor(
     readonly id: ThreadId,
-    readonly supervision: ThreadCoreSupervision,
+    readonly context: ThreadContext,
     private callbacks: ThreadCoreCallbacks,
     readonly manager: NativeInferenceManager,
     readonly toolSpecs: ProviderToolSpec[],
     readonly edlRegisters: EdlRegisters,
+    /** The display archive of every structured result the log can still
+     * refer to. Carried onto the conversation that replaces this one, which
+     * is why it is handed in rather than started empty. */
+    readonly structuredToolResults: Map<ToolRequestId, ToolStructuredResult>,
+    private pendingSeed: AgentInput[],
     readonly fileSupervisor: FileSupervisor,
-    gitSupervisor: GitSupervisor | undefined,
-    systemInfoSupervisor: SystemInfoSupervisor | undefined,
+    readonly gitSupervisor: GitSupervisor | undefined,
+    readonly systemInfoSupervisor: SystemInfoSupervisor | undefined,
+    /** Absent exactly on the compaction thread, whose content its caller
+     * composes exactly. */
+    readonly systemReminders: SystemReminderSupervisor | undefined,
   ) {
     for (const event of [
       "fileAdded",
@@ -148,21 +96,24 @@ export class ThreadCore {
       this.fileSupervisor.on(event, () => this.handleUpdate());
     }
     this.fileSupervisor.start();
-    this.gitSupervisor = gitSupervisor;
-    this.systemInfoSupervisor = systemInfoSupervisor;
-    const supervisors = [
-      ...(this.gitSupervisor ? [this.gitSupervisor] : []),
-      ...(this.supervision.type === "enabled" ? [this.fileSupervisor] : []),
-      ...(this.systemInfoSupervisor ? [this.systemInfoSupervisor] : []),
-      ...(this.supervision.type === "enabled"
-        ? [this.supervision.systemReminders]
-        : []),
-    ];
-    this.contextHooks = composeSupervisors(() => supervisors);
+    // Files are tracked for every conversation but only *delivered* where
+    // reminders are, so the two appear and disappear together.
+    this.contextHooks = composeSupervisors([
+      ...(gitSupervisor ? [gitSupervisor] : []),
+      ...(systemReminders ? [fileSupervisor] : []),
+      ...(systemInfoSupervisor ? [systemInfoSupervisor] : []),
+      ...(systemReminders ? [systemReminders] : []),
+    ]);
   }
 
-  get context(): ThreadContext {
-    return this.supervision.context;
+  /** Content that leads the next turn: the hand-off a reset supplies, or a
+   * nudge aimed at this conversation rather than at the thread. Drained by
+   * the first turn that runs. */
+  get seed(): ReadonlyArray<AgentInput> {
+    return this.pendingSeed;
+  }
+  addSeed(messages: AgentInput[]): void {
+    this.pendingSeed = [...this.pendingSeed, ...messages];
   }
 
   static create({
@@ -173,6 +124,8 @@ export class ThreadCore {
     toolSpecs,
     edlRegisters = { registers: new Map(), nextSavedId: 0 },
     initialFiles,
+    seed = [],
+    structuredResults,
   }: {
     id: ThreadId;
     context: ThreadContext;
@@ -181,9 +134,10 @@ export class ThreadCore {
     toolSpecs: ProviderToolSpec[];
     edlRegisters?: EdlRegisters;
     initialFiles?: Files;
+    seed?: AgentInput[];
+    structuredResults?: ReadonlyMap<ToolRequestId, ToolStructuredResult>;
   }): ThreadCore {
     const delivery = context.contextDelivery;
-    let core: ThreadCore | undefined;
     const fileSupervisor = FileSupervisor.create({
       logger: context.logger,
       fileIO: context.fileIO,
@@ -193,18 +147,12 @@ export class ThreadCore {
       ...(delivery?.pollIntervalMs !== undefined
         ? { pollIntervalMs: delivery.pollIntervalMs }
         : {}),
-      onSent: (updates) => {
-        if (core?.isActive) delivery?.onFilesSent?.(updates);
-      },
     });
     const gitSupervisor = delivery
       ? GitSupervisor.create({
           gitClient: context.gitClient,
           initialGitState: delivery.initialGitState,
           logger: context.logger,
-          onSent: (update) => {
-            if (core?.isActive) delivery.onGitSent?.(update);
-          },
         })
       : undefined;
     const systemInfoSupervisor =
@@ -214,32 +162,30 @@ export class ThreadCore {
             alreadyInjected: manager.log.messages.length > 0,
           })
         : undefined;
-    const supervision: ThreadCoreSupervision =
+    const structuredToolResults = new Map(structuredResults);
+    const systemReminders =
       context.threadType === "compact"
-        ? { type: "compact", context }
-        : {
-            type: "enabled",
-            context,
-            systemReminders: SystemReminderSupervisor.create({
-              threadType: context.threadType,
-              subagentConfig: context.subagentConfig,
-              contextTracker: fileSupervisor,
-              getStructuredResults: () =>
-                core?.structuredToolResults ?? new Map(),
-            }),
-          };
-    core = new ThreadCore(
+        ? undefined
+        : SystemReminderSupervisor.create({
+            threadType: context.threadType,
+            subagentConfig: context.subagentConfig,
+            contextTracker: fileSupervisor,
+            getStructuredResults: () => structuredToolResults,
+          });
+    return new ThreadCore(
       id,
-      supervision,
+      context,
       callbacks,
       manager,
       toolSpecs,
       edlRegisters,
+      structuredToolResults,
+      [...seed],
       fileSupervisor,
       gitSupervisor,
       systemInfoSupervisor,
+      systemReminders,
     );
-    return core;
   }
 
   static clone({
@@ -255,11 +201,12 @@ export class ThreadCore {
     callbacks: ThreadCoreCallbacks;
     nativeMessageIdx: NativeMessageIdx;
   }): ThreadCore {
-    const clonedSupervisionContext = supervisionContextForClone(
-      source.supervision,
-      context,
-    );
-    const clonedContext = clonedSupervisionContext.context;
+    // Conversation kind is inherited from the source, so supervisor presence
+    // cannot diverge from it.
+    const clonedContext: ThreadContext =
+      source.context.threadType === "compact"
+        ? { ...context, threadType: "compact" }
+        : { ...context, threadType: source.context.threadType };
     const toolSpecs = getToolSpecs(
       clonedContext.threadType,
       clonedContext.mcpToolManager,
@@ -273,25 +220,17 @@ export class ThreadCore {
     const manager = source.manager.clone();
     manager.truncateMessages(nativeMessageIdx);
     const effectiveNativeMessageIdx = manager.getNativeMessageIdx();
-    const delivery = clonedContext.contextDelivery;
-    let clone: ThreadCore | undefined;
     const fileSupervisor = FileSupervisor.clone({
       source: source.fileSupervisor,
       history: {
         type: "truncate",
         nativeMessageIdx: effectiveNativeMessageIdx,
       },
-      onSent: (updates) => {
-        if (clone?.isActive) delivery?.onFilesSent?.(updates);
-      },
     });
     const gitSupervisor = source.gitSupervisor
       ? GitSupervisor.clone({
           source: source.gitSupervisor,
           nativeMessageIdx: effectiveNativeMessageIdx,
-          onSent: (update) => {
-            if (clone?.isActive) delivery?.onGitSent?.(update);
-          },
         })
       : undefined;
     const systemInfoSupervisor = source.systemInfoSupervisor
@@ -300,23 +239,24 @@ export class ThreadCore {
           nativeMessageIdx: effectiveNativeMessageIdx,
         })
       : undefined;
-    const supervision: ThreadCoreSupervision =
-      clonedSupervisionContext.type === "compact"
-        ? clonedSupervisionContext
-        : {
-            type: "enabled",
-            context: clonedSupervisionContext.context,
-            systemReminders: SystemReminderSupervisor.clone({
-              source: clonedSupervisionContext.sourceSystemReminders,
-              nativeMessageIdx: effectiveNativeMessageIdx,
-              contextTracker: fileSupervisor,
-              getStructuredResults: () =>
-                clone?.structuredToolResults ?? new Map(),
-            }),
-          };
-    clone = new ThreadCore(
+    const structuredToolResults = new Map<
+      ToolRequestId,
+      ToolStructuredResult
+    >();
+    for (const [key, value] of source.structuredToolResults) {
+      structuredToolResults.set(key, structuredClone(value));
+    }
+    const systemReminders = source.systemReminders
+      ? SystemReminderSupervisor.clone({
+          source: source.systemReminders,
+          nativeMessageIdx: effectiveNativeMessageIdx,
+          contextTracker: fileSupervisor,
+          getStructuredResults: () => structuredToolResults,
+        })
+      : undefined;
+    return new ThreadCore(
       id,
-      supervision,
+      clonedContext,
       callbacks,
       manager,
       toolSpecs,
@@ -324,11 +264,13 @@ export class ThreadCore {
         registers: new Map(source.edlRegisters.registers),
         nextSavedId: source.edlRegisters.nextSavedId,
       },
+      structuredToolResults,
+      [],
       fileSupervisor,
       gitSupervisor,
       systemInfoSupervisor,
+      systemReminders,
     );
-    return clone;
   }
   get isActive(): boolean {
     return !this.disposed;
@@ -340,11 +282,11 @@ export class ThreadCore {
     if (!this.disposed) this.callbacks.onUpdate();
   }
 
-  beginSubmission(submitted: AgentInput[]): AgentInput[] {
-    const messages = [...this.pendingSeed, ...submitted];
-    this.pendingSeed = [];
+  /** A new submission starts here. Only the edited-file list is per
+   * submission — the seed belongs to the first *turn*, and `runTurn` drains
+   * it — so this is the whole boundary. */
+  beginSubmission(): void {
     this.editedFilesThisTurn = [];
-    return messages;
   }
 
   async dispose(): Promise<void> {
@@ -417,7 +359,6 @@ export class ThreadCore {
       const { structuredResult, ...wireResult } = result;
       if (structuredResult) {
         this.structuredToolResults.set(request.id, structuredResult);
-        this.callbacks.onStructuredResult(request.id, structuredResult);
       }
       return { ...executed, result: wireResult };
     });
@@ -425,11 +366,7 @@ export class ThreadCore {
   }
   private toolBatch:
     | { type: "idle" }
-    | {
-        type: "running";
-        executor: ToolExecutorHost;
-        requested: NonEmptyRequestedTools;
-      } = { type: "idle" };
+    | { type: "running"; executor: ToolExecutorHost } = { type: "idle" };
 
   private executeTools(
     requests: NonEmptyRequestedTools,
@@ -444,7 +381,7 @@ export class ThreadCore {
       publishTools,
       onUpdate: () => this.handleUpdate(),
     });
-    this.toolBatch = { type: "running", executor, requested: requests };
+    this.toolBatch = { type: "running", executor };
     const execution = executor.execute(requests);
     return {
       ...execution,
@@ -486,13 +423,13 @@ export class ThreadCore {
   }
 
   /** The idx of the last message that will hold the results of the tools
-   * running right now. The active batch owns both its executor and its
-   * non-empty request list, so this cannot fall back to stale metadata. */
+   * running right now. The running batch fixed it when it started, so there
+   * is one place it is decided and no stale metadata to fall back to. */
   private get pendingResultMessageIdx(): NativeMessageIdx {
     if (this.toolBatch.type !== "running") {
       throw new Error("onToolApplied called without a running tool batch");
     }
-    return this.manager.getPendingResultMessageIdx(this.toolBatch.requested);
+    return this.toolBatch.executor.resultMessageIdx;
   }
 
   private agentHooks(): AgentHooks {
@@ -506,7 +443,9 @@ export class ThreadCore {
         // The reminder is the last context supervisor, so its injection sits
         // after context updates and immediately before queued/user content.
         ...this.contextHooks.onBeforeRequest,
-        { run: (ctx) => this.callbacks.flushQueue(ctx) },
+        // Registered after every context supervisor: the owner's queued
+        // content is the user's own, and it lands last in the message.
+        ...ownerHooks.onBeforeRequestLast,
         // After every hook that might have asked for a count, so it records
         // the one this request was decided on — and never forces one.
         {
@@ -539,8 +478,10 @@ export class ThreadCore {
     }
     return undefined;
   }
-  async runTurn(messages: AgentInput[]): Promise<SendResult> {
+  async runTurn(submitted: AgentInput[]): Promise<SendResult> {
     if (!this.isActive) return { type: "aborted" };
+    const messages = [...this.pendingSeed, ...submitted];
+    this.pendingSeed = [];
     const turn = runAgentLoop(
       {
         logger: this.context.logger,

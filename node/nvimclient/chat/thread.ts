@@ -341,10 +341,6 @@ export class NvimThread {
       ...(context.initialFiles ? { initialFiles: context.initialFiles } : {}),
       initialGitState: context.initialGitState,
     };
-    contextDelivery.onFilesSent = (updates) =>
-      this.recordMessageViewState({ contextUpdates: updates });
-    contextDelivery.onGitSent = (update) =>
-      this.recordMessageViewState({ gitUpdate: update });
     if (preBuilt) {
       this.core = preBuilt.core;
       this.core.callbacks = this.coreCallbacks();
@@ -401,7 +397,7 @@ export class NvimThread {
     // chunk boundary has to repaint even though nothing on the thread moved.
     this.compactor?.on("transition", () => this.onCoreUpdate());
 
-    this.core.hooks = composeSupervisors(() => [
+    this.core.hooks = composeSupervisors([
       MaxTokensSupervisor.create(),
       ...this.supervisors,
     ]);
@@ -498,6 +494,9 @@ export class NvimThread {
     return {
       onUpdate: () => this.onCoreUpdate(),
       resolve: (message) => this.resolveSubmission(message),
+      onFilesSent: (updates) =>
+        this.recordMessageViewState({ contextUpdates: updates }),
+      onGitSent: (update) => this.recordMessageViewState({ gitUpdate: update }),
     };
   }
 

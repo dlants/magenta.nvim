@@ -19,8 +19,8 @@ export type ToolExecutorDeps = {
   logger: Logger;
   createTool: (request: ToolRequest) => ToolInvocation;
   getHooks: () => AgentHooks;
-  /** The idx of the last message this batch's results will occupy. Read when
-   * the batch settles, just before the results are written. */
+  /** The idx of the last message this batch's results will occupy. Fixed
+   * when the batch starts: nothing is appended to the log while tools run. */
   getPendingResultMessageIdx: (
     requested: NonEmptyRequestedTools,
   ) => NativeMessageIdx;
@@ -44,6 +44,17 @@ export class ToolExecutorHost {
    * before they are reachable, and once they have all settled. */
   private aborting = false;
 
+  private pendingResultMessageIdx: NativeMessageIdx | undefined;
+
+  /** Where this batch's results will be written. Readable for as long as the
+   * batch is live, which is exactly when a tool can report what it applied. */
+  get resultMessageIdx(): NativeMessageIdx {
+    if (this.pendingResultMessageIdx === undefined) {
+      throw new Error("resultMessageIdx read outside a running batch");
+    }
+    return this.pendingResultMessageIdx;
+  }
+
   /** Abort the batch in flight: stop every live invocation and settle the
    * batch as `aborted`. Also reachable from the thread directly, for the
    * teardowns that are not the agent winding a turn down. */
@@ -62,6 +73,8 @@ export class ToolExecutorHost {
     requests: NonEmptyRequestedTools,
   ): Promise<ToolOutcome> {
     this.aborting = false;
+    this.pendingResultMessageIdx =
+      this.deps.getPendingResultMessageIdx(requests);
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
     const results = new Map<ToolRequestId, ProviderToolResult["result"]>();
 
@@ -129,10 +142,7 @@ export class ToolExecutorHost {
     let suspend: SuspendReason | undefined;
     for (const hook of this.deps.getHooks().onToolResults) {
       try {
-        const asked = hook(
-          results,
-          this.deps.getPendingResultMessageIdx(requests),
-        );
+        const asked = hook(results, this.resultMessageIdx);
         suspend ??= asked;
       } catch (err) {
         this.deps.logger.error(

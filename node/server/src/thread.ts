@@ -30,7 +30,12 @@ import {
   parseCompact,
   type ResolveSubmission,
 } from "./submission/index.ts";
-import { buildClonedFiles, type Files } from "./supervisors/file-supervisor.ts";
+import {
+  buildClonedFiles,
+  type Files,
+  type FileUpdates,
+} from "./supervisors/file-supervisor.ts";
+import type { GitContextUpdate } from "./supervisors/git-supervisor.ts";
 import type {
   AgentRequestContext,
   OnUpdate,
@@ -123,6 +128,11 @@ type FlushedQueue =
 export type ThreadCallbacks = {
   onUpdate: OnUpdate;
   resolve: ResolveSubmission;
+  /** A context supervisor committed a delivery into the request going out.
+   * Subscribed once per conversation generation, since a reset replaces the
+   * supervisors along with the core. */
+  onFilesSent?: (updates: FileUpdates) => void;
+  onGitSent?: (update: GitContextUpdate) => void;
 };
 /** Stable identity, submission queues, yield contract and archive across
  * replaceable conversation generations. */
@@ -163,10 +173,14 @@ export class Thread {
   get toolSpecs(): ProviderToolSpec[] {
     return this.core.toolSpecs;
   }
-  readonly structuredToolResults = new Map<
+  /** The conversation's own archive: a reset or fork carries it onto the
+   * replacement core, so it outlives the generation that produced it. */
+  get structuredToolResults(): ReadonlyMap<
     ToolRequestId,
     ToolStructuredResult
-  >();
+  > {
+    return this.core.structuredToolResults;
+  }
   getLastStopTokenCount(): number {
     return this.core.getLastStopTokenCount();
   }
@@ -176,6 +190,7 @@ export class Thread {
   }
   public hooks: ThreadHooks = {
     onBeforeRequest: [],
+    onBeforeRequestLast: [],
     onToolResults: [],
     onYield: [],
     hasPendingContent: () => Promise.resolve(false),
@@ -210,7 +225,35 @@ export class Thread {
     this._core = core ?? this.createCore();
   }
 
-  private createCore(initialFiles?: Files): ThreadCore {
+  /** The owner-side hook set the core consults. `hooks` is the supervisors',
+   * set by whoever owns this thread; the async queue flush is the thread's
+   * own and has to ride the tail of the request, after context updates. */
+  private coreHooks(): ThreadHooks {
+    return {
+      ...this.hooks,
+      onBeforeRequestLast: [
+        ...this.hooks.onBeforeRequestLast,
+        { run: (ctx) => this.queueFlushAction(ctx) },
+      ],
+    };
+  }
+
+  /** A context supervisor lives and dies with the core, so each generation is
+   * subscribed to as it is built and a stale one can never report. */
+  private watchContextDeliveries(core: ThreadCore): void {
+    core.fileSupervisor.on("sent", (updates) => {
+      if (this.core === core) this.callbacks.onFilesSent?.(updates);
+    });
+    core.gitSupervisor?.on("sent", (update) => {
+      if (this.core === core) this.callbacks.onGitSent?.(update);
+    });
+  }
+
+  private createCore(opts?: {
+    initialFiles?: Files;
+    seed?: AgentInput[];
+    structuredResults?: ReadonlyMap<ToolRequestId, ToolStructuredResult>;
+  }): ThreadCore {
     const context = this.context;
     const toolSpecs = getToolSpecs(
       context.threadType,
@@ -230,21 +273,23 @@ export class Thread {
         ? { effortOverride: context.subagentConfig.effort }
         : {}),
     });
-    return ThreadCore.create({
+    const core = ThreadCore.create({
       id: this.id,
       context,
       callbacks: {
         onUpdate: () => this.handleUpdate(),
-        getHooks: () => this.hooks,
-        onStructuredResult: (id, result) => {
-          this.structuredToolResults.set(id, result);
-        },
-        flushQueue: (ctx) => this.queueFlushAction(ctx),
+        getHooks: () => this.coreHooks(),
       },
       manager,
       toolSpecs,
-      ...(initialFiles ? { initialFiles } : {}),
+      ...(opts?.initialFiles ? { initialFiles: opts.initialFiles } : {}),
+      ...(opts?.seed ? { seed: opts.seed } : {}),
+      ...(opts?.structuredResults
+        ? { structuredResults: opts.structuredResults }
+        : {}),
     });
+    this.watchContextDeliveries(core);
+    return core;
   }
 
   static async clone(args: {
@@ -262,11 +307,7 @@ export class Thread {
       nativeMessageIdx,
       callbacks: {
         onUpdate: () => cloned.handleUpdate(),
-        getHooks: () => cloned.hooks,
-        onStructuredResult: (id, result) => {
-          cloned.structuredToolResults.set(id, result);
-        },
-        flushQueue: (ctx) => cloned.queueFlushAction(ctx),
+        getHooks: () => cloned.coreHooks(),
       },
     });
     const cloned = new Thread(
@@ -282,27 +323,18 @@ export class Thread {
       },
       core,
     );
-    for (const [id, structured] of sourceThread.structuredToolResults) {
-      cloned.structuredToolResults.set(id, structuredClone(structured));
-    }
+    cloned.watchContextDeliveries(core);
     return cloned;
   }
   get activeReminders(): ReadonlySet<string> {
-    return this.core.supervision.type === "enabled"
-      ? this.core.supervision.systemReminders.activeReminders
-      : new Set();
+    return this.core.systemReminders?.activeReminders ?? new Set();
   }
 
   private activateReminder(
     text: string,
     nativeMessageIdx: NativeMessageIdx,
   ): void {
-    if (this.core.supervision.type === "enabled") {
-      this.core.supervision.systemReminders.activateReminder(
-        text,
-        nativeMessageIdx,
-      );
-    }
+    this.core.systemReminders?.activateReminder(text, nativeMessageIdx);
   }
   /** Busy from the first request of a submission until the loop comes to
    * rest, which spans the gaps between turns. */
@@ -362,10 +394,10 @@ export class Thread {
    * stable thread. Reset supplies the replacement conversation's seed. */
 
   get pendingTurnContent(): ReadonlyArray<AgentInput> {
-    return this.core.pendingSeed;
+    return this.core.seed;
   }
   prependToNextTurn(messages: AgentInput[]): void {
-    this.core.pendingSeed = [...this.core.pendingSeed, ...messages];
+    this.core.addSeed(messages);
   }
   async awaitArchiveFlush(): Promise<void> {
     await this.threadLogger.flushed();
@@ -683,7 +715,7 @@ export class Thread {
     const submission = new AbortController();
     this.submission = submission;
     const core = this.core;
-    const messages = core.beginSubmission(submitted);
+    core.beginSubmission();
     const isCurrent = this.currentLoopGuard();
     this.handleUpdate();
     const finish = (result: SendResult) => {
@@ -694,7 +726,7 @@ export class Thread {
       }
       return result;
     };
-    return this.runLoop(messages, isCurrent, force).then(
+    return this.runLoop(submitted, isCurrent, force).then(
       finish,
       (error: unknown) => {
         finish({
@@ -711,7 +743,7 @@ export class Thread {
     force?: true,
   ): Promise<SendResult> {
     const core = this.core;
-    if (!messages.length && !force) {
+    if (!messages.length && !core.seed.length && !force) {
       const pending = await this.hasPendingContent();
       // Probing takes time, and a send that arrived while it ran owns the
       // loop now: this one is over before it touched the agent.
@@ -984,6 +1016,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.cancelSubmission();
     try {
       const initialFiles = buildClonedFiles(this.core.fileSupervisor.files);
+      const structuredResults = this.core.structuredToolResults;
       await this.core.dispose();
       this.assertUsable();
       // Disposal is irreversible: cancellation prevents the caller's follow-up,
@@ -993,13 +1026,15 @@ Come up with a succinct thread title for this prompt. It must be a single line (
           summary: archive.summary,
           chunkCount: archive.chunkCount,
         });
-      const core = this.createCore(initialFiles);
+      const core = this.createCore({
+        initialFiles,
+        seed,
+        structuredResults,
+      });
       this._core = core;
       this.submission = undefined;
       this.lastSubmissionResult = undefined;
-      core.pendingSeed = [...seed];
       this.threadLogger.resetCursor();
-      this.hooks.onReset?.();
       this.handleUpdate();
       return core;
     } finally {

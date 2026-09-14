@@ -85,53 +85,50 @@ export type RequestAction = SupervisorAction;
  * in the agent because it is policy over a plural collaborator, and each
  * consumer is free to choose a different one. */
 export function composeSupervisors(
-  getSupervisors: () => ReadonlyArray<ThreadSupervisor>,
+  supervisors: ReadonlyArray<ThreadSupervisor>,
 ): ThreadHooks {
+  const onBeforeRequest: BeforeRequestHook[] = [];
+  const onToolResults: ToolResultsHook[] = [];
+  const onYield: YieldHook[] = [];
+  for (const sup of supervisors) {
+    const beforeRequest = sup.onBeforeRequest?.bind(sup);
+    if (beforeRequest) {
+      onBeforeRequest.push({
+        ...(sup.requestPreflightTokenCount
+          ? { requestPreflightTokenCount: true }
+          : {}),
+        run: beforeRequest,
+      });
+    }
+
+    const toolResults = sup.onToolResults?.bind(sup);
+    // Supervisors observe tool results; only the thread's own yield gate
+    // stops a turn here.
+    if (toolResults) {
+      onToolResults.push((results, nativeMessageIdx) => {
+        toolResults(results, nativeMessageIdx);
+        return undefined;
+      });
+    }
+
+    const yieldHook = sup.onYield?.bind(sup);
+    // The built-in supervisors predate structured yields and read text.
+    if (yieldHook) {
+      onYield.push((value) =>
+        yieldHook(
+          value.type === "text" ? value.text : JSON.stringify(value.value),
+        ),
+      );
+    }
+  }
+
   return {
-    // Getters, not eagerly-built arrays: the supervisor list is read at every
-    // hook point, so a supervisor registered later still participates.
-    get onBeforeRequest(): BeforeRequestHook[] {
-      const hooks: BeforeRequestHook[] = [];
-      for (const sup of getSupervisors()) {
-        const run = sup.onBeforeRequest?.bind(sup);
-        if (!run) continue;
-        hooks.push({
-          ...(sup.requestPreflightTokenCount
-            ? { requestPreflightTokenCount: true }
-            : {}),
-          run,
-        });
-      }
-      return hooks;
-    },
-    get onToolResults(): ToolResultsHook[] {
-      const hooks: ToolResultsHook[] = [];
-      for (const sup of getSupervisors()) {
-        const hook = sup.onToolResults?.bind(sup);
-        // Supervisors observe tool results; only the thread's own yield gate
-        // stops a turn here.
-        if (hook)
-          hooks.push((results, nativeMessageIdx) => {
-            hook(results, nativeMessageIdx);
-            return undefined;
-          });
-      }
-      return hooks;
-    },
-    get onYield(): YieldHook[] {
-      const hooks: YieldHook[] = [];
-      for (const sup of getSupervisors()) {
-        const onYield = sup.onYield?.bind(sup);
-        if (!onYield) continue;
-        // The built-in supervisors predate structured yields and read text.
-        hooks.push((value) =>
-          onYield(
-            value.type === "text" ? value.text : JSON.stringify(value.value),
-          ),
-        );
-      }
-      return hooks;
-    },
+    onBeforeRequest,
+    // Supervisors contribute to the request, never to the tail of it: that
+    // slot is the owner's own.
+    onBeforeRequestLast: [],
+    onToolResults,
+    onYield,
     onEndTurn: (context) => {
       const texts: string[] = [];
       // The first suspension wins, and it wins over any nudge: there is no
@@ -140,7 +137,7 @@ export function composeSupervisors(
       // `onBeforeRequest` side, a stop is a fact each of them may need to
       // record — so this cannot short-circuit out of the loop.
       let suspend: Extract<EndTurnAction, { type: "suspend" }> | undefined;
-      for (const sup of getSupervisors()) {
+      for (const sup of supervisors) {
         const action = sup.onEndTurnWithoutYield?.(context);
         if (!action) continue;
         if (action.type === "send-message") texts.push(action.text);
@@ -150,19 +147,14 @@ export function composeSupervisors(
       if (texts.length === 0) return { type: "none" };
       return { type: "send-message", text: texts.join("\n\n") };
     },
-    onReset: () => {
-      for (const sup of getSupervisors()) {
-        sup.onReset?.();
-      }
-    },
     hasPendingContent: async () => {
-      for (const sup of getSupervisors()) {
+      for (const sup of supervisors) {
         if (await sup.hasPendingContent?.()) return true;
       }
       return false;
     },
     onToolApplied: (event) => {
-      for (const sup of getSupervisors()) {
+      for (const sup of supervisors) {
         sup.onToolApplied?.(event);
       }
     },
@@ -196,8 +188,7 @@ export type RequestContext = {
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: string): Promise<YieldAction>;
-  /** Every requested tool has settled and its results are about to be
-   * written. Fire-and-forget. */
+  /** Every requested tool has settled and its results are about to be written. Fire-and-forget. */
   onToolResults?(
     results: ToolResults,
     /** The idx of the message that will hold these results. */
@@ -208,9 +199,6 @@ export interface ThreadSupervisor {
    * counts the conversation before consulting it. Declaring it is what makes
    * the count happen at all. */
   requestPreflightTokenCount?: boolean;
-  /** The thread threw its log away (compaction) and starts over. A supervisor
-   * whose contribution is once-per-conversation re-arms here. */
-  onReset?(): void;
   onBeforeRequest?(context: RequestContext): Promise<SupervisorAction>;
   /** Would `onBeforeRequest` contribute anything right now? Must not commit
    * any "sent" state — it answers a question about a request that may never
@@ -264,10 +252,6 @@ export class SystemInfoSupervisor implements ThreadSupervisor {
         ? args.source.injectedAt
         : undefined,
     );
-  }
-
-  onReset(): void {
-    this.injectedAt = undefined;
   }
 
   async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {

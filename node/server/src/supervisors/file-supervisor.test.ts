@@ -41,8 +41,8 @@ function setup(files: Record<string, string>) {
     cwd: "/test" as NvimCwd,
     homeDir: "/home" as HomeDir,
     initialFiles: {},
-    onSent,
   });
+  supervisor.on("sent", onSent);
   return { fileIO, onSent, supervisor };
 }
 

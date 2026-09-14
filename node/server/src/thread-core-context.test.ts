@@ -54,13 +54,13 @@ async function fixture() {
       fileIO,
       contextDelivery: {
         initialGitState: git,
-        onFilesSent,
         pollIntervalMs: 60_000,
       },
       gitClient: { getState: async () => git },
     },
     uniqueThreadId("core-context"),
   );
+  thread.callbacks.onFilesSent = onFilesSent;
   const manager = thread.core.fileSupervisor;
   manager.addFileContext(file, "tracked.txt" as RelFilePath, {
     category: FileCategory.TEXT,
@@ -313,14 +313,11 @@ describe("Thread-owned context delivery", () => {
       const sourceText = await f.request();
       expect(sourceText.match(/Remember the skills/g)).toHaveLength(1);
       const forkPoint = f.thread.inferenceManager.getNativeMessageIdx();
-      expect(f.thread.core.supervision.type).toBe("enabled");
-      if (f.thread.core.supervision.type !== "enabled") {
+      const reminders = f.thread.core.systemReminders;
+      if (!reminders) {
         throw new Error("Expected reminders for a root thread");
       }
-      f.thread.core.supervision.systemReminders.activateReminder(
-        "retain this reminder",
-        forkPoint,
-      );
+      reminders.activateReminder("retain this reminder", forkPoint);
 
       fork = await Thread.clone({
         sourceThread: f.thread,
@@ -347,7 +344,7 @@ describe("Thread-owned context delivery", () => {
     try {
       f.setGit();
       let suspend = true;
-      f.thread.hooks = composeSupervisors(() => [
+      f.thread.hooks = composeSupervisors([
         {
           onBeforeRequest: () =>
             Promise.resolve(

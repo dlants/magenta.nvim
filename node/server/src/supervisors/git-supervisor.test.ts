@@ -39,15 +39,13 @@ function setup(current: GitState, initial: GitState | undefined) {
     getState: () => Promise.resolve(current),
   } as unknown as GitClient;
   const onSent = vi.fn<(u: GitContextUpdate) => void>();
-  return {
-    supervisor: GitSupervisor.create({
-      gitClient,
-      initialGitState: initial,
-      logger: noopLogger,
-      onSent,
-    }),
-    onSent,
-  };
+  const supervisor = GitSupervisor.create({
+    gitClient,
+    initialGitState: initial,
+    logger: noopLogger,
+  });
+  supervisor.on("sent", onSent);
+  return { supervisor, onSent };
 }
 
 describe("GitSupervisor", () => {

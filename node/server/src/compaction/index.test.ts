@@ -380,31 +380,6 @@ it.each([
   await thread.destroy();
 });
 
-it("does not continue when an onReset callback aborts the compaction", async () => {
-  const { core: thread, mockClient } = createAgentWithMock(
-    undefined,
-    uniqueThreadId("compact-reset-callback"),
-  );
-  thread.hooks.onReset = () => {
-    void thread.abort();
-  };
-  expect(
-    await runSubmission({
-      thread,
-      compactor: {
-        run: async () => ({
-          type: "complete",
-          summary: "summary",
-          chunkCount: 1,
-        }),
-      },
-      start: compactStart,
-    }),
-  ).toEqual({ type: "aborted" });
-  expect(mockClient.streams).toHaveLength(0);
-  await thread.destroy();
-});
-
 it("an immediate submission supersedes a parked compaction before resolution", async () => {
   const entered = new Defer<void>();
   const outcome = new Defer<CompactionOutcome>();

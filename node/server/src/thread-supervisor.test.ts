@@ -31,7 +31,7 @@ describe("composeSupervisors onBeforeRequest", () => {
     const quiet: ThreadSupervisor = {
       onBeforeRequest: () => Promise.resolve({ type: "none" as const }),
     };
-    const hooks = composeSupervisors(() => [first, {}, quiet]);
+    const hooks = composeSupervisors([first, {}, quiet]);
     expect(hooks.onBeforeRequest.length).toBe(2);
     expect(
       await Promise.all(
@@ -40,7 +40,7 @@ describe("composeSupervisors onBeforeRequest", () => {
     ).toEqual([injectText("first"), { type: "none" }]);
   });
   it("declares the preflight token count only for supervisors that ask", () => {
-    const hooks = composeSupervisors(() => [
+    const hooks = composeSupervisors([
       { onBeforeRequest: () => Promise.resolve({ type: "none" as const }) },
       AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "go" }),
     ]);
@@ -48,21 +48,10 @@ describe("composeSupervisors onBeforeRequest", () => {
       hooks.onBeforeRequest.map((h) => h.requestPreflightTokenCount ?? false),
     ).toEqual([false, true]);
   });
-  it("reads the supervisor list at every call", async () => {
-    const supervisors: ThreadSupervisor[] = [];
-    const hooks = composeSupervisors(() => supervisors);
-    expect(hooks.onBeforeRequest.length).toBe(0);
-    supervisors.push({
-      onBeforeRequest: () => Promise.resolve(injectText("late")),
-    });
-    expect(await hooks.onBeforeRequest[0].run(requestContext)).toEqual(
-      injectText("late"),
-    );
-  });
 });
 describe("composeSupervisors hasPendingContent", () => {
   it("is true when any supervisor has something pending", async () => {
-    const hooks = composeSupervisors(() => [
+    const hooks = composeSupervisors([
       { hasPendingContent: () => Promise.resolve(false) },
       {},
       { hasPendingContent: () => Promise.resolve(true) },
@@ -70,7 +59,7 @@ describe("composeSupervisors hasPendingContent", () => {
     expect(await hooks.hasPendingContent?.()).toBe(true);
   });
   it("is false when no supervisor answers", async () => {
-    const hooks = composeSupervisors(() => [
+    const hooks = composeSupervisors([
       {},
       { hasPendingContent: () => Promise.resolve(false) },
     ]);
@@ -92,7 +81,7 @@ describe("composeSupervisors onEndTurn", () => {
         text: "keep going",
       }),
     };
-    const hooks = composeSupervisors(() => [
+    const hooks = composeSupervisors([
       nudger,
       AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "go" }),
     ]);
@@ -103,7 +92,7 @@ describe("composeSupervisors onEndTurn", () => {
   });
 
   it("keeps only the first suspension", () => {
-    const hooks = composeSupervisors(() => [
+    const hooks = composeSupervisors([
       AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "go" }),
       AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "stop" }),
     ]);
@@ -122,14 +111,11 @@ describe("SystemInfoSupervisor", () => {
     cwd: "/tmp" as SystemInfo["cwd"],
     git: undefined,
   };
-  it("injects once, and again after a reset", async () => {
+  it("injects once", async () => {
     const sup = SystemInfoSupervisor.create({
       systemInfo,
       alreadyInjected: false,
     });
-    expect((await sup.onBeforeRequest(context)).type).toBe("inject");
-    expect((await sup.onBeforeRequest(context)).type).toBe("none");
-    sup.onReset();
     expect((await sup.onBeforeRequest(context)).type).toBe("inject");
     expect((await sup.onBeforeRequest(context)).type).toBe("none");
   });

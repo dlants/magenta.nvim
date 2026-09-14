@@ -136,10 +136,11 @@ export type FileSupervisorDeps = {
   cwd: NvimCwd;
   homeDir: HomeDir;
   pollIntervalMs?: number;
-  onSent?: (updates: FileUpdates) => void;
 };
 
 export type FileSupervisorEvents = {
+  /** A context update was just committed into the request going out. */
+  sent: [updates: FileUpdates];
   fileAdded: [absFilePath: AbsFilePath];
   fileRemoved: [absFilePath: AbsFilePath];
   filesReset: [];
@@ -258,7 +259,6 @@ export class FileSupervisor
     private homeDir: HomeDir,
     files: Files,
     pollIntervalMs: number,
-    private readonly onSent?: (updates: FileUpdates) => void,
   ) {
     super();
     this.files = files;
@@ -272,7 +272,6 @@ export class FileSupervisor
     homeDir,
     initialFiles = {},
     pollIntervalMs = 1000,
-    onSent,
   }: FileSupervisorDeps & { initialFiles?: Files }): FileSupervisor {
     return new FileSupervisor(
       logger,
@@ -286,18 +285,15 @@ export class FileSupervisor
         ]),
       ) as Files,
       pollIntervalMs,
-      onSent,
     );
   }
 
   static clone({
     source,
     history,
-    onSent,
   }: {
     source: FileSupervisor;
     history: FileHistoryClone;
-    onSent?: (updates: FileUpdates) => void;
   }): FileSupervisor {
     const files = Object.fromEntries(
       Object.entries(source.files).map(([path, file]) => [
@@ -312,7 +308,6 @@ export class FileSupervisor
       source.homeDir,
       files,
       source.pollIntervalMs,
-      onSent,
     );
   }
 
@@ -323,7 +318,7 @@ export class FileSupervisor
     if (!this.isCurrent(revision) || Object.keys(updates).length === 0)
       return { type: "none" };
     const content = this.contextUpdatesToContent(updates);
-    this.onSent?.(updates);
+    this.emit("sent", updates);
     return { type: "inject", content };
   }
 

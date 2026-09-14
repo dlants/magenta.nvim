@@ -298,7 +298,7 @@ describe("preflight token count parity", () => {
    * anthropic-only feature until openai grows a counting endpoint. */
   const compactHooks = () =>
     agentHooks({
-      onBeforeRequest: composeSupervisors(() => [
+      onBeforeRequest: composeSupervisors([
         AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
       ]).onBeforeRequest,
     });

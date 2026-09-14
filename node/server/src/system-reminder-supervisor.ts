@@ -189,12 +189,6 @@ export class SystemReminderSupervisor implements ThreadSupervisor {
     return injectText(reminder);
   }
 
-  onReset(): void {
-    this.standingHistory.length = 0;
-    this.bashHistory.length = 0;
-    this.reminderHistory.length = 0;
-  }
-
   /** The union of transient reminders and reminders derived from markdown
    * files currently in context, deduped on text. */
   private extraReminders(): string[] {
