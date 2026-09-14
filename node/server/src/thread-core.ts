@@ -1,4 +1,8 @@
-import type { GitState } from "./capabilities/git-client.ts";
+import type { FileIO } from "./capabilities/file-io.ts";
+import type { GitClient, GitState } from "./capabilities/git-client.ts";
+import type { SubagentConfig, ThreadType } from "./chat-types.ts";
+import type { Logger } from "./logger.ts";
+import type { SystemInfo } from "./providers/system-prompt.ts";
 import { FileSupervisor, type Files } from "./supervisors/file-supervisor.ts";
 import { GitSupervisor } from "./supervisors/git-supervisor.ts";
 import { SystemInfoSupervisor } from "./thread-supervisor.ts";
@@ -28,7 +32,6 @@ import type {
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
-import type { ThreadCloneContext, ThreadContext } from "./thread.ts";
 import type {
   AgentHooks,
   SendResult,
@@ -45,9 +48,23 @@ import type {
   ToolStructuredResult,
 } from "./tool-types.ts";
 import { structuredResultFor } from "./tool-types.ts";
-import { createTool } from "./tools/create-tool.ts";
-import { getToolSpecs } from "./tools/toolManager.ts";
-import type { AbsFilePath } from "./utils/files.ts";
+import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
+import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
+
+export interface ThreadCoreContext {
+  logger: Logger;
+  threadToolCreator: ThreadToolCreator;
+  structuredYield: boolean;
+  structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
+  fileIO: FileIO;
+  cwd: NvimCwd;
+  homeDir: HomeDir;
+  gitClient: GitClient;
+  systemInfo: SystemInfo;
+  threadType: ThreadType;
+  subagentConfig?: SubagentConfig | undefined;
+  contextDelivery?: ThreadContextDelivery | undefined;
+}
 
 export interface ThreadCoreCallbacks {
   onUpdate: () => void;
@@ -76,15 +93,11 @@ export class ThreadCore {
 
   private constructor(
     readonly id: ThreadId,
-    readonly context: ThreadContext,
+    private readonly context: ThreadCoreContext,
     private callbacks: ThreadCoreCallbacks,
     readonly manager: NativeInferenceManager,
     readonly toolSpecs: ProviderToolSpec[],
     readonly edlRegisters: EdlRegisters,
-    /** The display archive of every structured result the log can still
-     * refer to. Carried onto the conversation that replaces this one, which
-     * is why it is handed in rather than started empty. */
-    readonly structuredToolResults: Map<ToolRequestId, ToolStructuredResult>,
     private pendingSeed: AgentInput[],
     readonly fileSupervisor: FileSupervisor,
     readonly gitSupervisor: GitSupervisor | undefined,
@@ -113,6 +126,12 @@ export class ThreadCore {
       ...(systemInfoSupervisor ? [systemInfoSupervisor] : []),
       ...(systemReminders ? [systemReminders] : []),
     ];
+    this.createTool = this.context.threadToolCreator({
+      contextTracker: this.fileSupervisor,
+      onToolApplied: this.onToolApplied,
+      edlRegisters: this.edlRegisters,
+      requestRender: () => this.handleUpdate(),
+    });
   }
 
   /** Records the count this request was decided on, whoever asked for it —
@@ -131,14 +150,13 @@ export class ThreadCore {
     onToolResults: (results) => {
       for (const id of results.keys()) {
         const structured = structuredResultFor(
-          this.structuredToolResults.get(id),
+          this.context.structuredToolResults.get(id),
           "yield_to_parent",
         );
         if (!structured) continue;
-        const value: YieldValue =
-          this.context.yieldSchema !== undefined
-            ? { type: "structured", value: structured.input }
-            : { type: "text", text: structured.input.result ?? "" };
+        const value: YieldValue = this.context.structuredYield
+          ? { type: "structured", value: structured.input }
+          : { type: "text", text: structured.input.result ?? "" };
         return { kind: "yield", value };
       }
       return undefined;
@@ -164,17 +182,15 @@ export class ThreadCore {
     edlRegisters = { registers: new Map(), nextSavedId: 0 },
     initialFiles,
     seed = [],
-    structuredResults,
   }: {
     id: ThreadId;
-    context: ThreadContext;
+    context: ThreadCoreContext;
     callbacks: ThreadCoreCallbacks;
     manager: NativeInferenceManager;
     toolSpecs: ProviderToolSpec[];
     edlRegisters?: EdlRegisters;
     initialFiles?: Files;
     seed?: AgentInput[];
-    structuredResults?: ReadonlyMap<ToolRequestId, ToolStructuredResult>;
   }): ThreadCore {
     const delivery = context.contextDelivery;
     const fileSupervisor = FileSupervisor.create({
@@ -201,7 +217,6 @@ export class ThreadCore {
             alreadyInjected: manager.log.messages.length > 0,
           })
         : undefined;
-    const structuredToolResults = new Map(structuredResults);
     const systemReminders =
       context.threadType === "compact"
         ? undefined
@@ -209,7 +224,7 @@ export class ThreadCore {
             threadType: context.threadType,
             subagentConfig: context.subagentConfig,
             contextTracker: fileSupervisor,
-            getStructuredResults: () => structuredToolResults,
+            getStructuredResults: () => context.structuredToolResults,
           });
     return new ThreadCore(
       id,
@@ -218,7 +233,6 @@ export class ThreadCore {
       manager,
       toolSpecs,
       edlRegisters,
-      structuredToolResults,
       [...seed],
       fileSupervisor,
       gitSupervisor,
@@ -231,31 +245,17 @@ export class ThreadCore {
     source,
     id,
     context,
+    toolSpecs,
     callbacks,
     nativeMessageIdx,
   }: {
     source: ThreadCore;
     id: ThreadId;
-    context: ThreadCloneContext;
+    context: ThreadCoreContext;
+    toolSpecs: ProviderToolSpec[];
     callbacks: ThreadCoreCallbacks;
     nativeMessageIdx: NativeMessageIdx;
   }): ThreadCore {
-    // Conversation kind is inherited from the source, so supervisor presence
-    // cannot diverge from it.
-    const clonedContext: ThreadContext =
-      source.context.threadType === "compact"
-        ? { ...context, threadType: "compact" }
-        : { ...context, threadType: source.context.threadType };
-    const toolSpecs = getToolSpecs(
-      clonedContext.threadType,
-      clonedContext.mcpToolManager,
-      clonedContext.availableCapabilities,
-      clonedContext.getAgents(),
-      clonedContext.subagentConfig,
-      clonedContext.yieldSchema,
-      clonedContext.getScriptRunner?.()?.getScriptCatalog(),
-      clonedContext.subagentDockerfile,
-    );
     const manager = source.manager.clone();
     manager.truncateMessages(nativeMessageIdx);
     const effectiveNativeMessageIdx = manager.getNativeMessageIdx();
@@ -278,24 +278,17 @@ export class ThreadCore {
           nativeMessageIdx: effectiveNativeMessageIdx,
         })
       : undefined;
-    const structuredToolResults = new Map<
-      ToolRequestId,
-      ToolStructuredResult
-    >();
-    for (const [key, value] of source.structuredToolResults) {
-      structuredToolResults.set(key, structuredClone(value));
-    }
     const systemReminders = source.systemReminders
       ? SystemReminderSupervisor.clone({
           source: source.systemReminders,
           nativeMessageIdx: effectiveNativeMessageIdx,
           contextTracker: fileSupervisor,
-          getStructuredResults: () => structuredToolResults,
+          getStructuredResults: () => context.structuredToolResults,
         })
       : undefined;
     return new ThreadCore(
       id,
-      clonedContext,
+      context,
       callbacks,
       manager,
       toolSpecs,
@@ -303,7 +296,6 @@ export class ThreadCore {
         registers: new Map(source.edlRegisters.registers),
         nextSavedId: source.edlRegisters.nextSavedId,
       },
-      structuredToolResults,
       [],
       fileSupervisor,
       gitSupervisor,
@@ -368,33 +360,19 @@ export class ThreadCore {
     }
   };
 
+  /** The last of the three tool-creation layers: the client's capabilities and
+   * the thread's identity are bound by whoever built `threadToolCreator`, and
+   * this generation binds the state a reset replaces along with it. */
+  private readonly createTool: CreateTool;
+
   private invokeTool(request: ToolRequest): ToolInvocation {
-    const invocation = createTool(request, {
-      threadId: this.id,
-      logger: this.context.logger,
-      lspClient: this.context.lspClient,
-      luaExecutor: this.context.luaExecutor,
-      mcpToolManager: this.context.mcpToolManager,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-      maxConcurrentSubagents: this.context.maxConcurrentSubagents,
-      maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
-      contextTracker: this.fileSupervisor,
-      onToolApplied: this.onToolApplied,
-      edlRegisters: this.edlRegisters,
-      fileIO: this.context.fileIO,
-      shell: this.context.shell,
-      threadManager: this.context.threadManager,
-      scriptRunner: this.context.getScriptRunner?.(),
-      requestRender: () => this.handleUpdate(),
-      getAgents: () => this.context.getAgents(),
-    });
+    const invocation = this.createTool(request);
     const promise = invocation.promise.then((executed) => {
       const { result } = executed;
       if (result.status !== "ok") return { ...executed, result };
       const { structuredResult, ...wireResult } = result;
       if (structuredResult) {
-        this.structuredToolResults.set(request.id, structuredResult);
+        this.context.structuredToolResults.set(request.id, structuredResult);
       }
       return { ...executed, result: wireResult };
     });
@@ -409,9 +387,7 @@ export class ThreadCore {
     publishTools: (tools: ToolInvocationState) => void,
   ): ToolExecution {
     const executor = new ToolExecutorHost({
-      logger: this.context.logger,
       createTool: (request) => this.invokeTool(request),
-      getHooks: () => this.activeHooks,
       getPendingResultMessageIdx: (requested) =>
         this.manager.getPendingResultMessageIdx(requested),
       publishTools,

@@ -28,7 +28,6 @@ export interface AgentContext {
 
 export type ToolOutcome =
   | { type: "continue"; results: ToolResults }
-  | { type: "suspend"; results: ToolResults; reason: SuspendReason }
   | { type: "aborted"; results: ToolResults };
 
 export type ToolExecution = {
@@ -184,6 +183,10 @@ export function runAgentLoop(
         loopState = { type: "preparing", aborting: loopState.aborting };
       }
 
+      // Fixed before the append: a batch can write more than its result
+      // messages (image attachments follow them), and the hooks name the
+      // message the results themselves land in.
+      const resultMessageIdx = manager.getPendingResultMessageIdx(requested);
       manager.appendToolResults(
         requested,
         completeToolResults(
@@ -195,14 +198,27 @@ export function runAgentLoop(
         ),
       );
 
+      // The hooks see the results only once they are in the log.
+      let suspend: SuspendReason | undefined;
+      for (const hook of deps.getHooks().onToolResults) {
+        try {
+          // Every hook is consulted even once one has asked to suspend — a stop
+          // is a fact each of them may need to record — and the first wins.
+          const asked = hook(toolOutcome.results, resultMessageIdx);
+          suspend ??= asked;
+        } catch (err) {
+          logger.error(`onToolResults hook threw: ${(err as Error).message}`);
+        }
+      }
+
       if (loopState.aborting || toolOutcome.type === "aborted") {
         loopState.aborting = true;
         deps.onUpdate?.();
         return { type: "aborted" };
       }
 
-      if (toolOutcome.type === "suspend") {
-        return { type: "suspended", reason: toolOutcome.reason };
+      if (suspend) {
+        return { type: "suspended", reason: suspend };
       }
 
       // continue to the next iteration

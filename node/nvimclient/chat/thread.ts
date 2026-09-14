@@ -11,6 +11,7 @@ import {
   type AgentInput,
   type CompactionRunId,
   type ContextFiles,
+  clientToolCreator,
   type FileSupervisor,
   type GitSupervisor,
   loadAgents,
@@ -353,6 +354,17 @@ export class NvimThread {
       this.core = preBuilt.core;
       this.core.callbacks = this.coreCallbacks();
     } else {
+      const getAgents = () =>
+        loadAgents({
+          cwd,
+          logger: context.nvim.logger,
+          options: context.options,
+        });
+      const getScriptRunner = () => context.chat.scriptRunner;
+      const maxConcurrentSubagents =
+        context.options.maxConcurrentSubagents || 3;
+      const maxConcurrentFastSubagents =
+        context.options.maxConcurrentFastSubagents || 8;
       this.core = new Thread(
         id,
         {
@@ -369,29 +381,33 @@ export class NvimThread {
           systemInfo: context.systemInfo,
           mcpToolManager: context.mcpToolManager,
           threadManager: context.chat,
-          getScriptRunner: () => context.chat.scriptRunner,
+          getScriptRunner,
           fileIO: env.fileIO,
-          shell: env.shell,
           gitClient: env.gitClient,
-          lspClient: env.lspClient,
-          ...(env.luaExecutor !== undefined
-            ? { luaExecutor: env.luaExecutor }
-            : {}),
+          clientToolCreator: clientToolCreator({
+            logger: context.nvim.logger,
+            lspClient: env.lspClient,
+            ...(env.luaExecutor !== undefined
+              ? { luaExecutor: env.luaExecutor }
+              : {}),
+            mcpToolManager: context.mcpToolManager,
+            cwd,
+            homeDir,
+            maxConcurrentSubagents,
+            maxConcurrentFastSubagents,
+            fileIO: env.fileIO,
+            shell: env.shell,
+            threadManager: context.chat,
+            getScriptRunner,
+            getAgents,
+          }),
           availableCapabilities: env.availableCapabilities,
           environmentConfig: env.environmentConfig,
-          maxConcurrentSubagents: context.options.maxConcurrentSubagents || 3,
-          maxConcurrentFastSubagents:
-            context.options.maxConcurrentFastSubagents || 8,
           ...(context.options.dockerfile
             ? { subagentDockerfile: context.options.dockerfile }
             : {}),
           ...(context.yieldSchema ? { yieldSchema: context.yieldSchema } : {}),
-          getAgents: () =>
-            loadAgents({
-              cwd,
-              logger: context.nvim.logger,
-              options: context.options,
-            }),
+          getAgents,
           provider: getProvider(context.nvim, context.profile),
         },
         this.coreCallbacks(),
@@ -702,17 +718,31 @@ export class NvimThread {
         mcpToolManager,
         threadManager: chat,
         fileIO: environment.fileIO,
-        shell: environment.shell,
         gitClient: environment.gitClient,
-        lspClient: environment.lspClient,
-        ...(environment.luaExecutor !== undefined
-          ? { luaExecutor: environment.luaExecutor }
-          : {}),
+        clientToolCreator: clientToolCreator({
+          logger: nvim.logger,
+          lspClient: environment.lspClient,
+          ...(environment.luaExecutor !== undefined
+            ? { luaExecutor: environment.luaExecutor }
+            : {}),
+          mcpToolManager,
+          cwd: environment.cwd,
+          homeDir: environment.homeDir,
+          maxConcurrentSubagents: getOptions().maxConcurrentSubagents || 3,
+          maxConcurrentFastSubagents:
+            getOptions().maxConcurrentFastSubagents || 8,
+          fileIO: environment.fileIO,
+          shell: environment.shell,
+          threadManager: chat,
+          getAgents: () =>
+            loadAgents({
+              cwd: environment.cwd,
+              logger: nvim.logger,
+              options: getOptions(),
+            }),
+        }),
         availableCapabilities: environment.availableCapabilities,
         environmentConfig: environment.environmentConfig,
-        maxConcurrentSubagents: getOptions().maxConcurrentSubagents || 3,
-        maxConcurrentFastSubagents:
-          getOptions().maxConcurrentFastSubagents || 8,
         ...(getOptions().dockerfile
           ? { subagentDockerfile: getOptions().dockerfile }
           : {}),

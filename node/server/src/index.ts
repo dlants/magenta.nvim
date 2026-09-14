@@ -307,7 +307,13 @@ export type {
   ValidateInput,
 } from "./tool-types.ts";
 export * as BashCommand from "./tools/bashCommand.ts";
-export { type CreateToolContext, createTool } from "./tools/create-tool.ts";
+export {
+  type ClientToolContext,
+  type ClientToolCreator,
+  type CreateToolContext,
+  clientToolCreator,
+  createTool,
+} from "./tools/create-tool.ts";
 export * as Edl from "./tools/edl.ts";
 export * as FindReferences from "./tools/findReferences.ts";
 export { formatToolSpec, formatToolSpecs } from "./tools/format-tool-spec.ts";

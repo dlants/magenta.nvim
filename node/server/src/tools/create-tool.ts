@@ -30,8 +30,9 @@ import * as ThreadTitle from "./thread-title.ts";
 import type { StaticToolRequest } from "./toolManager.ts";
 import * as YieldToParent from "./yield-to-parent.ts";
 
-export type CreateToolContext = {
-  threadId: ThreadId;
+/** The collaborators that live as long as the client connection: capabilities
+ * and configuration that every thread of that client shares. */
+export type ClientToolContext = {
   logger: Logger;
   lspClient: LspClient;
   luaExecutor?: LuaExecutor | undefined;
@@ -40,17 +41,51 @@ export type CreateToolContext = {
   homeDir: HomeDir;
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
-  contextTracker: ContextTracker;
-  onToolApplied: OnToolApplied;
-  edlRegisters: EdlRegisters;
   fileIO: FileIO;
   shell: Shell;
   threadManager: ThreadManager;
-  scriptRunner?: ScriptRunner | undefined;
-  requestRender: () => void;
+  getScriptRunner?: (() => ScriptRunner | undefined) | undefined;
   getAgents: () => AgentsMap;
 };
 
+/** What a thread adds: its identity, which outlives the conversation
+ * generations inside it. */
+export type ThreadToolContext = {
+  threadId: ThreadId;
+};
+
+/** What one conversation generation adds: the state a reset replaces along
+ * with the core that owns it. */
+export type CoreToolContext = {
+  contextTracker: ContextTracker;
+  onToolApplied: OnToolApplied;
+  edlRegisters: EdlRegisters;
+  requestRender: () => void;
+};
+
+export type CreateToolContext = ClientToolContext &
+  ThreadToolContext &
+  CoreToolContext;
+
+/** Builds the tools of one conversation generation. */
+export type CreateTool = (request: ToolRequest) => ExecutingToolInvocation;
+
+/** Binds a thread's identity; outlives the cores handed to it. */
+export type ThreadToolCreator = (core: CoreToolContext) => CreateTool;
+
+/** Binds the client's capabilities; outlives the threads handed to it. */
+export type ClientToolCreator = (
+  thread: ThreadToolContext,
+) => ThreadToolCreator;
+
+export function clientToolCreator(
+  client: ClientToolContext,
+): ClientToolCreator {
+  return (thread) => (core) => (request) =>
+    createTool(request, { ...client, ...thread, ...core });
+}
+
+/** The flat form, for callers that hold every layer at once. */
 export function createTool(
   request: ToolRequest,
   context: CreateToolContext,
@@ -136,7 +171,7 @@ export function createTool(
 
     case "run_script": {
       return RunScript.execute(staticRequest, {
-        scriptRunner: context.scriptRunner,
+        scriptRunner: context.getScriptRunner?.(),
         threadId: context.threadId,
       });
     }

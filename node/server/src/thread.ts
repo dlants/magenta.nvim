@@ -3,10 +3,7 @@ import type { AgentContext } from "./agent.ts";
 import type { AgentsMap } from "./agents/agents.ts";
 import type { FileIO } from "./capabilities/file-io.ts";
 import type { GitClient } from "./capabilities/git-client.ts";
-import type { LspClient } from "./capabilities/lsp-client.ts";
-import type { LuaExecutor } from "./capabilities/lua-executor.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
-import type { Shell } from "./capabilities/shell.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
 import type { EdlRegisters } from "./edl/index.ts";
@@ -48,7 +45,11 @@ import type {
   YieldValue,
 } from "./thread-api.ts";
 import { renderYieldValue } from "./thread-api.ts";
-import { type ThreadContextDelivery, ThreadCore } from "./thread-core.ts";
+import {
+  type ThreadContextDelivery,
+  ThreadCore,
+  type ThreadCoreContext,
+} from "./thread-core.ts";
 
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type {
@@ -59,6 +60,7 @@ import type {
 } from "./thread-supervisor.ts";
 import { composeSupervisors } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
+import type { ClientToolCreator } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
@@ -88,15 +90,11 @@ interface ThreadContextBase extends AgentContext {
   threadManager: ThreadManager;
   getScriptRunner?: () => ScriptRunner | undefined;
   fileIO: FileIO;
-  shell: Shell;
   gitClient: GitClient;
-  lspClient: LspClient;
-  luaExecutor?: LuaExecutor | undefined;
+  clientToolCreator: ClientToolCreator;
   availableCapabilities: Set<ToolCapability>;
   environmentConfig: EnvironmentConfig;
   subagentDockerfile?: string;
-  maxConcurrentSubagents: number;
-  maxConcurrentFastSubagents: number;
   getAgents: () => AgentsMap;
   contextDelivery?: ThreadContextDelivery;
 }
@@ -178,13 +176,11 @@ export class Thread {
   get toolSpecs(): ProviderToolSpec[] {
     return this.core.toolSpecs;
   }
-  /** The conversation's own archive: a reset or fork carries it onto the
-   * replacement core, so it outlives the generation that produced it. */
   get structuredToolResults(): ReadonlyMap<
     ToolRequestId,
     ToolStructuredResult
   > {
-    return this.core.structuredToolResults;
+    return this.resultArchive;
   }
   getLastStopTokenCount(): number {
     return this.core.getLastStopTokenCount();
@@ -212,6 +208,11 @@ export class Thread {
     public callbacks: ThreadCallbacks,
     private archiveOptions: ThreadArchiveOptions = {},
     core?: ThreadCore,
+    // Tool request IDs identify immutable results, shared across resets and forks.
+    private readonly resultArchive = new Map<
+      ToolRequestId,
+      ToolStructuredResult
+    >(),
   ) {
     this.threadLogger = new ThreadLogger(
       id,
@@ -265,13 +266,29 @@ export class Thread {
     });
   }
 
-  private createCore(opts?: {
-    initialFiles?: Files;
-    seed?: AgentInput[];
-    structuredResults?: ReadonlyMap<ToolRequestId, ToolStructuredResult>;
-  }): ThreadCore {
-    const context = this.context;
-    const toolSpecs = getToolSpecs(
+  private static coreContext(
+    id: ThreadId,
+    context: ThreadContext,
+    structuredToolResults: Map<ToolRequestId, ToolStructuredResult>,
+  ): ThreadCoreContext {
+    return {
+      logger: context.logger,
+      threadToolCreator: context.clientToolCreator({ threadId: id }),
+      structuredYield: context.yieldSchema !== undefined,
+      structuredToolResults,
+      fileIO: context.fileIO,
+      cwd: context.cwd,
+      homeDir: context.homeDir,
+      gitClient: context.gitClient,
+      systemInfo: context.systemInfo,
+      threadType: context.threadType,
+      subagentConfig: context.subagentConfig,
+      contextDelivery: context.contextDelivery,
+    };
+  }
+
+  private static buildToolSpecs(context: ThreadContext): ProviderToolSpec[] {
+    return getToolSpecs(
       context.threadType,
       context.mcpToolManager,
       context.availableCapabilities,
@@ -281,6 +298,14 @@ export class Thread {
       context.getScriptRunner?.()?.getScriptCatalog(),
       context.subagentDockerfile,
     );
+  }
+
+  private createCore(opts?: {
+    initialFiles?: Files;
+    seed?: AgentInput[];
+  }): ThreadCore {
+    const context = this.context;
+    const toolSpecs = Thread.buildToolSpecs(context);
     const manager = context.provider.createInferenceManager({
       profile: context.profile,
       systemPrompt: context.systemPrompt,
@@ -291,7 +316,7 @@ export class Thread {
     });
     const core = ThreadCore.create({
       id: this.id,
-      context,
+      context: Thread.coreContext(this.id, context, this.resultArchive),
       callbacks: {
         onUpdate: () => this.handleUpdate(),
       },
@@ -299,9 +324,6 @@ export class Thread {
       toolSpecs,
       ...(opts?.initialFiles ? { initialFiles: opts.initialFiles } : {}),
       ...(opts?.seed ? { seed: opts.seed } : {}),
-      ...(opts?.structuredResults
-        ? { structuredResults: opts.structuredResults }
-        : {}),
     });
     this.adoptCore(core);
     return core;
@@ -315,10 +337,19 @@ export class Thread {
     callbacks: ThreadCallbacks;
   }): Promise<Thread> {
     const { sourceThread, newId, nativeMessageIdx, context, callbacks } = args;
+    const clonedContext: ThreadContext = {
+      ...context,
+      threadType: sourceThread.threadType,
+    };
     const core = ThreadCore.clone({
       source: sourceThread.core,
       id: newId,
-      context,
+      context: Thread.coreContext(
+        newId,
+        clonedContext,
+        sourceThread.resultArchive,
+      ),
+      toolSpecs: Thread.buildToolSpecs(clonedContext),
       nativeMessageIdx,
       callbacks: {
         onUpdate: () => cloned.handleUpdate(),
@@ -326,7 +357,7 @@ export class Thread {
     });
     const cloned = new Thread(
       newId,
-      core.context,
+      clonedContext,
       callbacks,
       {
         ...sourceThread.archiveOptions,
@@ -336,6 +367,7 @@ export class Thread {
         },
       },
       core,
+      sourceThread.resultArchive,
     );
     cloned.adoptCore(core);
     return cloned;
@@ -1029,7 +1061,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.cancelSubmission();
     try {
       const initialFiles = buildClonedFiles(this.core.fileSupervisor.files);
-      const structuredResults = this.core.structuredToolResults;
       await this.core.dispose();
       this.assertUsable();
       // Disposal is irreversible: cancellation prevents the caller's follow-up,
@@ -1042,7 +1073,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       const core = this.createCore({
         initialFiles,
         seed,
-        structuredResults,
       });
       this._core = core;
       this.submission = undefined;

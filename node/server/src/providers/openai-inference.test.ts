@@ -5,7 +5,6 @@ import {
   agentHooks,
   createTestOpenAIAgent,
   flatLoop,
-  noopLogger,
   type TestAgent,
   toolExecution,
 } from "../test-helpers.ts";
@@ -1007,7 +1006,6 @@ describe("OpenAIInferenceManager pending message indices", () => {
     });
     let agent!: TestAgent;
     const host = new ToolExecutorHost({
-      logger: noopLogger,
       createTool: (request) => ({
         promise: Promise.resolve({
           type: "tool_result",
@@ -1017,7 +1015,6 @@ describe("OpenAIInferenceManager pending message indices", () => {
         }),
         abort: () => {},
       }),
-      getHooks: () => hooks,
       getPendingResultMessageIdx: (requested) =>
         agent.manager.getPendingResultMessageIdx(requested),
       publishTools: () => {},

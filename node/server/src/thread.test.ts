@@ -840,7 +840,6 @@ describe("Thread aborts the tools it owns", () => {
       `results-during-${action}`,
       onToolResults,
     );
-    const oldCore = core.core;
     const archive = core.structuredToolResults;
     const stopping =
       action === "reset"
@@ -854,7 +853,7 @@ describe("Thread aborts the tools it owns", () => {
     expect(onToolResults).toHaveBeenCalledTimes(action === "abort" ? 1 : 0);
     expect(archive.size).toBe(0);
     expect(core.structuredToolResults.size).toBe(0);
-    expect(oldCore.structuredToolResults.size).toBe(0);
+    expect(core.structuredToolResults).toBe(archive);
     await core.destroy();
   });
 
@@ -1569,8 +1568,8 @@ describe("replaceable conversation core", () => {
       value: { type: "text", text: "finished" },
     });
     expect(core.yielded?.value).toEqual({ type: "text", text: "finished" });
-    // One archive, carried onto the replacement conversation.
-    expect(core.core.structuredToolResults.size).toBe(1);
+    // The archive belongs to the thread, not the replacement conversation.
+    expect(core.structuredToolResults.size).toBe(1);
     expect(
       core.structuredToolResults.get("yield-result" as ToolRequestId),
     ).toEqual({
@@ -1581,7 +1580,7 @@ describe("replaceable conversation core", () => {
     expect(await core.result).toEqual(await result);
   });
 
-  it("deep-copies the durable structured-result archive when forking", async () => {
+  it("shares the immutable structured-result archive across forks and resets", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent",
     });
@@ -1607,12 +1606,13 @@ describe("replaceable conversation core", () => {
       context: threadCloneContext(core.context),
       callbacks: core.callbacks,
     });
-    expect(fork.structuredToolResults).not.toBe(core.structuredToolResults);
+    expect(fork.structuredToolResults).toBe(core.structuredToolResults);
     expect(fork.structuredToolResults.get(id)).toEqual(original);
-    expect(fork.structuredToolResults.get(id)).not.toBe(original);
-    expect(fork.core.structuredToolResults.size).toBe(1);
+    expect(fork.structuredToolResults.get(id)).toBe(original);
+    expect(fork.structuredToolResults.size).toBe(1);
     await core.reset({ seed: [], archive: { type: "none" } });
     expect(core.structuredToolResults.get(id)).toBe(original);
+    expect(fork.structuredToolResults).toBe(core.structuredToolResults);
     await core.destroy();
     expect(fork.structuredToolResults.get(id)).toEqual(original);
     await fork.destroy();

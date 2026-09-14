@@ -47,7 +47,8 @@ import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import { Thread, type ThreadContext } from "./thread.ts";
 import type { AgentHooks, SendResult, ThreadHooks } from "./thread-api.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
-import { createTool } from "./tools/create-tool.ts";
+import type { ClientToolContext } from "./tools/create-tool.ts";
+import { clientToolCreator } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
@@ -231,9 +232,17 @@ function stub<T>(partial: Partial<T>): T {
   return partial as T;
 }
 
+/** Tests vary thread-level and tool-level collaborators in one bag; which
+ * layer a name belongs to is decided here, not at the call site. */
+export type TestContextOverrides = Partial<ThreadContext> &
+  Partial<ClientToolContext>;
+
 /** The stubbed context every test agent shares. */
-function baseTestContext(provider: Provider): ThreadContext {
-  return {
+function baseTestContext(
+  provider: Provider,
+  overrides: TestContextOverrides = {},
+): ThreadContext {
+  const base = {
     logger: noopLogger,
     profile: {
       provider: "mock",
@@ -260,18 +269,30 @@ function baseTestContext(provider: Provider): ThreadContext {
       fileExists: async () => false,
       stat: async () => undefined,
     }),
-    shell: stub<ThreadContext["shell"]>({}),
     gitClient: stub<ThreadContext["gitClient"]>({
       getState: async () => undefined,
     }),
-    lspClient: stub<ThreadContext["lspClient"]>({}),
     availableCapabilities: new Set(),
     environmentConfig: { type: "local" },
-    maxConcurrentSubagents: 1,
-    maxConcurrentFastSubagents: 8,
     getAgents: () => ({}),
     provider,
+  } satisfies Omit<ThreadContext, "clientToolCreator">;
+  const context = { ...base, ...overrides };
+  const clientTools: ClientToolContext = {
+    logger: context.logger,
+    lspClient: stub<ClientToolContext["lspClient"]>({}),
+    mcpToolManager: context.mcpToolManager,
+    cwd: context.cwd,
+    homeDir: context.homeDir,
+    maxConcurrentSubagents: 1,
+    maxConcurrentFastSubagents: 8,
+    fileIO: context.fileIO,
+    shell: stub<ClientToolContext["shell"]>({}),
+    threadManager: context.threadManager,
+    getAgents: context.getAgents,
+    ...overrides,
   };
+  return { ...context, clientToolCreator: clientToolCreator(clientTools) };
 }
 
 /** Fill in the hook points a test does not care about. */
@@ -286,7 +307,7 @@ export function agentHooks(partial: Partial<TestHooks> = {}): TestHooks {
 }
 
 export function createAgentWithMock(
-  overrides?: Partial<ThreadContext>,
+  overrides?: TestContextOverrides,
   threadId: ThreadId = "test-thread" as ThreadId,
   resolve?: ResolveSubmission,
   onUpdate?: () => void,
@@ -297,10 +318,7 @@ export function createAgentWithMock(
 } {
   const mockClient = new MockAnthropicClient();
   const provider = createMockProvider(mockClient);
-  const context: ThreadContext = {
-    ...baseTestContext(provider),
-    ...overrides,
-  };
+  const context = baseTestContext(provider, overrides);
 
   return {
     core: new Thread(
@@ -320,7 +338,7 @@ export function createAgentWithMock(
 type TestAgentOpts = {
   onUpdate?: () => void;
   getHooks?: () => AgentHooks;
-  context?: Partial<ThreadContext>;
+  context?: TestContextOverrides;
   /** Stand in for real tool execution. Tests about the loop's handling of
    * tool outcomes supply this instead of wiring up real tools. */
   executeTools?: ToolExecutor;
@@ -361,44 +379,26 @@ function buildTestAgent(
   provider: Provider,
   opts: TestAgentOpts,
 ): { agent: TestAgent; toolExecutor: ToolExecutorHost } {
-  const context: ThreadContext = {
-    ...baseTestContext(provider),
-    ...opts.context,
-  };
+  const context = baseTestContext(provider, opts.context);
   const edlRegisters: EdlRegisters = { registers: new Map(), nextSavedId: 0 };
   let publishTools: Parameters<ToolExecutor>[1] = () => {};
   const manager = testManager(context, opts.cloneFrom);
   // The bare-agent harness stands in for the thread: it owns tool execution
   // the same way, so the loop under test sees production wiring.
   const host = new ToolExecutorHost({
-    logger: context.logger,
-    getHooks: opts.getHooks ?? (() => agentHooks()),
     // The production formula, not a copy of it: a wrong one must fail here.
     getPendingResultMessageIdx: (toolCount) =>
       manager.getPendingResultMessageIdx(toolCount),
     publishTools: (tools) => publishTools(tools),
     onUpdate: opts.onUpdate ?? (() => {}),
-    createTool: (request) =>
-      createTool(request, {
-        threadId: "test-agent" as ThreadId,
-        logger: context.logger,
-        lspClient: context.lspClient,
-        luaExecutor: context.luaExecutor,
-        mcpToolManager: context.mcpToolManager,
-        cwd: context.cwd,
-        homeDir: context.homeDir,
-        maxConcurrentSubagents: context.maxConcurrentSubagents,
-        maxConcurrentFastSubagents: context.maxConcurrentFastSubagents,
-        contextTracker: { files: context.contextDelivery?.initialFiles ?? {} },
-        onToolApplied: () => {},
-        edlRegisters,
-        fileIO: context.fileIO,
-        shell: context.shell,
-        threadManager: context.threadManager,
-        scriptRunner: context.getScriptRunner?.(),
-        requestRender: () => {},
-        getAgents: () => context.getAgents(),
-      }),
+    createTool: context.clientToolCreator({
+      threadId: "test-agent" as ThreadId,
+    })({
+      contextTracker: { files: context.contextDelivery?.initialFiles ?? {} },
+      onToolApplied: () => {},
+      edlRegisters,
+      requestRender: () => {},
+    }),
   });
   const runBatch: ToolExecutor = opts.executeTools ?? ((r) => host.execute(r));
   const executeTools: ToolExecutor = (requests, publish) => {

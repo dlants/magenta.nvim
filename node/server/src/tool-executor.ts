@@ -1,13 +1,11 @@
 import type { ToolExecution, ToolOutcome } from "./agent.ts";
-import type { Logger } from "./logger.ts";
 import type {
   NativeMessageIdx,
   NonEmptyRequestedTools,
   ProviderToolResult,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import type { AgentHooks, ToolInvocationState } from "./thread-api.ts";
-import type { SuspendReason } from "./thread-supervisor.ts";
+import type { ToolInvocationState } from "./thread-api.ts";
 import type {
   ActiveToolEntry,
   ToolInvocation,
@@ -16,9 +14,7 @@ import type {
 } from "./tool-types.ts";
 
 export type ToolExecutorDeps = {
-  logger: Logger;
   createTool: (request: ToolRequest) => ToolInvocation;
-  getHooks: () => AgentHooks;
   /** The idx of the last message this batch's results will occupy. Fixed
    * when the batch starts: nothing is appended to the log while tools run. */
   getPendingResultMessageIdx: (
@@ -30,9 +26,9 @@ export type ToolExecutorDeps = {
 };
 
 /** Runs one batch of tool requests to completion. Owned by the `Thread` — it
- * is the thread that builds tools, holds the `onToolResults` hooks and decides
- * to abort — and handed to the agent as `AgentDeps.executeTools`. The agent
- * only appends what comes back. */
+ * is the thread that builds tools and decides to abort — and handed to the
+ * agent as `AgentDeps.executeTools`. The agent appends what comes back and
+ * runs the `onToolResults` hooks over it. */
 export class ToolExecutorHost {
   constructor(private deps: ToolExecutorDeps) {}
 
@@ -137,19 +133,6 @@ export class ToolExecutorHost {
       results.set(id, result.result);
     }
 
-    // Every hook is consulted even once one has asked to suspend — a stop is a
-    // fact each of them may need to record — and the first `suspend` wins.
-    let suspend: SuspendReason | undefined;
-    for (const hook of this.deps.getHooks().onToolResults) {
-      try {
-        const asked = hook(results, this.resultMessageIdx);
-        suspend ??= asked;
-      } catch (err) {
-        this.deps.logger.error(
-          `onToolResults hook threw: ${(err as Error).message}`,
-        );
-      }
-    }
     // Nothing is running any more: `activeTools` means *live* invocations, and
     // the view switches from tool progress to results the moment it empties.
     this.live = new Map();
@@ -157,10 +140,6 @@ export class ToolExecutorHost {
 
     if (this.aborting) {
       return { type: "aborted", results };
-    }
-
-    if (suspend) {
-      return { type: "suspend", results, reason: suspend };
     }
 
     return { type: "continue", results };

@@ -55,3 +55,17 @@
 {"timestamp":"2026-09-09T03:27:05Z","query":"buffer reloaded from disk after agent edit checktime -k 4","commit":"07ce798c4d8cc7b8de6ca49c136d419ff58fd488"}
 {"timestamp":"2026-09-09T03:46:52Z","query":"node process logging log file uncaught exception rpc socket disconnect -k 5","commit":"07ce798c4d8cc7b8de6ca49c136d419ff58fd488"}
 {"timestamp":"2026-09-11T02:22:56Z","query":"ContextManager thread-core cloning context tracker ownership nvimclient -k 8","commit":"bfcdb71a03c28d585f99d368fa9a95937f5ace14"}
+{"timestamp":"2026-09-12T18:54:08Z","query":"ThreadCore create existing messages alreadyInjected system info preamble tests -k 10","commit":"a8bd22fa41a3d10129284987ae650be36e0ea8aa"}
+{"timestamp":"2026-09-12T18:54:08Z","query":"GitTracker getAgentView file counts clone history monotonic tests -k 10","commit":"a8bd22fa41a3d10129284987ae650be36e0ea8aa"}
+{"timestamp":"2026-09-12T18:59:55Z","query":"compact thread supervisor list context hooks ThreadCore create clone -k 10","commit":"a8bd22fa41a3d10129284987ae650be36e0ea8aa"}
+{"timestamp":"2026-09-12T18:59:55Z","query":"system reminder tests standing reminder bash reminder activateReminder -k 10","commit":"a8bd22fa41a3d10129284987ae650be36e0ea8aa"}
+{"timestamp":"2026-09-12T18:59:55Z","query":"SystemReminderSupervisor ReminderSupervisor reminderAction noReminders construction clone -k 10","commit":"a8bd22fa41a3d10129284987ae650be36e0ea8aa"}
+{"timestamp":"2026-09-12T18:59:55Z","query":"RequestContext status suspended before request hooks supervisor compose -k 10","commit":"a8bd22fa41a3d10129284987ae650be36e0ea8aa"}
+{"timestamp":"2026-09-12T19:12:34Z","query":"tests system reminder reset active reminders reset thread reset -k 8","commit":"450984ebfa2b8d837796afa64a18c606ff2f6835"}
+{"timestamp":"2026-09-12T19:12:34Z","query":"queued message reminders async next clone rewind native message index tests -k 8","commit":"450984ebfa2b8d837796afa64a18c606ff2f6835"}
+{"timestamp":"2026-09-12T19:12:38Z","query":"ThreadContext threadType clone ThreadCore clone context changes -k 8","commit":"450984ebfa2b8d837796afa64a18c606ff2f6835"}
+{"timestamp":"2026-09-12T19:13:39Z","query":"system reminder supervisor unit tests bash armed fired cloning and thread deferred reminder fork tests -k 10","commit":"450984ebfa2b8d837796afa64a18c606ff2f6835"}
+{"timestamp":"2026-09-12T20:35:23Z","query":"AutoCompactSupervisor tests clone threshold nextPrompt","commit":"20e33c8abbf48e13f68bc31fe1efe6ddc6709d0e"}
+{"timestamp":"2026-09-12T20:59:29Z","query":"inference provider abort signal stream hangs request timeout terminate stream -k 8","commit":"5d43dd9d47d0be0d3be66152582240ac585e8fae"}
+{"timestamp":"2026-09-12T21:00:10Z","query":"AnthropicInferenceManager abort in-flight request retry test finalMessage hangs -k 8","commit":"5d43dd9d47d0be0d3be66152582240ac585e8fae"}
+{"timestamp":"2026-09-12T21:23:55Z","query":"where ThreadCore creates and owns supervisors composeSupervisors supervision","commit":"67693e737033411be114d5e4c13789e1b3856fd8"}

@@ -3,7 +3,6 @@ import type {
   NativeMessageIdx,
   NonEmptyRequestedTools,
 } from "./providers/provider-types.ts";
-import { agentHooks, noopLogger } from "./test-helpers.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
 import type {
   ToolInvocation,
@@ -31,9 +30,7 @@ describe("ToolExecutorHost", () => {
       abort,
     };
     const host = new ToolExecutorHost({
-      logger: noopLogger,
       createTool: () => invocation,
-      getHooks: () => agentHooks(),
       getPendingResultMessageIdx: () => 0 as NativeMessageIdx,
       publishTools: () => {},
       onUpdate: () => {},

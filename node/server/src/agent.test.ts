@@ -44,7 +44,6 @@ import {
 } from "./test-helpers.ts";
 import type { ThreadContext, YieldState } from "./thread.ts";
 import { Thread, threadCloneContext } from "./thread.ts";
-
 import type {
   BeforeRequestHook,
   SendResult,
@@ -58,7 +57,12 @@ import {
   type ThreadSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
-import type { ToolName, ToolRequestId } from "./tool-types.ts";
+import type {
+  ToolName,
+  ToolRequestId,
+  ToolStructuredResult,
+} from "./tool-types.ts";
+import type { ClientToolContext } from "./tools/create-tool.ts";
 import { Defer, delay, pollUntil } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
@@ -811,7 +815,9 @@ describe("Thread.reset", () => {
       stream.finishResponse("end_turn");
       await sent;
 
-      core.core.structuredToolResults.set("tr-1" as ToolRequestId, {
+      (
+        core.structuredToolResults as Map<ToolRequestId, ToolStructuredResult>
+      ).set("tr-1" as ToolRequestId, {
         toolName: "thread_title",
       });
       const oldAgent = core.inferenceManager;
@@ -2589,7 +2595,7 @@ describe("structured tool result ownership", () => {
   it("records the structured payload on the thread, keeping it out of the messages", async () => {
     const { shell } = createMockShell(makeAbbreviatedShellResult());
     const { core, mockClient } = createAgentWithMock({
-      shell: shell as unknown as ThreadContext["shell"],
+      shell: shell as unknown as ClientToolContext["shell"],
     });
     const requestId = "tool-bash-1" as ToolRequestId;
     void core.send([
@@ -2627,7 +2633,7 @@ describe("Agent bash summary reminder", () => {
   it("fires the bash reminder on the first abbreviated bash output", async () => {
     const { shell } = createMockShell(makeAbbreviatedShellResult());
     const { core, mockClient } = createAgentWithMock({
-      shell: shell as unknown as ThreadContext["shell"],
+      shell: shell as unknown as ClientToolContext["shell"],
     });
 
     void core.send([
@@ -2658,7 +2664,7 @@ describe("Agent bash summary reminder", () => {
   it("combines the standing and bash reminders into a single <system-reminder> block when both gates fire", async () => {
     const { shell } = createMockShell(makeAbbreviatedShellResult());
     const { core, mockClient } = createAgentWithMock({
-      shell: shell as unknown as ThreadContext["shell"],
+      shell: shell as unknown as ClientToolContext["shell"],
     });
 
     void core.send([
@@ -2713,7 +2719,7 @@ describe("Agent bash summary reminder", () => {
       makeAbbreviatedShellResult(),
     );
     const { core, mockClient } = createAgentWithMock({
-      shell: shell as unknown as ThreadContext["shell"],
+      shell: shell as unknown as ClientToolContext["shell"],
     });
 
     void core.send([
@@ -3514,7 +3520,10 @@ describe("Thread survives the compaction agent swap", () => {
     const threadId = uniqueThreadId("compact-structured");
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
-      const map = core.core.structuredToolResults;
+      const map = core.structuredToolResults as Map<
+        ToolRequestId,
+        ToolStructuredResult
+      >;
       map.set(
         "req-1" as ToolRequestId,
         {
@@ -3522,8 +3531,8 @@ describe("Thread survives the compaction agent swap", () => {
         } as never,
       );
       await compact(core, mockClient);
-      // The replacement conversation inherits the archive, entry for entry.
-      expect(core.core.structuredToolResults).not.toBe(map);
+      // Compaction replaces the conversation, not the thread-owned archive.
+      expect(core.structuredToolResults).toBe(map);
       expect(core.structuredToolResults.has("req-1" as ToolRequestId)).toBe(
         true,
       );

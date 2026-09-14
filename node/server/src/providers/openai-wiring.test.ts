@@ -10,6 +10,8 @@ import { resolveAsText } from "../submission/index.ts";
 import type { ThreadContext } from "../thread.ts";
 import { Thread } from "../thread.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
+import type { ClientToolContext } from "../tools/create-tool.ts";
+import { clientToolCreator } from "../tools/create-tool.ts";
 import { validateInput } from "../tools/helpers.ts";
 import type { MCPToolManager } from "../tools/mcp/manager.ts";
 import { pollUntil } from "../utils/async.ts";
@@ -71,17 +73,36 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
       writeFile: async () => {},
       fileExists: async () => false,
     } as unknown as ThreadContext["fileIO"],
-    shell: {
-      exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    } as unknown as ThreadContext["shell"],
     gitClient: {
       getState: async () => undefined,
     } as unknown as ThreadContext["gitClient"],
-    lspClient: {} as unknown as ThreadContext["lspClient"],
     availableCapabilities: new Set(),
     environmentConfig: { type: "local" },
-    maxConcurrentSubagents: 1,
-    maxConcurrentFastSubagents: 8,
+    clientToolCreator: clientToolCreator({
+      logger: noopLogger,
+      lspClient: {} as unknown as ClientToolContext["lspClient"],
+      mcpToolManager: {
+        serverMap: {},
+        getToolSpecs: () => [],
+      } as unknown as ClientToolContext["mcpToolManager"],
+      cwd: "/tmp" as ThreadContext["cwd"],
+      homeDir: "/home" as ThreadContext["homeDir"],
+      maxConcurrentSubagents: 1,
+      maxConcurrentFastSubagents: 8,
+      fileIO: {
+        readFile: async () => "",
+        writeFile: async () => {},
+        fileExists: async () => false,
+      } as unknown as ClientToolContext["fileIO"],
+      shell: {
+        exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      } as unknown as ClientToolContext["shell"],
+      threadManager: {
+        getThread: () => undefined,
+        getThreads: () => [],
+      } as unknown as ClientToolContext["threadManager"],
+      getAgents: () => ({}),
+    }),
     getAgents: () => ({}),
     provider,
   };
