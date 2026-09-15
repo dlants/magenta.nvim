@@ -1,26 +1,17 @@
-import type { FileIO } from "./capabilities/file-io.ts";
-import type { GitClient, GitState } from "./capabilities/git-client.ts";
-import type { SubagentConfig, ThreadType } from "./chat-types.ts";
-import type { Logger } from "./logger.ts";
-import type { SystemInfo } from "./providers/system-prompt.ts";
-import { FileSupervisor, type Files } from "./supervisors/file-supervisor.ts";
-import { GitSupervisor } from "./supervisors/git-supervisor.ts";
-import { SystemInfoSupervisor } from "./thread-supervisor.ts";
-
-/** How this conversation's context supervisors are seeded. Construction
- * parameters only: what a supervisor delivers is reported on its own `sent`
- * event, which the owning `Thread` subscribes to. */
-export interface ThreadContextDelivery {
-  initialFiles?: Files;
-  pollIntervalMs?: number;
-  initialGitState?: GitState | undefined;
-}
-
-import { type AgentTurn, runAgentLoop, type ToolExecution } from "./agent.ts";
-import type { OnToolApplied } from "./capabilities/context-tracker.ts";
+import {
+  type AgentTurn,
+  type BeforeRequestDecision,
+  runAgentLoop,
+  type ToolExecution,
+} from "./agent.ts";
+import type {
+  ContextTracker,
+  OnToolApplied,
+  OnToolAppliedHook,
+} from "./capabilities/context-tracker.ts";
 import type { ThreadId } from "./chat-types.ts";
 import type { EdlRegisters } from "./edl/index.ts";
-
+import type { Logger } from "./logger.ts";
 import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
 import type {
   AgentInput,
@@ -31,65 +22,34 @@ import type {
   ProviderToolSpec,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
 import type {
-  AgentHooks,
   SendResult,
-  ThreadHooks,
   ToolInvocationState,
-  YieldValue,
+  ToolResultsHook,
 } from "./thread-api.ts";
-import type { ThreadSupervisor } from "./thread-supervisor.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
-import type {
-  ToolInvocation,
-  ToolRequest,
-  ToolRequestId,
-  ToolStructuredResult,
-} from "./tool-types.ts";
-import { structuredResultFor } from "./tool-types.ts";
+import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
-import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
+import type { AbsFilePath } from "./utils/files.ts";
 
 export interface ThreadCoreContext {
   logger: Logger;
   threadToolCreator: ThreadToolCreator;
-  structuredYield: boolean;
-  structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
-  fileIO: FileIO;
-  cwd: NvimCwd;
-  homeDir: HomeDir;
-  gitClient: GitClient;
-  systemInfo: SystemInfo;
-  threadType: ThreadType;
-  subagentConfig?: SubagentConfig | undefined;
-  contextDelivery?: ThreadContextDelivery | undefined;
+  completedTools: Map<ToolRequestId, CompletedToolInfo>;
+  contextTracker: ContextTracker;
 }
 
 export interface ThreadCoreCallbacks {
   onUpdate: () => void;
+  onBeforeRequest: () => Promise<BeforeRequestDecision>;
+  onToolResults: ToolResultsHook;
+  onToolApplied: OnToolAppliedHook;
 }
 
 export class ThreadCore {
   editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[] = [];
   preflightTokenCount: number | undefined;
   private disposed = false;
-
-  /** The composed answer of every supervisor consulted on this conversation,
-   * owner's included. The owner composes it — it is the only actor that knows
-   * the whole list — and re-composes it whenever the list or the core
-   * changes. */
-  hooks: ThreadHooks = {
-    onBeforeRequest: [],
-    onToolResults: [],
-    onYield: [],
-    hasPendingContent: () => Promise.resolve(false),
-  };
-
-  /** The supervisors whose lifetime is this conversation's. Handed to the
-   * owner so it can compose them in one ordered list with its own; the
-   * instances are created, cloned and disposed here. */
-  readonly contextSupervisors: ReadonlyArray<ThreadSupervisor>;
 
   private constructor(
     readonly id: ThreadId,
@@ -98,79 +58,13 @@ export class ThreadCore {
     readonly manager: NativeInferenceManager,
     readonly toolSpecs: ProviderToolSpec[],
     readonly edlRegisters: EdlRegisters,
-    private pendingSeed: AgentInput[],
-    readonly fileSupervisor: FileSupervisor,
-    readonly gitSupervisor: GitSupervisor | undefined,
-    readonly systemInfoSupervisor: SystemInfoSupervisor | undefined,
-    /** Absent exactly on the compaction thread, whose content its caller
-     * composes exactly. */
-    readonly systemReminders: SystemReminderSupervisor | undefined,
   ) {
-    for (const event of [
-      "fileAdded",
-      "fileRemoved",
-      "filesReset",
-      "pendingUpdatesChanged",
-    ] as const) {
-      this.fileSupervisor.on(event, () => this.handleUpdate());
-    }
-    this.fileSupervisor.start();
-    // Files are tracked for every conversation but only *delivered* where
-    // reminders are, so the two appear and disappear together. The reminder
-    // is last, so its injection sits after every context update.
-    this.contextSupervisors = [
-      this.preflightRecorder,
-      this.yieldGate,
-      ...(gitSupervisor ? [gitSupervisor] : []),
-      ...(systemReminders ? [fileSupervisor] : []),
-      ...(systemInfoSupervisor ? [systemInfoSupervisor] : []),
-      ...(systemReminders ? [systemReminders] : []),
-    ];
     this.createTool = this.context.threadToolCreator({
-      contextTracker: this.fileSupervisor,
+      contextTracker: this.context.contextTracker,
       onToolApplied: this.onToolApplied,
       edlRegisters: this.edlRegisters,
       requestRender: () => this.handleUpdate(),
     });
-  }
-
-  /** Records the count this request was decided on, whoever asked for it —
-   * and never forces one, since it does not declare
-   * `requestPreflightTokenCount`. */
-  private readonly preflightRecorder: ThreadSupervisor = {
-    onBeforeRequest: (ctx) => {
-      this.preflightTokenCount = ctx.inputTokenCount;
-      return Promise.resolve({ type: "none" as const });
-    },
-  };
-
-  /** yield_to_parent has landed in the log: stop the turn and hand the value
-   * to the owner, which is the only actor that can settle a yield. */
-  private readonly yieldGate: ThreadSupervisor = {
-    onToolResults: (results) => {
-      for (const id of results.keys()) {
-        const structured = structuredResultFor(
-          this.context.structuredToolResults.get(id),
-          "yield_to_parent",
-        );
-        if (!structured) continue;
-        const value: YieldValue = this.context.structuredYield
-          ? { type: "structured", value: structured.input }
-          : { type: "text", text: structured.input.result ?? "" };
-        return { kind: "yield", value };
-      }
-      return undefined;
-    },
-  };
-
-  /** Content that leads the next turn: the hand-off a reset supplies, or a
-   * nudge aimed at this conversation rather than at the thread. Drained by
-   * the first turn that runs. */
-  get seed(): ReadonlyArray<AgentInput> {
-    return this.pendingSeed;
-  }
-  addSeed(messages: AgentInput[]): void {
-    this.pendingSeed = [...this.pendingSeed, ...messages];
   }
 
   static create({
@@ -180,8 +74,6 @@ export class ThreadCore {
     manager,
     toolSpecs,
     edlRegisters = { registers: new Map(), nextSavedId: 0 },
-    initialFiles,
-    seed = [],
   }: {
     id: ThreadId;
     context: ThreadCoreContext;
@@ -189,43 +81,7 @@ export class ThreadCore {
     manager: NativeInferenceManager;
     toolSpecs: ProviderToolSpec[];
     edlRegisters?: EdlRegisters;
-    initialFiles?: Files;
-    seed?: AgentInput[];
   }): ThreadCore {
-    const delivery = context.contextDelivery;
-    const fileSupervisor = FileSupervisor.create({
-      logger: context.logger,
-      fileIO: context.fileIO,
-      cwd: context.cwd,
-      homeDir: context.homeDir,
-      initialFiles: initialFiles ?? delivery?.initialFiles ?? {},
-      ...(delivery?.pollIntervalMs !== undefined
-        ? { pollIntervalMs: delivery.pollIntervalMs }
-        : {}),
-    });
-    const gitSupervisor = delivery
-      ? GitSupervisor.create({
-          gitClient: context.gitClient,
-          initialGitState: delivery.initialGitState,
-          logger: context.logger,
-        })
-      : undefined;
-    const systemInfoSupervisor =
-      delivery && context.threadType !== "compact"
-        ? SystemInfoSupervisor.create({
-            systemInfo: context.systemInfo,
-            alreadyInjected: manager.log.messages.length > 0,
-          })
-        : undefined;
-    const systemReminders =
-      context.threadType === "compact"
-        ? undefined
-        : SystemReminderSupervisor.create({
-            threadType: context.threadType,
-            subagentConfig: context.subagentConfig,
-            contextTracker: fileSupervisor,
-            getStructuredResults: () => context.structuredToolResults,
-          });
     return new ThreadCore(
       id,
       context,
@@ -233,82 +89,9 @@ export class ThreadCore {
       manager,
       toolSpecs,
       edlRegisters,
-      [...seed],
-      fileSupervisor,
-      gitSupervisor,
-      systemInfoSupervisor,
-      systemReminders,
     );
   }
 
-  static clone({
-    source,
-    id,
-    context,
-    toolSpecs,
-    callbacks,
-    nativeMessageIdx,
-  }: {
-    source: ThreadCore;
-    id: ThreadId;
-    context: ThreadCoreContext;
-    toolSpecs: ProviderToolSpec[];
-    callbacks: ThreadCoreCallbacks;
-    nativeMessageIdx: NativeMessageIdx;
-  }): ThreadCore {
-    const manager = source.manager.clone();
-    manager.truncateMessages(nativeMessageIdx);
-    const effectiveNativeMessageIdx = manager.getNativeMessageIdx();
-    const fileSupervisor = FileSupervisor.clone({
-      source: source.fileSupervisor,
-      history: {
-        type: "truncate",
-        nativeMessageIdx: effectiveNativeMessageIdx,
-      },
-    });
-    const gitSupervisor = source.gitSupervisor
-      ? GitSupervisor.clone({
-          source: source.gitSupervisor,
-          nativeMessageIdx: effectiveNativeMessageIdx,
-        })
-      : undefined;
-    const systemInfoSupervisor = source.systemInfoSupervisor
-      ? SystemInfoSupervisor.clone({
-          source: source.systemInfoSupervisor,
-          nativeMessageIdx: effectiveNativeMessageIdx,
-        })
-      : undefined;
-    const systemReminders = source.systemReminders
-      ? SystemReminderSupervisor.clone({
-          source: source.systemReminders,
-          nativeMessageIdx: effectiveNativeMessageIdx,
-          contextTracker: fileSupervisor,
-          getStructuredResults: () => context.structuredToolResults,
-        })
-      : undefined;
-    return new ThreadCore(
-      id,
-      context,
-      callbacks,
-      manager,
-      toolSpecs,
-      {
-        registers: new Map(source.edlRegisters.registers),
-        nextSavedId: source.edlRegisters.nextSavedId,
-      },
-      [],
-      fileSupervisor,
-      gitSupervisor,
-      systemInfoSupervisor,
-      systemReminders,
-    );
-  }
-  /** A disposed conversation has no say any more: its tools may still be
-   * settling, but nothing they report can reach a supervisor. */
-  private get activeHooks(): AgentHooks {
-    if (this.disposed) return { onBeforeRequest: [], onToolResults: [] };
-    return this.hooks;
-  }
   get isActive(): boolean {
     return !this.disposed;
   }
@@ -316,9 +99,7 @@ export class ThreadCore {
     if (!this.disposed) this.callbacks.onUpdate();
   }
 
-  /** A new submission starts here. Only the edited-file list is per
-   * submission — the seed belongs to the first *turn*, and `runTurn` drains
-   * it — so this is the whole boundary. */
+  /** Edited-file snapshots are scoped to a submission, not an individual turn. */
   beginSubmission(): void {
     this.editedFilesThisTurn = [];
   }
@@ -326,7 +107,6 @@ export class ThreadCore {
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-    this.fileSupervisor.destroy();
     if (this.toolBatch.type === "running") this.toolBatch.executor.abortAll();
     await this.abortAgentTurn();
   }
@@ -338,7 +118,7 @@ export class ThreadCore {
     // fact this tool established will be revealed by the next message.
     const nativeMessageIdx = this.pendingResultMessageIdx;
     try {
-      this.hooks.onToolApplied?.({
+      this.callbacks.onToolApplied({
         absFilePath,
         tool,
         fileTypeInfo,
@@ -360,24 +140,10 @@ export class ThreadCore {
     }
   };
 
-  /** The last of the three tool-creation layers: the client's capabilities and
-   * the thread's identity are bound by whoever built `threadToolCreator`, and
-   * this generation binds the state a reset replaces along with it. */
+  /** The client's capabilities and thread identity are already bound by
+   * `threadToolCreator`; this layer binds conversation-local state. */
   private readonly createTool: CreateTool;
 
-  private invokeTool(request: ToolRequest): ToolInvocation {
-    const invocation = this.createTool(request);
-    const promise = invocation.promise.then((executed) => {
-      const { result } = executed;
-      if (result.status !== "ok") return { ...executed, result };
-      const { structuredResult, ...wireResult } = result;
-      if (structuredResult) {
-        this.context.structuredToolResults.set(request.id, structuredResult);
-      }
-      return { ...executed, result: wireResult };
-    });
-    return { ...invocation, promise };
-  }
   private toolBatch:
     | { type: "idle" }
     | { type: "running"; executor: ToolExecutorHost } = { type: "idle" };
@@ -387,7 +153,8 @@ export class ThreadCore {
     publishTools: (tools: ToolInvocationState) => void,
   ): ToolExecution {
     const executor = new ToolExecutorHost({
-      createTool: (request) => this.invokeTool(request),
+      createTool: this.createTool,
+      completedTools: this.context.completedTools,
       getPendingResultMessageIdx: (requested) =>
         this.manager.getPendingResultMessageIdx(requested),
       publishTools,
@@ -444,17 +211,23 @@ export class ThreadCore {
     return this.toolBatch.executor.resultMessageIdx;
   }
 
-  async runTurn(submitted: AgentInput[]): Promise<SendResult> {
+  async runTurn(messages: AgentInput[]): Promise<SendResult> {
     if (!this.isActive) return { type: "aborted" };
-    const messages = [...this.pendingSeed, ...submitted];
-    this.pendingSeed = [];
     const turn = runAgentLoop(
       {
         logger: this.context.logger,
         manager: this.manager,
         executeTools: (requests, publishTools) =>
           this.executeTools(requests, publishTools),
-        getHooks: () => this.activeHooks,
+        onBeforeRequest: () =>
+          this.isActive
+            ? this.callbacks.onBeforeRequest()
+            : Promise.resolve({ type: "proceed", injections: [] }),
+        onToolResults: (results, idx) =>
+          this.isActive
+            ? this.callbacks.onToolResults(results, idx)
+            : undefined,
+
         onUpdate: () => this.handleUpdate(),
       },
       messages,

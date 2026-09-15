@@ -25,7 +25,6 @@ import type * as RunScript from "./tools/run-script.ts";
 import type * as SpawnSubagents from "./tools/spawn-subagents.ts";
 import type * as ThreadTitle from "./tools/thread-title.ts";
 import type { StaticToolName } from "./tools/tool-registry.ts";
-import type * as YieldToParent from "./tools/yield-to-parent.ts";
 import type { HomeDir, NvimCwd } from "./utils/files.ts";
 import type { Result } from "./utils/result.ts";
 
@@ -61,7 +60,6 @@ export type ToolStructuredResult =
   | NvimLua.StructuredResult
   | FindReferences.StructuredResult
   | ThreadTitle.StructuredResult
-  | YieldToParent.StructuredResult
   | RunScript.StructuredResult;
 
 export type CompletedToolInfo = {
@@ -88,8 +86,8 @@ export type ToolManagerToolMsg = {
 export type ToolMsg = { __toolMsg: true };
 
 /** What a tool's `execute` resolves to: the wire result plus the structured
- * payload that never goes to the model. The thread strips the structured half
- * before the agent sees it. */
+ * payload that never goes to the model. The thread's executor archives both
+ * halves and strips the structured half before the agent sees it. */
 export type ExecutedToolResult = Omit<ProviderToolResult, "result"> & {
   result:
     | {

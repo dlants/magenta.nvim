@@ -2,14 +2,12 @@ import type OpenAI from "openai";
 import { describe, expect, it } from "vitest";
 import type { ToolExecutor } from "../agent.ts";
 import {
-  agentHooks,
   createTestOpenAIAgent,
   flatLoop,
   type TestAgent,
   toolExecution,
 } from "../test-helpers.ts";
 import type { SendResult } from "../thread-api.ts";
-import { injectText } from "../thread-supervisor.ts";
 import { ToolExecutorHost } from "../tool-executor.ts";
 import type { ToolName } from "../tool-types.ts";
 import {
@@ -935,25 +933,17 @@ describe("OpenAIInferenceManager pending message indices", () => {
     const resultIdx: NativeMessageIdx[] = [];
     const { agent, mockClient } = createTestOpenAIAgent({
       tools: [spec],
-      getHooks: () =>
-        agentHooks({
-          onBeforeRequest: [
-            {
-              run: (ctx) => {
-                requestIdx.push(ctx.nativeMessageIdx);
-                return Promise.resolve(
-                  injectText(`INJECTED-${requestIdx.length - 1}`),
-                );
-              },
-            },
-          ],
-          onToolResults: [
-            (_results, nativeMessageIdx) => {
-              resultIdx.push(nativeMessageIdx);
-              return undefined;
-            },
-          ],
-        }),
+      onBeforeRequest: () => {
+        requestIdx.push(agent.manager.getPendingUserMessageIdx());
+        return Promise.resolve({
+          type: "proceed",
+          injections: [userText(`INJECTED-${requestIdx.length - 1}`)],
+        });
+      },
+      onToolResults: (_results, nativeMessageIdx) => {
+        resultIdx.push(nativeMessageIdx);
+        return undefined;
+      },
     });
     const turn = agent.send([
       {
@@ -986,26 +976,27 @@ describe("OpenAIInferenceManager pending message indices", () => {
   it("reports the result item before an attachment message and truncates at that boundary", async () => {
     const requestIdx: NativeMessageIdx[] = [];
     const resultIdx: NativeMessageIdx[] = [];
-    const hooks = agentHooks({
-      onBeforeRequest: [
-        {
-          run: (ctx) => {
-            requestIdx.push(ctx.nativeMessageIdx);
-            return Promise.resolve(
-              injectText(`ATTACHMENT-INJECTION-${requestIdx.length - 1}`),
-            );
-          },
-        },
-      ],
-      onToolResults: [
-        (_results, nativeMessageIdx) => {
-          resultIdx.push(nativeMessageIdx);
-          return undefined;
-        },
-      ],
-    });
+    const hooks = {
+      onBeforeRequest: () => {
+        requestIdx.push(agent.manager.getPendingUserMessageIdx());
+        return Promise.resolve({
+          type: "proceed" as const,
+          injections: [
+            userText(`ATTACHMENT-INJECTION-${requestIdx.length - 1}`),
+          ],
+        });
+      },
+      onToolResults: (
+        _results: ToolResults,
+        nativeMessageIdx: NativeMessageIdx,
+      ) => {
+        resultIdx.push(nativeMessageIdx);
+        return undefined;
+      },
+    };
     let agent!: TestAgent;
     const host = new ToolExecutorHost({
+      completedTools: new Map(),
       createTool: (request) => ({
         promise: Promise.resolve({
           type: "tool_result",
@@ -1023,7 +1014,7 @@ describe("OpenAIInferenceManager pending message indices", () => {
     const created = createTestOpenAIAgent({
       tools: [spec],
       executeTools: (requested) => host.execute(requested),
-      getHooks: () => hooks,
+      ...hooks,
     });
     agent = created.agent;
     const { mockClient } = created;

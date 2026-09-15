@@ -31,7 +31,6 @@ import {
   resolveAsText,
 } from "./submission/index.ts";
 import {
-  agentHooks,
   awaitNextStream,
   cleanupArchive,
   createAgentWithMock,
@@ -44,11 +43,7 @@ import {
 } from "./test-helpers.ts";
 import type { ThreadContext, YieldState } from "./thread.ts";
 import { Thread, threadCloneContext } from "./thread.ts";
-import type {
-  BeforeRequestHook,
-  SendResult,
-  ThreadSendResult,
-} from "./thread-api.ts";
+import type { SendResult, ThreadSendResult } from "./thread-api.ts";
 import {
   AutoCompactSupervisor,
   injectText,
@@ -58,9 +53,9 @@ import {
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 import type {
+  CompletedToolInfo,
   ToolName,
   ToolRequestId,
-  ToolStructuredResult,
 } from "./tool-types.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
 import { Defer, delay, pollUntil } from "./utils/async.ts";
@@ -175,7 +170,7 @@ describe("Thread.loopState", () => {
     expect(core.yielded).toBeDefined();
     expect(core.lastResult()).toEqual({
       type: "yielded",
-      value: { type: "structured", value: { count: 3 } },
+      value: { count: 3 },
     });
   });
 
@@ -204,7 +199,7 @@ describe("Thread.loopState", () => {
     expect(core.yielded).toBeDefined();
     expect(core.lastResult()).toEqual({
       type: "yielded",
-      value: { type: "text", text: "done" },
+      value: { result: "done" },
     });
   });
 });
@@ -223,7 +218,7 @@ describe("Thread.send result", () => {
     stream.finishResponse("end_turn");
     expect(await result).toEqual({ type: "completed", stopReason: "end_turn" });
   });
-  it("resolves yielded with the text a plain yield produced", async () => {
+  it("resolves yielded with the unchanged default input", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
@@ -243,18 +238,29 @@ describe("Thread.send result", () => {
     stream.finishResponse("end_turn");
     expect(await result).toEqual({
       type: "yielded",
-      value: { type: "text", text: "done" },
+      value: { result: "done" },
     });
   });
-  it("resolves yielded with the structured value a schema'd yield produced", async () => {
+  it.each([
+    { result: 42, nested: { items: [1, null, "three"] } },
+    { result: '{"count":3}', type: "text", text: "not a wrapper" },
+  ])("passes custom input unchanged to hooks and consumers: %j", async (input) => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
       yieldSchema: {
         type: "object",
-        properties: { count: { type: "number" } },
-        required: ["count"],
+        properties: { result: {} },
+        required: ["result"],
       },
     });
+    core.supervisors = [
+      {
+        onYield: async (value) => {
+          expect(value).toEqual(input);
+          return { type: "accept", resultPrefix: "synced" };
+        },
+      },
+    ];
     const result = core.send([
       {
         type: "text",
@@ -266,12 +272,22 @@ describe("Thread.send result", () => {
     stream.streamToolUse(
       "send-yield-structured" as ToolRequestId,
       "yield_to_parent" as ToolName,
-      { count: 3 },
+      input,
     );
     stream.finishResponse("end_turn");
     expect(await result).toEqual({
       type: "yielded",
-      value: { type: "structured", value: { count: 3 } },
+      value: input,
+      resultPrefix: "synced",
+    });
+    expect(await core.result).toEqual(await result);
+    expect(core.lastResult()).toEqual(await result);
+    expect(
+      core.completedTools.get("send-yield-structured" as ToolRequestId),
+    ).toMatchObject({
+      request: { input },
+      result: { result: { status: "ok" } },
+      structuredResult: undefined,
     });
   });
   it("resolves aborted when the turn is aborted", async () => {
@@ -320,8 +336,7 @@ describe("Thread.send result", () => {
     // Stand the thread up in the terminal state a torn-down subagent reaches,
     // without driving a whole yield + teardown.
     (core as unknown as { yieldState: YieldState }).yieldState = {
-      response: "done",
-      value: { type: "text", text: "done" },
+      value: { result: "done" },
       tornDown: true,
     };
     await expect(
@@ -815,11 +830,23 @@ describe("Thread.reset", () => {
       stream.finishResponse("end_turn");
       await sent;
 
-      (
-        core.structuredToolResults as Map<ToolRequestId, ToolStructuredResult>
-      ).set("tr-1" as ToolRequestId, {
-        toolName: "thread_title",
-      });
+      (core.completedTools as Map<ToolRequestId, CompletedToolInfo>).set(
+        "tr-1" as ToolRequestId,
+        {
+          request: {
+            id: "tr-1" as ToolRequestId,
+            toolName: "thread_title" as ToolName,
+            input: { title: "Old conversation" },
+          },
+          result: {
+            type: "tool_result",
+            id: "tr-1" as ToolRequestId,
+            result: { status: "ok", value: [] },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          },
+          structuredResult: { toolName: "thread_title" },
+        },
+      );
       const oldAgent = core.inferenceManager;
 
       await core.reset({
@@ -835,9 +862,7 @@ describe("Thread.reset", () => {
 
       expect(core.inferenceManager).not.toBe(oldAgent);
       expect(core.getProviderMessages()).toEqual([]);
-      expect(core.structuredToolResults.has("tr-1" as ToolRequestId)).toBe(
-        true,
-      );
+      expect(core.completedTools.has("tr-1" as ToolRequestId)).toBe(true);
       // The registers belong to the message list being replaced: a saved
       // fragment refers to text the fresh agent has never seen.
       expect(core.edlRegisters.registers.size).toBe(0);
@@ -938,7 +963,7 @@ describe("Agent.handleProviderStopped", () => {
 
     const yielded = core.yielded;
     if (!yielded) throw new Error("expected a yield");
-    expect(yielded.response).toBe("Here is the result of my work");
+    expect(yielded.value).toEqual({ result: "Here is the result of my work" });
   });
 
   it("custom yieldSchema yields a structured JSON value", async () => {
@@ -975,7 +1000,7 @@ describe("Agent.handleProviderStopped", () => {
 
     const yielded = core.yielded;
     if (!yielded) throw new Error("expected a yield");
-    expect(JSON.parse(yielded.response)).toEqual({ count: 3 });
+    expect(yielded.value).toEqual({ count: 3 });
   });
   it("max_tokens with truncated (incomplete) tool_use block sends error tool_result and auto-continues", async () => {
     const { core, mockClient } = createAgentWithMock();
@@ -1157,7 +1182,7 @@ describe("yield_to_parent as an ordinary tool", () => {
     stream.finishResponse("tool_use");
     expect(await sent).toEqual({
       type: "yielded",
-      value: { type: "text", text: "all done" },
+      value: { result: "all done" },
     });
     // The tool really ran, and the loop stopped rather than continuing on the
     // results.
@@ -1194,7 +1219,7 @@ describe("yield_to_parent as an ordinary tool", () => {
     stream.finishResponse("tool_use");
     expect(await sent).toEqual({
       type: "yielded",
-      value: { type: "text", text: "all done" },
+      value: { result: "all done" },
     });
     expect(core.getMessages().slice(-2)).toMatchObject([
       {
@@ -1236,7 +1261,7 @@ describe("yield_to_parent as an ordinary tool", () => {
     // The compaction gate belongs to a request that is never issued.
     expect(await sent).toEqual({
       type: "yielded",
-      value: { type: "text", text: "all done" },
+      value: { result: "all done" },
     });
     expect(compactions.prompts.length).toBe(0);
   });
@@ -1252,10 +1277,10 @@ describe("yield_to_parent as an ordinary tool", () => {
       },
     ]);
     const first = await mockClient.awaitStream();
-    first.streamToolUse(
+    first.streamToolUsePartial(
       "yield-bad" as ToolRequestId,
       "yield_to_parent" as ToolName,
-      { result: 42 },
+      ["[42]"],
     );
     first.finishResponse("tool_use");
     // No structured result, so no suspension: the turn continues with the
@@ -1304,7 +1329,7 @@ describe("Agent.abort on yielded thread", () => {
     // Mode should still be yielded with the original response
     const yielded = core.yielded;
     if (!yielded) throw new Error("expected a yield");
-    expect(yielded.response).toBe("Here is the result of my work");
+    expect(yielded.value).toEqual({ result: "Here is the result of my work" });
   });
 
   it("abortAndWait leaves the yield in place", async () => {
@@ -1339,7 +1364,7 @@ describe("Agent.abort on yielded thread", () => {
     expect(core.yielded).toBeDefined();
     expect(core.lastResult()).toEqual({
       type: "yielded",
-      value: { type: "text", text: "all done" },
+      value: { result: "all done" },
     });
   });
 });
@@ -2350,7 +2375,7 @@ describe("AutoCompactSupervisor integration", () => {
   });
 });
 
-describe("ThreadHooks.onToolApplied", () => {
+describe("Thread.onToolApplied", () => {
   it("fires for edl edits and get_files reads, alongside editedFilesThisTurn", async () => {
     const fileIO = new InMemoryFileIO({
       "/tmp/a.txt": "hello",
@@ -2611,15 +2636,24 @@ describe("structured tool result ownership", () => {
     });
     stream.finishResponse("tool_use");
     const structured = await pollUntil(() => {
-      const entry = core.structuredToolResults.get(requestId);
+      const entry = core.completedTools.get(requestId);
       if (entry) return entry;
       throw new Error("waiting for structured result");
     });
     expect(structured).toMatchObject({
-      toolName: "bash_command",
-      exitCode: 0,
-      wasAbbreviated: true,
+      request: {
+        id: requestId,
+        toolName: "bash_command",
+        input: { command: "echo hi" },
+      },
+      result: { type: "tool_result", id: requestId, result: { status: "ok" } },
+      structuredResult: {
+        toolName: "bash_command",
+        exitCode: 0,
+        wasAbbreviated: true,
+      },
     });
+    expect(structured.result.result).not.toHaveProperty("structuredResult");
     for (const message of core.getProviderMessages()) {
       for (const content of message.content) {
         if (content.type === "tool_result") {
@@ -3520,22 +3554,25 @@ describe("Thread survives the compaction agent swap", () => {
     const threadId = uniqueThreadId("compact-structured");
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
-      const map = core.structuredToolResults as Map<
-        ToolRequestId,
-        ToolStructuredResult
-      >;
-      map.set(
-        "req-1" as ToolRequestId,
-        {
+      const map = core.completedTools as Map<ToolRequestId, CompletedToolInfo>;
+      map.set("req-1" as ToolRequestId, {
+        request: {
+          id: "req-1" as ToolRequestId,
           toolName: "thread_title" as ToolName,
-        } as never,
-      );
+          input: { title: "Before compaction" },
+        },
+        result: {
+          type: "tool_result",
+          id: "req-1" as ToolRequestId,
+          result: { status: "ok", value: [] },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+        structuredResult: { toolName: "thread_title" },
+      });
       await compact(core, mockClient);
       // Compaction replaces the conversation, not the thread-owned archive.
-      expect(core.structuredToolResults).toBe(map);
-      expect(core.structuredToolResults.has("req-1" as ToolRequestId)).toBe(
-        true,
-      );
+      expect(core.completedTools).toBe(map);
+      expect(core.completedTools.has("req-1" as ToolRequestId)).toBe(true);
     } finally {
       await core.destroy();
       await cleanupArchive(threadId);
@@ -3608,13 +3645,13 @@ describe("Thread survives the compaction agent swap", () => {
   });
 });
 
-describe("Agent preflight token count", () => {
+describe("Thread preflight token count", () => {
   const noteCount = (
     seen: (number | undefined)[],
     preflight?: true,
-  ): BeforeRequestHook => ({
+  ): ThreadSupervisor => ({
     ...(preflight ? { requestPreflightTokenCount: true } : {}),
-    run: (ctx) => {
+    onBeforeRequest: (ctx) => {
       seen.push(ctx.inputTokenCount);
       return Promise.resolve({ type: "none" as const });
     },
@@ -3622,11 +3659,10 @@ describe("Agent preflight token count", () => {
 
   it("issues no count when no hook asks for one", async () => {
     const seen: (number | undefined)[] = [];
-    const { agent, mockClient } = createTestAgent({
-      getHooks: () => agentHooks({ onBeforeRequest: [noteCount(seen)] }),
-    });
+    const { core: agent, mockClient } = createAgentWithMock();
+    agent.supervisors = [noteCount(seen)];
     mockClient.mockInputTokenCount = 42;
-    const { promise: turn } = agent.send([
+    const turn = agent.send([
       {
         type: "text",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -3644,18 +3680,14 @@ describe("Agent preflight token count", () => {
 
   it("counts once per request, immediately before the first hook that asks", async () => {
     const seen: (number | undefined)[] = [];
-    const { agent, mockClient } = createTestAgent({
-      getHooks: () =>
-        agentHooks({
-          onBeforeRequest: [
-            noteCount(seen),
-            noteCount(seen, true),
-            noteCount(seen, true),
-          ],
-        }),
-    });
+    const { core: agent, mockClient } = createAgentWithMock();
+    agent.supervisors = [
+      noteCount(seen),
+      noteCount(seen, true),
+      noteCount(seen, true),
+    ];
     mockClient.mockInputTokenCount = 42;
-    const { promise: turn } = agent.send([
+    const turn = agent.send([
       {
         type: "text",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -3675,11 +3707,10 @@ describe("Agent preflight token count", () => {
 
   it("clears the count when it fails rather than reporting a stale one", async () => {
     const seen: (number | undefined)[] = [];
-    const { agent, mockClient } = createTestAgent({
-      getHooks: () => agentHooks({ onBeforeRequest: [noteCount(seen, true)] }),
-    });
+    const { core: agent, mockClient } = createAgentWithMock();
+    agent.supervisors = [noteCount(seen, true)];
     mockClient.mockInputTokenCount = 42;
-    const { promise: first } = agent.send([
+    const first = agent.send([
       {
         type: "text",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -3693,7 +3724,7 @@ describe("Agent preflight token count", () => {
     expect(agent.inputTokenCount).toBe(42);
 
     mockClient.countTokensError = new Error("count failed");
-    const { promise: second } = agent.send([
+    const second = agent.send([
       {
         type: "text",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -3715,21 +3746,17 @@ describe("Agent preflight token count", () => {
   });
   it("does not count when an earlier hook has already suspended", async () => {
     const seen: (number | undefined)[] = [];
-    const { agent, mockClient } = createTestAgent({
-      getHooks: () =>
-        agentHooks({
-          onBeforeRequest: [
-            {
-              run: () =>
-                Promise.resolve({
-                  type: "suspend" as const,
-                  reason: { kind: "stop" as const, message: "held" },
-                }),
-            },
-            noteCount(seen, true),
-          ],
-        }),
-    });
+    const { core: agent, mockClient } = createAgentWithMock();
+    agent.supervisors = [
+      {
+        onBeforeRequest: () =>
+          Promise.resolve({
+            type: "suspend",
+            reason: { kind: "stop", message: "held" },
+          }),
+      },
+      noteCount(seen, true),
+    ];
     mockClient.mockInputTokenCount = 42;
     expect(
       await agent.send([
@@ -3738,7 +3765,7 @@ describe("Agent preflight token count", () => {
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
-      ]).promise,
+      ]),
     ).toEqual({
       type: "suspended",
       reason: { kind: "stop", message: "held" },
@@ -3753,20 +3780,13 @@ describe("Agent preflight token count", () => {
 describe("Agent turn loop", () => {
   it("suspending at the gate issues no request", async () => {
     const { agent, mockClient } = createTestAgent({
-      getHooks: () =>
-        agentHooks({
-          onBeforeRequest: [
-            {
-              run: () =>
-                Promise.resolve({
-                  type: "suspend" as const,
-                  reason: { kind: "stop" as const, message: "held" },
-                }),
-            },
-          ],
+      onBeforeRequest: () =>
+        Promise.resolve({
+          type: "suspend",
+          reason: { kind: "stop", message: "held" },
+          injections: [],
         }),
     });
-
     expect(
       await agent.send([
         {
@@ -3886,15 +3906,14 @@ describe("Agent turn loop", () => {
 
   it("injections from the gate ride the caller's own user message", async () => {
     const { agent, mockClient } = createTestAgent({
-      getHooks: () =>
-        agentHooks({
-          onBeforeRequest: [
+      onBeforeRequest: () =>
+        Promise.resolve({
+          type: "proceed",
+          injections: [
             {
-              run: () =>
-                Promise.resolve({
-                  type: "inject" as const,
-                  content: [{ type: "text" as const, text: "injected" }],
-                }),
+              type: "text",
+              text: "injected",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
         }),

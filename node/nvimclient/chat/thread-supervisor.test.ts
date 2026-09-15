@@ -115,7 +115,7 @@ describe("DockerSupervisor", () => {
       text: expect.stringContaining("1/2"),
     });
     vi.mocked(teardownContainer).mockResolvedValueOnce({ syncedFiles: 5 });
-    await source.onYield("source done");
+    await source.onYield({ result: "source done" });
 
     const clone = DockerSupervisor.clone({ source });
     expect(clone.teardownResult).toEqual({ syncedFiles: 5 });
@@ -137,7 +137,7 @@ describe("DockerSupervisor", () => {
     });
 
     vi.mocked(teardownContainer).mockResolvedValueOnce({ syncedFiles: 9 });
-    const action = await clone.onYield("clone done");
+    const action = await clone.onYield({ result: "clone done" });
     expect(action).toEqual({
       type: "accept",
       resultPrefix: "[Changes synced to /host/dir]",
@@ -160,7 +160,7 @@ describe("DockerSupervisor", () => {
         hostDir: "/host/dir",
       });
 
-      const action = await supervisor.onYield("done");
+      const action = await supervisor.onYield({ result: "done" });
       expect(action.type).toBe("accept");
       if (action.type === "accept") {
         expect(action.resultPrefix).toContain("/host/dir");
@@ -183,7 +183,7 @@ describe("DockerSupervisor", () => {
         onProgress,
       });
 
-      await supervisor.onYield("done");
+      await supervisor.onYield({ result: "done" });
 
       expect(teardownContainer).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -199,7 +199,7 @@ describe("DockerSupervisor", () => {
         hostDir: "/host/dir",
       });
 
-      await supervisor.onYield("done");
+      await supervisor.onYield({ result: "done" });
 
       const call = vi.mocked(teardownContainer).mock.lastCall?.[0];
       expect(call).not.toHaveProperty("onProgress");

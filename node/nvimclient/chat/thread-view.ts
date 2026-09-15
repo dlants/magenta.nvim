@@ -88,6 +88,15 @@ export type RunningCompaction = {
   onSelectChunk: (threadId: ThreadId) => void;
 };
 
+export function renderYield(yielded: YieldState): string {
+  const body =
+    Object.keys(yielded.value).length === 1 &&
+    typeof yielded.value.result === "string"
+      ? yielded.value.result
+      : JSON.stringify(yielded.value);
+  return yielded.resultPrefix ? `${yielded.resultPrefix}\n\n${body}` : body;
+}
+
 export const renderStatus = (
   loopState: ThreadLoopState,
   latestUsage: Usage | undefined,
@@ -97,7 +106,7 @@ export const renderStatus = (
   yielded: YieldState | undefined,
 ): VDOMNode => {
   if (yielded) {
-    return d`↗️ yielded to parent: ${yielded.response}`;
+    return d`↗️ yielded to parent: ${renderYield(yielded)}`;
   }
   if (compaction) {
     const { run, onSelectChunk } = compaction;
@@ -1014,10 +1023,12 @@ function renderMessageContentBlock(
           return d`⚠️ tool result for ${request.id} not found\n`;
         }
 
-        const completedInfo: CompletedToolInfo = {
-          request: request,
+        const completedInfo: CompletedToolInfo = thread.core.completedTools.get(
+          request.id,
+        ) ?? {
+          request,
           result: toolResult,
-          structuredResult: thread.core.structuredToolResults.get(request.id),
+          structuredResult: undefined,
         };
 
         // Section 5: Result summary. get_files renders its own interactive

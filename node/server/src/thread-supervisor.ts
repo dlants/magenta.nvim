@@ -11,13 +11,7 @@ import {
   formatSystemInfo,
   type SystemInfo,
 } from "./providers/system-prompt.ts";
-import type {
-  BeforeRequestHook,
-  ThreadHooks,
-  ToolResultsHook,
-  YieldHook,
-  YieldValue,
-} from "./thread-api.ts";
+import type { YieldValue } from "./thread-api.ts";
 
 /** Action returned from the `onEndTurnWithoutYield` hook. */
 export type EndTurnAction =
@@ -72,84 +66,8 @@ export function injectText(
   return { type: "inject", content: [{ type: "text", text }] };
 }
 
-/** What a before-request hook may contribute. The agent appends every
- * injection to the request in hook order, so a contribution that must land
- * last — the user's own queued content — comes from a hook registered last. */
+/** A supervisor's contribution to Thread's combined before-request decision. */
 export type RequestAction = SupervisorAction;
-
-/** Fold a list of supervisors into the single `ThreadHooks` set a `Thread`
- * consults. The merge rules are exactly today's: `send-message` texts join
- * with a blank line, and the first `accept`/`reject` wins a yield. Request
- * actions become one before-request hook entry each: every injection,
- * in supervisor order, and the first `suspend`. Arbitration lives here rather than
- * in the agent because it is policy over a plural collaborator, and each
- * consumer is free to choose a different one. */
-export function composeSupervisors(
-  supervisors: ReadonlyArray<ThreadSupervisor>,
-): ThreadHooks {
-  const onBeforeRequest: BeforeRequestHook[] = [];
-  const onToolResults: ToolResultsHook[] = [];
-  const onYield: YieldHook[] = [];
-  for (const sup of supervisors) {
-    const beforeRequest = sup.onBeforeRequest?.bind(sup);
-    if (beforeRequest) {
-      onBeforeRequest.push({
-        ...(sup.requestPreflightTokenCount
-          ? { requestPreflightTokenCount: true }
-          : {}),
-        run: beforeRequest,
-      });
-    }
-
-    const toolResults = sup.onToolResults?.bind(sup);
-    if (toolResults) onToolResults.push(toolResults);
-
-    const yieldHook = sup.onYield?.bind(sup);
-    // The built-in supervisors predate structured yields and read text.
-    if (yieldHook) {
-      onYield.push((value) =>
-        yieldHook(
-          value.type === "text" ? value.text : JSON.stringify(value.value),
-        ),
-      );
-    }
-  }
-
-  return {
-    onBeforeRequest,
-    onToolResults,
-    onYield,
-    onEndTurn: (context) => {
-      const texts: string[] = [];
-      // The first suspension wins, and it wins over any nudge: there is no
-      // point asking the model to continue into a request we refuse to
-      // issue. Every supervisor is still consulted — as on the
-      // `onBeforeRequest` side, a stop is a fact each of them may need to
-      // record — so this cannot short-circuit out of the loop.
-      let suspend: Extract<EndTurnAction, { type: "suspend" }> | undefined;
-      for (const sup of supervisors) {
-        const action = sup.onEndTurnWithoutYield?.(context);
-        if (!action) continue;
-        if (action.type === "send-message") texts.push(action.text);
-        else if (action.type === "suspend") suspend ??= action;
-      }
-      if (suspend) return suspend;
-      if (texts.length === 0) return { type: "none" };
-      return { type: "send-message", text: texts.join("\n\n") };
-    },
-    hasPendingContent: async () => {
-      for (const sup of supervisors) {
-        if (await sup.hasPendingContent?.()) return true;
-      }
-      return false;
-    },
-    onToolApplied: (event) => {
-      for (const sup of supervisors) {
-        sup.onToolApplied?.(event);
-      }
-    },
-  };
-}
 
 export type EndTurnContext = {
   stopReason: StopReason;
@@ -177,14 +95,13 @@ export type RequestContext = {
 
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
-  onYield?(result: string): Promise<YieldAction>;
-  /** Every requested tool has settled and its results are about to be
-   * written. Observation, normally: the results are already final. A
-   * supervisor may stop the turn here over a well-formed log by returning a
-   * reason; the first one wins. */
+  onYield?(result: YieldValue): Promise<YieldAction>;
+  /** Called by Thread after the batch's results are in the log. A supervisor
+   * may request suspension; Thread combines these into the single callback
+   * result returned to the agent loop. */
   onToolResults?(
     results: ToolResults,
-    /** The idx of the message that will hold these results. */
+    /** The idx of the message holding these results. */
     nativeMessageIdx: NativeMessageIdx,
   ): SuspendReason | undefined;
   /** This supervisor reads `context.inputTokenCount` in `onBeforeRequest` and
@@ -302,7 +219,7 @@ export class SubagentSupervisor implements ThreadSupervisor {
     return { type: "none" };
   }
 
-  async onYield(_result: string): Promise<YieldAction> {
+  async onYield(_result: YieldValue): Promise<YieldAction> {
     return { type: "none" };
   }
 }
@@ -350,7 +267,7 @@ export class UnsupervisedSupervisor implements ThreadSupervisor {
     };
   }
 
-  async onYield(_result: string): Promise<YieldAction> {
+  async onYield(_result: YieldValue): Promise<YieldAction> {
     return { type: "none" };
   }
 }

@@ -1,10 +1,11 @@
 import { AnthropicError, APIError } from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  agentHooks,
+  createAgentWithMock,
   createTestAgent,
   flatLoop,
   sendText,
+  userInput,
 } from "../test-helpers.ts";
 import { isRetryableError } from "./anthropic-inference.ts";
 
@@ -129,21 +130,17 @@ describe("Agent retry logic", () => {
 
   it("does not re-fire the before-request gate, or re-count, on a retried request", async () => {
     let calls = 0;
-    const { agent, mockClient } = createTestAgent({
-      getHooks: () =>
-        agentHooks({
-          onBeforeRequest: [
-            {
-              requestPreflightTokenCount: true,
-              run: () => {
-                calls++;
-                return Promise.resolve({ type: "none" as const });
-              },
-            },
-          ],
-        }),
-    });
-    const turn = sendText(agent, "hello");
+    const { core, mockClient } = createAgentWithMock();
+    core.supervisors = [
+      {
+        requestPreflightTokenCount: true,
+        onBeforeRequest: () => {
+          calls++;
+          return Promise.resolve({ type: "none" });
+        },
+      },
+    ];
+    const turn = core.send(userInput("hello"));
     await vi.advanceTimersByTimeAsync(0);
     let stream = await mockClient.awaitStream();
     stream.respondWithError(make529Error());

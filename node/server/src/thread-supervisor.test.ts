@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import type { SystemInfo } from "./providers/system-prompt.ts";
+import { createAgentWithMock, userInput } from "./test-helpers.ts";
 import {
   AutoCompactSupervisor,
-  composeSupervisors,
   type EndTurnContext,
   injectText,
   type RequestContext,
   SystemInfoSupervisor,
-  type ThreadSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 
@@ -19,87 +18,91 @@ const context: RequestContext = {
   nativeMessageIdx: 0 as NativeMessageIdx,
 };
 
-const requestContext = {
-  ...context,
-  status: "pending" as const,
-};
-describe("composeSupervisors onBeforeRequest", () => {
-  it("contributes one hook entry per supervisor that answers, in order", async () => {
-    const first: ThreadSupervisor = {
-      onBeforeRequest: () => Promise.resolve(injectText("first")),
-    };
-    const quiet: ThreadSupervisor = {
-      onBeforeRequest: () => Promise.resolve({ type: "none" as const }),
-    };
-    const hooks = composeSupervisors([first, {}, quiet]);
-    expect(hooks.onBeforeRequest.length).toBe(2);
-    expect(
-      await Promise.all(
-        hooks.onBeforeRequest.map((h) => h.run(requestContext)),
-      ),
-    ).toEqual([injectText("first"), { type: "none" }]);
-  });
-  it("declares the preflight token count only for supervisors that ask", () => {
-    const hooks = composeSupervisors([
-      { onBeforeRequest: () => Promise.resolve({ type: "none" as const }) },
-      AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "go" }),
-    ]);
-    expect(
-      hooks.onBeforeRequest.map((h) => h.requestPreflightTokenCount ?? false),
-    ).toEqual([false, true]);
-  });
-});
-describe("composeSupervisors hasPendingContent", () => {
-  it("is true when any supervisor has something pending", async () => {
-    const hooks = composeSupervisors([
-      { hasPendingContent: () => Promise.resolve(false) },
+describe("Thread supervisor arbitration", () => {
+  it("applies request injections in supervisor order, ignoring quiet supervisors", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    core.supervisors = [
+      { onBeforeRequest: () => Promise.resolve(injectText("first")) },
       {},
-      { hasPendingContent: () => Promise.resolve(true) },
-    ]);
-    expect(await hooks.hasPendingContent?.()).toBe(true);
-  });
-  it("is false when no supervisor answers", async () => {
-    const hooks = composeSupervisors([
-      {},
-      { hasPendingContent: () => Promise.resolve(false) },
-    ]);
-    expect(await hooks.hasPendingContent?.()).toBe(false);
-  });
-});
-describe("composeSupervisors onEndTurn", () => {
-  const endTurnContext: EndTurnContext = {
-    stopReason: "end_turn",
-    inputTokenCount: 400000,
-    lastAssistantMessage: undefined,
-    nativeMessageIdx: 0 as NativeMessageIdx,
-  };
-
-  it("lets a suspension win over an accumulated nudge", () => {
-    const nudger: ThreadSupervisor = {
-      onEndTurnWithoutYield: () => ({
-        type: "send-message" as const,
-        text: "keep going",
-      }),
-    };
-    const hooks = composeSupervisors([
-      nudger,
-      AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "go" }),
-    ]);
-    expect(hooks.onEndTurn?.(endTurnContext)).toEqual({
-      type: "suspend",
-      reason: { kind: "compact", nextPrompt: "go" },
-    });
+      { onBeforeRequest: () => Promise.resolve({ type: "none" }) },
+      { onBeforeRequest: () => Promise.resolve(injectText("second")) },
+    ];
+    const turn = core.send(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    const texts = core
+      .getProviderMessages()
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "text")
+      .map((block) => block.text);
+    expect(texts.indexOf("first")).toBeLessThan(texts.indexOf("second"));
+    expect(texts).toContain("first");
+    expect(texts).toContain("second");
+    stream.finishResponse("end_turn");
+    await turn;
   });
 
-  it("keeps only the first suspension", () => {
-    const hooks = composeSupervisors([
-      AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "go" }),
-      AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "stop" }),
-    ]);
-    expect(hooks.onEndTurn?.(endTurnContext)).toEqual({
-      type: "suspend",
-      reason: { kind: "compact", nextPrompt: "go" },
+  it("asks pending-content supervisors before issuing a content-only request", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    core.supervisors = [
+      { hasPendingContent: () => Promise.resolve(false) },
+      {},
+      {
+        hasPendingContent: () => Promise.resolve(true),
+        onBeforeRequest: () => Promise.resolve(injectText("pending note")),
+      },
+    ];
+    const turn = core.send([]);
+    const stream = await mockClient.awaitStream();
+    expect(JSON.stringify(stream.messages)).toContain("pending note");
+    stream.finishResponse("end_turn");
+    await turn;
+  });
+
+  it("issues no request when no supervisor has pending content", async () => {
+    const { core, mockClient } = createAgentWithMock({ threadType: "compact" });
+    core.supervisors = [
+      {},
+      { hasPendingContent: () => Promise.resolve(false) },
+    ];
+    expect(await core.send([])).toEqual({ type: "empty" });
+    expect(mockClient.streams).toHaveLength(0);
+  });
+
+  it("lets the first suspension win over an end-turn nudge and later suspension", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const observed: string[] = [];
+    core.supervisors = [
+      {
+        onEndTurnWithoutYield: () => ({
+          type: "send-message",
+          text: "keep going",
+        }),
+      },
+      {
+        onEndTurnWithoutYield: () => ({
+          type: "suspend",
+          reason: { kind: "stop", message: "first" },
+        }),
+      },
+      {
+        onEndTurnWithoutYield: () => {
+          observed.push("last");
+          return {
+            type: "suspend",
+            reason: { kind: "stop", message: "second" },
+          };
+        },
+      },
+    ];
+    const turn = core.send(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.finishResponse("end_turn");
+    expect(await turn).toEqual({
+      type: "suspended",
+      reason: { kind: "stop", message: "first" },
     });
+    expect(observed).toEqual(["last"]);
+    expect(mockClient.streams).toHaveLength(1);
   });
 });
 

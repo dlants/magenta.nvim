@@ -154,7 +154,7 @@ describe("compaction generation ownership", () => {
     stream.finishResponse("end_turn");
     const expected = {
       type: "yielded",
-      value: { type: "structured", value: { answer: 42 } },
+      value: { answer: 42 },
     };
     expect(await sent).toEqual(expected);
     expect(await originalResult).toEqual(expected);

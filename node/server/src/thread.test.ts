@@ -840,7 +840,7 @@ describe("Thread aborts the tools it owns", () => {
       `results-during-${action}`,
       onToolResults,
     );
-    const archive = core.structuredToolResults;
+    const archive = core.completedTools;
     const stopping =
       action === "reset"
         ? core.reset({ seed: [], archive: { type: "none" } })
@@ -851,9 +851,16 @@ describe("Thread aborts the tools it owns", () => {
     await stopping;
     expect(await sent).toEqual({ type: "aborted" });
     expect(onToolResults).toHaveBeenCalledTimes(action === "abort" ? 1 : 0);
-    expect(archive.size).toBe(0);
-    expect(core.structuredToolResults.size).toBe(0);
-    expect(core.structuredToolResults).toBe(archive);
+    expect(archive.size).toBe(1);
+    expect(archive.get("tool-1" as ToolRequestId)).toMatchObject({
+      request: {
+        toolName: "get_files",
+        input: { files: [{ filePath: "/tmp/test.txt" }] },
+      },
+      result: { result: { status: "error" } },
+      structuredResult: undefined,
+    });
+    expect(core.completedTools).toBe(archive);
     await core.destroy();
   });
 
@@ -1429,6 +1436,7 @@ describe("replaceable conversation core", () => {
     const { core } = createAgentWithMock();
     const original = core.core;
     const result = core.result;
+    const originalFileSupervisor = core.fileSupervisor;
     original.edlRegisters.registers.set("old", "old content");
     original.edlRegisters.nextSavedId = 4;
     original.preflightTokenCount = 42;
@@ -1447,15 +1455,13 @@ describe("replaceable conversation core", () => {
       archive: { type: "none" },
     });
     expect(core.core).not.toBe(original);
-    expect(core.core.fileSupervisor).not.toBe(original.fileSupervisor);
-    expect(core.core.fileSupervisor.files).toEqual(
-      original.fileSupervisor.files,
-    );
+    expect(core.fileSupervisor).not.toBe(originalFileSupervisor);
+    expect(core.fileSupervisor.files).toEqual(originalFileSupervisor.files);
     expect(core.result).toBe(result);
     expect(core.edlRegisters.registers.size).toBe(0);
     expect(core.edlRegisters.nextSavedId).toBe(0);
     expect(core.inputTokenCount).toBeUndefined();
-    expect(core.structuredToolResults.size).toBe(0);
+    expect(core.completedTools.size).toBe(0);
     expect(core.queued.next).toEqual([pendingMessage("later")]);
     expect(core.pendingTurnContent).toEqual([
       {
@@ -1559,28 +1565,27 @@ describe("replaceable conversation core", () => {
     stream.finishResponse("end_turn");
     expect(await sent).toEqual({
       type: "yielded",
-      value: { type: "text", text: "finished" },
+      value: { result: "finished" },
     });
     await core.reset({ seed: [], archive: { type: "none" } });
     expect(core.result).toBe(result);
     expect(await result).toEqual({
       type: "yielded",
-      value: { type: "text", text: "finished" },
+      value: { result: "finished" },
     });
-    expect(core.yielded?.value).toEqual({ type: "text", text: "finished" });
-    // The archive belongs to the thread, not the replacement conversation.
-    expect(core.structuredToolResults.size).toBe(1);
+    expect(core.yielded?.value).toEqual({ result: "finished" });
     expect(
-      core.structuredToolResults.get("yield-result" as ToolRequestId),
-    ).toEqual({
-      toolName: "yield_to_parent",
-      input: { result: "finished" },
+      core.completedTools.get("yield-result" as ToolRequestId),
+    ).toMatchObject({
+      request: { toolName: "yield_to_parent", input: { result: "finished" } },
+      result: { result: { status: "ok" } },
+      structuredResult: undefined,
     });
     await core.destroy();
     expect(await core.result).toEqual(await result);
   });
 
-  it("shares the immutable structured-result archive across forks and resets", async () => {
+  it("shares the immutable completed-tool archive across forks and resets", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent",
     });
@@ -1592,11 +1597,16 @@ describe("replaceable conversation core", () => {
       },
     ]);
     const stream = await mockClient.awaitStream();
-    const id = "fork-yield" as ToolRequestId;
-    stream.streamToolUse(id, "yield_to_parent" as ToolName, { result: "done" });
+    const id = "fork-title" as ToolRequestId;
+    stream.streamToolUse(id, "thread_title" as ToolName, { title: "Work" });
+    stream.streamToolUse(
+      "fork-yield" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "done" },
+    );
     stream.finishResponse("end_turn");
     await sent;
-    const original = core.structuredToolResults.get(id);
+    const original = core.completedTools.get(id);
     expect(original).toBeDefined();
     const fork = await Thread.clone({
       sourceThread: core,
@@ -1606,15 +1616,15 @@ describe("replaceable conversation core", () => {
       context: threadCloneContext(core.context),
       callbacks: core.callbacks,
     });
-    expect(fork.structuredToolResults).toBe(core.structuredToolResults);
-    expect(fork.structuredToolResults.get(id)).toEqual(original);
-    expect(fork.structuredToolResults.get(id)).toBe(original);
-    expect(fork.structuredToolResults.size).toBe(1);
+    expect(fork.completedTools).toBe(core.completedTools);
+    expect(fork.completedTools.get(id)).toEqual(original);
+    expect(fork.completedTools.get(id)).toBe(original);
+    expect(fork.completedTools.size).toBe(2);
     await core.reset({ seed: [], archive: { type: "none" } });
-    expect(core.structuredToolResults.get(id)).toBe(original);
-    expect(fork.structuredToolResults).toBe(core.structuredToolResults);
+    expect(core.completedTools.get(id)).toBe(original);
+    expect(fork.completedTools).toBe(core.completedTools);
     await core.destroy();
-    expect(fork.structuredToolResults.get(id)).toEqual(original);
+    expect(fork.completedTools.get(id)).toEqual(original);
     await fork.destroy();
   });
 
@@ -1807,7 +1817,7 @@ describe("stale outer submissions", () => {
     replacement.finishResponse("tool_use");
     const expected = {
       type: "yielded",
-      value: { type: "text", text: "new result" },
+      value: { result: "new result" },
     };
     expect(await second).toEqual(expected);
     expect(await core.result).toEqual(expected);

@@ -251,11 +251,11 @@ export {
   type ThreadCallbacks,
   type ThreadCloneContext,
   type ThreadContext,
+  type ThreadContextDelivery,
   threadCloneContext,
   type YieldState,
 } from "./thread.ts";
 export type {
-  AgentHooks,
   OnUpdate,
   QueuedMessage,
   RestResult,
@@ -265,11 +265,7 @@ export type {
   ThreadSendResult,
   YieldValue,
 } from "./thread-api.ts";
-export {
-  type ThreadContextDelivery,
-  ThreadCore,
-  type ThreadCoreCallbacks,
-} from "./thread-core.ts";
+export { ThreadCore, type ThreadCoreCallbacks } from "./thread-core.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
   EndTurnAction,
@@ -284,7 +280,6 @@ export type {
 } from "./thread-supervisor.ts";
 export {
   AutoCompactSupervisor,
-  composeSupervisors,
   MaxTokensSupervisor,
   SubagentSupervisor,
   SystemInfoSupervisor,

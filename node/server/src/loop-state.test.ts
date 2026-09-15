@@ -2,11 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ToolOutcome } from "./agent.ts";
 import { loopLabel, loopStreamingBlock } from "./loop-state.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import {
-  agentHooks,
-  awaitNextStream,
-  createTestAgent,
-} from "./test-helpers.ts";
+import { awaitNextStream, createTestAgent } from "./test-helpers.ts";
 import type { ToolInvocationState } from "./thread-api.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
@@ -151,18 +147,11 @@ describe("AgentTurn lifecycle and progress", () => {
     const entered = new Defer<void>();
     const gate = new Defer<void>();
     const { agent, mockClient } = createTestAgent({
-      getHooks: () =>
-        agentHooks({
-          onBeforeRequest: [
-            {
-              run: async () => {
-                entered.resolve();
-                await gate.promise;
-                return { type: "none" };
-              },
-            },
-          ],
-        }),
+      onBeforeRequest: async () => {
+        entered.resolve();
+        await gate.promise;
+        return { type: "proceed", injections: [] };
+      },
     });
     const turn = agent.send([
       {

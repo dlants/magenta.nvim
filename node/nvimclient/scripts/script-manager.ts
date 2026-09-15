@@ -131,10 +131,7 @@ function toScriptResult(result: ThreadResult): ScriptThreadResult {
   }
   return {
     status: "ok",
-    value:
-      result.value.type === "text"
-        ? result.value.text
-        : JSON.stringify(result.value.value),
+    value: JSON.stringify(result.value),
   };
 }
 

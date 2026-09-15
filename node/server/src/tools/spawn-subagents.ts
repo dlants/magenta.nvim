@@ -711,10 +711,9 @@ function buildResult(
       threadResult.type === "yielded"
         ? {
             status: "ok",
-            value:
-              threadResult.value.type === "text"
-                ? threadResult.value.text
-                : JSON.stringify(threadResult.value.value),
+            value: [threadResult.resultPrefix, threadResult.value.result]
+              .filter((part) => part !== undefined)
+              .join("\n\n"),
           }
         : { status: "error", error: threadResult.reason };
     if (result.status === "ok") {

@@ -5,12 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import { FsFileIO } from "./capabilities/file-io.ts";
 import type { GitState } from "./capabilities/git-client.ts";
 import { runSubmission } from "./compaction/index.ts";
-import type { MockStream } from "./providers/mock-anthropic-client.ts";
 import {
   type NativeMessageIdx,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
 } from "./providers/provider-types.ts";
-import { resolveAsText } from "./submission/index.ts";
+import { pendingMessage, resolveAsText } from "./submission/index.ts";
 import { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import {
   awaitNextStream,
@@ -45,7 +44,7 @@ async function fixture() {
     untrackedCount: 0,
   };
   const onFilesSent = vi.fn();
-  const start = vi.spyOn(FileSupervisor.prototype, "start");
+  const create = vi.spyOn(FileSupervisor, "create");
   const { core: thread, mockClient } = createAgentWithMock(
     {
       cwd,
@@ -60,23 +59,22 @@ async function fixture() {
     uniqueThreadId("core-context"),
   );
   thread.callbacks.onFilesSent = onFilesSent;
-  const manager = thread.core.fileSupervisor;
+  const manager = thread.fileSupervisor;
   manager.addFileContext(file, "tracked.txt" as RelFilePath, {
     category: FileCategory.TEXT,
     mimeType: "text/plain",
     extension: "txt",
   });
-  const stop = vi.spyOn(manager, "stop");
+  const destroy = vi.spyOn(manager, "destroy");
   const changed = vi.fn();
   manager.on("pendingUpdatesChanged", changed);
   thread.setTitle("context integration");
-  let previous: MockStream | undefined;
   async function request(target = thread, text = "continue") {
+    const previous = mockClient.streams.at(-1);
     const sent = target.send([
       { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
     ]);
     const stream = await awaitNextStream(mockClient, previous);
-    previous = stream;
     stream.streamText("done");
     stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
     await sent;
@@ -90,8 +88,8 @@ async function fixture() {
     manager,
     thread,
     mockClient,
-    start,
-    stop,
+    create,
+    destroy,
     changed,
     onFilesSent,
     request,
@@ -157,9 +155,9 @@ describe("Thread-owned context delivery", () => {
       }
       expect(f.thread.core).not.toBe(oldCore);
       expect(oldCore.isActive).toBe(false);
-      expect(f.thread.core.fileSupervisor).not.toBe(f.manager);
-      expect(f.start).toHaveBeenCalledTimes(2);
-      expect(f.stop).toHaveBeenCalledTimes(1);
+      expect(f.thread.fileSupervisor).not.toBe(f.manager);
+      expect(f.create).toHaveBeenCalledTimes(2);
+      expect(f.destroy).toHaveBeenCalledTimes(1);
       expect(replacement).toContain("replacement summary");
       expect(replacement).toContain("replacement tracked content");
       expect(replacement).not.toContain("original tracked content");
@@ -171,14 +169,11 @@ describe("Thread-owned context delivery", () => {
       f.changed.mockClear();
       await fs.writeFile(f.file, "a later tracked edit\n");
       const replacementChanged = vi.fn();
-      f.thread.core.fileSupervisor.on(
-        "pendingUpdatesChanged",
-        replacementChanged,
-      );
-      await f.thread.core.fileSupervisor.refreshPendingUpdates();
+      f.thread.fileSupervisor.on("pendingUpdatesChanged", replacementChanged);
+      await f.thread.fileSupervisor.refreshPendingUpdates();
       expect(replacementChanged).toHaveBeenCalled();
       await f.thread.destroy();
-      expect(f.stop).toHaveBeenCalledTimes(1);
+      expect(f.destroy).toHaveBeenCalledTimes(1);
       f.changed.mockClear();
       f.manager.emit("pendingUpdatesChanged");
       expect(f.changed).not.toHaveBeenCalled();
@@ -212,7 +207,7 @@ describe("Thread-owned context delivery", () => {
         },
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
-      const manager = fork.core.fileSupervisor;
+      const manager = fork.fileSupervisor;
       fork.setTitle("fork context integration");
       expect(JSON.stringify(fork.getProviderMessages())).not.toContain(
         "source-only later request",
@@ -224,11 +219,11 @@ describe("Thread-owned context delivery", () => {
       expect(f.manager.files[f.file].agentView).toEqual(sourceView);
       await fork.reset({ seed: [], archive: { type: "none" } });
       expect(f.manager.files[f.file].agentView).toEqual(sourceView);
-      expect(fork.core.fileSupervisor.files[f.file].agentView).toBeUndefined();
+      expect(fork.fileSupervisor.files[f.file].agentView).toBeUndefined();
       await f.thread.destroy();
       await fs.writeFile(f.file, "fork after source destruction\n");
       expect(await f.request(fork)).toContain("fork after source destruction");
-      fork.core.fileSupervisor.removeFileContext(f.file);
+      fork.fileSupervisor.removeFileContext(f.file);
       expect(f.manager.files[f.file]).toBeDefined();
     } finally {
       if (fork) {
@@ -309,14 +304,20 @@ describe("Thread-owned context delivery", () => {
     const f = await fixture();
     let fork: Thread | undefined;
     try {
-      const sourceText = await f.request();
+      f.thread.callbacks.resolve = async (message) => ({
+        ...(await resolveAsText(message)),
+        reminders: ["retain this reminder"],
+      });
+      const submitted = f.thread.submit(
+        pendingMessage("activate reminder"),
+        "now",
+      );
+      const reminderStream = await f.mockClient.awaitStream();
+      reminderStream.finishResponse("end_turn");
+      await submitted;
+      const sourceText = JSON.stringify(reminderStream.messages);
       expect(sourceText.match(/Remember the skills/g)).toHaveLength(1);
       const forkPoint = f.thread.inferenceManager.getNativeMessageIdx();
-      const reminders = f.thread.core.systemReminders;
-      if (!reminders) {
-        throw new Error("Expected reminders for a root thread");
-      }
-      reminders.activateReminder("retain this reminder", forkPoint);
 
       fork = await Thread.clone({
         sourceThread: f.thread,
@@ -371,9 +372,9 @@ describe("Thread-owned context delivery", () => {
       });
       expect(f.mockClient.streams).toHaveLength(0);
       expect(f.manager.files[f.file].agentView).toBeUndefined();
-      expect(
-        f.thread.core.gitSupervisor?.gitTracker.getAgentView()?.branch,
-      ).toBe("initial-branch");
+      expect(f.thread.gitSupervisor?.gitTracker.getAgentView()?.branch).toBe(
+        "initial-branch",
+      );
 
       suspend = false;
       const sent = f.thread.send([
@@ -427,7 +428,7 @@ describe("Thread-owned context delivery", () => {
         },
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
-      const tracker = fork.core.fileSupervisor;
+      const tracker = fork.fileSupervisor;
       expect(tracker).not.toBe(f.manager);
       expect(tracker.files[f.file].agentView).toEqual(
         f.manager.files[f.file].agentView,
@@ -477,7 +478,7 @@ describe("Thread-owned context delivery", () => {
       const pending = f.manager.getContextUpdate();
       await reading;
       await f.thread.reset({ seed: [], archive: { type: "none" } });
-      const replacement = f.thread.core.fileSupervisor;
+      const replacement = f.thread.fileSupervisor;
       f.changed.mockClear();
       release("stale read content\n");
       expect(await pending).toEqual({});

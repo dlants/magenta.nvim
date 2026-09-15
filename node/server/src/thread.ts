@@ -1,8 +1,10 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import type { AgentContext } from "./agent.ts";
+import type { AgentContext, BeforeRequestDecision } from "./agent.ts";
+
 import type { AgentsMap } from "./agents/agents.ts";
+import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
 import type { FileIO } from "./capabilities/file-io.ts";
-import type { GitClient } from "./capabilities/git-client.ts";
+import type { GitClient, GitState } from "./capabilities/git-client.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
@@ -29,10 +31,15 @@ import {
 } from "./submission/index.ts";
 import {
   buildClonedFiles,
+  FileSupervisor,
   type Files,
   type FileUpdates,
 } from "./supervisors/file-supervisor.ts";
-import type { GitContextUpdate } from "./supervisors/git-supervisor.ts";
+import {
+  type GitContextUpdate,
+  GitSupervisor,
+} from "./supervisors/git-supervisor.ts";
+import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
 import type {
   AgentRequestContext,
   OnUpdate,
@@ -44,22 +51,23 @@ import type {
   ThreadSendResult,
   YieldValue,
 } from "./thread-api.ts";
-import { renderYieldValue } from "./thread-api.ts";
 import {
-  type ThreadContextDelivery,
   ThreadCore,
+  type ThreadCoreCallbacks,
   type ThreadCoreContext,
 } from "./thread-core.ts";
 
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
-import type {
-  RequestAction,
-  RequestContext,
-  SuspendReason,
-  ThreadSupervisor,
+import {
+  type EndTurnAction,
+  type EndTurnContext,
+  type RequestAction,
+  type RequestContext,
+  type SuspendReason,
+  SystemInfoSupervisor,
+  type ThreadSupervisor,
 } from "./thread-supervisor.ts";
-import { composeSupervisors } from "./thread-supervisor.ts";
-import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
+import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { ClientToolCreator } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
@@ -68,9 +76,14 @@ import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
 import type { HomeDir, NvimCwd } from "./utils/files.ts";
+export interface ThreadContextDelivery {
+  initialFiles?: Files;
+  pollIntervalMs?: number;
+  initialGitState?: GitState | undefined;
+}
 export type YieldState = {
   value: YieldValue;
-  response: string;
+  resultPrefix?: string;
   tornDown: boolean;
 };
 export type EnvironmentConfig =
@@ -153,6 +166,10 @@ export class Thread {
   get systemInfo(): SystemInfo {
     return this.context.systemInfo;
   }
+  fileSupervisor!: FileSupervisor;
+  gitSupervisor: GitSupervisor | undefined;
+  private systemInfoSupervisor: SystemInfoSupervisor | undefined;
+  private systemReminders: SystemReminderSupervisor | undefined;
   private _core: ThreadCore;
   private interruption = new AbortController();
   get interruptionSignal(): AbortSignal {
@@ -176,10 +193,7 @@ export class Thread {
   get toolSpecs(): ProviderToolSpec[] {
     return this.core.toolSpecs;
   }
-  get structuredToolResults(): ReadonlyMap<
-    ToolRequestId,
-    ToolStructuredResult
-  > {
+  get completedTools(): ReadonlyMap<ToolRequestId, CompletedToolInfo> {
     return this.resultArchive;
   }
   getLastStopTokenCount(): number {
@@ -198,7 +212,6 @@ export class Thread {
   }
   set supervisors(supervisors: ThreadSupervisor[]) {
     this._supervisors = supervisors;
-    this.composeHooks(this.core);
   }
   private threadLogger: ThreadLogger;
 
@@ -207,11 +220,11 @@ export class Thread {
     public readonly context: ThreadContext,
     public callbacks: ThreadCallbacks,
     private archiveOptions: ThreadArchiveOptions = {},
-    core?: ThreadCore,
+    fork?: { source: Thread; nativeMessageIdx: NativeMessageIdx },
     // Tool request IDs identify immutable results, shared across resets and forks.
     private readonly resultArchive = new Map<
       ToolRequestId,
-      ToolStructuredResult
+      CompletedToolInfo
     >(),
   ) {
     this.threadLogger = new ThreadLogger(
@@ -232,7 +245,9 @@ export class Thread {
           : {}),
       },
     );
-    this._core = core ?? this.createCore();
+    this._core = fork
+      ? this.cloneCore(fork.source, fork.nativeMessageIdx)
+      : this.createCore();
   }
 
   /** The thread's own contribution to a request: the queued user content. It
@@ -242,48 +257,174 @@ export class Thread {
     onBeforeRequest: (ctx: RequestContext) => this.queueFlushAction(ctx),
   };
 
-  /** The whole ordered list, in one place: owner gates, then the
-   * conversation's own context supervisors, then the user's queued content.
-   * Re-composed per core generation, since the context supervisors live and
-   * die with the core. */
-  private composeHooks(core: ThreadCore): void {
-    core.hooks = composeSupervisors([
+  private preflightRecorder!: ThreadSupervisor;
+  private yieldGate!: ThreadSupervisor;
+
+  private createGates(): void {
+    this.preflightRecorder = {
+      onBeforeRequest: async (ctx) => {
+        this.core.preflightTokenCount = ctx.inputTokenCount;
+        return { type: "none" };
+      },
+    };
+    this.yieldGate = {
+      onToolResults: (results) => {
+        for (const [id, result] of results) {
+          if (result.status !== "ok") continue;
+          const completed = this.resultArchive.get(id);
+          if (completed?.request.toolName === "yield_to_parent") {
+            return {
+              kind: "yield",
+              value: completed.request.input as YieldValue,
+            };
+          }
+        }
+        return undefined;
+      },
+    };
+  }
+
+  private coreCallbacks(getCore: () => ThreadCore): ThreadCoreCallbacks {
+    const isCurrent = () =>
+      this.core === getCore() && getCore().isActive && !this.destroyed;
+    return {
+      onUpdate: () => {
+        if (isCurrent()) this.handleUpdate();
+      },
+      onBeforeRequest: () => this.beforeRequest(getCore()),
+      onToolResults: (results, idx) => {
+        let suspend: SuspendReason | undefined;
+        for (const supervisor of this.orderedSupervisors) {
+          if (!isCurrent()) break;
+          try {
+            const asked = supervisor.onToolResults?.(results, idx);
+            suspend ??= asked;
+          } catch (error) {
+            this.context.logger.error(
+              `onToolResults hook threw: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
+        return suspend;
+      },
+      onToolApplied: (event) => this.onToolApplied(event, isCurrent),
+    };
+  }
+
+  private onToolApplied(
+    event: Parameters<OnToolAppliedHook>[0],
+    isCurrent: () => boolean,
+  ): void {
+    for (const supervisor of this.orderedSupervisors) {
+      if (!isCurrent()) return;
+      supervisor.onToolApplied?.(event);
+    }
+  }
+
+  private async beforeRequest(
+    core: ThreadCore,
+  ): Promise<BeforeRequestDecision> {
+    const manager = core.manager;
+    const isCurrentLoop = this.currentLoopGuard();
+    const isCurrent = () =>
+      this.core === core && core.isActive && isCurrentLoop();
+    const injections: AgentInput[] = [];
+    let suspend: SuspendReason | undefined;
+    let tokenCount: number | undefined;
+    let counted = false;
+    for (const supervisor of this.orderedSupervisors) {
+      if (!isCurrent()) break;
+      if (!supervisor.onBeforeRequest) continue;
+      if (supervisor.requestPreflightTokenCount && !counted && !suspend) {
+        counted = true;
+        try {
+          tokenCount = await manager.countTokens?.();
+        } catch (error) {
+          this.context.logger.warn(
+            `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        if (!isCurrent()) break;
+      }
+      const action = await supervisor.onBeforeRequest({
+        inputTokenCount: tokenCount,
+        outputTokenCount: manager.log.messages.reduce(
+          (total, message) => total + (message.usage?.outputTokens ?? 0),
+          0,
+        ),
+        nativeMessageIdx: manager.getPendingUserMessageIdx(),
+        ...(suspend === undefined
+          ? { status: "pending" as const }
+          : { status: "suspended" as const, reason: suspend }),
+      });
+      if (!isCurrent()) break;
+      if (action.type === "suspend") suspend ??= action.reason;
+      else if (action.type === "inject") {
+        for (const block of action.content) {
+          injections.push(
+            block.type === "text"
+              ? { ...block, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }
+              : block,
+          );
+        }
+      }
+    }
+    return suspend === undefined
+      ? { type: "proceed", injections }
+      : { type: "suspend", reason: suspend, injections };
+  }
+
+  private onEndTurn(context: EndTurnContext): EndTurnAction {
+    const texts: string[] = [];
+    let suspend: Extract<EndTurnAction, { type: "suspend" }> | undefined;
+    for (const supervisor of this.orderedSupervisors) {
+      const action = supervisor.onEndTurnWithoutYield?.(context);
+      if (action?.type === "send-message") texts.push(action.text);
+      else if (action?.type === "suspend") suspend ??= action;
+    }
+    if (suspend) return suspend;
+    return texts.length
+      ? { type: "send-message", text: texts.join("\n\n") }
+      : { type: "none" };
+  }
+
+  private get orderedSupervisors(): ReadonlyArray<ThreadSupervisor> {
+    return [
       ...this._supervisors,
-      ...core.contextSupervisors,
+      this.preflightRecorder,
+      this.yieldGate,
+      ...(this.gitSupervisor ? [this.gitSupervisor] : []),
+      ...(this.systemReminders ? [this.fileSupervisor] : []),
+      ...(this.systemInfoSupervisor ? [this.systemInfoSupervisor] : []),
+      ...(this.systemReminders ? [this.systemReminders] : []),
       this.queueFlush,
-    ]);
+    ];
   }
 
-  /** A context supervisor lives and dies with the core, so each generation is
-   * subscribed to as it is built and a stale one can never report. */
   private adoptCore(core: ThreadCore): void {
-    this.composeHooks(core);
-    core.fileSupervisor.on("sent", (updates) => {
-      if (this.core === core) this.callbacks.onFilesSent?.(updates);
+    this.fileSupervisor.on("pendingUpdatesChanged", () => {
+      if (this.core === core && core.isActive) this.handleUpdate();
     });
-    core.gitSupervisor?.on("sent", (update) => {
-      if (this.core === core) this.callbacks.onGitSent?.(update);
+    this.fileSupervisor.on("sent", (updates) => {
+      if (this.core === core && core.isActive)
+        this.callbacks.onFilesSent?.(updates);
+    });
+    this.gitSupervisor?.on("sent", (update) => {
+      if (this.core === core && core.isActive)
+        this.callbacks.onGitSent?.(update);
     });
   }
 
-  private static coreContext(
+  private coreContext(
     id: ThreadId,
     context: ThreadContext,
-    structuredToolResults: Map<ToolRequestId, ToolStructuredResult>,
+    completedTools: Map<ToolRequestId, CompletedToolInfo>,
   ): ThreadCoreContext {
     return {
       logger: context.logger,
       threadToolCreator: context.clientToolCreator({ threadId: id }),
-      structuredYield: context.yieldSchema !== undefined,
-      structuredToolResults,
-      fileIO: context.fileIO,
-      cwd: context.cwd,
-      homeDir: context.homeDir,
-      gitClient: context.gitClient,
-      systemInfo: context.systemInfo,
-      threadType: context.threadType,
-      subagentConfig: context.subagentConfig,
-      contextDelivery: context.contextDelivery,
+      completedTools,
+      contextTracker: this.fileSupervisor,
     };
   }
 
@@ -300,10 +441,97 @@ export class Thread {
     );
   }
 
-  private createCore(opts?: {
-    initialFiles?: Files;
-    seed?: AgentInput[];
-  }): ThreadCore {
+  private cloneCore(
+    source: Thread,
+    nativeMessageIdx: NativeMessageIdx,
+  ): ThreadCore {
+    const manager = source.inferenceManager.clone();
+    manager.truncateMessages(nativeMessageIdx);
+    const effectiveIdx = manager.getNativeMessageIdx();
+    this.fileSupervisor = FileSupervisor.clone({
+      source: source.fileSupervisor,
+      history: { type: "truncate", nativeMessageIdx: effectiveIdx },
+    });
+    this.gitSupervisor = source.gitSupervisor
+      ? GitSupervisor.clone({
+          source: source.gitSupervisor,
+          nativeMessageIdx: effectiveIdx,
+        })
+      : undefined;
+    this.systemInfoSupervisor = source.systemInfoSupervisor
+      ? SystemInfoSupervisor.clone({
+          source: source.systemInfoSupervisor,
+          nativeMessageIdx: effectiveIdx,
+        })
+      : undefined;
+    this.systemReminders = source.systemReminders
+      ? SystemReminderSupervisor.clone({
+          source: source.systemReminders,
+          nativeMessageIdx: effectiveIdx,
+          contextTracker: this.fileSupervisor,
+          getCompletedTools: () => this.resultArchive,
+        })
+      : undefined;
+    this.createGates();
+    const core = ThreadCore.create({
+      id: this.id,
+      context: this.coreContext(this.id, this.context, this.resultArchive),
+      callbacks: this.coreCallbacks(() => core),
+      manager,
+      toolSpecs: Thread.buildToolSpecs(this.context),
+      edlRegisters: {
+        registers: new Map(source.edlRegisters.registers),
+        nextSavedId: source.edlRegisters.nextSavedId,
+      },
+    });
+    this.adoptCore(core);
+    return core;
+  }
+
+  private createSupervisors(
+    manager: NativeInferenceManager,
+    initialFiles?: Files,
+  ): void {
+    this.createGates();
+
+    const context = this.context;
+    const delivery = context.contextDelivery;
+    this.fileSupervisor = FileSupervisor.create({
+      logger: context.logger,
+      fileIO: context.fileIO,
+      cwd: context.cwd,
+      homeDir: context.homeDir,
+      initialFiles: initialFiles ?? delivery?.initialFiles ?? {},
+      ...(delivery?.pollIntervalMs !== undefined
+        ? { pollIntervalMs: delivery.pollIntervalMs }
+        : {}),
+    });
+    this.gitSupervisor = delivery
+      ? GitSupervisor.create({
+          gitClient: context.gitClient,
+          initialGitState: delivery.initialGitState,
+          logger: context.logger,
+        })
+      : undefined;
+    this.systemInfoSupervisor =
+      delivery && context.threadType !== "compact"
+        ? SystemInfoSupervisor.create({
+            systemInfo: context.systemInfo,
+            alreadyInjected: manager.log.messages.length > 0,
+          })
+        : undefined;
+    this.systemReminders =
+      context.threadType === "compact"
+        ? undefined
+        : SystemReminderSupervisor.create({
+            threadType: context.threadType,
+            subagentConfig: context.subagentConfig,
+            contextTracker: this.fileSupervisor,
+            getCompletedTools: () => this.resultArchive,
+          });
+  }
+
+  private createCore(opts?: { initialFiles?: Files }): ThreadCore {
     const context = this.context;
     const toolSpecs = Thread.buildToolSpecs(context);
     const manager = context.provider.createInferenceManager({
@@ -314,16 +542,14 @@ export class Thread {
         ? { effortOverride: context.subagentConfig.effort }
         : {}),
     });
+    this.createSupervisors(manager, opts?.initialFiles);
     const core = ThreadCore.create({
       id: this.id,
-      context: Thread.coreContext(this.id, context, this.resultArchive),
-      callbacks: {
-        onUpdate: () => this.handleUpdate(),
-      },
+      context: this.coreContext(this.id, context, this.resultArchive),
+      callbacks: this.coreCallbacks(() => core),
+
       manager,
       toolSpecs,
-      ...(opts?.initialFiles ? { initialFiles: opts.initialFiles } : {}),
-      ...(opts?.seed ? { seed: opts.seed } : {}),
     });
     this.adoptCore(core);
     return core;
@@ -341,20 +567,6 @@ export class Thread {
       ...context,
       threadType: sourceThread.threadType,
     };
-    const core = ThreadCore.clone({
-      source: sourceThread.core,
-      id: newId,
-      context: Thread.coreContext(
-        newId,
-        clonedContext,
-        sourceThread.resultArchive,
-      ),
-      toolSpecs: Thread.buildToolSpecs(clonedContext),
-      nativeMessageIdx,
-      callbacks: {
-        onUpdate: () => cloned.handleUpdate(),
-      },
-    });
     const cloned = new Thread(
       newId,
       clonedContext,
@@ -366,21 +578,20 @@ export class Thread {
           nativeMessageIdx,
         },
       },
-      core,
+      { source: sourceThread, nativeMessageIdx },
       sourceThread.resultArchive,
     );
-    cloned.adoptCore(core);
     return cloned;
   }
   get activeReminders(): ReadonlySet<string> {
-    return this.core.systemReminders?.activeReminders ?? new Set();
+    return this.systemReminders?.activeReminders ?? new Set();
   }
 
   private activateReminder(
     text: string,
     nativeMessageIdx: NativeMessageIdx,
   ): void {
-    this.core.systemReminders?.activateReminder(text, nativeMessageIdx);
+    this.systemReminders?.activateReminder(text, nativeMessageIdx);
   }
   /** Busy from the first request of a submission until the loop comes to
    * rest, which spans the gaps between turns. */
@@ -409,7 +620,12 @@ export class Thread {
    * branch on it for control flow. */
   lastResult(): RestResult | undefined {
     if (this.yieldState) {
-      return { type: "yielded", value: this.yieldState.value };
+      const { value, resultPrefix } = this.yieldState;
+      return {
+        type: "yielded",
+        value,
+        ...(resultPrefix ? { resultPrefix } : {}),
+      };
     }
     const state = this.loopState;
     if (state.type !== "idle") return undefined;
@@ -436,14 +652,14 @@ export class Thread {
   getMessages(): ProviderMessage[] {
     return [...this.getProviderMessages()];
   }
-  /** Seed content belongs to the conversation it will lead, not to the
-   * stable thread. Reset supplies the replacement conversation's seed. */
+  /** Reset replaces this content; the next turn drains it exactly once. */
+  private pendingSeed: AgentInput[] = [];
 
   get pendingTurnContent(): ReadonlyArray<AgentInput> {
-    return this.core.seed;
+    return this.pendingSeed;
   }
   prependToNextTurn(messages: AgentInput[]): void {
-    this.core.addSeed(messages);
+    this.pendingSeed = [...this.pendingSeed, ...messages];
   }
   async awaitArchiveFlush(): Promise<void> {
     await this.threadLogger.flushed();
@@ -740,8 +956,12 @@ export class Thread {
     const core = this.core;
     if (!core.isActive) return false;
     const isCurrent = this.currentLoopGuard();
-    const pending = await core.hooks.hasPendingContent();
-    return isCurrent() && pending;
+    for (const supervisor of this.orderedSupervisors) {
+      const pending = await supervisor.hasPendingContent?.();
+      if (!isCurrent()) return false;
+      if (pending) return true;
+    }
+    return false;
   }
   /** Outer hooks may outlive cancellation. Each submission captures its own
    * signal so a late continuation cannot act on the replacement submission. */
@@ -788,14 +1008,20 @@ export class Thread {
     force?: true,
   ): Promise<SendResult> {
     const core = this.core;
-    if (!messages.length && !core.seed.length && !force) {
+    if (!messages.length && !this.pendingSeed.length && !force) {
       const pending = await this.hasPendingContent();
       // Probing takes time, and a send that arrived while it ran owns the
       // loop now: this one is over before it touched the agent.
       if (!isCurrentLoop()) return { type: "aborted" };
       if (!pending) return { type: "empty" };
     }
-    let result = await core.runTurn(messages);
+    const runTurn = (submitted: AgentInput[]): Promise<SendResult> => {
+      if (!isCurrentLoop()) return Promise.resolve({ type: "aborted" });
+      const input = [...this.pendingSeed, ...submitted];
+      this.pendingSeed = [];
+      return core.runTurn(input);
+    };
+    let result = await runTurn(messages);
     for (;;) {
       if (!isCurrentLoop()) return { type: "aborted" };
       // A yield suspension is the thread's own, raised by `yieldGate`, and
@@ -807,7 +1033,7 @@ export class Thread {
         );
         if (!isCurrentLoop()) return { type: "aborted" };
         if (resolved.type === "settled") return resolved.result;
-        result = await core.runTurn(resolved.messages);
+        result = await runTurn(resolved.messages);
         continue;
       }
       if (result.type !== "completed") return result;
@@ -821,7 +1047,7 @@ export class Thread {
           return { type: "suspended", reason: next.reason };
         case "messages":
         case "flushed": {
-          const continued = await core.runTurn(next.messages);
+          const continued = await runTurn(next.messages);
           if (!isCurrentLoop()) return { type: "aborted" };
           if (continued.type === "suspended" && next.type === "flushed") {
             return {
@@ -848,23 +1074,21 @@ export class Thread {
     | { type: "settled"; result: SendResult }
     | { type: "resubmit"; messages: AgentInput[] }
   > {
-    const rendered = renderYieldValue(value);
     const texts: string[] = [];
-    for (const hook of this.core.hooks.onYield) {
-      const action = await hook(value);
+    for (const supervisor of this.orderedSupervisors) {
+      if (!supervisor.onYield) continue;
+      const action = await supervisor.onYield(value);
+
       if (!isCurrent()) return { type: "settled", result: { type: "aborted" } };
       if (action.type === "accept") {
-        const response = action.resultPrefix
-          ? `${action.resultPrefix}\n\n${rendered}`
-          : rendered;
-        const accepted: YieldValue =
-          value.type === "structured"
-            ? value
-            : { type: "text", text: response };
-        this.yieldState = { value: accepted, response, tornDown: true };
+        const prefix = action.resultPrefix
+          ? { resultPrefix: action.resultPrefix }
+          : {};
+        this.yieldState = { value, ...prefix, tornDown: true };
+
         return {
           type: "settled",
-          result: { type: "yielded", value: accepted },
+          result: { type: "yielded", value, ...prefix },
         };
       }
       if (action.type === "reject") {
@@ -884,7 +1108,6 @@ export class Thread {
     if (!texts.length) {
       this.yieldState = {
         value,
-        response: rendered,
         tornDown: false,
       };
       return { type: "settled", result: { type: "yielded", value } };
@@ -988,7 +1211,7 @@ export class Thread {
     ) {
       return { type: "queues" };
     }
-    const action = this.core.hooks.onEndTurn?.({
+    const action = this.onEndTurn({
       stopReason,
       inputTokenCount: this.core.preflightTokenCount,
       lastAssistantMessage: this.core.lastAssistantMessage,
@@ -1060,7 +1283,8 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.interrupt();
     this.cancelSubmission();
     try {
-      const initialFiles = buildClonedFiles(this.core.fileSupervisor.files);
+      const initialFiles = buildClonedFiles(this.fileSupervisor.files);
+      this.fileSupervisor.destroy();
       await this.core.dispose();
       this.assertUsable();
       // Disposal is irreversible: cancellation prevents the caller's follow-up,
@@ -1072,9 +1296,9 @@ Come up with a succinct thread title for this prompt. It must be a single line (
         });
       const core = this.createCore({
         initialFiles,
-        seed,
       });
       this._core = core;
+      this.pendingSeed = [...seed];
       this.submission = undefined;
       this.lastSubmissionResult = undefined;
       this.threadLogger.resetCursor();
@@ -1094,6 +1318,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     if (this.destroyed) return;
     this.destroyed = true;
     this.interrupt();
+    this.fileSupervisor.destroy();
     await this.core.dispose();
     this.settleResult({
       type: "aborted",

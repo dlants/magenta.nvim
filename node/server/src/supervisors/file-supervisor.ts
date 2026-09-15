@@ -142,8 +142,6 @@ export type FileSupervisorEvents = {
   /** A context update was just committed into the request going out. */
   sent: [updates: FileUpdates];
   fileAdded: [absFilePath: AbsFilePath];
-  fileRemoved: [absFilePath: AbsFilePath];
-  filesReset: [];
   pendingUpdatesChanged: [];
 };
 
@@ -263,6 +261,9 @@ export class FileSupervisor
     super();
     this.files = files;
     this.pollIntervalMs = pollIntervalMs;
+    this.pollTimer = setInterval(() => {
+      this.scheduleRefreshPendingUpdates();
+    }, pollIntervalMs);
   }
 
   static create({
@@ -340,24 +341,11 @@ export class FileSupervisor
     this.toolApplied(absFilePath, tool, fileTypeInfo, nativeMessageIdx);
   };
 
-  start(): void {
-    if (this.destroyed || this.pollTimer) return;
-    this.pollTimer = setInterval(() => {
-      this.scheduleRefreshPendingUpdates();
-    }, this.pollIntervalMs);
-  }
-
-  stop(): void {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = undefined;
-    }
-  }
-
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    this.stop();
+    clearInterval(this.pollTimer);
+    this.pollTimer = undefined;
     this.removeAllListeners();
   }
 
@@ -456,7 +444,6 @@ export class FileSupervisor
     this.revision++;
     delete this.files[absFilePath];
     delete this.pendingUpdates[absFilePath];
-    this.emit("fileRemoved", absFilePath);
     this.scheduleRefreshPendingUpdates();
   }
 
@@ -517,16 +504,6 @@ export class FileSupervisor
       });
       this.emit("fileAdded", absFilePath);
     }
-    this.scheduleRefreshPendingUpdates();
-  }
-
-  reset(): void {
-    if (this.destroyed) return;
-    this.files = buildClonedFiles(this.files);
-    this.pendingUpdates = {};
-    this.observedStats.clear();
-    this.revision++;
-    this.emit("filesReset");
     this.scheduleRefreshPendingUpdates();
   }
 

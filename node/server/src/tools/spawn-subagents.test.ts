@@ -46,7 +46,7 @@ function createMockThreadManager(
     simulateYield(threadId: ThreadId, result: Result<string>) {
       deferFor(threadId).resolve(
         result.status === "ok"
-          ? { type: "yielded", value: { type: "text", text: result.value } }
+          ? { type: "yielded", value: { result: result.value } }
           : { type: "aborted", reason: result.error },
       );
     },

@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
+import type { AgentLoopDeps } from "../agent.ts";
 import {
-  agentHooks,
+  createAgentWithMock,
   createTestAgent,
   createTestOpenAIAgent,
   flatLoop,
   type TestAgent,
   toolExecution,
 } from "../test-helpers.ts";
-import type { BeforeRequestHook, SendResult } from "../thread-api.ts";
-import {
-  AutoCompactSupervisor,
-  composeSupervisors,
-} from "../thread-supervisor.ts";
+import type { SendResult } from "../thread-api.ts";
+import { AutoCompactSupervisor } from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
 import { ABORT_MARKER_TEXT } from "./inference-shared.ts";
@@ -172,20 +170,19 @@ describe("onBeforeRequest", () => {
   const held = { kind: "stop" as const, message: "held" };
   /** The gate fires on the opening request too; this one holds the
    * continuation that would carry the tool results. */
-  const holdSecond = (bump: () => number): BeforeRequestHook => ({
-    run: () =>
+  const holdSecond =
+    (bump: () => number): AgentLoopDeps["onBeforeRequest"] =>
+    () =>
       Promise.resolve(
         bump() === 1
-          ? { type: "none" as const }
-          : { type: "suspend" as const, reason: held },
-      ),
-  });
+          ? { type: "proceed", injections: [] }
+          : { type: "suspend", reason: held, injections: [] },
+      );
 
   it("stops the anthropic turn without issuing the continuation", async () => {
     let calls = 0;
     const { agent, mockClient } = createTestAgent({
-      getHooks: () =>
-        agentHooks({ onBeforeRequest: [holdSecond(() => ++calls)] }),
+      onBeforeRequest: holdSecond(() => ++calls),
     });
     const { promise: sendPromise } = agent.send([
       {
@@ -209,8 +206,7 @@ describe("onBeforeRequest", () => {
     let calls = 0;
     const { agent, mockClient } = createTestOpenAIAgent({
       executeTools: emptyResults,
-      getHooks: () =>
-        agentHooks({ onBeforeRequest: [holdSecond(() => ++calls)] }),
+      onBeforeRequest: holdSecond(() => ++calls),
     });
     const { promise: sendPromise } = agent.send([
       {
@@ -296,17 +292,11 @@ describe("preflight token count parity", () => {
    * `countTokens`. On openai a hook that asks for one sees `undefined`, so
    * `AutoCompactSupervisor` cannot fire — auto-compaction is an
    * anthropic-only feature until openai grows a counting endpoint. */
-  const compactHooks = () =>
-    agentHooks({
-      onBeforeRequest: composeSupervisors([
-        AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
-      ]).onBeforeRequest,
-    });
   it("suspends for compaction on anthropic and not on openai", async () => {
-    const { agent, mockClient } = createTestAgent({
-      getHooks: compactHooks,
-      executeTools: noExecutor,
-    });
+    const { core: agent, mockClient } = createAgentWithMock();
+    agent.supervisors = [
+      AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
+    ];
     mockClient.mockInputTokenCount = 100;
     expect(
       await agent.send([
@@ -315,17 +305,27 @@ describe("preflight token count parity", () => {
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "go",
         },
-      ]).promise,
+      ]),
     ).toEqual({
       type: "suspended",
       reason: { kind: "compact", nextPrompt: "wrap up" },
     });
 
-    const openai = createTestOpenAIAgent({
-      getHooks: compactHooks,
-      executeTools: noExecutor,
+    const openai = createTestOpenAIAgent({ executeTools: noExecutor });
+    const { core: openaiThread } = createAgentWithMock({
+      provider: {
+        createInferenceManager: () => openai.agent.manager,
+        forceToolUse: () => {
+          throw new Error("unused");
+        },
+      },
     });
-    const { promise: sendPromise } = openai.agent.send([
+    openaiThread.supervisors = [
+      AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
+    ];
+    // Only exercise the request gate: the resting end-turn policy can compact
+    // from reported usage even when preflight counting is unavailable.
+    const sendPromise = openaiThread.core.runTurn([
       {
         type: "text",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,

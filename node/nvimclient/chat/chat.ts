@@ -65,7 +65,7 @@ import type { CommandRegistry } from "./commands/registry.ts";
 import type { SandboxRoot } from "./thread.ts";
 import { NvimThread } from "./thread.ts";
 import { DockerSupervisor } from "./thread-supervisor.ts";
-import { view as threadView } from "./thread-view.ts";
+import { renderYield, view as threadView } from "./thread-view.ts";
 
 const ARCHIVE_PAGE_SIZE = 50;
 
@@ -1552,7 +1552,7 @@ ${rows}${loadMore}`;
             if (yielded) {
               return {
                 type: "yielded" as const,
-                response: yielded.response,
+                response: renderYield(yielded),
               };
             }
             switch (loopState.type) {

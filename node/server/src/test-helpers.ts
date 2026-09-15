@@ -45,7 +45,7 @@ import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import { Thread, type ThreadContext } from "./thread.ts";
-import type { AgentHooks, SendResult, ThreadHooks } from "./thread-api.ts";
+import type { SendResult } from "./thread-api.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
 import { clientToolCreator } from "./tools/create-tool.ts";
@@ -114,30 +114,8 @@ export class TestAgent {
     return this.manager.log.messages;
   }
 
-  inputTokenCount: number | undefined;
-
   send(messages?: AgentInput[]): AgentTurn {
-    const turn = runAgentLoop(
-      {
-        ...this.deps,
-        getHooks: () => {
-          const hooks = this.deps.getHooks();
-          return {
-            ...hooks,
-            onBeforeRequest: [
-              ...hooks.onBeforeRequest,
-              {
-                run: (ctx) => {
-                  this.inputTokenCount = ctx.inputTokenCount;
-                  return Promise.resolve({ type: "none" as const });
-                },
-              },
-            ],
-          };
-        },
-      },
-      messages,
-    );
+    const turn = runAgentLoop(this.deps, messages);
     this.turn = turn;
     const promise = turn.promise.then(
       (result) => {
@@ -295,17 +273,6 @@ function baseTestContext(
   return { ...context, clientToolCreator: clientToolCreator(clientTools) };
 }
 
-/** Fill in the hook points a test does not care about. */
-type TestHooks = AgentHooks & Pick<ThreadHooks, "onYield">;
-export function agentHooks(partial: Partial<TestHooks> = {}): TestHooks {
-  return {
-    onBeforeRequest: [],
-    onToolResults: [],
-    onYield: [],
-    ...partial,
-  };
-}
-
 export function createAgentWithMock(
   overrides?: TestContextOverrides,
   threadId: ThreadId = "test-thread" as ThreadId,
@@ -337,7 +304,8 @@ export function createAgentWithMock(
 /** What every test agent can vary, whichever provider backs it. */
 type TestAgentOpts = {
   onUpdate?: () => void;
-  getHooks?: () => AgentHooks;
+  onBeforeRequest?: AgentLoopDeps["onBeforeRequest"];
+  onToolResults?: AgentLoopDeps["onToolResults"];
   context?: TestContextOverrides;
   /** Stand in for real tool execution. Tests about the loop's handling of
    * tool outcomes supply this instead of wiring up real tools. */
@@ -386,6 +354,7 @@ function buildTestAgent(
   // The bare-agent harness stands in for the thread: it owns tool execution
   // the same way, so the loop under test sees production wiring.
   const host = new ToolExecutorHost({
+    completedTools: new Map(),
     // The production formula, not a copy of it: a wrong one must fail here.
     getPendingResultMessageIdx: (toolCount) =>
       manager.getPendingResultMessageIdx(toolCount),
@@ -409,7 +378,10 @@ function buildTestAgent(
     logger: context.logger,
     manager,
     executeTools,
-    getHooks: opts.getHooks ?? (() => agentHooks()),
+    onBeforeRequest:
+      opts.onBeforeRequest ??
+      (() => Promise.resolve({ type: "proceed", injections: [] })),
+    onToolResults: opts.onToolResults ?? (() => undefined),
     onUpdate: opts.onUpdate ?? (() => {}),
   });
   return { agent, toolExecutor: host };

@@ -255,10 +255,10 @@ export class NvimThread {
   public sandboxBypassed = false;
 
   get fileSupervisor(): FileSupervisor {
-    return this.core.core.fileSupervisor;
+    return this.core.fileSupervisor;
   }
   get gitSupervisor(): GitSupervisor {
-    return this.core.core.gitSupervisor!;
+    return this.core.gitSupervisor!;
   }
 
   get agent(): NativeInferenceManager {
@@ -599,7 +599,7 @@ export class NvimThread {
 
   /** Walks the agent's provider messages and collects the tool results.
    * Structured (display-only) data is not carried here — it lives in
-   * `core.structuredToolResults` and is looked up at render time. */
+   * `core.completedTools` and is looked up at render time. */
   rebuildToolResultMap(): void {
     const next = new Map<ToolRequestId, ProviderToolResult>();
     for (const message of this.core.getProviderMessages()) {

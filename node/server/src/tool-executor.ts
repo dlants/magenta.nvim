@@ -8,13 +8,17 @@ import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { ToolInvocationState } from "./thread-api.ts";
 import type {
   ActiveToolEntry,
+  CompletedToolInfo,
+  ExecutedToolResult,
+  ExecutingToolInvocation,
   ToolInvocation,
   ToolRequest,
   ToolRequestId,
 } from "./tool-types.ts";
 
 export type ToolExecutorDeps = {
-  createTool: (request: ToolRequest) => ToolInvocation;
+  createTool: (request: ToolRequest) => ExecutingToolInvocation;
+  completedTools: Map<ToolRequestId, CompletedToolInfo>;
   /** The idx of the last message this batch's results will occupy. Fixed
    * when the batch starts: nothing is appended to the log while tools run. */
   getPendingResultMessageIdx: (
@@ -65,6 +69,29 @@ export class ToolExecutorHost {
     return { promise: this.runBatch(requests), abort: () => this.abortAll() };
   }
 
+  private recordCompletedTool(
+    request: ToolRequest,
+    executed: ExecutedToolResult,
+  ): ProviderToolResult {
+    const structuredResult =
+      executed.result.status === "ok"
+        ? executed.result.structuredResult
+        : undefined;
+    const result: ProviderToolResult = {
+      ...executed,
+      result:
+        executed.result.status === "ok"
+          ? { status: "ok", value: executed.result.value }
+          : executed.result,
+    };
+    this.deps.completedTools.set(request.id, {
+      request,
+      result,
+      structuredResult,
+    });
+    return result;
+  }
+
   private async runBatch(
     requests: NonEmptyRequestedTools,
   ): Promise<ToolOutcome> {
@@ -87,10 +114,16 @@ export class ToolExecutorHost {
       try {
         invocation = this.deps.createTool(request);
       } catch (err) {
-        results.set(requested.id, {
-          status: "error",
-          error: `Tool creation failed: ${(err as Error).message}`,
+        const result = this.recordCompletedTool(request, {
+          type: "tool_result",
+          id: requested.id,
+          result: {
+            status: "error",
+            error: `Tool creation failed: ${(err as Error).message}`,
+          },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         });
+        results.set(requested.id, result.result);
         continue;
       }
       activeTools.set(request.id, {
@@ -109,7 +142,7 @@ export class ToolExecutorHost {
 
     const settled = await Promise.all(
       [...activeTools].map(async ([id, entry]) => {
-        let result: ProviderToolResult;
+        let result: ExecutedToolResult;
         try {
           result = await entry.handle.promise;
         } catch (err) {
@@ -123,9 +156,10 @@ export class ToolExecutorHost {
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         }
-        entry.result = result;
+        const wireResult = this.recordCompletedTool(entry.request, result);
+        entry.result = wireResult;
         this.deps.onUpdate();
-        return [id, result] as const;
+        return [id, wireResult] as const;
       }),
     );
 

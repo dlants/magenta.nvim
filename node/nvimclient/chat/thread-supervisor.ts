@@ -4,6 +4,7 @@ import type {
   TeardownResult,
   ThreadSupervisor,
   YieldAction,
+  YieldValue,
 } from "@magenta/server";
 import { teardownContainer, UnsupervisedSupervisor } from "@magenta/server";
 
@@ -55,7 +56,7 @@ export class DockerSupervisor implements ThreadSupervisor {
     return this.unsupervised.onEndTurnWithoutYield(context);
   }
 
-  async onYield(_result: string): Promise<YieldAction> {
+  async onYield(_result: YieldValue): Promise<YieldAction> {
     this.teardownResult = await teardownContainer({
       containerName: this.teardownConfig.containerName,
       workspacePath: this.teardownConfig.workspacePath,

@@ -13,11 +13,10 @@ import type {
   StreamingBlock,
   ToolResults,
 } from "./providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type {
-  AgentHooks,
   SendResult,
   ToolInvocationState,
+  ToolResultsHook,
 } from "./thread-api.ts";
 import type { SuspendReason } from "./thread-supervisor.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
@@ -68,7 +67,8 @@ export type AgentLoopDeps = AgentContext & {
   manager: NativeInferenceManager;
   onUpdate?: () => void;
   executeTools: ToolExecutor;
-  getHooks: () => AgentHooks;
+  onBeforeRequest: () => Promise<BeforeRequestDecision>;
+  onToolResults: ToolResultsHook;
 };
 
 /** One full assistant turn - iterating through tool invocations until the agent decides to stop.
@@ -90,7 +90,8 @@ export function runAgentLoop(
       if (loopState.aborting) return { type: "aborted" };
 
       updateLoopState({ type: "preparing", aborting: loopState.aborting });
-      const decision = await runBeforeRequestHooks(deps);
+      // The owner coordinates request policy and returns one combined decision.
+      const decision = await deps.onBeforeRequest();
       // Injected content and the caller's own input go into the log even when
       // the loop is suspended, so both are there for the resume.
       if (decision.injections.length > 0) {
@@ -184,7 +185,7 @@ export function runAgentLoop(
       }
 
       // Fixed before the append: a batch can write more than its result
-      // messages (image attachments follow them), and the hooks name the
+      // messages (image attachments follow them), and the callback names the
       // message the results themselves land in.
       const resultMessageIdx = manager.getPendingResultMessageIdx(requested);
       manager.appendToolResults(
@@ -198,17 +199,12 @@ export function runAgentLoop(
         ),
       );
 
-      // The hooks see the results only once they are in the log.
+      // Notify the owner after results are in the log, including on abort.
       let suspend: SuspendReason | undefined;
-      for (const hook of deps.getHooks().onToolResults) {
-        try {
-          // Every hook is consulted even once one has asked to suspend — a stop
-          // is a fact each of them may need to record — and the first wins.
-          const asked = hook(toolOutcome.results, resultMessageIdx);
-          suspend ??= asked;
-        } catch (err) {
-          logger.error(`onToolResults hook threw: ${(err as Error).message}`);
-        }
+      try {
+        suspend = deps.onToolResults(toolOutcome.results, resultMessageIdx);
+      } catch (err) {
+        logger.error(`onToolResults callback threw: ${(err as Error).message}`);
       }
 
       if (loopState.aborting || toolOutcome.type === "aborted") {
@@ -250,63 +246,6 @@ export type BeforeRequestDecision = {
   injections: AgentInput[];
 } & ({ type: "proceed" } | { type: "suspend"; reason: SuspendReason });
 
-async function runBeforeRequestHooks(
-  deps: AgentLoopDeps,
-): Promise<BeforeRequestDecision> {
-  const { logger, manager } = deps;
-  const injections: AgentInput[] = [];
-  let suspend: SuspendReason | undefined;
-  let tokenCount: number | undefined;
-  let counted = false;
-
-  for (const hook of deps.getHooks().onBeforeRequest) {
-    if (hook.requestPreflightTokenCount && !counted && !suspend) {
-      counted = true;
-      try {
-        tokenCount = await manager.countTokens?.();
-      } catch (error) {
-        tokenCount = undefined;
-        logger.warn(
-          `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-    const action = await hook.run({
-      inputTokenCount: tokenCount,
-      outputTokenCount: outputTokenCount(manager),
-      nativeMessageIdx: manager.getPendingUserMessageIdx(),
-      ...(suspend === undefined
-        ? ({ status: "pending" } as const)
-        : ({ status: "suspended", reason: suspend } as const)),
-    });
-    switch (action.type) {
-      case "inject":
-        for (const block of action.content) {
-          injections.push(
-            block.type === "text"
-              ? {
-                  type: "text" as const,
-                  text: block.text,
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-                }
-              : block,
-          );
-        }
-        break;
-      case "suspend":
-        suspend ??= action.reason;
-        break;
-      case "none":
-        break;
-      default:
-        assertUnreachable(action);
-    }
-  }
-  return suspend !== undefined
-    ? { type: "suspend", reason: suspend, injections }
-    : { type: "proceed", injections };
-}
-
 function completeToolResults(
   requested: ReadonlyArray<RequestedTool>,
   results: ToolResults,
@@ -320,12 +259,4 @@ function completeToolResults(
     }
   }
   return filled;
-}
-
-function outputTokenCount(manager: NativeInferenceManager): number {
-  let total = 0;
-  for (const message of manager.log.messages) {
-    total += message.usage?.outputTokens ?? 0;
-  }
-  return total;
 }

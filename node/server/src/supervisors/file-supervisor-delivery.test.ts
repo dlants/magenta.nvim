@@ -822,7 +822,6 @@ describe("FileSupervisor - background poll", () => {
         { type: "get-file", content: "content" },
         TEXT_FILE_TYPE,
       );
-      cm.start();
 
       const spy = vi.fn();
       cm.on("pendingUpdatesChanged", spy);
@@ -873,7 +872,6 @@ describe("FileSupervisor - background poll", () => {
       await fileIO.writeFile(TEST_PATH, "changed");
       statCounter += 100;
 
-      cm.start();
       await vi.advanceTimersByTimeAsync(300);
 
       expect(spy.mock.calls.length).toBeGreaterThanOrEqual(1);
@@ -886,26 +884,27 @@ describe("FileSupervisor - background poll", () => {
 });
 
 describe("FileSupervisor conversation delivery lifetime", () => {
-  it("reset retains membership but clears delivered state", async () => {
+  it("reseeded clone retains membership but clears delivered state", async () => {
     const { cm } = createTestFileSupervisor({ [TEST_PATH]: "content" });
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
     await cm.getContextUpdate();
     expect(cm.files[TEST_PATH].agentView).toBeDefined();
-    cm.reset();
-    expect(Object.keys(cm.files)).toEqual([TEST_PATH]);
-    expect(cm.files[TEST_PATH].agentView).toBeUndefined();
-    expect(cm.getPendingUpdates()).toEqual({});
-    expect((await cm.getContextUpdate())[TEST_PATH].update).toMatchObject({
+    const clone = FileSupervisor.clone({
+      source: cm,
+      history: { type: "reseed" },
+    });
+    expect(Object.keys(clone.files)).toEqual([TEST_PATH]);
+    expect(clone.files[TEST_PATH].agentView).toBeUndefined();
+    expect(clone.getPendingUpdates()).toEqual({});
+    expect((await clone.getContextUpdate())[TEST_PATH].update).toMatchObject({
       status: "ok",
       value: { type: "whole-file" },
     });
+    clone.destroy();
     cm.destroy();
   });
 
-  it.each([
-    "reset",
-    "destroy",
-  ] as const)("ignores a pending file read after %s", async (operation) => {
+  it("ignores a pending file read after destroy", async () => {
     const { cm, fileIO } = createTestFileSupervisor({
       [TEST_PATH]: "content",
     });
@@ -924,17 +923,14 @@ describe("FileSupervisor conversation delivery lifetime", () => {
     });
     const update = cm.getContextUpdate();
     await reading;
-    cm[operation]();
+    cm.destroy();
     finish("stale content");
     expect(await update).toEqual({});
     expect(cm.files[TEST_PATH].agentView).toBeUndefined();
     cm.destroy();
   });
 
-  it.each([
-    "reset",
-    "destroy",
-  ] as const)("does not publish a stale poll after %s", async (operation) => {
+  it("does not publish a stale poll after destroy", async () => {
     const { cm, fileIO } = createTestFileSupervisor({
       [TEST_PATH]: "content",
     });
@@ -952,7 +948,7 @@ describe("FileSupervisor conversation delivery lifetime", () => {
         }),
     );
     const refresh = cm.refreshPendingUpdates();
-    cm[operation]();
+    cm.destroy();
     const onPending = vi.fn();
     cm.on("pendingUpdatesChanged", onPending);
     finish(undefined);
@@ -965,7 +961,7 @@ describe("FileSupervisor conversation delivery lifetime", () => {
     cm.destroy();
   });
 
-  it("keeps a single timer across resets and stops it exactly once", () => {
+  it("starts polling on construction and stops it on destroy", () => {
     vi.useFakeTimers();
     try {
       const cm = FileSupervisor.create({
@@ -981,15 +977,9 @@ describe("FileSupervisor conversation delivery lifetime", () => {
         initialFiles: {},
         pollIntervalMs: 100,
       });
-      cm.start();
-      cm.start();
-      cm.reset();
-      cm.reset();
-      cm.start();
       expect(vi.getTimerCount()).toBe(1);
       cm.destroy();
       cm.destroy();
-      cm.start();
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();

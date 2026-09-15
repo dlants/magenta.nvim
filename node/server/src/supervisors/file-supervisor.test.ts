@@ -123,7 +123,6 @@ describe("FileSupervisor", () => {
     vi.useFakeTimers();
     try {
       const { supervisor, onSent } = setup({ [TEST_PATH]: "hello" });
-      supervisor.start();
       expect(vi.getTimerCount()).toBe(1);
       supervisor.destroy();
       supervisor.destroy();
@@ -194,7 +193,7 @@ describe("FileSupervisor", () => {
 });
 
 describe("FileSupervisor conversation lifetime", () => {
-  it("does not send stale updates after reset and reseeds the next request", async () => {
+  it("does not send stale updates after disposal and reseeds the replacement", async () => {
     const { supervisor, fileIO, onSent } = setup({
       [TEST_PATH]: "content",
     });
@@ -222,15 +221,20 @@ describe("FileSupervisor conversation lifetime", () => {
       nativeMessageIdx: 0 as NativeMessageIdx,
     });
     await reading;
-    supervisor.reset();
+    supervisor.destroy();
+    const clone = FileSupervisor.clone({
+      source: supervisor,
+      history: { type: "reseed" },
+    });
+    clone.on("sent", onSent);
     finish("stale");
     expect(await request).toEqual({ type: "none" });
     expect(onSent).not.toHaveBeenCalled();
     expect(supervisor.files[TEST_PATH].agentView).toBeUndefined();
-    expect(await supervisor.hasPendingContent()).toBe(true);
+    expect(await clone.hasPendingContent()).toBe(true);
     expect(
       (
-        await supervisor.onBeforeRequest({
+        await clone.onBeforeRequest({
           status: "pending",
           inputTokenCount: 0,
           outputTokenCount: 0,
@@ -239,7 +243,7 @@ describe("FileSupervisor conversation lifetime", () => {
       ).type,
     ).toBe("inject");
     expect(onSent).toHaveBeenCalledTimes(1);
-    supervisor.destroy();
+    clone.destroy();
   });
 
   it("retains tool-applied PDF history inclusively without sharing pages", () => {

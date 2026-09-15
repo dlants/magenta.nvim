@@ -17,9 +17,9 @@ import {
   type ThreadSupervisor,
 } from "./thread-supervisor.ts";
 import {
+  type CompletedToolInfo,
   structuredResultFor,
   type ToolRequestId,
-  type ToolStructuredResult,
 } from "./tool-types.ts";
 
 /** Minimum output tokens between standing system reminders. */
@@ -44,7 +44,7 @@ type SystemReminderDeps = {
   threadType: ReminderThreadType;
   subagentConfig?: SubagentConfig | undefined;
   contextTracker: ContextTracker;
-  getStructuredResults: () => ReadonlyMap<ToolRequestId, ToolStructuredResult>;
+  getCompletedTools: () => ReadonlyMap<ToolRequestId, CompletedToolInfo>;
 };
 
 function retainedThrough<T extends { nativeMessageIdx: NativeMessageIdx }>(
@@ -88,19 +88,19 @@ export class SystemReminderSupervisor implements ThreadSupervisor {
     source,
     nativeMessageIdx,
     contextTracker,
-    getStructuredResults,
+    getCompletedTools,
   }: {
     source: SystemReminderSupervisor;
     nativeMessageIdx: NativeMessageIdx;
     contextTracker: ContextTracker;
-    getStructuredResults: SystemReminderDeps["getStructuredResults"];
+    getCompletedTools: SystemReminderDeps["getCompletedTools"];
   }): SystemReminderSupervisor {
     return new SystemReminderSupervisor(
       {
         threadType: source.deps.threadType,
         subagentConfig: source.deps.subagentConfig,
         contextTracker,
-        getStructuredResults,
+        getCompletedTools,
       },
       retainedThrough(source.standingHistory, nativeMessageIdx),
       retainedThrough(source.bashHistory, nativeMessageIdx),
@@ -124,10 +124,10 @@ export class SystemReminderSupervisor implements ThreadSupervisor {
     results: ToolResults,
     nativeMessageIdx: NativeMessageIdx,
   ): undefined {
-    const structuredResults = this.deps.getStructuredResults();
+    const completedTools = this.deps.getCompletedTools();
     for (const [id, result] of results) {
       if (result.status !== "ok") continue;
-      const structured = structuredResults.get(id);
+      const structured = completedTools.get(id)?.structuredResult;
       const bash = structuredResultFor(structured, "bash_command");
       if (bash?.wasAbbreviated) {
         appendMonotonic(

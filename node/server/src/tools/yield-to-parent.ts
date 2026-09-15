@@ -10,14 +10,7 @@ import type {
 } from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
 
-export type Input = {
-  result?: string;
-  [key: string]: unknown;
-};
-
-/** The call's input, thread-side. The thread builds the `YieldValue` from it;
- * the model never sees it. */
-export type StructuredResult = { toolName: "yield_to_parent"; input: Input };
+export type Input = Record<string, unknown>;
 
 export type ToolRequest = GenericToolRequest<"yield_to_parent", Input>;
 
@@ -37,10 +30,6 @@ export function execute(request: ToolRequest): ExecutingToolInvocation {
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
-        structuredResult: {
-          toolName: "yield_to_parent" as const,
-          input: request.input,
-        },
       },
       nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     }),
@@ -91,15 +80,11 @@ After using this tool, the sub-agent thread will be terminated.`,
 export function validateInput(input: {
   [key: string]: unknown;
 }): Result<Input> {
-  if ("result" in input && typeof input.result !== "string") {
-    return {
-      status: "error",
-      error: `expected req.input.result to be a string but it was ${JSON.stringify(input.result)}`,
-    };
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return { status: "error", error: "expected yield input to be an object" };
   }
-
   return {
     status: "ok",
-    value: input as Input,
+    value: input,
   };
 }

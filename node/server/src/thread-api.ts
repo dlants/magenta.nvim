@@ -1,4 +1,3 @@
-import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
 import type {
   AgentInput,
   NativeMessageIdx,
@@ -7,30 +6,14 @@ import type {
 } from "./providers/provider-types.ts";
 import type { PendingMessage } from "./submission/index.ts";
 import type {
-  EndTurnAction,
-  EndTurnContext,
-  RequestAction,
   RequestContext,
   SuspendReason,
   YieldAction,
 } from "./thread-supervisor.ts";
 import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
 
-/** What a thread hands back when it yields. Which variant a thread produces is
- * fixed at construction — a thread either has a `yieldSchema` or does not — so
- * a receiver never has to guess by parsing, and a text result that happens to
- * be valid JSON is never silently reinterpreted. */
-export type YieldValue =
-  | { type: "text"; text: string }
-  /** conforms to the `yieldSchema` this thread was constructed with */
-  | { type: "structured"; value: unknown };
-
-/** The display/transport rendering of a yield: what a human reads and what a
- * `resultPrefix` can be glued onto. Derived, never stored alongside the
- * value. */
-export function renderYieldValue(value: YieldValue): string {
-  return value.type === "structured" ? JSON.stringify(value.value) : value.text;
-}
+/** The yield tool's input, unchanged. Consumers own the schema and interpretation. */
+export type YieldValue = Record<string, unknown>;
 
 /** Malformed requests never become an `activeTools` entry, so the map can be
  * smaller than `requested`. */
@@ -62,7 +45,7 @@ export type SendResult =
   /** The submission settled without ever issuing a request (empty content),
    * so there was never a turn and there is nothing to continue from. */
   | { type: "empty" }
-  | { type: "yielded"; value: YieldValue }
+  | { type: "yielded"; value: YieldValue; resultPrefix?: string }
   | { type: "aborted" }
   /** The runner exhausted its retries. Nothing is discarded: the submission
    * is still in the log, in a shape the provider will accept, so retrying
@@ -80,7 +63,7 @@ export type ThreadSendResult = SendResult | { type: "queued" };
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */
 export type ThreadResult =
-  | { type: "yielded"; value: YieldValue }
+  | { type: "yielded"; value: YieldValue; resultPrefix?: string }
   /** destroyed before it ever yielded */
   | { type: "aborted"; reason: string };
 
@@ -96,25 +79,10 @@ export type QueuedMessage = {
 /** What the agent tells its owner about the request it is about to issue. */
 export type AgentRequestContext = RequestContext;
 
-/** One entry at the before-request point. An object rather than a function so
- * `Agent` can read `requestPreflightTokenCount` *without* invoking it, and so
- * know whether to issue a token count before this entry runs. */
-export type BeforeRequestHook = {
-  /** This hook reads `ctx.inputTokenCount` and wants it to describe the
-   * request it is deciding about. Not declaring it is the opt-out: a
-   * conversation nobody asks about is never counted. */
-  requestPreflightTokenCount?: boolean;
-  run: (ctx: AgentRequestContext) => Promise<RequestAction>;
-};
-
-/** Every requested tool has settled and its results are about to be written.
- * Consulted before the continuation's before-request hooks — but it also fires
- * on turns that stop here (abort) and issue no continuation at all,
- * deliberately: a consumer accumulating state off tool results wants it
- * carried into whatever request comes next, even one from a later turn.
- *
- * The results are already final — a hook cannot change them — but it may stop
- * the turn here, over a well-formed log. The first `suspend` wins. */
+/** Called once per tool batch after its results have been written to the log,
+ * including aborted batches. The callback cannot change the logged results,
+ * but may suspend the turn before the next before-request callback.
+ * Abort takes precedence over a returned suspension reason. */
 export type ToolResultsHook = (
   results: ToolResults,
   nativeMessageIdx: NativeMessageIdx,
@@ -124,39 +92,6 @@ export type ToolResultsHook = (
  * Awaited; a refusal arrives as a follow-up system message after that
  * result. */
 export type YieldHook = (value: YieldValue) => Promise<YieldAction>;
-
-/** The `Agent` -> owner questions: one array per hook point, each composed by
- * that point's own rule. `Agent` never learns what a `Supervisor` is — the
- * owner flattens its supervisors into these arrays at registration. */
-export type AgentHooks = {
-  /** About to issue a provider request — the opening one of a submission, or
-   * a continuation carrying tool results. Not re-fired when a request is
-   * retried. Every injection is applied, in order; the first `suspend`
-   * wins. */
-  onBeforeRequest: BeforeRequestHook[];
-  onToolResults: ToolResultsHook[];
-};
-
-/** What one composed supervisor list answers. A superset of `AgentHooks`: the
- * turn loop's outer half lives in `Thread`, so the end-of-turn question is
- * asked there and the agent never sees it. Produced only by
- * `composeSupervisors`, from a single ordered list — request injections land
- * in that order, so "the user's queued content goes last" is expressed by
- * putting its supervisor last. */
-export type ThreadHooks = AgentHooks & {
-  /** The model called yield_to_parent and the agent settled on it. The first
-   * `accept`/`reject` wins; `send-message` texts concatenate. */
-  onYield: YieldHook[];
-  /** A file-touching tool (edl, get_files) finished. Fire-and-forget. Fires
-   * per file from inside a tool, not at a turn-loop boundary; the thread owns
-   * tool construction, so it never reaches the agent. */
-  onToolApplied?: OnToolAppliedHook;
-  /** The agent stopped without yielding. */
-  onEndTurn?: (ctx: EndTurnContext) => EndTurnAction;
-  /** Whether any supervisor would contribute content to a request issued
-   * right now. Must not commit any "sent" state. */
-  hasPendingContent: () => Promise<boolean>;
-};
 
 /** "Something visible moved." No payload: read `phase`. Called at streaming
  * rates and not throttled; the recipient coalesces, and its debounce must be

@@ -6,20 +6,44 @@ import type {
 } from "./providers/provider-types.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
 import type { RequestContext } from "./thread-supervisor.ts";
-import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
+import type {
+  CompletedToolInfo,
+  ToolName,
+  ToolRequestId,
+  ToolStructuredResult,
+} from "./tool-types.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 
 const INTERVAL = 2000;
 const TOOL_ID = "tool-1" as ToolRequestId;
 
 function makeSupervisor(contextFiles: ContextTracker["files"] = {}) {
-  const structured = new Map<ToolRequestId, ToolStructuredResult>();
+  const completedTools = new Map<ToolRequestId, CompletedToolInfo>();
   const supervisor = SystemReminderSupervisor.create({
     threadType: "root",
     contextTracker: { files: contextFiles },
-    getStructuredResults: () => structured,
+    getCompletedTools: () => completedTools,
   });
-  return { structured, supervisor };
+  const record = (
+    id: ToolRequestId,
+    structuredResult: ToolStructuredResult,
+  ) => {
+    completedTools.set(id, {
+      request: {
+        id,
+        toolName: structuredResult.toolName as ToolName,
+        input: {},
+      },
+      result: {
+        type: "tool_result",
+        id,
+        result: { status: "ok", value: [] },
+        nativeMessageIdx: 0 as NativeMessageIdx,
+      },
+      structuredResult,
+    });
+  };
+  return { record, supervisor };
 }
 
 function request(
@@ -81,7 +105,7 @@ describe("SystemReminderSupervisor token gate", () => {
       source: supervisor,
       nativeMessageIdx: 1 as NativeMessageIdx,
       contextTracker: { files: {} },
-      getStructuredResults: () => new Map(),
+      getCompletedTools: () => new Map(),
     });
     expect(
       await reminderText(throughFirst, INTERVAL * 2 - 1, 4 as NativeMessageIdx),
@@ -91,7 +115,7 @@ describe("SystemReminderSupervisor token gate", () => {
       source: supervisor,
       nativeMessageIdx: 3 as NativeMessageIdx,
       contextTracker: { files: {} },
-      getStructuredResults: () => new Map(),
+      getCompletedTools: () => new Map(),
     });
     expect(
       await reminderText(
@@ -105,8 +129,8 @@ describe("SystemReminderSupervisor token gate", () => {
 
 describe("SystemReminderSupervisor bash latch", () => {
   it("fires on the next request after abbreviated output, then clears", async () => {
-    const { structured, supervisor } = makeSupervisor();
-    structured.set(TOOL_ID, {
+    const { record, supervisor } = makeSupervisor();
+    record(TOOL_ID, {
       toolName: "bash_command",
       exitCode: 0,
       signal: undefined,
@@ -126,9 +150,9 @@ describe("SystemReminderSupervisor bash latch", () => {
   });
 
   it("retains an arm through its index and a firing through later clone points", async () => {
-    const { structured, supervisor } = makeSupervisor();
+    const { record, supervisor } = makeSupervisor();
     await reminderText(supervisor, 0, 0 as NativeMessageIdx);
-    structured.set(TOOL_ID, {
+    record(TOOL_ID, {
       toolName: "bash_command",
       exitCode: 0,
       signal: undefined,
@@ -145,7 +169,7 @@ describe("SystemReminderSupervisor bash latch", () => {
       source: supervisor,
       nativeMessageIdx: 2 as NativeMessageIdx,
       contextTracker: { files: {} },
-      getStructuredResults: () => new Map(),
+      getCompletedTools: () => new Map(),
     });
     expect(await reminderText(throughArm, 1, 5 as NativeMessageIdx)).toContain(
       "bash_summarizer",
@@ -156,7 +180,7 @@ describe("SystemReminderSupervisor bash latch", () => {
         source: supervisor,
         nativeMessageIdx: clonePoint as NativeMessageIdx,
         contextTracker: { files: {} },
-        getStructuredResults: () => new Map(),
+        getCompletedTools: () => new Map(),
       });
       expect(
         await reminderText(throughFire, 1, 6 as NativeMessageIdx),
@@ -165,9 +189,9 @@ describe("SystemReminderSupervisor bash latch", () => {
   });
 
   it("drops a bash reminder armed after the clone point", async () => {
-    const { structured, supervisor } = makeSupervisor();
+    const { record, supervisor } = makeSupervisor();
     await reminderText(supervisor, 0, 0 as NativeMessageIdx);
-    structured.set(TOOL_ID, {
+    record(TOOL_ID, {
       toolName: "bash_command",
       exitCode: 0,
       signal: undefined,
@@ -183,7 +207,7 @@ describe("SystemReminderSupervisor bash latch", () => {
       source: supervisor,
       nativeMessageIdx: 1 as NativeMessageIdx,
       contextTracker: { files: {} },
-      getStructuredResults: () => new Map(),
+      getCompletedTools: () => new Map(),
     });
     expect(await reminderText(clone, 1, 3 as NativeMessageIdx)).toBeUndefined();
   });
@@ -199,7 +223,7 @@ describe("SystemReminderSupervisor activated reminders", () => {
       source: supervisor,
       nativeMessageIdx: 1 as NativeMessageIdx,
       contextTracker: { files: {} },
-      getStructuredResults: () => new Map(),
+      getCompletedTools: () => new Map(),
     });
     expect(clone.activeReminders).toEqual(new Set(["before"]));
     const text = await reminderText(clone, 0, 2 as NativeMessageIdx);
@@ -208,8 +232,8 @@ describe("SystemReminderSupervisor activated reminders", () => {
   });
 
   it("rewinds a get_files activation by its result message index", async () => {
-    const { structured, supervisor } = makeSupervisor();
-    structured.set(TOOL_ID, {
+    const { record, supervisor } = makeSupervisor();
+    record(TOOL_ID, {
       toolName: "get_files",
       files: [
         {
@@ -226,13 +250,13 @@ describe("SystemReminderSupervisor activated reminders", () => {
       source: supervisor,
       nativeMessageIdx: 3 as NativeMessageIdx,
       contextTracker: { files: {} },
-      getStructuredResults: () => new Map(),
+      getCompletedTools: () => new Map(),
     });
     const through = SystemReminderSupervisor.clone({
       source: supervisor,
       nativeMessageIdx: 4 as NativeMessageIdx,
       contextTracker: { files: {} },
-      getStructuredResults: () => new Map(),
+      getCompletedTools: () => new Map(),
     });
     expect(before.activeReminders).toEqual(new Set());
     expect(through.activeReminders).toEqual(new Set(["pet the cat"]));
@@ -256,8 +280,8 @@ describe("SystemReminderSupervisor activated reminders", () => {
 
 describe("SystemReminderSupervisor suspension", () => {
   it("does not consume standing or bash reminders on a suspended request", async () => {
-    const { structured, supervisor } = makeSupervisor();
-    structured.set(TOOL_ID, {
+    const { record, supervisor } = makeSupervisor();
+    record(TOOL_ID, {
       toolName: "bash_command",
       exitCode: 0,
       signal: undefined,

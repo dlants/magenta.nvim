@@ -318,9 +318,9 @@ describe("yield behavior", () => {
         if (!yielded) {
           throw new Error("yieldedResponse not set yet");
         }
-        return yielded.response;
+        return yielded.value.result;
       });
-      expect(childWrapper.thread.core.yielded?.response).toBe(
+      expect(childWrapper.thread.core.yielded?.value.result).toBe(
         "Task result: success",
       );
     });
@@ -408,11 +408,9 @@ describe("yield behavior", () => {
         return m;
       });
 
-      expect(mode.response).toContain("magenta/worker-test123");
-      expect(mode.response).toContain("Completed all changes");
-      expect(mode.response).toMatch(
-        /^\[Worker branch:.*\]\n\nCompleted all changes$/,
-      );
+      expect(mode.resultPrefix).toContain("magenta/worker-test123");
+      expect(mode.value).toEqual({ result: "Completed all changes" });
+
       expect(mode.tornDown).toBe(true);
     });
   });

@@ -188,7 +188,7 @@ describe("OpenAI provider wiring", () => {
       if (core.yielded) return true;
       throw new Error(`waiting for yielded, got ${loopLabel(core.loopState)}`);
     });
-    expect(core.yielded?.response).toBe("all done");
+    expect(core.yielded?.value.result).toBe("all done");
   });
 
   it("caches one provider instance per profile name", () => {
