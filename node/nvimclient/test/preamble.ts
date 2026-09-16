@@ -326,7 +326,8 @@ export async function withNvimProcess(
           throw new Error(`socket ${sock} not ready: ${(e as Error).message}`);
         }
       },
-      { timeout: 500 },
+      // Parallel suites can delay process startup beyond a single polling window.
+      { timeout: 5_000 },
     );
 
     await fn(sock, { tmpDir, homeDir, baseDir });

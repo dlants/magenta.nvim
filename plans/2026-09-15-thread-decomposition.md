@@ -210,6 +210,14 @@ Extract a helper accepting provider, fast-model identifier, system prompt, and u
 
 Decisions: keep the existing submission APIs, mutable resolver field, owner-supervisor setters, and preflight/yield bookkeeping for their planned later stages. Only notification callbacks and their container reference become readonly here. Moving the minimal fork callback wiring forward from stage 4 is necessary to make notifications fixed in stage 1; shared construction/resolver extraction remains stage 4. Environment services remain externally owned; core disposal never destroys file I/O or git clients.
 
+### Stage 1 review follow-up (September 16, 2026)
+
+- [x] Replaced permissive core initialization options with the shared `ThreadCoreInitialization` fresh/fork discriminated union. `Thread.createCore` uses the same union, including explicit fresh initialization on reset.
+- [x] Replaced the fork wrapper's prebuilt-core argument and unassigned callback target with a synchronous core factory receiving the existing `NvimThread`. Fork callbacks now come from that wrapper's existing `coreCallbacks()` implementation, just like fresh construction. `Thread.clone` is synchronous because history/resource cloning performs no asynchronous work; this also removes the artificial await between snapshotting and wrapper construction. No placeholder callbacks, attachment setter, or additional lifecycle abstraction was introduced.
+- Shared nvim dependency assembly remains stage 4; only the unsafe fork attachment boundary was changed here.
+- Validation exposed intermittent Neovim socket startup timeouts in unrelated integration tests across two full-suite runs. Increased the readiness polling deadline from 500 ms to 5 seconds (still returns immediately when ready), rather than adding sleeps or changing production behavior.
+- [x] Final full-project validation: `npx vitest run` (125 files passed, 1697 tests passed; 2 existing skipped tests and 1 todo), `npx tsc -b`, `npx biome check .` (357 files checked), and `git diff --check`. Existing historical-index tests now consume synchronous clone results directly.
+
 Validation uncovered an existing `dd` context-file removal failure, reproduced with all node changes temporarily restored to HEAD. Removing a file pruned pending state before refresh compared it, suppressing the update notification. Added the missing removal notification so the existing integration test and full suite can pass.
 
 - Goal: replacing/discarding one core replaces/discards all conversation-local state and resources.

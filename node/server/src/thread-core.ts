@@ -54,6 +54,10 @@ export interface ThreadCoreCallbacks {
   onFileAdded: (path: AbsFilePath) => void;
 }
 
+export type ThreadCoreInitialization =
+  | { type: "fresh"; initialFiles?: Files }
+  | { type: "fork"; source: ThreadCore; nativeMessageIdx: NativeMessageIdx };
+
 export class ThreadCore {
   preflightTokenCount: number | undefined;
   private disposed = false;
@@ -76,23 +80,21 @@ export class ThreadCore {
     private readonly environment: ThreadContext,
     private readonly callbacks: ThreadCoreCallbacks,
     private readonly completedTools: Map<ToolRequestId, CompletedToolInfo>,
-    options: {
-      initialFiles?: Files;
-      fork?: { source: ThreadCore; nativeMessageIdx: NativeMessageIdx };
-    } = {},
+    options: ThreadCoreInitialization = { type: "fresh" },
   ) {
     this.toolSpecs = ThreadCore.buildToolSpecs(environment);
-    this.manager = options.fork
-      ? this.cloneHistory(options.fork.source, options.fork.nativeMessageIdx)
-      : environment.provider.createInferenceManager({
-          profile: environment.profile,
-          systemPrompt: environment.systemPrompt,
-          tools: this.toolSpecs,
-          ...(environment.subagentConfig?.effort
-            ? { effortOverride: environment.subagentConfig.effort }
-            : {}),
-        });
-    if (!options.fork)
+    this.manager =
+      options.type === "fork"
+        ? this.cloneHistory(options.source, options.nativeMessageIdx)
+        : environment.provider.createInferenceManager({
+            profile: environment.profile,
+            systemPrompt: environment.systemPrompt,
+            tools: this.toolSpecs,
+            ...(environment.subagentConfig?.effort
+              ? { effortOverride: environment.subagentConfig.effort }
+              : {}),
+          });
+    if (options.type === "fresh")
       this.createSupervisors(this.manager, options.initialFiles);
     const createTool = environment.clientToolCreator({ threadId: id })({
       contextTracker: this.fileSupervisor,

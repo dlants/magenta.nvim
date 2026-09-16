@@ -379,7 +379,7 @@ describe("Thread-owned context delivery", () => {
     const forks: Thread[] = [];
     try {
       await f.request();
-      const head = await Thread.clone({
+      const head = Thread.clone({
         sourceThread: f.thread,
         newId: uniqueThreadId("system-info-head"),
         nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
@@ -390,7 +390,7 @@ describe("Thread-owned context delivery", () => {
       const headText = await f.request(head, "continue at head");
       expect(headText.match(/<system-info>/g)).toHaveLength(1);
 
-      const before = await Thread.clone({
+      const before = Thread.clone({
         sourceThread: f.thread,
         newId: uniqueThreadId("system-info-before"),
         nativeMessageIdx: -1 as NativeMessageIdx,

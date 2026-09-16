@@ -51,7 +51,11 @@ import type {
   ThreadSendResult,
   YieldValue,
 } from "./thread-api.ts";
-import { ThreadCore, type ThreadCoreCallbacks } from "./thread-core.ts";
+import {
+  ThreadCore,
+  type ThreadCoreCallbacks,
+  type ThreadCoreInitialization,
+} from "./thread-core.ts";
 
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type {
@@ -254,10 +258,9 @@ export class Thread {
     );
     this._core = fork
       ? this.createCore({
-          fork: {
-            source: fork.source.core,
-            nativeMessageIdx: fork.nativeMessageIdx,
-          },
+          type: "fork",
+          source: fork.source.core,
+          nativeMessageIdx: fork.nativeMessageIdx,
         })
       : this.createCore();
   }
@@ -429,10 +432,9 @@ export class Thread {
     ];
   }
 
-  private createCore(opts?: {
-    initialFiles?: Files;
-    fork?: { source: ThreadCore; nativeMessageIdx: NativeMessageIdx };
-  }): ThreadCore {
+  private createCore(
+    opts: ThreadCoreInitialization = { type: "fresh" },
+  ): ThreadCore {
     this.createGates();
     const core = new ThreadCore(
       this.id,
@@ -443,13 +445,13 @@ export class Thread {
     );
     return core;
   }
-  static async clone(args: {
+  static clone(args: {
     sourceThread: Thread;
     newId: ThreadId;
     nativeMessageIdx: NativeMessageIdx;
     context: ThreadCloneContext;
     callbacks: ThreadCallbacks;
-  }): Promise<Thread> {
+  }): Thread {
     const { sourceThread, newId, nativeMessageIdx, context, callbacks } = args;
     const clonedContext: ThreadContext = {
       ...context,
@@ -1202,6 +1204,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
           chunkCount: archive.chunkCount,
         });
       const core = this.createCore({
+        type: "fresh",
         initialFiles,
       });
       this._core = core;

@@ -310,11 +310,7 @@ export class NvimThread {
       systemInfo: SystemInfo;
       commandRegistry: CommandRegistry;
     },
-    /** The core fork owns the cloned history and tracked-file state before
-     * this display wrapper exists. */
-    preBuilt?: {
-      core: Thread;
-    },
+    createCore?: (thread: NvimThread) => Thread,
   ) {
     this.myDispatch = (msg) =>
       this.context.dispatch({
@@ -344,13 +340,12 @@ export class NvimThread {
     const cwd = isDocker ? env.cwd : context.cwd;
     const homeDir = isDocker ? env.homeDir : context.homeDir;
 
-    const contextDelivery: ThreadContextDelivery = preBuilt?.core.context
-      .contextDelivery ?? {
+    const contextDelivery: ThreadContextDelivery = {
       ...(context.initialFiles ? { initialFiles: context.initialFiles } : {}),
       initialGitState: context.initialGitState,
     };
-    if (preBuilt) {
-      this.core = preBuilt.core;
+    if (createCore) {
+      this.core = createCore(this);
     } else {
       const getAgents = () =>
         loadAgents({
@@ -698,76 +693,7 @@ export class NvimThread {
       : undefined;
 
     // No awaits above: native history and delivery must describe the same instant.
-    let thread!: NvimThread;
-    const core = await Thread.clone({
-      sourceThread: sourceCore,
-      newId: newThreadId,
-      nativeMessageIdx,
-      context: {
-        logger: nvim.logger,
-        profile,
-        cwd: environment.cwd,
-        homeDir: environment.homeDir,
-        contextDelivery: {
-          initialGitState,
-        },
-        ...(sourceThread.context.subagentConfig
-          ? { subagentConfig: sourceThread.context.subagentConfig }
-          : {}),
-        systemPrompt: sourceCoreState.systemPrompt,
-        systemInfo: sourceCoreState.systemInfo,
-        mcpToolManager,
-        threadManager: chat,
-        fileIO: environment.fileIO,
-        gitClient: environment.gitClient,
-        clientToolCreator: clientToolCreator({
-          logger: nvim.logger,
-          lspClient: environment.lspClient,
-          ...(environment.luaExecutor !== undefined
-            ? { luaExecutor: environment.luaExecutor }
-            : {}),
-          mcpToolManager,
-          cwd: environment.cwd,
-          homeDir: environment.homeDir,
-          maxConcurrentSubagents: getOptions().maxConcurrentSubagents || 3,
-          maxConcurrentFastSubagents:
-            getOptions().maxConcurrentFastSubagents || 8,
-          fileIO: environment.fileIO,
-          shell: environment.shell,
-          threadManager: chat,
-          getAgents: () =>
-            loadAgents({
-              cwd: environment.cwd,
-              logger: nvim.logger,
-              options: getOptions(),
-            }),
-        }),
-        availableCapabilities: environment.availableCapabilities,
-        environmentConfig: environment.environmentConfig,
-        ...(getOptions().dockerfile
-          ? { subagentDockerfile: getOptions().dockerfile }
-          : {}),
-        getAgents: () =>
-          loadAgents({
-            cwd: environment.cwd,
-            logger: nvim.logger,
-            options: getOptions(),
-          }),
-        provider: getProvider(nvim, profile),
-      },
-      // Construction only snapshots history; notifications and resolution start after attachment.
-      callbacks: {
-        onUpdate: () => thread.onCoreUpdate(),
-        resolve: (message) => thread.resolveSubmission(message),
-        onFilesSent: (updates) =>
-          thread.recordMessageViewState({ contextUpdates: updates }),
-        onGitSent: (update) =>
-          thread.recordMessageViewState({ gitUpdate: update }),
-        onFileAdded: args.onFileAdded,
-      },
-    });
-
-    thread = new NvimThread(
+    const thread = new NvimThread(
       newThreadId,
       sourceCoreState.threadType,
       sourceCoreState.systemPrompt,
@@ -790,7 +716,65 @@ export class NvimThread {
           ? { subagentConfig: sourceThread.context.subagentConfig }
           : {}),
       },
-      { core },
+      (wrapper) =>
+        Thread.clone({
+          sourceThread: sourceCore,
+          newId: newThreadId,
+          nativeMessageIdx,
+          context: {
+            logger: nvim.logger,
+            profile,
+            cwd: environment.cwd,
+            homeDir: environment.homeDir,
+            contextDelivery: {
+              initialGitState,
+            },
+            ...(sourceThread.context.subagentConfig
+              ? { subagentConfig: sourceThread.context.subagentConfig }
+              : {}),
+            systemPrompt: sourceCoreState.systemPrompt,
+            systemInfo: sourceCoreState.systemInfo,
+            mcpToolManager,
+            threadManager: chat,
+            fileIO: environment.fileIO,
+            gitClient: environment.gitClient,
+            clientToolCreator: clientToolCreator({
+              logger: nvim.logger,
+              lspClient: environment.lspClient,
+              ...(environment.luaExecutor !== undefined
+                ? { luaExecutor: environment.luaExecutor }
+                : {}),
+              mcpToolManager,
+              cwd: environment.cwd,
+              homeDir: environment.homeDir,
+              maxConcurrentSubagents: getOptions().maxConcurrentSubagents || 3,
+              maxConcurrentFastSubagents:
+                getOptions().maxConcurrentFastSubagents || 8,
+              fileIO: environment.fileIO,
+              shell: environment.shell,
+              threadManager: chat,
+              getAgents: () =>
+                loadAgents({
+                  cwd: environment.cwd,
+                  logger: nvim.logger,
+                  options: getOptions(),
+                }),
+            }),
+            availableCapabilities: environment.availableCapabilities,
+            environmentConfig: environment.environmentConfig,
+            ...(getOptions().dockerfile
+              ? { subagentDockerfile: getOptions().dockerfile }
+              : {}),
+            getAgents: () =>
+              loadAgents({
+                cwd: environment.cwd,
+                logger: nvim.logger,
+                options: getOptions(),
+              }),
+            provider: getProvider(nvim, profile),
+          },
+          callbacks: wrapper.coreCallbacks(),
+        }),
     );
 
     thread.sandboxBypassed = sourceThread.isSandboxBypassed;
