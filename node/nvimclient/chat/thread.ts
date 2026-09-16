@@ -1,4 +1,3 @@
-import * as fs from "node:fs/promises";
 import type {
   GitContextUpdate,
   GitState,
@@ -45,7 +44,6 @@ import { createLocalEnvironment, type Environment } from "../environment.ts";
 import { displaySnapshotDiff } from "../nvim/displaySnapshotDiff.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
-import type { Row0Indexed } from "../nvim/window.ts";
 import type { MagentaOptions, Profile } from "../options.ts";
 import {
   getProvider,
@@ -57,7 +55,6 @@ import type { RootMsg } from "../root-msg.ts";
 import type { Sandbox } from "../sandbox-manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { getBufferIfOpen } from "../utils/buffers.ts";
 import type {
   AbsFilePath,
   HomeDir,
@@ -170,12 +167,14 @@ export type Msg =
     }
   | {
       type: "toggle-edited-file-expanded";
+      groupId: number;
       filePath: AbsFilePath;
     }
   | {
       type: "open-edit-file-diff";
       filePath: AbsFilePath;
       snapshot: string;
+      content: string;
     }
   | {
       type: "permission-pending-change";
@@ -235,7 +234,7 @@ export class NvimThread {
     expandedToolDefinitions: { [toolName: string]: boolean };
     contextFilesExpanded: boolean;
     pendingMessagesExpanded: { [index: number]: boolean };
-    editedFilesExpanded: { [path: AbsFilePath]: { patch: string } };
+    editedFilesExpanded: { [key: string]: { patch: string } };
     messageViewState: { [messageIdx: number]: MessageViewState };
     toolViewState: { [toolRequestId: ToolRequestId]: ToolViewState };
     compactionViewState: {
@@ -847,21 +846,6 @@ export class NvimThread {
     return this.core.getLastStopTokenCount();
   }
 
-  private async readCurrentFileContent(filePath: AbsFilePath): Promise<string> {
-    const bufResult = await getBufferIfOpen({
-      unresolvedPath: filePath,
-      context: this.context,
-    });
-    if (bufResult.status === "ok") {
-      const lines = await bufResult.buffer.getLines({
-        start: 0 as Row0Indexed,
-        end: -1 as Row0Indexed,
-      });
-      return lines.join("\n");
-    }
-    return await fs.readFile(filePath, "utf-8");
-  }
-
   update(msg: RootMsg): void {
     if (msg.type === "thread-msg" && msg.id === this.id) {
       this.myUpdate(msg.msg);
@@ -1034,29 +1018,25 @@ export class NvimThread {
         return;
 
       case "toggle-edited-file-expanded": {
-        const key = msg.filePath;
+        const key = `${msg.groupId}:${msg.filePath}`;
         if (this.state.editedFilesExpanded[key]) {
           delete this.state.editedFilesExpanded[key];
           return;
         }
-        const entry = this.core.editedFilesThisTurn.find(
-          (e) => e.path === msg.filePath,
-        );
+        const entry = this.core.editedFileGroups
+          .find((group) => group.id === msg.groupId)
+          ?.files.find((file) => file.path === msg.filePath);
         if (!entry) return;
-        this.readCurrentFileContent(msg.filePath)
-          .then((current) => {
-            const patch = diff.createPatch(
-              displayPath(this.context.cwd, msg.filePath, this.context.homeDir),
-              entry.snapshot,
-              current,
-              "snapshot",
-              "current",
-              { context: 2 },
-            );
-            this.state.editedFilesExpanded[key] = { patch };
-            this.myDispatch({ type: "turn-ended" });
-          })
-          .catch((e: Error) => this.context.nvim.logger.error(e.message));
+        this.state.editedFilesExpanded[key] = {
+          patch: diff.createPatch(
+            displayPath(this.context.cwd, msg.filePath, this.context.homeDir),
+            entry.snapshot,
+            entry.content,
+            "before",
+            "after",
+            { context: 2 },
+          ),
+        };
         return;
       }
 
@@ -1064,6 +1044,7 @@ export class NvimThread {
         displaySnapshotDiff({
           filePath: msg.filePath,
           snapshot: msg.snapshot,
+          content: msg.content,
           nvim: this.context.nvim,
           cwd: this.context.cwd,
           homeDir: this.context.homeDir,

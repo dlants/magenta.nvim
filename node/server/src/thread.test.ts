@@ -1437,8 +1437,8 @@ describe("replaceable conversation core", () => {
     const original = core.core;
     const result = core.result;
     const originalFileSupervisor = core.fileSupervisor;
-    original.edlRegisters.registers.set("old", "old content");
-    original.edlRegisters.nextSavedId = 4;
+    core.edlRegisters.registers.set("old", "old content");
+    core.edlRegisters.nextSavedId = 4;
     original.preflightTokenCount = 42;
     const probe = new Defer<boolean>();
     core.supervisors = [{ hasPendingContent: () => probe.promise }];

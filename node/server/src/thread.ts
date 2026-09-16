@@ -59,6 +59,7 @@ import {
 
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import {
+  EditedFilesSupervisor,
   type EndTurnAction,
   type EndTurnContext,
   type RequestAction,
@@ -184,11 +185,10 @@ export class Thread {
   get core(): ThreadCore {
     return this._core;
   }
-  get edlRegisters(): EdlRegisters {
-    return this.core.edlRegisters;
-  }
-  get editedFilesThisTurn() {
-    return this.core.editedFilesThisTurn;
+  edlRegisters: EdlRegisters = { registers: new Map(), nextSavedId: 0 };
+  editedFilesSupervisor!: EditedFilesSupervisor;
+  get editedFileGroups() {
+    return this.editedFilesSupervisor.groups;
   }
   get toolSpecs(): ProviderToolSpec[] {
     return this.core.toolSpecs;
@@ -307,7 +307,6 @@ export class Thread {
         }
         return suspend;
       },
-      onToolApplied: (event) => this.onToolApplied(event, isCurrent),
     };
   }
 
@@ -317,7 +316,13 @@ export class Thread {
   ): void {
     for (const supervisor of this.orderedSupervisors) {
       if (!isCurrent()) return;
-      supervisor.onToolApplied?.(event);
+      try {
+        supervisor.onToolApplied?.(event);
+      } catch (error) {
+        this.context.logger.error(
+          `onToolApplied hook threw: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   }
 
@@ -393,6 +398,7 @@ export class Thread {
       ...this._supervisors,
       this.preflightRecorder,
       this.yieldGate,
+      this.editedFilesSupervisor,
       ...(this.gitSupervisor ? [this.gitSupervisor] : []),
       ...(this.systemReminders ? [this.fileSupervisor] : []),
       ...(this.systemInfoSupervisor ? [this.systemInfoSupervisor] : []),
@@ -415,16 +421,33 @@ export class Thread {
     });
   }
 
-  private coreContext(
-    id: ThreadId,
-    context: ThreadContext,
-    completedTools: Map<ToolRequestId, CompletedToolInfo>,
-  ): ThreadCoreContext {
+  private coreContext(getCore: () => ThreadCore): ThreadCoreContext {
+    const isCurrent = () =>
+      this.core === getCore() && getCore().isActive && !this.destroyed;
     return {
-      logger: context.logger,
-      threadToolCreator: context.clientToolCreator({ threadId: id }),
-      completedTools,
-      contextTracker: this.fileSupervisor,
+      logger: this.context.logger,
+      completedTools: this.resultArchive,
+      createTool: this.context.clientToolCreator({ threadId: this.id })({
+        contextTracker: this.fileSupervisor,
+        edlRegisters: this.edlRegisters,
+        onToolApplied: (absFilePath, tool, fileTypeInfo) => {
+          if (!isCurrent()) return;
+          // The tool result has not been appended yet; the running batch
+          // fixes the index that will reveal this edit or read to the agent.
+          this.onToolApplied(
+            {
+              absFilePath,
+              tool,
+              fileTypeInfo,
+              nativeMessageIdx: getCore().pendingResultMessageIdx,
+            },
+            isCurrent,
+          );
+        },
+        requestRender: () => {
+          if (isCurrent()) this.handleUpdate();
+        },
+      }),
     };
   }
 
@@ -448,6 +471,10 @@ export class Thread {
     const manager = source.inferenceManager.clone();
     manager.truncateMessages(nativeMessageIdx);
     const effectiveIdx = manager.getNativeMessageIdx();
+    this.editedFilesSupervisor = EditedFilesSupervisor.clone({
+      source: source.editedFilesSupervisor,
+      nativeMessageIdx: effectiveIdx,
+    });
     this.fileSupervisor = FileSupervisor.clone({
       source: source.fileSupervisor,
       history: { type: "truncate", nativeMessageIdx: effectiveIdx },
@@ -473,16 +500,16 @@ export class Thread {
         })
       : undefined;
     this.createGates();
+    this.edlRegisters = {
+      registers: new Map(source.edlRegisters.registers),
+      nextSavedId: source.edlRegisters.nextSavedId,
+    };
     const core = ThreadCore.create({
       id: this.id,
-      context: this.coreContext(this.id, this.context, this.resultArchive),
+      context: this.coreContext(() => core),
       callbacks: this.coreCallbacks(() => core),
       manager,
       toolSpecs: Thread.buildToolSpecs(this.context),
-      edlRegisters: {
-        registers: new Map(source.edlRegisters.registers),
-        nextSavedId: source.edlRegisters.nextSavedId,
-      },
     });
     this.adoptCore(core);
     return core;
@@ -496,6 +523,7 @@ export class Thread {
 
     const context = this.context;
     const delivery = context.contextDelivery;
+    this.editedFilesSupervisor = EditedFilesSupervisor.create();
     this.fileSupervisor = FileSupervisor.create({
       logger: context.logger,
       fileIO: context.fileIO,
@@ -543,9 +571,10 @@ export class Thread {
         : {}),
     });
     this.createSupervisors(manager, opts?.initialFiles);
+    this.edlRegisters = { registers: new Map(), nextSavedId: 0 };
     const core = ThreadCore.create({
       id: this.id,
-      context: this.coreContext(this.id, context, this.resultArchive),
+      context: this.coreContext(() => core),
       callbacks: this.coreCallbacks(() => core),
 
       manager,
@@ -980,7 +1009,6 @@ export class Thread {
     const submission = new AbortController();
     this.submission = submission;
     const core = this.core;
-    core.beginSubmission();
     const isCurrent = this.currentLoopGuard();
     this.handleUpdate();
     const finish = (result: SendResult) => {
@@ -1015,11 +1043,32 @@ export class Thread {
       if (!isCurrentLoop()) return { type: "aborted" };
       if (!pending) return { type: "empty" };
     }
-    const runTurn = (submitted: AgentInput[]): Promise<SendResult> => {
-      if (!isCurrentLoop()) return Promise.resolve({ type: "aborted" });
+    const runTurn = async (submitted: AgentInput[]): Promise<SendResult> => {
+      if (!isCurrentLoop()) return { type: "aborted" };
       const input = [...this.pendingSeed, ...submitted];
       this.pendingSeed = [];
-      return core.runTurn(input);
+      const supervisors = this.orderedSupervisors;
+      const notify = (
+        hook: "onAgentLoopStart" | "onAgentLoopStop",
+        idx: NativeMessageIdx,
+      ) => {
+        for (const supervisor of supervisors) {
+          if (this.core !== core) break;
+          try {
+            supervisor[hook]?.(idx);
+          } catch (error) {
+            this.context.logger.error(
+              `${hook} hook threw: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
+      };
+      try {
+        notify("onAgentLoopStart", core.manager.getPendingUserMessageIdx());
+        return await core.runTurn(input);
+      } finally {
+        notify("onAgentLoopStop", core.manager.getNativeMessageIdx());
+      }
     };
     let result = await runTurn(messages);
     for (;;) {

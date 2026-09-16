@@ -3,7 +3,7 @@ import type {
   NativeMessageIdx,
   NonEmptyRequestedTools,
 } from "./providers/provider-types.ts";
-import { ToolExecutorHost } from "./tool-executor.ts";
+import { executeToolBatch } from "./tool-executor.ts";
 import type {
   CompletedToolInfo,
   ExecutedToolResult,
@@ -13,7 +13,7 @@ import type {
   ToolRequestId,
 } from "./tool-types.ts";
 
-describe("ToolExecutorHost", () => {
+describe("executeToolBatch", () => {
   it.each([
     "structured",
     "plain",
@@ -42,7 +42,7 @@ describe("ToolExecutorHost", () => {
               ...(structuredResult ? { structuredResult } : {}),
             },
     };
-    const host = new ToolExecutorHost({
+    const deps = {
       completedTools,
       createTool: () => {
         if (mode === "throw") throw new Error("creation failed");
@@ -54,13 +54,13 @@ describe("ToolExecutorHost", () => {
           abort: () => {},
         };
       },
-      getPendingResultMessageIdx: () => 0 as NativeMessageIdx,
       publishTools: () => {},
       onUpdate: () => {},
-    });
-    const outcome = await host.execute([
-      { id: request.id, request: { status: "ok", value: request } },
-    ]).promise;
+    };
+    const outcome = await executeToolBatch(
+      [{ id: request.id, request: { status: "ok", value: request } }],
+      deps,
+    ).promise;
     const completed = completedTools.get(request.id);
     expect(completed).toBeDefined();
     expect(completed?.request).toBe(request);
@@ -76,9 +76,7 @@ describe("ToolExecutorHost", () => {
     );
   });
 
-  it("aborts an invocation created while the owner was already aborting", async () => {
-    // The window this pins: the abort lands after the invocations exist but
-    // before they are published, so nothing else can reach them.
+  it("aborts the batch through its execution handle", async () => {
     let settle!: () => void;
     const abort = vi.fn(() => settle());
     const invocation: ToolInvocation = {
@@ -94,13 +92,12 @@ describe("ToolExecutorHost", () => {
       abort,
     };
     const completedTools = new Map<ToolRequestId, CompletedToolInfo>();
-    const host = new ToolExecutorHost({
+    const deps = {
       completedTools,
       createTool: () => invocation,
-      getPendingResultMessageIdx: () => 0 as NativeMessageIdx,
       publishTools: () => {},
       onUpdate: () => {},
-    });
+    };
     const request: ToolRequest = {
       id: "tool-1" as ToolRequestId,
       toolName: "get_files" as ToolName,
@@ -110,7 +107,7 @@ describe("ToolExecutorHost", () => {
       { id: request.id, request: { status: "ok", value: request } },
     ];
 
-    const execution = host.execute(requests);
+    const execution = executeToolBatch(requests, deps);
     execution.abort();
     const outcome = await execution.promise;
     expect(abort).toHaveBeenCalled();

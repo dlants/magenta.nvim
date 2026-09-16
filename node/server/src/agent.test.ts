@@ -40,6 +40,7 @@ import {
   TEST_ARCHIVE_DIR,
   toolExecution,
   uniqueThreadId,
+  userInput,
 } from "./test-helpers.ts";
 import type { ThreadContext, YieldState } from "./thread.ts";
 import { Thread, threadCloneContext } from "./thread.ts";
@@ -2376,7 +2377,7 @@ describe("AutoCompactSupervisor integration", () => {
 });
 
 describe("Thread.onToolApplied", () => {
-  it("fires for edl edits and get_files reads, alongside editedFilesThisTurn", async () => {
+  it("fires for edl edits and get_files reads, alongside editedFileGroups", async () => {
     const fileIO = new InMemoryFileIO({
       "/tmp/a.txt": "hello",
       "/tmp/b.txt": "other",
@@ -2427,12 +2428,12 @@ describe("Thread.onToolApplied", () => {
       { supervisor: 0, path: "/tmp/b.txt", type: "get-file" },
       { supervisor: 1, path: "/tmp/b.txt", type: "get-file" },
     ]);
-    expect(core.editedFilesThisTurn).toEqual([
-      { path: "/tmp/a.txt", snapshot: "hello" },
+    expect(core.editedFileGroups[0].files).toEqual([
+      { path: "/tmp/a.txt", snapshot: "hello", content: "bye" },
     ]);
   });
 
-  it("keeps editedFilesThisTurn bookkeeping when a subscriber throws", async () => {
+  it("keeps editedFileGroups bookkeeping when a subscriber throws", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
@@ -2459,95 +2460,204 @@ describe("Thread.onToolApplied", () => {
     stream.finishResponse("tool_use");
 
     await pollUntil(() => {
-      if (core.editedFilesThisTurn.length === 1) return true;
+      if (core.editedFileGroups[0]?.files.length === 1) return true;
       throw new Error("waiting for the edited-file bookkeeping");
     });
-    expect(core.editedFilesThisTurn).toEqual([
-      { path: "/tmp/a.txt", snapshot: "hello" },
+    expect(core.editedFileGroups[0].files).toEqual([
+      { path: "/tmp/a.txt", snapshot: "hello", content: "bye" },
     ]);
   });
 });
-describe("Thread.editedFilesThisTurn", () => {
-  it("starts empty and resets on new sendMessage", async () => {
+describe("Thread.editedFileGroups", () => {
+  const edit = (
+    stream: Awaited<ReturnType<MockAnthropicClient["awaitStream"]>>,
+    id: string,
+    before: string,
+    after: string,
+  ) => {
+    stream.streamToolUse(id as ToolRequestId, "edl" as ToolName, {
+      script: `file \`/tmp/a.txt\`\nnarrow /${before}/\nreplace "${after}"`,
+    });
+    stream.finishResponse("tool_use");
+  };
+
+  it("retains completed loops, including empty loops, and the first snapshot with latest content", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
-
-    expect(core.editedFilesThisTurn).toEqual([]);
-
-    void core.send([
-      {
-        type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        text: "edit a",
-      },
-    ]);
+    expect(core.editedFileGroups).toEqual([]);
+    const first = core.send(userInput("edit twice"));
     const stream = await mockClient.awaitStream();
-    stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
-      script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
-    });
-    stream.finishResponse("tool_use");
-
-    await pollUntil(() => {
-      if (core.editedFilesThisTurn.length === 1) return true;
-      throw new Error(
-        `waiting for 1 edited file, got ${core.editedFilesThisTurn.length}`,
-      );
-    });
-    expect(core.editedFilesThisTurn).toEqual([
-      { path: "/tmp/a.txt", snapshot: "hello" },
+    edit(stream, "edit-1", "hello", "bye");
+    const second = await awaitNextStream(mockClient, stream);
+    edit(second, "edit-2", "bye", "done");
+    const third = await awaitNextStream(mockClient, second);
+    expect(core.editedFileGroups[0].endNativeMessageIdx).toBeUndefined();
+    third.streamText("done");
+    third.finishResponse("end_turn");
+    expect(await first).toEqual({ type: "completed", stopReason: "end_turn" });
+    const firstGroup = core.editedFileGroups[0];
+    expect(firstGroup.files).toEqual([
+      { path: "/tmp/a.txt", snapshot: "hello", content: "done" },
     ]);
+    expect(firstGroup.endNativeMessageIdx).toBe(
+      core.inferenceManager.getNativeMessageIdx(),
+    );
 
-    void core.send([
-      {
-        type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        text: "next turn",
-      },
+    const next = core.send(userInput("edit again"));
+    const fourth = await awaitNextStream(mockClient, third);
+    edit(fourth, "edit-3", "done", "final");
+    const fifth = await awaitNextStream(mockClient, fourth);
+    fifth.streamText("done");
+    fifth.finishResponse("end_turn");
+    await next;
+    const empty = core.send(userInput("no edits"));
+    const sixth = await awaitNextStream(mockClient, fifth);
+    sixth.streamText("done");
+    sixth.finishResponse("end_turn");
+    await empty;
+    expect(core.editedFileGroups).toHaveLength(3);
+    expect(core.editedFileGroups[0]).toEqual(firstGroup);
+    expect(core.editedFileGroups[1].files).toEqual([
+      { path: "/tmp/a.txt", snapshot: "done", content: "final" },
     ]);
-    await mockClient.awaitStream();
-    expect(core.editedFilesThisTurn).toEqual([]);
+    expect(core.editedFileGroups[2].files).toEqual([]);
+    expect(new Set(core.editedFileGroups.map((group) => group.id)).size).toBe(
+      3,
+    );
+    expect(core.editedFileGroups[1].startNativeMessageIdx).toBeGreaterThan(
+      firstGroup.endNativeMessageIdx!,
+    );
+    expect(core.editedFileGroups[2].endNativeMessageIdx).toBe(
+      core.inferenceManager.getNativeMessageIdx(),
+    );
   });
 
-  it("keeps the pre-turn snapshot after a second edit to the same file", async () => {
+  it.each([
+    false,
+    true,
+  ])("closes an aborted loop at the final abort marker (edited: %s)", async (edited) => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
-    void core.send([
-      {
-        type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        text: "edit a",
-      },
-    ]);
-    const stream = await mockClient.awaitStream();
-    stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
-      script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
-    });
-    stream.finishResponse("tool_use");
-    await pollUntil(() => {
-      if (core.editedFilesThisTurn.length === 1) return true;
-      throw new Error(
-        `waiting for 1 edited file, got ${core.editedFilesThisTurn.length}`,
-      );
-    });
-    const stream2 = await awaitNextStream(mockClient, stream);
-    stream2.streamToolUse("edl-2" as ToolRequestId, "edl" as ToolName, {
-      script: `file \`/tmp/a.txt\`\nnarrow /bye/\nreplace "done"`,
-    });
-    stream2.finishResponse("tool_use");
-    await pollUntil(async () => {
-      const content = await fileIO.readFile(
-        "/tmp/a.txt" as unknown as Parameters<typeof fileIO.readFile>[0],
-      );
-      if (content === "done") return true;
-      throw new Error(`waiting for second edit, got ${content}`);
-    });
-    expect(core.editedFilesThisTurn).toEqual([
-      { path: "/tmp/a.txt", snapshot: "hello" },
-    ]);
+    const turn = core.send(userInput("edit"));
+    let stream = await mockClient.awaitStream();
+    if (edited) {
+      edit(stream, "edit-1", "hello", "bye");
+      stream = await awaitNextStream(mockClient, stream);
+    }
+    core.abort();
+    expect(await turn).toEqual({ type: "aborted" });
+    const group = core.editedFileGroups[0];
+    expect(group.endNativeMessageIdx).toBe(
+      core.inferenceManager.getNativeMessageIdx(),
+    );
+    expect(group.files).toEqual(
+      edited ? [{ path: "/tmp/a.txt", snapshot: "hello", content: "bye" }] : [],
+    );
+    expect(JSON.stringify(core.getProviderMessages().at(-1))).toContain(
+      ABORT_MARKER_TEXT,
+    );
+    core.abort();
+    expect(core.editedFileGroups).toEqual([group]);
+    const next = core.send(userInput("continue"));
+    const nextStream = await awaitNextStream(mockClient, stream);
+    nextStream.streamText("done");
+    nextStream.finishResponse("end_turn");
+    await next;
+    expect(core.editedFileGroups[0]).toEqual(group);
+    expect(
+      core.editedFileGroups[1].startNativeMessageIdx,
+    ).toBeGreaterThanOrEqual(group.endNativeMessageIdx!);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("clones edit history independently at a full or mid-loop boundary (mid-loop: %s)", async (midLoop) => {
+    const parentId = uniqueThreadId("edits-parent");
+    const childId = uniqueThreadId("edits-child");
+    const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
+    const {
+      core: parent,
+      mockClient,
+      context,
+    } = createAgentWithMock(
+      { fileIO: fileIO as unknown as ThreadContext["fileIO"] },
+      parentId,
+    );
+    let child: Thread | undefined;
+    try {
+      const turn = parent.send(userInput("edit twice"));
+      const stream = await mockClient.awaitStream();
+      edit(stream, "edit-1", "hello", "bye");
+      const second = await awaitNextStream(mockClient, stream);
+      const midpoint = parent.inferenceManager.getNativeMessageIdx();
+      edit(second, "edit-2", "bye", "done");
+      const third = await awaitNextStream(mockClient, second);
+      third.streamText("done");
+      third.finishResponse("end_turn");
+      await turn;
+      const parentHistory = parent.editedFileGroups;
+      const nativeMessageIdx = midLoop
+        ? midpoint
+        : parent.inferenceManager.getNativeMessageIdx();
+      child = await Thread.clone({
+        sourceThread: parent,
+        newId: childId,
+        nativeMessageIdx,
+        context: threadCloneContext(context),
+        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+      });
+      expect(child.editedFileGroups).toEqual([
+        {
+          ...parentHistory[0],
+          endNativeMessageIdx: midLoop
+            ? midpoint
+            : parentHistory[0].endNativeMessageIdx,
+          files: [
+            {
+              path: "/tmp/a.txt",
+              snapshot: "hello",
+              content: midLoop ? "bye" : "done",
+            },
+          ],
+        },
+      ]);
+      const inherited = child.editedFileGroups[0];
+      const childTurn = child.send(userInput("child edit"));
+      const fourth = await awaitNextStream(mockClient, third);
+      edit(fourth, "child-edit", "done", "child");
+      const fifth = await awaitNextStream(mockClient, fourth);
+      fifth.streamText("done");
+      fifth.finishResponse("end_turn");
+      await childTurn;
+      expect(parent.editedFileGroups).toEqual(parentHistory);
+      expect(child.editedFileGroups[0]).toEqual(inherited);
+      expect(child.editedFileGroups[1].files).toEqual([
+        { path: "/tmp/a.txt", snapshot: "done", content: "child" },
+      ]);
+      const childHistory = child.editedFileGroups;
+      const parentTurn = parent.send(userInput("parent edit"));
+      const sixth = await awaitNextStream(mockClient, fifth);
+      edit(sixth, "parent-edit", "child", "parent");
+      const seventh = await awaitNextStream(mockClient, sixth);
+      seventh.streamText("done");
+      seventh.finishResponse("end_turn");
+      await parentTurn;
+      expect(child.editedFileGroups).toEqual(childHistory);
+      expect(parent.editedFileGroups[0]).toEqual(parentHistory[0]);
+      expect(parent.editedFileGroups[1].files).toEqual([
+        { path: "/tmp/a.txt", snapshot: "child", content: "parent" },
+      ]);
+    } finally {
+      await parent.destroy();
+      if (child) await child.destroy();
+      await cleanupArchive(parentId);
+      await cleanupArchive(childId);
+    }
   });
 });
 
@@ -4051,7 +4161,7 @@ describe("Agent turn loop", () => {
         resolveStat = () => resolve({ mtimeMs: 0, size: 100 });
       },
     );
-    const { agent, mockClient, toolExecutor } = createTestAgent({
+    const { agent, mockClient } = createTestAgent({
       context: {
         fileIO: {
           readFile: async () => "file contents",
@@ -4081,8 +4191,6 @@ describe("Agent turn loop", () => {
     const abortSpies = [...active.values()].map((entry) =>
       vi.spyOn(entry.handle, "abort"),
     );
-    // Aborting the live invocations is the owner's, not the agent's.
-    toolExecutor.abortAll();
     const abortPromise = agent.abortAndWait();
     resolveStat();
     await abortPromise;

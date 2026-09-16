@@ -8,7 +8,7 @@ import {
   toolExecution,
 } from "../test-helpers.ts";
 import type { SendResult } from "../thread-api.ts";
-import { ToolExecutorHost } from "../tool-executor.ts";
+import { executeToolBatch } from "../tool-executor.ts";
 import type { ToolName } from "../tool-types.ts";
 import {
   ABORT_TOOL_RESULT_TEXT,
@@ -995,25 +995,26 @@ describe("OpenAIInferenceManager pending message indices", () => {
       },
     };
     let agent!: TestAgent;
-    const host = new ToolExecutorHost({
-      completedTools: new Map(),
-      createTool: (request) => ({
-        promise: Promise.resolve({
-          type: "tool_result",
-          id: request.id,
-          result: imageResult(),
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    const executeTools: NonNullable<
+      Parameters<typeof createTestOpenAIAgent>[0]
+    >["executeTools"] = (requested, publishTools) =>
+      executeToolBatch(requested, {
+        completedTools: new Map(),
+        createTool: (request) => ({
+          promise: Promise.resolve({
+            type: "tool_result",
+            id: request.id,
+            result: imageResult(),
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          }),
+          abort: () => {},
         }),
-        abort: () => {},
-      }),
-      getPendingResultMessageIdx: (requested) =>
-        agent.manager.getPendingResultMessageIdx(requested),
-      publishTools: () => {},
-      onUpdate: () => {},
-    });
+        publishTools,
+        onUpdate: () => {},
+      });
     const created = createTestOpenAIAgent({
       tools: [spec],
-      executeTools: (requested) => host.execute(requested),
+      executeTools,
       ...hooks,
     });
     agent = created.agent;

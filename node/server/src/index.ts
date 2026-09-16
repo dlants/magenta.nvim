@@ -268,6 +268,8 @@ export type {
 export { ThreadCore, type ThreadCoreCallbacks } from "./thread-core.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
+  EditedFile,
+  EditedFileGroup,
   EndTurnAction,
   EndTurnContext,
   PlainStopSuspendReason,
@@ -280,6 +282,7 @@ export type {
 } from "./thread-supervisor.ts";
 export {
   AutoCompactSupervisor,
+  EditedFilesSupervisor,
   MaxTokensSupervisor,
   SubagentSupervisor,
   SystemInfoSupervisor,

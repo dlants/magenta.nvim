@@ -12,6 +12,7 @@ import {
   type SystemInfo,
 } from "./providers/system-prompt.ts";
 import type { YieldValue } from "./thread-api.ts";
+import type { AbsFilePath } from "./utils/files.ts";
 
 /** Action returned from the `onEndTurnWithoutYield` hook. */
 export type EndTurnAction =
@@ -94,6 +95,8 @@ export type RequestContext = {
 );
 
 export interface ThreadSupervisor {
+  onAgentLoopStart?(nativeMessageIdx: NativeMessageIdx): void;
+  onAgentLoopStop?(nativeMessageIdx: NativeMessageIdx): void;
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: YieldValue): Promise<YieldAction>;
   /** Called by Thread after the batch's results are in the log. A supervisor
@@ -117,6 +120,102 @@ export interface ThreadSupervisor {
    * worth a request. */
   hasPendingContent?(): Promise<boolean>;
   onToolApplied?: OnToolAppliedHook;
+}
+
+export type EditedFile = {
+  path: AbsFilePath;
+  snapshot: string;
+  content: string;
+};
+
+export type EditedFileGroup = {
+  id: number;
+  startNativeMessageIdx: NativeMessageIdx;
+  endNativeMessageIdx?: NativeMessageIdx;
+  files: EditedFile[];
+};
+
+type EditedFileHistoryGroup = Omit<EditedFileGroup, "files"> & {
+  edits: (EditedFile & { nativeMessageIdx: NativeMessageIdx })[];
+};
+
+export class EditedFilesSupervisor implements ThreadSupervisor {
+  private history: EditedFileHistoryGroup[] = [];
+  private nextGroupId = 0;
+  private activeGroup: EditedFileHistoryGroup | undefined;
+
+  private constructor() {}
+
+  static create(): EditedFilesSupervisor {
+    return new EditedFilesSupervisor();
+  }
+
+  static clone(args: {
+    source: EditedFilesSupervisor;
+    nativeMessageIdx: NativeMessageIdx;
+  }): EditedFilesSupervisor {
+    const cloned = EditedFilesSupervisor.create();
+    cloned.nextGroupId = args.source.nextGroupId;
+    cloned.history = args.source.history
+      .filter((group) => group.startNativeMessageIdx <= args.nativeMessageIdx)
+      .map((group) => ({
+        ...group,
+        endNativeMessageIdx:
+          group.endNativeMessageIdx === undefined ||
+          group.endNativeMessageIdx > args.nativeMessageIdx
+            ? args.nativeMessageIdx
+            : group.endNativeMessageIdx,
+        edits: group.edits
+          .filter((edit) => edit.nativeMessageIdx <= args.nativeMessageIdx)
+          .map((edit) => ({ ...edit })),
+      }));
+    return cloned;
+  }
+
+  get groups(): EditedFileGroup[] {
+    return this.history.map(({ edits, ...group }) => {
+      const files = new Map<AbsFilePath, EditedFile>();
+      for (const edit of edits) {
+        const previous = files.get(edit.path);
+        files.set(edit.path, {
+          path: edit.path,
+          snapshot: previous?.snapshot ?? edit.snapshot,
+          content: edit.content,
+        });
+      }
+      return { ...group, files: [...files.values()] };
+    });
+  }
+
+  onAgentLoopStart(nativeMessageIdx: NativeMessageIdx): void {
+    const group: EditedFileHistoryGroup = {
+      id: this.nextGroupId++,
+      startNativeMessageIdx: nativeMessageIdx,
+      edits: [],
+    };
+    this.history.push(group);
+    this.activeGroup = group;
+  }
+
+  onAgentLoopStop(nativeMessageIdx: NativeMessageIdx): void {
+    if (!this.activeGroup) return;
+    this.activeGroup.endNativeMessageIdx = nativeMessageIdx;
+    this.activeGroup = undefined;
+  }
+
+  onToolApplied: OnToolAppliedHook = ({
+    absFilePath,
+    tool,
+    nativeMessageIdx,
+  }) => {
+    if (tool.type !== "edl-edit" || !this.activeGroup) return;
+    this.activeGroup.edits.push({
+      path: absFilePath,
+      snapshot: tool.previousContent,
+      content: tool.content,
+      nativeMessageIdx,
+    });
+  };
 }
 
 function containsYieldTag(

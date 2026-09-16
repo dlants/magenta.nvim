@@ -46,7 +46,7 @@ import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import { Thread, type ThreadContext } from "./thread.ts";
 import type { SendResult } from "./thread-api.ts";
-import { ToolExecutorHost } from "./tool-executor.ts";
+import { executeToolBatch } from "./tool-executor.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
 import { clientToolCreator } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
@@ -346,19 +346,14 @@ function testManager(
 function buildTestAgent(
   provider: Provider,
   opts: TestAgentOpts,
-): { agent: TestAgent; toolExecutor: ToolExecutorHost } {
+): { agent: TestAgent } {
   const context = baseTestContext(provider, opts.context);
   const edlRegisters: EdlRegisters = { registers: new Map(), nextSavedId: 0 };
-  let publishTools: Parameters<ToolExecutor>[1] = () => {};
   const manager = testManager(context, opts.cloneFrom);
   // The bare-agent harness stands in for the thread: it owns tool execution
   // the same way, so the loop under test sees production wiring.
-  const host = new ToolExecutorHost({
+  const deps = {
     completedTools: new Map(),
-    // The production formula, not a copy of it: a wrong one must fail here.
-    getPendingResultMessageIdx: (toolCount) =>
-      manager.getPendingResultMessageIdx(toolCount),
-    publishTools: (tools) => publishTools(tools),
     onUpdate: opts.onUpdate ?? (() => {}),
     createTool: context.clientToolCreator({
       threadId: "test-agent" as ThreadId,
@@ -368,12 +363,11 @@ function buildTestAgent(
       edlRegisters,
       requestRender: () => {},
     }),
-  });
-  const runBatch: ToolExecutor = opts.executeTools ?? ((r) => host.execute(r));
-  const executeTools: ToolExecutor = (requests, publish) => {
-    publishTools = publish;
-    return runBatch(requests, publish);
   };
+  const executeTools: ToolExecutor =
+    opts.executeTools ??
+    ((requests, publishTools) =>
+      executeToolBatch(requests, { ...deps, publishTools }));
   const agent = new TestAgent({
     logger: context.logger,
     manager,
@@ -384,7 +378,7 @@ function buildTestAgent(
     onToolResults: opts.onToolResults ?? (() => undefined),
     onUpdate: opts.onUpdate ?? (() => {}),
   });
-  return { agent, toolExecutor: host };
+  return { agent };
 }
 
 /** An `Agent` on a mock anthropic client, with no thread around it: the
@@ -399,7 +393,6 @@ export function createTestAgent(
 ): {
   agent: TestAgent;
   mockClient: MockAnthropicClient;
-  toolExecutor: ToolExecutorHost;
 } {
   const mockClient = opts?.mockClient ?? new MockAnthropicClient();
   const provider = createMockProvider(mockClient, opts?.anthropicOptions);
@@ -423,7 +416,6 @@ export function createTestOpenAIAgent(
 ): {
   agent: TestAgent;
   mockClient: MockOpenAIClient;
-  toolExecutor: ToolExecutorHost;
 } {
   const mockClient = opts?.mockClient ?? new MockOpenAIClient();
   const tools = opts?.tools;

@@ -1,6 +1,5 @@
 import type { ToolExecution, ToolOutcome } from "./agent.ts";
 import type {
-  NativeMessageIdx,
   NonEmptyRequestedTools,
   ProviderToolResult,
 } from "./providers/provider-types.ts";
@@ -19,57 +18,23 @@ import type {
 export type ToolExecutorDeps = {
   createTool: (request: ToolRequest) => ExecutingToolInvocation;
   completedTools: Map<ToolRequestId, CompletedToolInfo>;
-  /** The idx of the last message this batch's results will occupy. Fixed
-   * when the batch starts: nothing is appended to the log while tools run. */
-  getPendingResultMessageIdx: (
-    requested: NonEmptyRequestedTools,
-  ) => NativeMessageIdx;
   /** Where the invocations are, for whoever renders them. */
   publishTools: (tools: ToolInvocationState) => void;
   onUpdate: () => void;
 };
 
-/** Runs one batch of tool requests to completion. Owned by the `Thread` — it
- * is the thread that builds tools and decides to abort — and handed to the
- * agent as `AgentDeps.executeTools`. The agent appends what comes back and
- * runs the `onToolResults` hooks over it. */
-export class ToolExecutorHost {
-  constructor(private deps: ToolExecutorDeps) {}
+export function executeToolBatch(
+  requests: NonEmptyRequestedTools,
+  deps: ToolExecutorDeps,
+): ToolExecution {
+  let live = new Map<ToolRequestId, ActiveToolEntry>();
+  let aborting = false;
+  const abort = () => {
+    aborting = true;
+    for (const entry of live.values()) entry.handle.abort();
+  };
 
-  /** The invocations that are running right now. Empty between batches. */
-  private live = new Map<ToolRequestId, ActiveToolEntry>();
-
-  /** Whether the batch in flight has been aborted. Read at the two points
-   * where an abort can be missed: after the invocations are created but
-   * before they are reachable, and once they have all settled. */
-  private aborting = false;
-
-  private pendingResultMessageIdx: NativeMessageIdx | undefined;
-
-  /** Where this batch's results will be written. Readable for as long as the
-   * batch is live, which is exactly when a tool can report what it applied. */
-  get resultMessageIdx(): NativeMessageIdx {
-    if (this.pendingResultMessageIdx === undefined) {
-      throw new Error("resultMessageIdx read outside a running batch");
-    }
-    return this.pendingResultMessageIdx;
-  }
-
-  /** Abort the batch in flight: stop every live invocation and settle the
-   * batch as `aborted`. Also reachable from the thread directly, for the
-   * teardowns that are not the agent winding a turn down. */
-  abortAll(): void {
-    this.aborting = true;
-    for (const [, entry] of this.live) entry.handle.abort();
-  }
-
-  /** Mirrors `NativeInferenceManager.sendRequest`: the batch starts here and
-   * the handle aborts this batch and nothing else. */
-  execute(requests: NonEmptyRequestedTools): ToolExecution {
-    return { promise: this.runBatch(requests), abort: () => this.abortAll() };
-  }
-
-  private recordCompletedTool(
+  function recordCompletedTool(
     request: ToolRequest,
     executed: ExecutedToolResult,
   ): ProviderToolResult {
@@ -84,7 +49,7 @@ export class ToolExecutorHost {
           ? { status: "ok", value: executed.result.value }
           : executed.result,
     };
-    this.deps.completedTools.set(request.id, {
+    deps.completedTools.set(request.id, {
       request,
       result,
       structuredResult,
@@ -92,12 +57,7 @@ export class ToolExecutorHost {
     return result;
   }
 
-  private async runBatch(
-    requests: NonEmptyRequestedTools,
-  ): Promise<ToolOutcome> {
-    this.aborting = false;
-    this.pendingResultMessageIdx =
-      this.deps.getPendingResultMessageIdx(requests);
+  async function runBatch(): Promise<ToolOutcome> {
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
     const results = new Map<ToolRequestId, ProviderToolResult["result"]>();
 
@@ -112,9 +72,9 @@ export class ToolExecutorHost {
       const request = requested.request.value;
       let invocation: ToolInvocation;
       try {
-        invocation = this.deps.createTool(request);
+        invocation = deps.createTool(request);
       } catch (err) {
-        const result = this.recordCompletedTool(request, {
+        const result = recordCompletedTool(request, {
           type: "tool_result",
           id: requested.id,
           result: {
@@ -134,11 +94,8 @@ export class ToolExecutorHost {
       });
     }
 
-    this.live = activeTools;
-    // An abort can land while the invocations are being created, before they
-    // are reachable; abort them here so none is left running.
-    if (this.aborting) this.abortAll();
-    this.deps.publishTools({ type: "running", activeTools });
+    live = activeTools;
+    deps.publishTools({ type: "running", activeTools });
 
     const settled = await Promise.all(
       [...activeTools].map(async ([id, entry]) => {
@@ -156,9 +113,9 @@ export class ToolExecutorHost {
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         }
-        const wireResult = this.recordCompletedTool(entry.request, result);
+        const wireResult = recordCompletedTool(entry.request, result);
         entry.result = wireResult;
-        this.deps.onUpdate();
+        deps.onUpdate();
         return [id, wireResult] as const;
       }),
     );
@@ -169,13 +126,15 @@ export class ToolExecutorHost {
 
     // Nothing is running any more: `activeTools` means *live* invocations, and
     // the view switches from tool progress to results the moment it empties.
-    this.live = new Map();
-    this.deps.publishTools({ type: "settled" });
+    live = new Map();
+    deps.publishTools({ type: "settled" });
 
-    if (this.aborting) {
+    if (aborting) {
       return { type: "aborted", results };
     }
 
     return { type: "continue", results };
   }
+
+  return { promise: runBatch(), abort };
 }

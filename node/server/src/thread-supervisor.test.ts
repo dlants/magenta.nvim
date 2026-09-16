@@ -4,12 +4,14 @@ import type { SystemInfo } from "./providers/system-prompt.ts";
 import { createAgentWithMock, userInput } from "./test-helpers.ts";
 import {
   AutoCompactSupervisor,
+  EditedFilesSupervisor,
   type EndTurnContext,
   injectText,
   type RequestContext,
   SystemInfoSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
+import type { AbsFilePath } from "./utils/files.ts";
 
 const context: RequestContext = {
   status: "pending",
@@ -103,6 +105,100 @@ describe("Thread supervisor arbitration", () => {
     });
     expect(observed).toEqual(["last"]);
     expect(mockClient.streams).toHaveLength(1);
+  });
+});
+
+describe("EditedFilesSupervisor", () => {
+  const idx = (value: number) => value as NativeMessageIdx;
+  const apply = (
+    supervisor: EditedFilesSupervisor,
+    at: number,
+    previousContent: string,
+    content: string,
+    path = "/tmp/a.txt",
+  ) =>
+    supervisor.onToolApplied({
+      absFilePath: path as AbsFilePath,
+      nativeMessageIdx: idx(at),
+      fileTypeInfo: {
+        category: "text",
+        mimeType: "text/plain",
+        extension: "txt",
+      },
+      tool: { type: "edl-edit", previousContent, content },
+    });
+
+  it("truncates edits inside a group and drops groups after the clone point", () => {
+    const source = EditedFilesSupervisor.create();
+    source.onAgentLoopStart(idx(0));
+    apply(source, 2, "original", "first");
+    apply(source, 4, "first", "second");
+    apply(source, 4, "other", "changed", "/tmp/b.txt");
+    source.onAgentLoopStop(idx(5));
+    source.onAgentLoopStart(idx(6));
+    apply(source, 8, "second", "third");
+    source.onAgentLoopStop(idx(9));
+    const clone = EditedFilesSupervisor.clone({
+      source,
+      nativeMessageIdx: idx(2),
+    });
+    expect(clone.groups).toEqual([
+      {
+        id: source.groups[0].id,
+        startNativeMessageIdx: 0,
+        endNativeMessageIdx: 2,
+        files: [{ path: "/tmp/a.txt", snapshot: "original", content: "first" }],
+      },
+    ]);
+    const beforeEdits = EditedFilesSupervisor.clone({
+      source,
+      nativeMessageIdx: idx(1),
+    });
+    expect(beforeEdits.groups[0].files).toEqual([]);
+    const atEnd = EditedFilesSupervisor.clone({
+      source,
+      nativeMessageIdx: idx(5),
+    });
+    expect(atEnd.groups).toEqual([source.groups[0]]);
+    clone.onAgentLoopStart(idx(3));
+    apply(clone, 5, "first", "fork");
+    clone.onAgentLoopStop(idx(6));
+    expect(new Set(clone.groups.map((group) => group.id)).size).toBe(2);
+    expect(source.groups[0].files[0].content).toBe("second");
+    expect(source.groups[1].files[0].content).toBe("third");
+    expect(clone.groups[0].files[0].content).toBe("first");
+  });
+
+  it("returns detached views and freezes an active source group at the clone boundary", () => {
+    const source = EditedFilesSupervisor.create();
+    apply(source, 0, "ignored", "outside loop");
+    expect(source.groups).toEqual([]);
+    source.onAgentLoopStart(idx(1));
+    apply(source, 2, "original", "first");
+    const clone = EditedFilesSupervisor.clone({
+      source,
+      nativeMessageIdx: idx(2),
+    });
+    const view = clone.groups;
+    view[0].files[0].content = "mutated";
+    view[0].files.push({
+      path: "/tmp/b.txt" as AbsFilePath,
+      snapshot: "",
+      content: "injected",
+    });
+    view.pop();
+    apply(source, 4, "first", "second");
+    source.onAgentLoopStop(idx(5));
+    apply(source, 6, "second", "ignored after stop");
+    clone.onAgentLoopStop(idx(10));
+    expect(clone.groups[0]).toMatchObject({
+      endNativeMessageIdx: 2,
+      files: [{ path: "/tmp/a.txt", snapshot: "original", content: "first" }],
+    });
+    expect(source.groups[0]).toMatchObject({
+      endNativeMessageIdx: 5,
+      files: [{ path: "/tmp/a.txt", snapshot: "original", content: "second" }],
+    });
   });
 });
 

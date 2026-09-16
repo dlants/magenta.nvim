@@ -2,12 +2,12 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  type AbsFilePath,
   type CompactionRunState,
   type CompletedToolInfo,
   compactionRunChunkIndex,
   compactionRunThreadIds,
   displayPath,
+  type EditedFileGroup,
   type FileSupervisor,
   formatToolSpec,
   formatToolSpecs,
@@ -364,26 +364,38 @@ function renderChunkThreadRow(
   );
 }
 function editedFilesSummaryView(
-  editedFiles: ReadonlyArray<{ path: AbsFilePath; snapshot: string }>,
+  group: EditedFileGroup,
   thread: NvimThread,
   dispatch: Dispatch<Msg>,
 ): VDOMNode {
+  const editedFiles = group.files;
   if (editedFiles.length === 0) return d``;
 
   const { cwd, homeDir } = thread.context;
-  return d`\n${withExtmark(d`Files edited this turn:\n`, { hl_group: "@comment" })}${editedFiles.map(
-    ({ path: filePath, snapshot }) => {
+  return d`\n${withExtmark(d`Files edited:\n`, { hl_group: "@comment" })}${editedFiles.map(
+    ({ path: filePath, snapshot, content }) => {
       const display = displayPath(cwd, filePath, homeDir);
       const created = snapshot === "";
       const label = created ? "created" : "modified";
-      const expanded = thread.state.editedFilesExpanded[filePath];
+      const expanded =
+        thread.state.editedFilesExpanded[`${group.id}:${filePath}`];
       const marker = expanded ? "▼" : "▶";
       const row = withBindings(d`  ${marker} ${label} ${display}\n`, {
-        "=": () => dispatch({ type: "toggle-edited-file-expanded", filePath }),
+        "=": () =>
+          dispatch({
+            type: "toggle-edited-file-expanded",
+            groupId: group.id,
+            filePath,
+          }),
         "<CR>": () =>
           created
             ? dispatch({ type: "open-edit-file", filePath })
-            : dispatch({ type: "open-edit-file-diff", filePath, snapshot }),
+            : dispatch({
+                type: "open-edit-file-diff",
+                filePath,
+                snapshot,
+                content,
+              }),
       });
       const body = expanded
         ? withExtmark(d`${expanded.patch}\n`, { hl_group: "@comment" })
@@ -519,11 +531,31 @@ ${contextFilesView(thread.fileSupervisor, contextViewCtx(thread), {
     thread.state.compactionViewState,
     dispatch,
   );
-  const editedFilesView = editedFilesSummaryView(
-    thread.core.editedFilesThisTurn,
-    thread,
-    dispatch,
+  const editedGroups = thread.core.editedFileGroups.filter(
+    (group) =>
+      group.endNativeMessageIdx !== undefined && group.files.length > 0,
   );
+  const editedFilesAtMessage = new Map<number, EditedFileGroup[]>();
+  for (const group of editedGroups) {
+    // Provider conversion can merge or hide native items. Place the boundary
+    // after the last display message beginning at or before the native stop.
+    let at = -1;
+    for (let i = 0; i < messages.length; i++) {
+      if (
+        messages[i].content.some(
+          (block) => block.nativeMessageIdx <= group.endNativeMessageIdx!,
+        )
+      )
+        at = i;
+    }
+    const groups = editedFilesAtMessage.get(at) ?? [];
+    groups.push(group);
+    editedFilesAtMessage.set(at, groups);
+  }
+  const editsAt = (messageIdx: number) =>
+    d`${(editedFilesAtMessage.get(messageIdx) ?? []).map((group) =>
+      editedFilesSummaryView(group, thread, dispatch),
+    )}`;
   const { async: pendingAsync, next: pendingNext } = thread.core.queued;
   const pendingCount = pendingAsync.length;
   const pendingMessagesView =
@@ -602,7 +634,7 @@ ${contextFilesView(thread.fileSupervisor, contextViewCtx(thread), {
       message.role === "user" &&
       message.content.every((c) => c.type === "tool_result")
     ) {
-      return d``;
+      return editsAt(messageIdx);
     }
 
     // User messages composed only of auto-generated content (tool_result,
@@ -705,7 +737,7 @@ ${contentView}`;
         })
       : messageBody;
 
-    return d`${renderedBody}${forkedToAtIdx(messageIdx)}`;
+    return d`${renderedBody}${editsAt(messageIdx)}${forkedToAtIdx(messageIdx)}`;
   });
 
   const streamingBlockView = loopStreamingBlock(loopState)
@@ -738,7 +770,7 @@ ${fileSupervisorView}\
 ${sandboxView}\
 ${pendingMessagesView}${pendingNextMessagesView}\
 ${trailingForkedToView}\
-${editedFilesView}
+${editsAt(-1)}
 ${statusView}`;
 };
 

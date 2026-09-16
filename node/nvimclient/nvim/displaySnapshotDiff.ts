@@ -11,13 +11,14 @@ import {
 import type { Nvim } from "./nvim-node/index.ts";
 
 /**
- * Open the given file and a scratch buffer holding `snapshot` side-by-side in a
+ * Compare `snapshot` with recorded `content` (or the live file when omitted) in a
  * neovim diffsplit. Non-magenta windows are closed first, and magenta window
  * widths are restored afterwards.
  */
 export async function displaySnapshotDiff({
   filePath,
   snapshot,
+  content,
   nvim,
   cwd,
   homeDir,
@@ -25,6 +26,7 @@ export async function displaySnapshotDiff({
 }: {
   filePath: UnresolvedFilePath | AbsFilePath;
   snapshot: string;
+  content?: string;
   nvim: Nvim;
   cwd: NvimCwd;
   homeDir: HomeDir;
@@ -44,7 +46,20 @@ export async function displaySnapshotDiff({
     await window.close();
   }
 
-  const fileBuffer = await NvimBuffer.bufadd(absFilePath, nvim);
+  const fileBuffer =
+    content === undefined
+      ? await NvimBuffer.bufadd(absFilePath, nvim)
+      : await NvimBuffer.create(false, true, nvim);
+  if (content !== undefined) {
+    await fileBuffer.setOption("bufhidden", "wipe");
+    await fileBuffer.setLines({
+      start: 0 as Row0Indexed,
+      end: -1 as Row0Indexed,
+      lines: content.split("\n") as Line[],
+    });
+    await fileBuffer.setName(`${absFilePath}_after`);
+    await fileBuffer.setOption("modifiable", false);
+  }
   const fileWindowId = (await nvim.call("nvim_open_win", [
     fileBuffer.id,
     true,
@@ -62,6 +77,7 @@ export async function displaySnapshotDiff({
     end: -1 as Row0Indexed,
     lines: snapshot.split("\n") as Line[],
   });
+  await scratchBuffer.setOption("modifiable", false);
   await scratchBuffer.setName(`${absFilePath}_snapshot`);
   await nvim.call("nvim_open_win", [
     scratchBuffer.id,

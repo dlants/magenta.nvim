@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 import type { Row0Indexed } from "../nvim/window.ts";
 import { withDriver } from "../test/preamble.ts";
 
-test("summary shows edited file, opens on <CR>, and resets on next turn", async () => {
+test("summary shows edited file, opens on <CR>, and persists on next turn", async () => {
   await withDriver(
     {
       setupFiles: async (tmpDir) => {
@@ -46,9 +46,9 @@ test("summary shows edited file, opens on <CR>, and resets on next turn", async 
         toolRequests: [],
       });
 
-      await driver.assertDisplayBufferContains("Files edited this turn:");
+      await driver.assertDisplayBufferContains("Files edited:");
 
-      // `=` expands an inline unified diff of the snapshot vs current content.
+      // `=` expands the recorded before/after diff.
       await driver.triggerDisplayBufferKeyOnContent("▶ modified a.txt", "=");
       await driver.assertDisplayBufferContains("-hello");
       await driver.assertDisplayBufferContains("+bye");
@@ -57,10 +57,10 @@ test("summary shows edited file, opens on <CR>, and resets on next turn", async 
       await driver.triggerDisplayBufferKeyOnContent("▼ modified a.txt", "=");
       await driver.assertDisplayBufferDoesNotContain("+bye");
 
-      // `<CR>` opens the snapshot-vs-live diffsplit.
+      // `<CR>` opens the before-vs-after diffsplit.
       await driver.triggerDisplayBufferKeyOnContent("▶ modified a.txt", "<CR>");
 
-      // The scratch snapshot buffer opens alongside the live file, both in diff
+      // The scratch snapshot buffer opens alongside the recorded after-content, both in diff
       // mode, and the scratch buffer holds the pre-edit snapshot content.
       const snapshotWindow = await driver.findWindow(async (w) => {
         const name = await (await w.buffer()).getName();
@@ -75,7 +75,7 @@ test("summary shows edited file, opens on <CR>, and resets on next turn", async 
 
       const fileWindow = await driver.findWindow(async (w) => {
         const name = await (await w.buffer()).getName();
-        return name.endsWith("a.txt");
+        return name.endsWith("a.txt_after");
       });
       expect(await fileWindow.getOption("diff")).toBe(true);
 
@@ -88,7 +88,7 @@ test("summary shows edited file, opens on <CR>, and resets on next turn", async 
       await driver.inputMagentaText("edit b");
       await driver.send();
 
-      await driver.assertDisplayBufferDoesNotContain("Files edited this turn:");
+      await driver.assertDisplayBufferContains("Files edited:");
 
       const stream2 = await driver.mockAnthropic.awaitPendingStream();
       stream2.respond({
@@ -115,8 +115,11 @@ test("summary shows edited file, opens on <CR>, and resets on next turn", async 
         toolRequests: [],
       });
 
-      await driver.assertDisplayBufferContains("Files edited this turn:");
+      await driver.assertDisplayBufferContains("Files edited:");
       await driver.assertDisplayBufferContains("b.txt");
+      await driver.assertDisplayBufferContains("▶ modified a.txt");
+      await driver.triggerDisplayBufferKeyOnContent("▶ modified a.txt", "=");
+      await driver.assertDisplayBufferContains("+bye");
     },
   );
 });
@@ -154,7 +157,7 @@ test("created file shows 'created' and opens directly on <CR>", async () => {
       toolRequests: [],
     });
 
-    await driver.assertDisplayBufferContains("Files edited this turn:");
+    await driver.assertDisplayBufferContains("Files edited:");
     await driver.assertDisplayBufferContains("▶ created c.txt");
 
     // `<CR>` opens the file directly (no snapshot diff buffer).
@@ -168,7 +171,7 @@ test("created file shows 'created' and opens directly on <CR>", async () => {
   });
 });
 
-test("expand diff reads current content from an open buffer, not disk", async () => {
+test("historical diff ignores later unsaved buffer changes", async () => {
   await withDriver(
     {
       setupFiles: async (tmpDir) => {
@@ -207,7 +210,7 @@ test("expand diff reads current content from an open buffer, not disk", async ()
         toolRequests: [],
       });
 
-      await driver.assertDisplayBufferContains("Files edited this turn:");
+      await driver.assertDisplayBufferContains("Files edited:");
 
       // Open the file in a (non-magenta) buffer and give it unsaved content
       // that differs from both the snapshot and what's on disk.
@@ -223,11 +226,11 @@ test("expand diff reads current content from an open buffer, not disk", async ()
         ["buffered"],
       ]);
 
-      // The inline diff must reflect the live buffer content, not the on-disk
-      // ("bye") content.
+      // Historical diffs retain the recorded edit rather than later buffer changes.
       await driver.triggerDisplayBufferKeyOnContent("▶ modified a.txt", "=");
       await driver.assertDisplayBufferContains("-hello");
-      await driver.assertDisplayBufferContains("+buffered");
+      await driver.assertDisplayBufferContains("+bye");
+      await driver.assertDisplayBufferDoesNotContain("+buffered");
     },
   );
 });
