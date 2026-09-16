@@ -292,9 +292,11 @@ export class FileSupervisor
   static clone({
     source,
     history,
+    deps,
   }: {
     source: FileSupervisor;
     history: FileHistoryClone;
+    deps?: FileSupervisorDeps;
   }): FileSupervisor {
     const files = Object.fromEntries(
       Object.entries(source.files).map(([path, file]) => [
@@ -303,10 +305,10 @@ export class FileSupervisor
       ]),
     ) as Files;
     return new FileSupervisor(
-      source.logger,
-      source.fileIO,
-      source.cwd,
-      source.homeDir,
+      deps?.logger ?? source.logger,
+      deps?.fileIO ?? source.fileIO,
+      deps?.cwd ?? source.cwd,
+      deps?.homeDir ?? source.homeDir,
       files,
       source.pollIntervalMs,
     );
@@ -444,6 +446,8 @@ export class FileSupervisor
     this.revision++;
     delete this.files[absFilePath];
     delete this.pendingUpdates[absFilePath];
+    // The refresh now compares against the pruned map, so it cannot report the removal.
+    this.emit("pendingUpdatesChanged");
     this.scheduleRefreshPendingUpdates();
   }
 

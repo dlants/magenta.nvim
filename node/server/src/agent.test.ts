@@ -3691,14 +3691,19 @@ describe("Thread survives the compaction agent swap", () => {
 
   it("forwards events from the replacement agent and none from the old one", async () => {
     const threadId = uniqueThreadId("compact-events");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    let updates = 0;
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      threadId,
+      undefined,
+      () => updates++,
+    );
     try {
       const oldAgent = core.inferenceManager;
       await compact(core, mockClient);
       expect(core.inferenceManager).not.toBe(oldAgent);
 
-      let updates = 0;
-      core.callbacks.onUpdate = () => updates++;
+      updates = 0;
       core.setTitle("after compaction");
       expect(updates).toBe(1);
     } finally {

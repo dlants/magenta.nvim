@@ -44,7 +44,7 @@ import type {
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
-import { Thread, type ThreadContext } from "./thread.ts";
+import { Thread, type ThreadCallbacks, type ThreadContext } from "./thread.ts";
 import type { SendResult } from "./thread-api.ts";
 import { executeToolBatch } from "./tool-executor.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
@@ -278,6 +278,10 @@ export function createAgentWithMock(
   threadId: ThreadId = "test-thread" as ThreadId,
   resolve?: ResolveSubmission,
   onUpdate?: () => void,
+  callbacks?: Pick<
+    ThreadCallbacks,
+    "onFilesSent" | "onGitSent" | "onFileAdded"
+  >,
 ): {
   core: Thread;
   mockClient: MockAnthropicClient;
@@ -291,7 +295,11 @@ export function createAgentWithMock(
     core: new Thread(
       threadId,
       context,
-      { onUpdate: onUpdate ?? (() => {}), resolve: resolve ?? resolveAsText },
+      {
+        ...callbacks,
+        onUpdate: onUpdate ?? (() => {}),
+        resolve: resolve ?? resolveAsText,
+      },
       {
         baseDir: TEST_ARCHIVE_DIR,
       },

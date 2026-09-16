@@ -31,15 +31,15 @@ import {
 } from "./submission/index.ts";
 import {
   buildClonedFiles,
-  FileSupervisor,
+  type FileSupervisor,
   type Files,
   type FileUpdates,
 } from "./supervisors/file-supervisor.ts";
-import {
-  type GitContextUpdate,
+import type {
+  GitContextUpdate,
   GitSupervisor,
 } from "./supervisors/git-supervisor.ts";
-import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
+import type { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
 import type {
   AgentRequestContext,
   OnUpdate,
@@ -51,32 +51,27 @@ import type {
   ThreadSendResult,
   YieldValue,
 } from "./thread-api.ts";
-import {
-  ThreadCore,
-  type ThreadCoreCallbacks,
-  type ThreadCoreContext,
-} from "./thread-core.ts";
+import { ThreadCore, type ThreadCoreCallbacks } from "./thread-core.ts";
 
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
-import {
+import type {
   EditedFilesSupervisor,
-  type EndTurnAction,
-  type EndTurnContext,
-  type RequestAction,
-  type RequestContext,
-  type SuspendReason,
+  EndTurnAction,
+  EndTurnContext,
+  RequestAction,
+  RequestContext,
+  SuspendReason,
   SystemInfoSupervisor,
-  type ThreadSupervisor,
+  ThreadSupervisor,
 } from "./thread-supervisor.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { ClientToolCreator } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
-import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
-import type { HomeDir, NvimCwd } from "./utils/files.ts";
+import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
 export interface ThreadContextDelivery {
   initialFiles?: Files;
   pollIntervalMs?: number;
@@ -143,13 +138,13 @@ type FlushedQueue =
   | { type: "messages"; messages: AgentInput[] }
   | { type: "compact"; nextPrompt: string | undefined };
 export type ThreadCallbacks = {
-  onUpdate: OnUpdate;
+  readonly onUpdate: OnUpdate;
   resolve: ResolveSubmission;
   /** A context supervisor committed a delivery into the request going out.
-   * Subscribed once per conversation generation, since a reset replaces the
-   * supervisors along with the core. */
-  onFilesSent?: (updates: FileUpdates) => void;
-  onGitSent?: (update: GitContextUpdate) => void;
+   * Fixed for the thread lifetime; retired cores cannot publish deliveries. */
+  readonly onFilesSent?: (updates: FileUpdates) => void;
+  readonly onGitSent?: (update: GitContextUpdate) => void;
+  readonly onFileAdded?: (path: AbsFilePath) => void;
 };
 /** Stable identity, submission queues, yield contract and archive across
  * replaceable conversation generations. */
@@ -167,10 +162,18 @@ export class Thread {
   get systemInfo(): SystemInfo {
     return this.context.systemInfo;
   }
-  fileSupervisor!: FileSupervisor;
-  gitSupervisor: GitSupervisor | undefined;
-  private systemInfoSupervisor: SystemInfoSupervisor | undefined;
-  private systemReminders: SystemReminderSupervisor | undefined;
+  get fileSupervisor(): FileSupervisor {
+    return this.core.fileSupervisor;
+  }
+  get gitSupervisor(): GitSupervisor | undefined {
+    return this.core.gitSupervisor;
+  }
+  private get systemInfoSupervisor(): SystemInfoSupervisor | undefined {
+    return this.core.systemInfoSupervisor;
+  }
+  private get systemReminders(): SystemReminderSupervisor | undefined {
+    return this.core.systemReminders;
+  }
   private _core: ThreadCore;
   private interruption = new AbortController();
   get interruptionSignal(): AbortSignal {
@@ -185,8 +188,12 @@ export class Thread {
   get core(): ThreadCore {
     return this._core;
   }
-  edlRegisters: EdlRegisters = { registers: new Map(), nextSavedId: 0 };
-  editedFilesSupervisor!: EditedFilesSupervisor;
+  get edlRegisters(): EdlRegisters {
+    return this.core.edlRegisters;
+  }
+  get editedFilesSupervisor(): EditedFilesSupervisor {
+    return this.core.editedFilesSupervisor;
+  }
   get editedFileGroups() {
     return this.editedFilesSupervisor.groups;
   }
@@ -218,7 +225,7 @@ export class Thread {
   constructor(
     public id: ThreadId,
     public readonly context: ThreadContext,
-    public callbacks: ThreadCallbacks,
+    public readonly callbacks: ThreadCallbacks,
     private archiveOptions: ThreadArchiveOptions = {},
     fork?: { source: Thread; nativeMessageIdx: NativeMessageIdx },
     // Tool request IDs identify immutable results, shared across resets and forks.
@@ -246,7 +253,12 @@ export class Thread {
       },
     );
     this._core = fork
-      ? this.cloneCore(fork.source, fork.nativeMessageIdx)
+      ? this.createCore({
+          fork: {
+            source: fork.source.core,
+            nativeMessageIdx: fork.nativeMessageIdx,
+          },
+        })
       : this.createCore();
   }
 
@@ -291,6 +303,16 @@ export class Thread {
       onUpdate: () => {
         if (isCurrent()) this.handleUpdate();
       },
+      onFilesSent: (updates) => {
+        if (isCurrent()) this.callbacks.onFilesSent?.(updates);
+      },
+      onGitSent: (update) => {
+        if (isCurrent()) this.callbacks.onGitSent?.(update);
+      },
+      onFileAdded: (path) => {
+        if (isCurrent()) this.callbacks.onFileAdded?.(path);
+      },
+      onToolApplied: (event) => this.onToolApplied(event, isCurrent),
       onBeforeRequest: () => this.beforeRequest(getCore()),
       onToolResults: (results, idx) => {
         let suspend: SuspendReason | undefined;
@@ -407,183 +429,20 @@ export class Thread {
     ];
   }
 
-  private adoptCore(core: ThreadCore): void {
-    this.fileSupervisor.on("pendingUpdatesChanged", () => {
-      if (this.core === core && core.isActive) this.handleUpdate();
-    });
-    this.fileSupervisor.on("sent", (updates) => {
-      if (this.core === core && core.isActive)
-        this.callbacks.onFilesSent?.(updates);
-    });
-    this.gitSupervisor?.on("sent", (update) => {
-      if (this.core === core && core.isActive)
-        this.callbacks.onGitSent?.(update);
-    });
-  }
-
-  private coreContext(getCore: () => ThreadCore): ThreadCoreContext {
-    const isCurrent = () =>
-      this.core === getCore() && getCore().isActive && !this.destroyed;
-    return {
-      logger: this.context.logger,
-      completedTools: this.resultArchive,
-      createTool: this.context.clientToolCreator({ threadId: this.id })({
-        contextTracker: this.fileSupervisor,
-        edlRegisters: this.edlRegisters,
-        onToolApplied: (absFilePath, tool, fileTypeInfo) => {
-          if (!isCurrent()) return;
-          // The tool result has not been appended yet; the running batch
-          // fixes the index that will reveal this edit or read to the agent.
-          this.onToolApplied(
-            {
-              absFilePath,
-              tool,
-              fileTypeInfo,
-              nativeMessageIdx: getCore().pendingResultMessageIdx,
-            },
-            isCurrent,
-          );
-        },
-        requestRender: () => {
-          if (isCurrent()) this.handleUpdate();
-        },
-      }),
-    };
-  }
-
-  private static buildToolSpecs(context: ThreadContext): ProviderToolSpec[] {
-    return getToolSpecs(
-      context.threadType,
-      context.mcpToolManager,
-      context.availableCapabilities,
-      context.getAgents(),
-      context.subagentConfig,
-      context.yieldSchema,
-      context.getScriptRunner?.()?.getScriptCatalog(),
-      context.subagentDockerfile,
+  private createCore(opts?: {
+    initialFiles?: Files;
+    fork?: { source: ThreadCore; nativeMessageIdx: NativeMessageIdx };
+  }): ThreadCore {
+    this.createGates();
+    const core = new ThreadCore(
+      this.id,
+      this.context,
+      this.coreCallbacks(() => core),
+      this.resultArchive,
+      opts,
     );
-  }
-
-  private cloneCore(
-    source: Thread,
-    nativeMessageIdx: NativeMessageIdx,
-  ): ThreadCore {
-    const manager = source.inferenceManager.clone();
-    manager.truncateMessages(nativeMessageIdx);
-    const effectiveIdx = manager.getNativeMessageIdx();
-    this.editedFilesSupervisor = EditedFilesSupervisor.clone({
-      source: source.editedFilesSupervisor,
-      nativeMessageIdx: effectiveIdx,
-    });
-    this.fileSupervisor = FileSupervisor.clone({
-      source: source.fileSupervisor,
-      history: { type: "truncate", nativeMessageIdx: effectiveIdx },
-    });
-    this.gitSupervisor = source.gitSupervisor
-      ? GitSupervisor.clone({
-          source: source.gitSupervisor,
-          nativeMessageIdx: effectiveIdx,
-        })
-      : undefined;
-    this.systemInfoSupervisor = source.systemInfoSupervisor
-      ? SystemInfoSupervisor.clone({
-          source: source.systemInfoSupervisor,
-          nativeMessageIdx: effectiveIdx,
-        })
-      : undefined;
-    this.systemReminders = source.systemReminders
-      ? SystemReminderSupervisor.clone({
-          source: source.systemReminders,
-          nativeMessageIdx: effectiveIdx,
-          contextTracker: this.fileSupervisor,
-          getCompletedTools: () => this.resultArchive,
-        })
-      : undefined;
-    this.createGates();
-    this.edlRegisters = {
-      registers: new Map(source.edlRegisters.registers),
-      nextSavedId: source.edlRegisters.nextSavedId,
-    };
-    const core = ThreadCore.create({
-      id: this.id,
-      context: this.coreContext(() => core),
-      callbacks: this.coreCallbacks(() => core),
-      manager,
-      toolSpecs: Thread.buildToolSpecs(this.context),
-    });
-    this.adoptCore(core);
     return core;
   }
-
-  private createSupervisors(
-    manager: NativeInferenceManager,
-    initialFiles?: Files,
-  ): void {
-    this.createGates();
-
-    const context = this.context;
-    const delivery = context.contextDelivery;
-    this.editedFilesSupervisor = EditedFilesSupervisor.create();
-    this.fileSupervisor = FileSupervisor.create({
-      logger: context.logger,
-      fileIO: context.fileIO,
-      cwd: context.cwd,
-      homeDir: context.homeDir,
-      initialFiles: initialFiles ?? delivery?.initialFiles ?? {},
-      ...(delivery?.pollIntervalMs !== undefined
-        ? { pollIntervalMs: delivery.pollIntervalMs }
-        : {}),
-    });
-    this.gitSupervisor = delivery
-      ? GitSupervisor.create({
-          gitClient: context.gitClient,
-          initialGitState: delivery.initialGitState,
-          logger: context.logger,
-        })
-      : undefined;
-    this.systemInfoSupervisor =
-      delivery && context.threadType !== "compact"
-        ? SystemInfoSupervisor.create({
-            systemInfo: context.systemInfo,
-            alreadyInjected: manager.log.messages.length > 0,
-          })
-        : undefined;
-    this.systemReminders =
-      context.threadType === "compact"
-        ? undefined
-        : SystemReminderSupervisor.create({
-            threadType: context.threadType,
-            subagentConfig: context.subagentConfig,
-            contextTracker: this.fileSupervisor,
-            getCompletedTools: () => this.resultArchive,
-          });
-  }
-
-  private createCore(opts?: { initialFiles?: Files }): ThreadCore {
-    const context = this.context;
-    const toolSpecs = Thread.buildToolSpecs(context);
-    const manager = context.provider.createInferenceManager({
-      profile: context.profile,
-      systemPrompt: context.systemPrompt,
-      tools: toolSpecs,
-      ...(context.subagentConfig?.effort
-        ? { effortOverride: context.subagentConfig.effort }
-        : {}),
-    });
-    this.createSupervisors(manager, opts?.initialFiles);
-    this.edlRegisters = { registers: new Map(), nextSavedId: 0 };
-    const core = ThreadCore.create({
-      id: this.id,
-      context: this.coreContext(() => core),
-      callbacks: this.coreCallbacks(() => core),
-
-      manager,
-      toolSpecs,
-    });
-    this.adoptCore(core);
-    return core;
-  }
-
   static async clone(args: {
     sourceThread: Thread;
     newId: ThreadId;
@@ -1333,7 +1192,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.cancelSubmission();
     try {
       const initialFiles = buildClonedFiles(this.fileSupervisor.files);
-      this.fileSupervisor.destroy();
       await this.core.dispose();
       this.assertUsable();
       // Disposal is irreversible: cancellation prevents the caller's follow-up,
@@ -1367,7 +1225,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     if (this.destroyed) return;
     this.destroyed = true;
     this.interrupt();
-    this.fileSupervisor.destroy();
     await this.core.dispose();
     this.settleResult({
       type: "aborted",

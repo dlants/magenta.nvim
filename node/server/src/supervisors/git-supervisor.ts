@@ -58,10 +58,12 @@ export class GitTracker {
   static clone(args: {
     source: GitTracker;
     nativeMessageIdx: NativeMessageIdx;
+    gitClient?: GitClient;
+    logger?: Logger;
   }): GitTracker {
     return new GitTracker(
-      args.source.gitClient,
-      args.source.logger,
+      args.gitClient ?? args.source.gitClient,
+      args.logger ?? args.source.logger,
       args.source.history
         .filter((entry) => entry.nativeMessageIdx <= args.nativeMessageIdx)
         .map((entry) => ({
@@ -182,9 +184,12 @@ export class GitSupervisor
   static clone(args: {
     source: GitSupervisor;
     nativeMessageIdx: NativeMessageIdx;
+    gitClient?: GitClient;
+    logger?: Logger;
   }): GitSupervisor {
     return new GitSupervisor(
       GitTracker.clone({
+        ...args,
         source: args.source.gitTracker,
         nativeMessageIdx: args.nativeMessageIdx,
       }),

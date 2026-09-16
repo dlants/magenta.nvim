@@ -740,6 +740,7 @@ export class Chat implements ThreadManager {
     });
 
     const thread = new NvimThread(threadId, threadType, systemPrompt, {
+      onFileAdded: (path) => this.triggerHierarchyDiscovery(thread, path),
       ...this.context,
       options: this.context.getOptions(),
       mcpToolManager: this.mcpToolManager,
@@ -757,10 +758,6 @@ export class Chat implements ThreadManager {
     });
 
     bypassRef.get = () => thread.isSandboxBypassed;
-
-    thread.fileSupervisor.on("fileAdded", (absFilePath) => {
-      this.triggerHierarchyDiscovery(thread, absFilePath);
-    });
 
     for (const absFilePath of Object.keys(
       thread.fileSupervisor.files,
@@ -1432,6 +1429,7 @@ ${rows}${loadMore}`;
     };
 
     const thread = await NvimThread.cloneFromNativeMessageIdx({
+      onFileAdded: (path) => this.triggerHierarchyDiscovery(thread, path),
       sourceThread,
       newThreadId,
       nativeMessageIdx: idx,
@@ -1445,10 +1443,6 @@ ${rows}${loadMore}`;
       sandbox: this.context.sandbox,
       getOptions: this.context.getOptions,
       getDisplayWidth: this.context.getDisplayWidth,
-    });
-
-    thread.fileSupervisor.on("fileAdded", (absFilePath) => {
-      this.triggerHierarchyDiscovery(thread, absFilePath);
     });
 
     const markerIdx = thread.core.getProviderMessages().length;

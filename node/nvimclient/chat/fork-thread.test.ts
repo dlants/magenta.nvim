@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import type {
   NativeMessageIdx,
   ToolName,
@@ -186,8 +187,8 @@ it("tool result map survives the fork", async () => {
   });
 });
 
-it("sandbox bypass is copied as an independent value", async () => {
-  await withDriver({}, async (driver) => {
+it("sandbox bypass and write approvals use the fork owner", async () => {
+  await withDriver({}, async (driver, dirs) => {
     await driver.showSidebar();
     await driver.inputMagentaText("hello");
     await driver.send();
@@ -213,6 +214,34 @@ it("sandbox bypass is copied as an independent value", async () => {
 
     expect(forkThread.isSandboxBypassed).toBe(true);
     expect(sourceThread.isSandboxBypassed).toBe(false);
+    const destination = path.join(dirs.baseDir, "fork-write.txt");
+    driver.mockSandbox.blockWritesTo(destination);
+    const forkIO = forkThread.core.context.fileIO;
+    expect(forkIO).toBe(forkThread.context.environment.fileIO);
+    expect(forkIO).not.toBe(sourceThread.core.context.fileIO);
+    await forkIO.writeFile(destination, "bypassed fork write");
+    expect(
+      sourceThread.sandboxViolationHandler!.getPendingViolations().size,
+    ).toBe(0);
+    expect(
+      forkThread.sandboxViolationHandler!.getPendingViolations().size,
+    ).toBe(0);
+    forkThread.sandboxBypassed = false;
+    sourceThread.sandboxBypassed = true;
+    const writing = forkIO.writeFile(destination, "approved fork write");
+    await pollUntil(() => {
+      expect(
+        forkThread.sandboxViolationHandler!.getPendingViolations().size,
+      ).toBe(1);
+      return true;
+    });
+    expect(
+      sourceThread.sandboxViolationHandler!.getPendingViolations().size,
+    ).toBe(0);
+    const position = await driver.assertDisplayBufferContains("> YES");
+    await driver.triggerDisplayBufferKey(position, "<CR>");
+    await writing;
+    expect(await fs.readFile(destination, "utf8")).toBe("approved fork write");
   });
 });
 

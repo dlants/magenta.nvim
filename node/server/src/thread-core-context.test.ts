@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FsFileIO } from "./capabilities/file-io.ts";
 import type { GitState } from "./capabilities/git-client.ts";
 import { runSubmission } from "./compaction/index.ts";
+import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import {
   type NativeMessageIdx,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -24,6 +25,7 @@ import {
   type HomeDir,
   type NvimCwd,
   type RelFilePath,
+  type UnresolvedFilePath,
 } from "./utils/files.ts";
 
 async function fixture() {
@@ -44,6 +46,7 @@ async function fixture() {
     untrackedCount: 0,
   };
   const onFilesSent = vi.fn();
+  const onFileAdded = vi.fn();
   const create = vi.spyOn(FileSupervisor, "create");
   const { core: thread, mockClient } = createAgentWithMock(
     {
@@ -57,8 +60,10 @@ async function fixture() {
       gitClient: { getState: async () => git },
     },
     uniqueThreadId("core-context"),
+    undefined,
+    undefined,
+    { onFilesSent, onFileAdded },
   );
-  thread.callbacks.onFilesSent = onFilesSent;
   const manager = thread.fileSupervisor;
   manager.addFileContext(file, "tracked.txt" as RelFilePath, {
     category: FileCategory.TEXT,
@@ -92,6 +97,7 @@ async function fixture() {
     destroy,
     changed,
     onFilesSent,
+    onFileAdded,
     request,
     setGit: () => {
       git = { ...git, branch: "replacement-branch", headSha: "222222222" };
@@ -107,6 +113,110 @@ async function fixture() {
 }
 
 describe("Thread-owned context delivery", () => {
+  it("keeps fixed file notifications across reset and ignores retired emitters", async () => {
+    const f = await fixture();
+    try {
+      await f.thread.reset({ seed: [], archive: { type: "none" } });
+      expect(f.destroy).toHaveBeenCalledTimes(1);
+      f.onFileAdded.mockClear();
+      f.onFilesSent.mockClear();
+      f.manager.emit("fileAdded", f.file);
+      f.manager.emit("sent", {});
+      expect(f.onFileAdded).not.toHaveBeenCalled();
+      expect(f.onFilesSent).not.toHaveBeenCalled();
+      const added = path.join(f.cwd, "added.txt") as AbsFilePath;
+      await fs.writeFile(added, "new generation content");
+      await f.thread.fileSupervisor.addFiles([
+        added as string as UnresolvedFilePath,
+      ]);
+      expect(f.onFileAdded).toHaveBeenCalledWith(added);
+      expect(await f.request()).toContain("new generation content");
+      expect(f.onFilesSent).toHaveBeenCalledTimes(1);
+      expect(f.thread.context.fileIO).toBe(f.fileIO);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it("fork history uses destination file and git collaborators after the source is destroyed", async () => {
+    const f = await fixture();
+    let fork: Thread | undefined;
+    try {
+      await f.request();
+      const fileIO = new InMemoryFileIO({ [f.file]: "destination content" });
+      const gitClient = { getState: vi.fn(async () => undefined) };
+      fork = await Thread.clone({
+        sourceThread: f.thread,
+        newId: uniqueThreadId("destination"),
+        nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
+        context: { ...threadCloneContext(f.thread.context), fileIO, gitClient },
+        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+      });
+      await f.thread.destroy();
+      expect(await f.request(fork)).toContain("destination content");
+      expect(gitClient.getState).toHaveBeenCalled();
+      expect(await f.fileIO.readFile(f.file)).toBe(
+        "original tracked content\n",
+      );
+    } finally {
+      if (fork) {
+        await fork.destroy();
+        await fork.awaitArchiveFlush();
+        await cleanupArchive(fork.id);
+      }
+      await f.cleanup();
+    }
+  });
+
+  it("core replacement preserves in-memory contents without sharing independent compact environments", async () => {
+    const file = "/summary.md" as AbsFilePath;
+    const fileIO = new InMemoryFileIO({ [file]: "original" });
+    const otherIO = new InMemoryFileIO({ [file]: "independent" });
+    const { core: first } = createAgentWithMock(
+      { threadType: "compact", fileIO },
+      uniqueThreadId("memory"),
+    );
+    const { core: other } = createAgentWithMock(
+      { threadType: "compact", fileIO: otherIO },
+      uniqueThreadId("memory-other"),
+    );
+    try {
+      await fileIO.writeFile(file, "retained edit");
+      const oldCore = first.core;
+      await first.reset({ seed: [], archive: { type: "none" } });
+      expect(first.core).not.toBe(oldCore);
+      expect(first.context.fileIO).toBe(fileIO);
+      expect(await fileIO.readFile(file)).toBe("retained edit");
+      await first.destroy();
+      expect(await fileIO.readFile(file)).toBe("retained edit");
+      expect(await otherIO.readFile(file)).toBe("independent");
+    } finally {
+      for (const thread of [first, other]) {
+        await thread.destroy();
+        await thread.awaitArchiveFlush();
+        await cleanupArchive(thread.id);
+      }
+    }
+  });
+
+  it("destroy during reset does not construct a replacement generation", async () => {
+    const f = await fixture();
+    try {
+      const oldCore = f.thread.core;
+      const constructions = f.create.mock.calls.length;
+      const reset = f.thread.reset({ seed: [], archive: { type: "none" } });
+      const rejected = expect(reset).rejects.toThrow("destroyed");
+      await f.thread.destroy();
+      await rejected;
+      expect(f.thread.core).toBe(oldCore);
+      expect(oldCore.isActive).toBe(false);
+      expect(f.create).toHaveBeenCalledTimes(constructions);
+      expect(f.destroy).toHaveBeenCalledTimes(1);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
   it.each([
     "reset",
     "compaction",

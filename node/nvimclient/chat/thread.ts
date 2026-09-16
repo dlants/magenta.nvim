@@ -23,7 +23,6 @@ import {
   parseCompact,
   type ResolvedSubmission,
   renderPending,
-  resolveAsText,
   runSubmission,
   type Submission,
   Thread,
@@ -304,6 +303,7 @@ export class NvimThread {
       yieldSchema?: JSONSchemaType;
       scriptName?: string;
       environment: Environment;
+      onFileAdded: (path: AbsFilePath) => void;
       initialFiles?: ContextFiles;
       initialGitState?: GitState | undefined;
       subagentConfig?: SubagentConfig;
@@ -351,7 +351,6 @@ export class NvimThread {
     };
     if (preBuilt) {
       this.core = preBuilt.core;
-      this.core.callbacks = this.coreCallbacks();
     } else {
       const getAgents = () =>
         loadAgents({
@@ -512,6 +511,7 @@ export class NvimThread {
    * now the return value of the `send`/`abort` this thread itself issued. */
   private coreCallbacks(): ThreadCallbacks {
     return {
+      onFileAdded: (path) => this.context.onFileAdded(path),
       onUpdate: () => this.onCoreUpdate(),
       resolve: (message) => this.resolveSubmission(message),
       onFilesSent: (updates) =>
@@ -643,6 +643,7 @@ export class NvimThread {
     sandbox: Sandbox;
     getOptions: () => MagentaOptions;
     getDisplayWidth: () => number;
+    onFileAdded: (path: AbsFilePath) => void;
   }): Promise<NvimThread> {
     const {
       sourceThread,
@@ -697,6 +698,7 @@ export class NvimThread {
       : undefined;
 
     // No awaits above: native history and delivery must describe the same instant.
+    let thread!: NvimThread;
     const core = await Thread.clone({
       sourceThread: sourceCore,
       newId: newThreadId,
@@ -753,12 +755,19 @@ export class NvimThread {
           }),
         provider: getProvider(nvim, profile),
       },
-      // Replaced by the wrapper's own callbacks as soon as it exists; a fork
-      // has to clone the source's history before there is a wrapper to talk to.
-      callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+      // Construction only snapshots history; notifications and resolution start after attachment.
+      callbacks: {
+        onUpdate: () => thread.onCoreUpdate(),
+        resolve: (message) => thread.resolveSubmission(message),
+        onFilesSent: (updates) =>
+          thread.recordMessageViewState({ contextUpdates: updates }),
+        onGitSent: (update) =>
+          thread.recordMessageViewState({ gitUpdate: update }),
+        onFileAdded: args.onFileAdded,
+      },
     });
 
-    const thread = new NvimThread(
+    thread = new NvimThread(
       newThreadId,
       sourceCoreState.threadType,
       sourceCoreState.systemPrompt,
@@ -768,6 +777,7 @@ export class NvimThread {
         mcpToolManager,
         profile,
         commandRegistry: sourceThread.context.commandRegistry,
+        onFileAdded: args.onFileAdded,
         nvim,
         cwd,
         homeDir,
