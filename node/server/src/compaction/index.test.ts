@@ -587,7 +587,7 @@ describe("complete submission ownership", () => {
     expect(resolutions).toEqual(["@compact", "deferred raw"]);
     stream.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
-    expect(thread.queuedCount).toBe(0);
+    expect(thread.queued.async.length + thread.queued.next.length).toBe(0);
     await thread.destroy();
   });
 

@@ -26,11 +26,17 @@ import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import {
   compactPrompt,
   type Delivery,
-  type PendingMessage,
   parseCompact,
   type ResolveSubmission,
   type SubmissionInput,
 } from "./submission/index.ts";
+import {
+  type DeferredDelivery,
+  Mailbox,
+  type QueueEntry,
+  type Queues,
+  submissionEntries,
+} from "./submission/mailbox.ts";
 import {
   buildClonedFiles,
   type FileSupervisor,
@@ -137,7 +143,7 @@ export type ThreadArchiveOptions = {
   baseDir?: string;
   scriptName?: string;
 };
-type DeferredDelivery = "async" | "next";
+
 /** The result of draining one queue: content for the next request, or a
  * compaction the flush ran into — never both. */
 type FlushedQueue =
@@ -594,10 +600,7 @@ export class Thread {
   ): Promise<ThreadSendResult> {
     this.assertUsable();
     if (delivery !== "now" && this.isBusy) {
-      this.enqueue(
-        input.type === "raw" ? [input.message] : input.messages,
-        delivery,
-      );
+      this.mailbox.enqueue(delivery, submissionEntries(input));
       return { type: "queued" };
     }
     return this.startSubmission(input);
@@ -736,46 +739,23 @@ export class Thread {
       throw error;
     }
   }
-  /** Flushed in full when the next provider request is issued (@async). */
-  private nextRequestQueue: (PendingMessage | AgentInput)[] = [];
-  /** Flushed in full the next time the thread comes to rest (@next). */
-  private nextStopQueue: (PendingMessage | AgentInput)[] = [];
-  get queued(): {
-    async: ReadonlyArray<PendingMessage | AgentInput>;
-    next: ReadonlyArray<PendingMessage | AgentInput>;
-  } {
-    return { async: this.nextRequestQueue, next: this.nextStopQueue };
+  private readonly mailbox = new Mailbox();
+  // The entry being resolved is already consumed; only untouched batch entries
+  // belong in abort's report, ahead of arrivals made during resolution.
+  private detachedBatch:
+    | { delivery: DeferredDelivery; entries: QueueEntry[] }
+    | undefined;
+  get queued(): Queues {
+    return this.mailbox.queues;
   }
-  get queuedCount(): number {
-    return this.nextRequestQueue.length + this.nextStopQueue.length;
-  }
-  private queue(delivery: DeferredDelivery): (PendingMessage | AgentInput)[] {
-    return delivery === "async" ? this.nextRequestQueue : this.nextStopQueue;
-  }
-  private enqueue(
-    messages: (PendingMessage | AgentInput)[],
-    delivery: DeferredDelivery,
-  ): void {
-    this.queue(delivery).push(...messages);
+  private restoreDetachedBatch(): void {
+    const batch = this.detachedBatch;
+    this.detachedBatch = undefined;
+    if (batch) this.mailbox.prepend(batch.delivery, batch.entries.splice(0));
   }
   private drainQueues(): QueuedMessage[] {
-    const unsent: QueuedMessage[] = [
-      ...this.nextRequestQueue.map(
-        (message): QueuedMessage => ({
-          when: "async",
-          message,
-        }),
-      ),
-      ...this.nextStopQueue.map(
-        (message): QueuedMessage => ({
-          when: "next",
-          message,
-        }),
-      ),
-    ];
-    this.nextRequestQueue = [];
-    this.nextStopQueue = [];
-    return unsent;
+    this.restoreDetachedBatch();
+    return this.mailbox.drain();
   }
   /** Drain one queue at a stop, resolving each entry at the moment it is
    * delivered. An entry whose resolution throws is dropped with a visible
@@ -787,32 +767,38 @@ export class Thread {
    * queue. */
   private async flushAtStop(delivery: DeferredDelivery): Promise<FlushedQueue> {
     const isCurrent = this.currentLoopGuard();
-    const count = this.queue(delivery).length;
+    const batch = { delivery, entries: this.mailbox.takeBatch(delivery) };
+    this.detachedBatch = batch;
     const messages: AgentInput[] = [];
-    for (let i = 0; i < count; i++) {
-      const entry = this.queue(delivery).shift();
-      if (entry === undefined) break;
-      const resolved = await this.resolveQueued(
-        entry,
-        isCurrent,
-        this.core.manager.getPendingUserMessageIdx(),
-      );
-      if (!isCurrent()) return { type: "messages", messages: [] };
-      if (!resolved) continue;
-      if (resolved.compact) {
-        return {
-          type: "compact",
-          nextPrompt:
-            [...messages, ...resolved.messages]
-              .filter((m) => m.type === "text")
-              .map((m) => m.text)
-              .join("\n")
-              .trim() || undefined,
-        };
+    try {
+      while (batch.entries.length) {
+        const entry = batch.entries.shift();
+        if (entry === undefined) break;
+        const resolved = await this.resolveQueued(
+          entry,
+          isCurrent,
+          this.core.manager.getPendingUserMessageIdx(),
+        );
+        if (!isCurrent()) return { type: "messages", messages: [] };
+        if (!resolved) continue;
+        if (resolved.compact) {
+          this.mailbox.prepend(delivery, batch.entries.splice(0));
+          return {
+            type: "compact",
+            nextPrompt:
+              [...messages, ...resolved.messages]
+                .filter((m) => m.type === "text")
+                .map((m) => m.text)
+                .join("\n")
+                .trim() || undefined,
+          };
+        }
+        messages.push(...resolved.messages);
       }
-      messages.push(...resolved.messages);
+      return { type: "messages", messages };
+    } finally {
+      if (this.detachedBatch === batch) this.detachedBatch = undefined;
     }
-    return { type: "messages", messages };
   }
   /** Drain the async queue into the request that is about to carry the tool
    * results. A `@compact` cannot ride such a request — there is no place to
@@ -823,27 +809,32 @@ export class Thread {
     nativeMessageIdx: NativeMessageIdx,
   ): Promise<AgentInput[]> {
     const isCurrent = this.currentLoopGuard();
-    const count = this.nextRequestQueue.length;
+    const batch = {
+      delivery: "async" as const,
+      entries: this.mailbox.takeBatch("async"),
+    };
+    this.detachedBatch = batch;
     const messages: AgentInput[] = [];
-    for (let i = 0; i < count; i++) {
-      const entry = this.nextRequestQueue.shift();
-      if (entry === undefined) break;
-      if (typeof entry === "string" && parseCompact(entry).compact) {
-        this.nextStopQueue.unshift(
+    try {
+      while (batch.entries.length) {
+        const entry = batch.entries.shift();
+        if (entry === undefined) break;
+        if (entry.type === "raw" && parseCompact(entry.message).compact) {
+          this.mailbox.prepend("next", [entry, ...batch.entries.splice(0)]);
+          return messages;
+        }
+        const resolved = await this.resolveQueued(
           entry,
-          ...this.nextRequestQueue.splice(0, count - i - 1),
+          isCurrent,
+          nativeMessageIdx,
         );
-        return messages;
+        if (!isCurrent()) return [];
+        if (resolved) messages.push(...resolved.messages);
       }
-      const resolved = await this.resolveQueued(
-        entry,
-        isCurrent,
-        nativeMessageIdx,
-      );
-      if (!isCurrent()) return [];
-      if (resolved) messages.push(...resolved.messages);
+      return messages;
+    } finally {
+      if (this.detachedBatch === batch) this.detachedBatch = undefined;
     }
-    return messages;
   }
   /** Resolve one entry, activating its reminders. An entry whose resolution
    * throws is dropped with a visible error rather than wedging the turn
@@ -859,14 +850,14 @@ export class Thread {
       !submission.signal.aborted;
   }
   private async resolveQueued(
-    entry: PendingMessage | AgentInput,
+    entry: QueueEntry,
     isCurrent: () => boolean,
     nativeMessageIdx: NativeMessageIdx,
   ) {
-    if (typeof entry !== "string")
-      return { compact: false, messages: [entry], reminders: [] };
+    if (entry.type === "resolved")
+      return { compact: false, messages: [entry.input], reminders: [] };
     try {
-      const resolved = await this.callbacks.resolve(entry);
+      const resolved = await this.callbacks.resolve(entry.message);
       if (!isCurrent()) return undefined;
       for (const text of resolved.reminders) {
         this.activateReminder(text, nativeMessageIdx);
@@ -887,7 +878,7 @@ export class Thread {
   private async queueFlushAction(
     ctx: AgentRequestContext,
   ): Promise<RequestAction> {
-    if (ctx.status === "suspended" || !this.nextRequestQueue.length)
+    if (ctx.status === "suspended" || !this.queued.async.length)
       return { type: "none" };
     return {
       type: "inject",
@@ -1144,7 +1135,7 @@ export class Thread {
     | { type: "rest" } {
     if (
       stopReason === "end_turn" &&
-      (this.nextRequestQueue.length || this.nextStopQueue.length)
+      (this.queued.async.length || this.queued.next.length)
     ) {
       return { type: "queues" };
     }
@@ -1207,6 +1198,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.interrupt();
     this.cancelSubmission();
     this.submission = undefined;
+    this.restoreDetachedBatch();
     return this.replaceCore(options);
   }
 

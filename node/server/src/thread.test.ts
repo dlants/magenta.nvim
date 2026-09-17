@@ -534,7 +534,9 @@ describe("deferred submissions", () => {
     // request carrying the tool results goes out without it.
     const toolResultStream = await awaitNextStream(mockClient, stream);
     expect(userTexts(core)).not.toContain("wrap it up");
-    expect(core.queued.next).toEqual([pendingMessage("@compact wrap it up")]);
+    expect(core.queued.next).toEqual([
+      { type: "raw", message: pendingMessage("@compact wrap it up") },
+    ]);
 
     // The next stop is the earliest point where it can take effect.
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
@@ -597,7 +599,9 @@ describe("deferred submissions", () => {
       expect.any(AbortSignal),
     );
     // Everything behind the compaction keeps its place in the queue.
-    expect(core.queued.next).toEqual([pendingMessage("third")]);
+    expect(core.queued.next).toEqual([
+      { type: "raw", message: pendingMessage("third") },
+    ]);
   });
 
   it("keeps a queue flushed for a stop-suspended request for the next request", async () => {
@@ -1095,7 +1099,7 @@ describe("Thread loop activity", () => {
             {
               type: "text" as const,
               nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              text: renderPending(message),
+              text: message,
             },
           ],
           reminders: [],
@@ -1145,14 +1149,14 @@ describe("Thread.abort between turns", () => {
       async (message) => {
         entered.resolve();
         await gate.promise;
-        resolved.push(renderPending(message));
+        resolved.push(message);
         return {
           compact: false,
           messages: [
             {
               type: "text" as const,
               nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              text: renderPending(message),
+              text: message,
             },
           ],
           reminders: ["aborted reminder"],
@@ -1625,7 +1629,9 @@ describe("replaceable conversation core", () => {
     expect(core.edlRegisters.nextSavedId).toBe(0);
     expect(core.inputTokenCount).toBeUndefined();
     expect(core.completedTools.size).toBe(0);
-    expect(core.queued.next).toEqual([pendingMessage("later")]);
+    expect(core.queued.next).toEqual([
+      { type: "raw", message: pendingMessage("later") },
+    ]);
     expect(core.pendingTurnContent).toEqual([
       {
         type: "text",
@@ -1887,7 +1893,7 @@ describe("stale outer submissions", () => {
             {
               type: "text" as const,
               nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              text: renderPending(message),
+              text: message,
             },
           ],
           reminders: ["stale reminder"],
@@ -2017,5 +2023,233 @@ describe("stale outer submissions", () => {
     };
     expect(await second).toEqual(expected);
     expect(await core.result).toEqual(expected);
+  });
+});
+
+describe("detached delivery batches", () => {
+  it("reset retains untouched detached entries without restoring stale resolved output", async () => {
+    const entered = new Defer<void>();
+    const gate = new Defer<void>();
+    const calls: string[] = [];
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("detached-reset"),
+      async (message) => {
+        calls.push(message);
+        if (message === "consumed") {
+          entered.resolve();
+          await gate.promise;
+        }
+        return {
+          compact: false,
+          messages: [
+            {
+              type: "text" as const,
+              text: message,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            },
+          ],
+          reminders: [],
+        };
+      },
+    );
+    const input = (text: string) => ({
+      type: "resolved" as const,
+      messages: [
+        {
+          type: "text" as const,
+          text,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ],
+    });
+    const sent = core.submit(input("start"));
+    const first = await mockClient.awaitStream();
+    for (const text of ["consumed", "retained"])
+      await core.submit({ type: "raw", message: pendingMessage(text) }, "next");
+    first.finishResponse("end_turn");
+    await entered.promise;
+    await core.reset({ seed: [], archive: { type: "none" } });
+    expect(core.queued.next).toEqual([
+      { type: "raw", message: pendingMessage("retained") },
+    ]);
+    gate.resolve();
+    expect(await sent).toEqual({ type: "aborted" });
+    const replacementSend = core.submit(input("replacement"));
+    const replacement = await awaitNextStream(mockClient, first);
+    replacement.finishResponse("end_turn");
+    const last = await awaitNextStream(mockClient, replacement);
+    last.finishResponse("end_turn");
+    await replacementSend;
+    expect(calls).toEqual(["consumed", "retained"]);
+    expect(userTexts(core)).not.toContain("consumed");
+  });
+  it.each([
+    "async",
+    "next",
+  ] as const)("abort reports untouched %s leftovers before later arrivals", async (delivery) => {
+    const entered = new Defer<void>();
+    const gate = new Defer<void>();
+    const calls: string[] = [];
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("detached-abort"),
+      async (message) => {
+        calls.push(message);
+        entered.resolve();
+        await gate.promise;
+        return { compact: false, messages: [], reminders: ["stale reminder"] };
+      },
+    );
+    const sent = core.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          text: "start",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ],
+    });
+    const first = await mockClient.awaitStream();
+    for (const text of ["consumed", "leftover"])
+      await core.submit(
+        { type: "raw", message: pendingMessage(text) },
+        delivery,
+      );
+    first.finishResponse("end_turn");
+    await entered.promise;
+    await core.submit(
+      { type: "raw", message: pendingMessage("arrival") },
+      delivery,
+    );
+    const { unsent } = await core.abort();
+    expect(unsent).toEqual(
+      ["leftover", "arrival"].map((text) => ({
+        when: delivery,
+        message: { type: "raw", message: pendingMessage(text) },
+      })),
+    );
+    gate.resolve();
+    expect(await sent).toEqual({ type: "aborted" });
+    expect(calls).toEqual(["consumed"]);
+    expect(core.activeReminders.has("stale reminder")).toBe(false);
+    expect(core.queued).toEqual({ async: [], next: [] });
+  });
+
+  it("a superseded flush cannot consume or restore the replacement's queue", async () => {
+    const entered = new Defer<void>();
+    const gate = new Defer<void>();
+    const calls: string[] = [];
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("detached-preempt"),
+      async (message) => {
+        calls.push(message);
+        if (message === "old") {
+          entered.resolve();
+          await gate.promise;
+        }
+        return {
+          compact: message === "old",
+          messages: [
+            {
+              type: "text" as const,
+              text: message,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            },
+          ],
+          reminders: [],
+        };
+      },
+    );
+    const input = (text: string) => ({
+      type: "resolved" as const,
+      messages: [
+        {
+          type: "text" as const,
+          text,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ],
+    });
+    const firstSend = core.submit(input("start"));
+    const first = await mockClient.awaitStream();
+    for (const text of ["old", "obsolete leftover"])
+      await core.submit({ type: "raw", message: pendingMessage(text) }, "next");
+    first.finishResponse("end_turn");
+    await entered.promise;
+    const replacementSend = core.submit(input("replacement"));
+    const replacement = await awaitNextStream(mockClient, first);
+    await core.submit(
+      { type: "raw", message: pendingMessage("new queue") },
+      "next",
+    );
+    gate.resolve();
+    expect(await firstSend).toEqual({ type: "aborted" });
+    expect(core.queued.next).toEqual([
+      { type: "raw", message: pendingMessage("new queue") },
+    ]);
+    replacement.finishResponse("end_turn");
+    const last = await awaitNextStream(mockClient, replacement);
+    last.finishResponse("end_turn");
+    await replacementSend;
+    expect(calls).toEqual(["old", "new queue"]);
+  });
+
+  it("enqueues during resolution stay outside the current batch", async () => {
+    const entered = new Defer<void>();
+    const gate = new Defer<void>();
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("batch-boundary"),
+      async (message) => {
+        if (message === "first batch") {
+          entered.resolve();
+          await gate.promise;
+        }
+        return {
+          compact: false,
+          messages: [
+            {
+              type: "text" as const,
+              text: message,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            },
+          ],
+          reminders: [],
+        };
+      },
+    );
+    const sent = core.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          text: "start",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ],
+    });
+    const first = await mockClient.awaitStream();
+    await core.submit(
+      { type: "raw", message: pendingMessage("first batch") },
+      "next",
+    );
+    first.finishResponse("end_turn");
+    await entered.promise;
+    await core.submit(
+      { type: "raw", message: pendingMessage("later batch") },
+      "next",
+    );
+    gate.resolve();
+    const second = await awaitNextStream(mockClient, first);
+    expect(userTexts(core)).toContain("first batch");
+    expect(userTexts(core)).not.toContain("later batch");
+    second.finishResponse("end_turn");
+    const third = await awaitNextStream(mockClient, second);
+    expect(userTexts(core)).toContain("later batch");
+    third.finishResponse("end_turn");
+    await sent;
   });
 });

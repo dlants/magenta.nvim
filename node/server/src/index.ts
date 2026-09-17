@@ -226,6 +226,11 @@ export {
   type Submission,
   type SubmissionInput,
 } from "./submission/index.ts";
+export type {
+  DeferredDelivery,
+  QueueEntry,
+  Queues,
+} from "./submission/mailbox.ts";
 export {
   buildClonedFiles,
   type DiffUpdate,

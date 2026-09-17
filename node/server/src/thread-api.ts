@@ -1,16 +1,17 @@
 import type {
-  AgentInput,
   NativeMessageIdx,
   StopReason,
   ToolResults,
 } from "./providers/provider-types.ts";
-import type { PendingMessage } from "./submission/index.ts";
+
 import type {
   RequestContext,
   SuspendReason,
   YieldAction,
 } from "./thread-supervisor.ts";
 import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
+
+export type { QueuedMessage } from "./submission/mailbox.ts";
 
 /** The yield tool's input, unchanged. Consumers own the schema and interpretation. */
 export type YieldValue = Record<string, unknown>;
@@ -57,15 +58,6 @@ export type ThreadResult =
   | { type: "yielded"; value: YieldValue; resultPrefix?: string }
   /** destroyed before it ever yielded */
   | { type: "aborted"; reason: string };
-
-/** A submission waiting for the current turn to come to rest. `when` replaces
- * the old pendingMessages / pendingNextMessages pair; the view already renders
- * them as two labelled sections of one list. */
-export type QueuedMessage = {
-  when: "async" | "next";
-  /** Raw submissions resolve at delivery; programmatic inputs are already resolved. */
-  message: PendingMessage | AgentInput;
-};
 
 /** What the agent tells its owner about the request it is about to issue. */
 export type AgentRequestContext = RequestContext;

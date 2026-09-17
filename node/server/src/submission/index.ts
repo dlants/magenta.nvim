@@ -1,5 +1,6 @@
 import type { AgentInput } from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
+import type { QueueEntry } from "./mailbox.ts";
 
 /** When a parsed submission is delivered.
  * - `now`: abort whatever is running and send immediately
@@ -18,12 +19,11 @@ export function pendingMessage(text: string): PendingMessage {
 }
 
 /** The display string for a queued entry whose commands have not run yet. */
-export function renderPending(message: PendingMessage | AgentInput): string {
-  return typeof message === "string"
-    ? message
-    : message.type === "text"
-      ? message.text
-      : `[${message.type}]`;
+export function renderPending(entry: QueueEntry): string {
+  if (entry.type === "raw") return entry.message;
+  return entry.input.type === "text"
+    ? entry.input.text
+    : `[${entry.input.type}]`;
 }
 
 /** When a submission should be delivered, and what to deliver. */

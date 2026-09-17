@@ -21,11 +21,7 @@ import type {
   ProviderMessage,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import {
-  pendingMessage,
-  renderPending,
-  resolveAsText,
-} from "./submission/index.ts";
+import { pendingMessage, resolveAsText } from "./submission/index.ts";
 import {
   awaitNextStream,
   cleanupArchive,
@@ -442,7 +438,7 @@ describe("Thread turn loop", () => {
             {
               type: "text" as const,
               nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              text: renderPending(message),
+              text: message,
             },
           ],
           reminders: [],

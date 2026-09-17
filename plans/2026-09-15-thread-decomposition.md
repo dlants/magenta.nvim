@@ -265,6 +265,15 @@ Decisions: retain the existing queue storage/entry representation for stage 3, m
 
 ## 3. Extract mailbox storage
 
+### Progress (September 17, 2026)
+
+- [x] Added dependency-free Mailbox storage with synchronous enqueue/takeBatch/prepend/drain operations and raw/resolved QueueEntry normalization. Queue inspection, rendering, and abort reports now use the tagged entries; removed the redundant queuedCount accessor.
+- [x] Thread retains delivery-time resolution, reminders, errors, compaction detection/deferral, spent-content carry, and ownership checks. Flushes detach a fixed batch; later arrivals stay queued. Unprocessed entries are explicitly tracked for ordered abort reporting and immediate-submission discard.
+- [x] Added mailbox ordering/normalization tests and Defer-controlled public-submission regressions for abort leftovers, supersession, reset retention, and arrivals during resolution. Existing delivery-time contents, image/document bypass, compact deferral/carry, suspension, and resolution-error coverage remain passing.
+- [x] Full-project validation: `npx vitest run` (126 files passed; 1713 tests passed, 2 skipped tests and 1 todo), `npx vitest run node/server/` (60 files, 1047 tests passed), `npx tsc -b`, `npx biome check .` (359 files), and `git diff --check`.
+
+Decisions: administrative reset synchronously restores untouched detached entries before replacing the core, preserving its existing queue-retention semantics. Obsolete flushes only clear their own batch record and cannot restore or consume replacement work. Entries whose resolution has begun remain consumed (including command side effects), matching existing abort behavior. Mailbox owns storage only; detached-batch accounting stays in Thread. Initial overlapping full/core test runs encountered shared archive-fixture collisions and integration timeouts; rerunning the suites sequentially passed without unrelated production/test changes.
+
 - Goal: mailbox owns queue storage; the submission coordinator owns when and how queued entries are resolved and delivered.
 - Move only queue storage and synchronous enqueue/takeBatch/prepend/drain operations into mailbox. Use the tagged QueueEntry union consistently in the queues getter, QueuedMessage, rendering, and abort results.
 - Keep ResolveSubmission, resolution-error logging, flush orchestration, compact deferral, spent-content carry, ownership checks, native message indices, and reminder activation in the coordinator. Mailbox returns unresolved batches and takes no dependencies. Track detached-batch leftovers explicitly so cancellation and abort reporting retain their existing semantics.

@@ -1060,7 +1060,7 @@ export class NvimThread {
       case "animation-tick":
         return;
       case "tool-progress":
-        if (this.core.queuedCount === 0) {
+        if (!this.core.queued.async.length && !this.core.queued.next.length) {
           this.state.pendingMessagesExpanded = {};
         }
         return;
