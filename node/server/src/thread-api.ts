@@ -26,10 +26,8 @@ export type ToolInvocationState =
     }
   | { type: "settled" };
 
-/** How one submission ended. Delivered once, to the actor that submitted it —
- * never broadcast. Internal continuations (auto-respond, supervisor nudges,
- * the max_tokens continue-prompt, a compaction handoff) do not produce one:
- * the promise resolves when the thread finally comes to rest. */
+/** Internal turn/continuation outcome. Thread consumes suspended handoffs and
+ * continuations before settling the public submission promise. */
 export type SendResult =
   /** The agent came to rest. `stopReason` is how the turn that just finished
    * ended. */
@@ -48,8 +46,8 @@ export type SendResult =
    * and the reason is opaque to core's turn loop. */
   | { type: "suspended"; reason: SuspendReason };
 
-/** How a submission ended, as anything outside the thread may see it: a
- * suspension is a handoff to a supervisor, never an outcome. */
+/** The complete submission outcome, after internal continuations and compaction.
+ * Delivered to the submitter rather than broadcast as a lifecycle result. */
 export type RestResult = Exclude<SendResult, { type: "suspended" }>;
 export type ThreadSendResult = RestResult | { type: "queued" };
 /** The thread's lifecycle outcome, for actors who never submitted: the
@@ -76,7 +74,7 @@ export type ToolResultsHook = (
  * result. */
 export type YieldHook = (value: YieldValue) => Promise<YieldAction>;
 
-/** "Something visible moved." No payload: read `phase`. Called at streaming
+/** "Something visible moved." No payload: read `loopState`. Called at streaming
  * rates and not throttled; the recipient coalesces, and its debounce must be
  * trailing-edge or the final call at rest is dropped. */
 export type OnUpdate = () => void;

@@ -64,8 +64,8 @@ import type { CommandRegistry } from "./commands/registry.ts";
 import { notifyUser } from "./notify.ts";
 import { DockerSupervisor } from "./thread-supervisor.ts";
 
-/** Trailing-edge coalescing window for core updates. The core no longer
- * throttles; a render cadence is a view decision. */
+/** Trailing-edge coalescing window for Thread updates. Render cadence is a
+ * view decision; server notifications are unthrottled. */
 const RENDER_DEBOUNCE_MS = 32;
 
 /** One frame per spinner step (see `spinnerFrame`), which is also fine for
@@ -315,8 +315,8 @@ export class NvimThread {
     this.rebuildToolResultMap();
   }
 
-  /** Coalesce the core's unthrottled `onUpdate` into at most one dispatch per
-   * frame. Trailing-edge on purpose: the core fires once more after the
+  /** Coalesce Thread's unthrottled `onUpdate` into at most one dispatch per
+   * frame. Trailing-edge on purpose: Thread fires once more after the
    * thread comes to rest, and a leading-edge throttle would drop exactly that
    * call and leave a stale streaming block on screen forever. */
   private renderDebounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -435,8 +435,7 @@ export class NvimThread {
     };
   }
 
-  /** Turn a finished submission into the effects that used to be broadcast
-   * events: the turn-end notification and the rolled-back input text. */
+  /** Observe one complete submission for UI completion and error presentation. */
   private observeSubmission(start: () => Promise<ThreadSendResult>): void {
     start().then(
       (result) => this.handleSendResult(result),
@@ -1009,7 +1008,7 @@ async function resolveSubmission(
  * Native and context histories are cloned synchronously. The source
  * is not aborted, no auto-context is re-resolved, and no system prompt is
  * regenerated. The result is a new NvimThread with its own environment and
- * Layer 3 view state, ready to continue from the snapshot. */
+ * UI state, ready to continue from the snapshot. */
 export async function cloneFromNativeMessageIdx(args: {
   sourceThread: NvimThread;
   newThreadId: ThreadId;

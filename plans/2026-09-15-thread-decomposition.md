@@ -357,6 +357,18 @@ Decisions: the native history boundary and latest usage are read models rather t
 
 ## 6. Integration validation and documentation
 
+### Progress (September 17, 2026)
+
+- [x] Replaced context.md's stale Agent/emitter architecture with the final Thread/ThreadCore ownership model, complete submission contract, construction/callback bridge, environment lifetime, and test-only lifecycle helpers.
+- [x] Removed the unused ThreadCore/ThreadCoreCallbacks server barrel export. Corrected stale turn/submission, compaction, UI, and test-helper comments without adding compatibility aliases or forwarding surfaces.
+- [x] Audited production nvim callers: no private core access/identity checks, external runSubmission wrapper, mutable policy setters, or prebuilt-core path remains. The UI observes complete submission promises; compaction execution stays inside Thread. White-box core access remains confined to server implementation and explicit test support.
+- [x] Server validation: `npx vitest run node/server/` (60 files, 1047 tests passed); `npx tsc -b`, `npx biome check .` (359 files), and `git diff --check` passed.
+- [x] Final full-project validation: `npx vitest run` (126 files passed, 1723 tests passed; 2 existing skipped tests and 1 todo), including all nvim fork, compaction, abort, title, context, view, and script/subagent suites. Final `npx tsc -b`, `npx biome check .` (359 files), and `git diff --check` passed.
+
+Decisions: retain standalone provider/runner exports and supervisor types used by legitimate lower-level consumers; remove only the obsolete public ThreadCore construction boundary. Test-only administrative reset and supervisor inspection helpers remain outside the server barrel. This stage changes documentation/export visibility only, not execution semantics; the existing race, fork, title, compaction, and view regressions provide integration coverage. Unrelated existing `.pkb` changes and the untracked client/server protocol plan are left untouched and excluded from the stage commit.
+
+The initial full run hit the existing thread-abort.test.ts process-termination snapshot race (SIGTERM versus bash exit 143), already recorded in stage 4. The complete rerun passed without changing unrelated process behavior or snapshots.
+
 - Goal: remove transitional APIs and document the final ownership model instead of retaining parallel old/new paths.
 - Update context.md's stale architecture descriptions, server exports, comments, and test helpers to describe Thread, ThreadCore, and the stable UI boundary accurately.
 - Run focused suites during each stage, then `npx vitest run node/server/`, relevant nvim integration suites, `npx tsc -b`, and `npx biome check .`. Run the full `npx vitest run` suite before completion where the local environment supports it.

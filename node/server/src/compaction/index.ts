@@ -1,7 +1,6 @@
 import type { ProviderMessage } from "../providers/provider-types.ts";
 
-/** The one suspension reason core's compaction loop understands. Everything
- * else that suspends is somebody else's business. */
+/** A handoff consumed by Thread's submission coordinator when it has a compactor. */
 export type CompactSuspendReason = {
   kind: "compact";
   nextPrompt: string | undefined;

@@ -271,7 +271,6 @@ export type {
   ThreadSendResult,
   YieldValue,
 } from "./thread-api.ts";
-export { ThreadCore, type ThreadCoreCallbacks } from "./thread-core.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
   EditedFile,

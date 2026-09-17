@@ -4,7 +4,7 @@ This is a neovim plugin for agentic tool use. The entrypoint is `lua/magenta/ini
 
 The node code is organized as npm workspaces:
 
-- `node/server/` (`@magenta/server`) — standalone logic with no neovim dependency (tools, providers, agents, agent/runner, EDL, etc.)
+- `node/server/` (`@magenta/server`) — standalone logic with no neovim dependency (tools, providers, Thread/ThreadCore, agent runner, EDL, etc.)
 - Root project — neovim-specific code (sidebar, TEA rendering, buffer-tracker, nvim bindings)
 
 The root `tsconfig.json` uses TypeScript project references to enforce the boundary: core cannot import from the root project.
@@ -31,13 +31,16 @@ Each result is a snippet with its file path — treat it as a pointer and open t
 
 ## Core layer (`@magenta/server`)
 
-`Agent` is an **event emitter**. It extends a custom type-safe `Emitter<Events>` class (`node/server/src/emitter.ts`) that provides `on()`, `off()`, and `emit()` methods parameterized on a typed event map.
+- **`Thread`** (`node/server/src/thread.ts`) is the stable server handle. It owns identity/title, archive and shared completed-tool results, mailbox, submission cancellation/coordination, chat policies, and the lifecycle result. Its private `core` is replaced during compaction; parents never inspect core identity or coordinate replacement.
+- **`ThreadCore`** (`node/server/src/thread-core.ts`) is the only replaceable conversation unit. It owns the provider manager, tool execution/current turn, EDL registers, context-delivery supervisors (files, git, system info, reminders, edited files), preflight state, and their disposal. Forking snapshots native and linked supervisor histories at the same effective native index.
+- **`runAgentLoop`** (`node/server/src/agent.ts`) runs one turn through provider requests and tool batches. It returns a turn handle with activity, cancellation, and a promise; it is not an event emitter. Thread owns policy ordering and continuations beyond that turn.
+- **`NativeInferenceManager`** (`node/server/src/providers/provider-types.ts`) owns native history and one request at a time, including retries and stream accumulation. Implementations are `AnthropicInferenceManager` and `OpenAIInferenceManager`. Streaming progress uses a request-scoped callback, not an emitter.
+- **`Mailbox`** (`node/server/src/submission/mailbox.ts`) owns synchronous tagged raw/resolved queue storage only. Thread handles delivery-time resolution, detached batches, reminders, compaction deferral, and stale-submission checks.
+- **`ThreadCompactor`** (`node/server/src/compaction/compactor.ts`) orchestrates compact children and exposes observable history. It depends on ThreadManager, parent ID, and a per-run AbortSignal, not a Thread reference. Compact threads have no compactor.
 
-- **`NativeInferenceManager`** (`node/server/src/providers/provider-types.ts`) — the provider-specific context: it owns the native message array, converts it to `ProviderMessage`s, and issues one request at a time (including retries and stream accumulation). Implemented by `AnthropicInferenceManager` (`providers/anthropic-inference.ts`) and `OpenAIInferenceManager` (`providers/openai-inference.ts`). It is not an emitter — it reports streaming progress through a callback passed to `sendRequest`, whose lifetime is exactly the request's.
+`Thread.submit` accepts discriminated raw/resolved input and optional delivery (`now`, `async`, or `next`); `retry()` reissues the retained log without resolving or appending content. One submission owns resolution, turns, compaction, replacement, and continuation until rest. Deferred input queues while busy, including compaction gaps; immediate input preempts. Public promises return `ThreadSendResult`/`RestResult`, never internal suspended `SendResult`s. `result` is the one-shot lifecycle outcome for subagents/scripts, distinct from submission outcomes and render-only `lastResult`.
 
-- **`Agent`** (`node/server/src/agent.ts`) — orchestrates agents and tools. Emits `update`, `playChime`, `scrollToLastMessage`, `setupResubmit`, `aborting`, and `contextUpdatesSent`.
-
-`Agent` owns the turn loop, the tool executor, the hooks and `AgentPhase`; the manager owns only "is a request in flight". The root project therefore only needs to subscribe to `Agent` — all core events are routed through a single point rather than requiring the root to subscribe to multiple emitters.
+Execution dependencies (including the resolver) and notification callbacks are supplied at construction. Chat policies survive replacement and run before core context delivery; queued user content is injected last. Environment dependencies also outlive replacement: core disposal releases conversation-local resources, not shared file I/O/git services. Fork construction supplies destination collaborators so local approval/bypass routing belongs to the fork.
 
 The manager's native array is the wire format: `Anthropic.MessageParam[]` for anthropic, `OpenAI.Responses.ResponseInputItem[]` for openai. Requests are built from that array directly. Two invariants hold for both providers:
 
@@ -50,18 +53,19 @@ The root project uses a **single-dispatch TEA architecture**:
 
 - **`RootMsg`** (`node/nvimclient/root-msg.ts`) — a discriminated union of all message types (`ThreadMsg`, `ChatMsg`, `SidebarMsg`).
 - **`dispatch`** (`node/nvimclient/magenta.ts`) — the single state update point. Every message flows through `dispatch`, which forwards it to controllers and triggers a re-render.
-- **Controllers** (e.g. `Chat`, `Thread`) — each maintains its own state and filters `RootMsg` for messages relevant to it. Each controller has a `myDispatch` that wraps local messages into the appropriate `RootMsg` variant.
+- **Controllers** (e.g. `Chat`, `NvimThread`) — each maintains its own state and filters `RootMsg` for messages relevant to it. Each controller has a `myDispatch` that wraps local messages into the appropriate `RootMsg` variant.
 - **`view`** — declarative TUI rendering using the `d` template literal, with `withBindings` for interactive elements.
 
 ## Core → Root bridge
 
-The root `NvimThread` class (`node/nvimclient/chat/thread.ts`) bridges the two layers. In its constructor, it subscribes to `Agent` events and converts them into dispatches:
+`createNvimThread` and `cloneFromNativeMessageIdx` in `node/nvimclient/chat/thread.ts` assemble fresh/fork environment dependencies, ordered chat policies, compactor, delivery-time resolver, and fixed callbacks. `NvimThread` wraps the ready server handle as `thread`; it owns UI state, debounced dispatch, input/error presentation, and automatic title requests, not server execution setup.
 
-- `core.on("update")` → dispatches `{ type: "tool-progress" }` to trigger re-renders
-- `core.on("scrollToLastMessage")` → dispatches a `sidebar-msg` to scroll the view
-- `core.on("setupResubmit")` → dispatches a `sidebar-msg` to populate the input buffer
+- `onUpdate` schedules a `tool-progress` dispatch; views read `thread.loopState`, provider messages, tool results, usage, and edited files directly.
+- `onFileAdded` wires Chat hierarchy discovery; `onFilesSent`/`onGitSent` record display metadata. Thread forwards core notifications only while that core is current, so replacement requires no subscriptions or rewiring by parents.
+- `onSubmission` reports resolved input to the title owner. The helper in `tools/thread-title.ts` generates the title; the wrapper guards late results, and Thread owns title/archive mutation.
+- The wrapper observes the complete `submit`/`retry` promise once for completion notification and error presentation. It neither wraps execution for compaction nor checks the private core. Compactor transition events are observed only to repaint history/status.
 
-This is the key pattern: **core emits events, the root subscribes at a single point (Thread), and converts them into RootMsg dispatches** that flow through the central update loop.
+Use `thread.contextFiles` for current file inspection/mutation rather than exposing FileSupervisor delivery hooks or lifetime controls. Resolve this capability at delivery time, not by capturing a retired core. Fixed callbacks may close over the completed wrapper because construction does not invoke them.
 
 ## Message flow
 
@@ -87,6 +91,8 @@ For comprehensive view system documentation and templating patterns, use `get_fi
 # Testing
 
 See `.magenta/skills/doc-testing/skill.md`.
+
+Prefer public submissions and real nvim flows with mock providers/Defer-controlled boundaries. Server `test-helpers.ts` contains explicit white-box lifecycle helpers (`resetThread`, `getFileSupervisor`) for tests that must inspect core-owned resources; those are not production APIs or exports from the server barrel.
 
 Quick reference:
 

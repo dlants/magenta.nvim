@@ -121,7 +121,7 @@ export class TestAgent {
     this.turn = turn;
     const promise = turn.promise.then(
       (result) => {
-        // Mirrors what `Thread` does around its own turn.
+        // Mirrors ThreadCore's abort bookkeeping around the turn.
         if (result.type === "aborted") {
           this.manager.appendUserMessage([
             {
@@ -419,7 +419,7 @@ export const defaultOpenAIOptions: OpenAIInferenceOptions = {
 };
 
 /** The same harness over the openai manager. Both providers are driven by the
- * one loop in `Agent`, so the two differ only in which client is mocked. */
+ * same `runAgentLoop`, so the two differ only in which client is mocked. */
 export function createTestOpenAIAgent(
   opts?: TestAgentOpts & {
     openaiOptions?: Partial<OpenAIInferenceOptions>;
@@ -480,8 +480,8 @@ export async function cleanupArchive(threadId: ThreadId): Promise<void> {
 }
 
 /** The text of every user message in the log, flattened. */
-export const userTexts = (core: Thread): string[] =>
-  core
+export const userTexts = (thread: Thread): string[] =>
+  thread
     .getProviderMessages()
     .filter((m) => m.role === "user")
     .flatMap((m) =>
