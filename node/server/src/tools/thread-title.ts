@@ -1,4 +1,7 @@
-import type { ProviderToolSpec } from "../providers/provider-types.ts";
+import type {
+  Provider,
+  ProviderToolSpec,
+} from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
   ExecutedToolResult,
@@ -114,4 +117,34 @@ export function validateInput(input: {
     status: "ok",
     value: input as Input,
   };
+}
+
+export async function generateTitle(
+  provider: Provider,
+  fastModel: string,
+  systemPrompt: string,
+  userMessage: string,
+): Promise<string | undefined> {
+  const request = provider.forceToolUse({
+    model: fastModel,
+    input: [
+      {
+        type: "text",
+        text: `The user has provided the following prompt:
+${userMessage}
+Come up with a succinct thread title for this prompt. It must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).
+`,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ],
+    spec,
+    systemPrompt,
+    disableCaching: true,
+  });
+  const result = await request.promise;
+  if (result.toolRequest.status !== "ok") return undefined;
+  const input = validateInput(
+    result.toolRequest.value.input as { [key: string]: unknown },
+  );
+  return input.status === "ok" ? input.value.title : undefined;
 }

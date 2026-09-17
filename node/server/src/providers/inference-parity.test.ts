@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import { describe, expect, it } from "vitest";
 import type { AgentLoopDeps } from "../agent.ts";
 import {
@@ -337,7 +338,7 @@ describe("preflight token count parity", () => {
 
     // Only exercise the request gate: the resting end-turn policy can compact
     // from reported usage even when preflight counting is unavailable.
-    const sendPromise = openaiThread.core.runTurn([
+    const sendPromise = openaiThread["core"].runTurn([
       {
         type: "text",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,

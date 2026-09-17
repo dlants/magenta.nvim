@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import {
   AutoCompactSupervisor,
   MaxTokensSupervisor,
@@ -22,12 +23,12 @@ it("root/user threads get an AutoCompactSupervisor", async () => {
     const thread = driver.magenta.chat.getActiveThread();
 
     expect(
-      thread.core.context.chatSupervisors!.some(
+      thread.thread.chatSupervisors!.some(
         (s) => s instanceof AutoCompactSupervisor,
       ),
     ).toBe(true);
     expect(
-      thread.core.context.chatSupervisors!.some(
+      thread.thread.chatSupervisors!.some(
         (s) => s instanceof SubagentSupervisor,
       ),
     ).toBe(false);
@@ -74,7 +75,7 @@ it("subagent threads get both SubagentSupervisor and AutoCompactSupervisor", asy
     const childWrapper = chat.threadWrappers[childThreadId!];
     if (childWrapper.state !== "initialized")
       throw new Error("Expected initialized child thread");
-    const supervisors = childWrapper.thread.core.context.chatSupervisors!;
+    const supervisors = childWrapper.thread.thread.chatSupervisors!;
 
     expect(supervisors.some((s) => s instanceof SubagentSupervisor)).toBe(true);
     expect(supervisors.some((s) => s instanceof AutoCompactSupervisor)).toBe(
@@ -133,7 +134,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
         const wrapper = chat.threadWrappers[id];
         if (wrapper.state !== "initialized")
           throw new Error("expected initialized thread");
-        const sup = wrapper.thread.core.context.chatSupervisors!.find(
+        const sup = wrapper.thread.thread.chatSupervisors!.find(
           (s): s is AutoCompactSupervisor => s instanceof AutoCompactSupervisor,
         );
         if (!sup) throw new Error("expected AutoCompactSupervisor");
@@ -166,10 +167,12 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
       const forkWrapper = chat.threadWrappers[forkId];
       if (forkWrapper.state !== "initialized")
         throw new Error("expected fork thread");
-      expect(forkWrapper.thread.core.toolSpecs).toEqual(
-        sourceWrapper.thread.core.toolSpecs,
+      expect(forkWrapper.thread.thread.toolSpecs).toEqual(
+        sourceWrapper.thread.thread.toolSpecs,
       );
-      expect(forkWrapper.thread.core.context.yieldSchema).toEqual(yieldSchema);
+      expect(forkWrapper.thread.thread["context"].yieldSchema).toEqual(
+        yieldSchema,
+      );
       expect(await ask(getSupervisor(forkId), 100_000)).toBe("suspend");
       expect(getSupervisor(forkId)).not.toBe(overridden);
     },
@@ -204,7 +207,7 @@ it.each([
     const thread = createNvimThread(
       uuidv7() as ThreadId,
       { type: "fresh", threadType },
-      source.core.systemPrompt,
+      source.thread.systemPrompt,
       {
         ...source.context,
         onFileAdded: () => {},
@@ -222,16 +225,19 @@ it.each([
         : {},
     );
     try {
-      const policies = thread.core.context.chatSupervisors!;
+      const policies = thread.thread.chatSupervisors!;
       expect(policies.map((policy) => policy.constructor)).toEqual(expected);
-      expect(thread.compactor).toBe(thread.core.context.compactor);
+      expect(thread.compactor).toBe(thread.thread["context"].compactor);
       expect(thread.compactor === undefined).toBe(threadType === "compact");
-      const resolve = thread.core.context.resolve;
-      const callbacks = thread.core.callbacks;
-      await thread.core.reset({ seed: [], archive: { type: "none" } });
-      expect(thread.core.context.chatSupervisors).toBe(policies);
-      expect(thread.core.context.resolve).toBe(resolve);
-      expect(thread.core.callbacks).toBe(callbacks);
+      const resolve = thread.thread["context"].resolve;
+      const callbacks = thread.thread.callbacks;
+      await thread.thread["replaceCore"]({
+        seed: [],
+        archive: { type: "none" },
+      });
+      expect(thread.thread.chatSupervisors).toBe(policies);
+      expect(thread.thread["context"].resolve).toBe(resolve);
+      expect(thread.thread.callbacks).toBe(callbacks);
     } finally {
       await thread.destroy();
     }
@@ -246,7 +252,7 @@ it("forks compact threads without a compactor or auto-compaction policy", async 
     const source = createNvimThread(
       uuidv7() as ThreadId,
       { type: "fresh", threadType: "compact" },
-      root.core.systemPrompt,
+      root.thread.systemPrompt,
       context,
     );
     try {
@@ -254,20 +260,18 @@ it("forks compact threads without a compactor or auto-compaction policy", async 
         uuidv7() as ThreadId,
         {
           type: "fork",
-          sourceThread: source.core,
-          nativeMessageIdx: source.core.inferenceManager.getNativeMessageIdx(),
+          sourceThread: source.thread,
+          nativeMessageIdx: source.thread.nativeMessageIdx,
         },
-        source.core.systemPrompt,
+        source.thread.systemPrompt,
         context,
       );
       try {
-        expect(fork.core.threadType).toBe("compact");
+        expect(fork.thread.threadType).toBe("compact");
         expect(fork.compactor).toBeUndefined();
-        expect(fork.core.context.compactor).toBeUndefined();
+        expect(fork.thread["context"].compactor).toBeUndefined();
         expect(
-          fork.core.context.chatSupervisors!.map(
-            (policy) => policy.constructor,
-          ),
+          fork.thread.chatSupervisors!.map((policy) => policy.constructor),
         ).toEqual([MaxTokensSupervisor, SubagentSupervisor]);
       } finally {
         await fork.destroy();

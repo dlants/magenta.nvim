@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import * as fs from "node:fs/promises";
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
@@ -29,6 +30,7 @@ import {
   createTestAgent,
   defaultAnthropicOptions,
   flatLoop,
+  resetThread,
   TEST_ARCHIVE_DIR,
   toolExecution,
   uniqueThreadId,
@@ -574,7 +576,7 @@ describe("Thread turn loop", () => {
 /** Record handoffs through the same compactor capability as production. */
 function trackCompactions(core: Thread): { prompts: (string | undefined)[] } {
   const prompts: (string | undefined)[] = [];
-  core.context.compactor = {
+  core["context"].compactor = {
     run: async (_messages, prompt) => {
       prompts.push(prompt);
       return { type: "aborted" };
@@ -622,9 +624,9 @@ describe("Thread submissions across a compaction handoff", () => {
     );
     try {
       const compactor = stubCompactor();
-      const oldAgent = core.inferenceManager;
+      const oldAgent = core["core"].manager;
       let settled: ThreadSendResult | undefined;
-      core.context.compactor = compactor;
+      core["context"].compactor = compactor;
       const result = core.submit({
         type: "resolved",
         messages: [
@@ -642,7 +644,7 @@ describe("Thread submissions across a compaction handoff", () => {
       stream.streamText("done");
       stream.finishResponse("end_turn");
       const contStream = await pollUntil(() => {
-        if (core.inferenceManager === oldAgent)
+        if (core["core"].manager === oldAgent)
           throw new Error("waiting for swap");
         return awaitNextStream(mockClient, stream);
       });
@@ -673,8 +675,8 @@ describe("Thread submissions across a compaction handoff", () => {
       // entirely of commands can expand to nothing, and an empty user turn is
       // not something to send.
 
-      const oldAgent = core.inferenceManager;
-      core.context.compactor = stubCompactor();
+      const oldAgent = core["core"].manager;
+      core["context"].compactor = stubCompactor();
       const result = core.submit({
         type: "resolved",
         messages: [
@@ -689,7 +691,7 @@ describe("Thread submissions across a compaction handoff", () => {
       stream.streamText("done");
       stream.finishResponse("end_turn");
       const contStream = await pollUntil(() => {
-        if (core.inferenceManager === oldAgent)
+        if (core["core"].manager === oldAgent)
           throw new Error("waiting for swap");
         return awaitNextStream(mockClient, stream);
       });
@@ -744,7 +746,7 @@ describe("Thread submissions across a compaction handoff", () => {
         },
       };
       let settled: ThreadSendResult | undefined;
-      core.context.compactor = compactor;
+      core["context"].compactor = compactor;
       const result = core.submit({
         type: "resolved",
         messages: [
@@ -761,12 +763,12 @@ describe("Thread submissions across a compaction handoff", () => {
 
       let stream = await mockClient.awaitStream();
       for (const [idx, prompt] of prompts.entries()) {
-        const oldAgent = core.inferenceManager;
+        const oldAgent = core["core"].manager;
         stream.streamText("done");
         stream.finishResponse("end_turn");
         const prev = stream;
         stream = await pollUntil(() => {
-          if (core.inferenceManager === oldAgent)
+          if (core["core"].manager === oldAgent)
             throw new Error("waiting for swap");
           return awaitNextStream(mockClient, prev);
         });
@@ -799,7 +801,7 @@ describe("Thread submissions across a compaction handoff", () => {
       threadId,
     );
     try {
-      core.context.compactor = stubCompactor({
+      core["context"].compactor = stubCompactor({
         type: "error",
         message: "boom",
       });
@@ -846,7 +848,7 @@ describe("Thread submissions across a compaction handoff", () => {
     );
     try {
       const compactor = stubCompactor();
-      core.context.compactor = compactor;
+      core["context"].compactor = compactor;
       const result = core.submit({
         type: "resolved",
         messages: [
@@ -922,9 +924,9 @@ describe("Thread.reset", () => {
           structuredResult: { toolName: "thread_title" },
         },
       );
-      const oldAgent = core.inferenceManager;
+      const oldAgent = core["core"].manager;
 
-      await core.reset({
+      await resetThread(core, {
         seed: [
           {
             type: "text",
@@ -935,12 +937,12 @@ describe("Thread.reset", () => {
         archive: { type: "none" },
       });
 
-      expect(core.inferenceManager).not.toBe(oldAgent);
+      expect(core["core"].manager).not.toBe(oldAgent);
       expect(core.getProviderMessages()).toEqual([]);
       expect(core.completedTools.has("tr-1" as ToolRequestId)).toBe(true);
       // The registers belong to the message list being replaced: a saved
       // fragment refers to text the fresh agent has never seen.
-      expect(core.edlRegisters.registers.size).toBe(0);
+      expect(core["core"].edlRegisters.registers.size).toBe(0);
 
       void core.submit({
         type: "resolved",
@@ -985,7 +987,7 @@ describe("Thread.reset", () => {
       await sent;
       await core.awaitArchiveFlush();
 
-      await core.reset({ seed: [], archive: { type: "none" } });
+      await resetThread(core, { seed: [], archive: { type: "none" } });
 
       expect(core.getProviderMessages()).toEqual([]);
       const entries = await readArchive(threadId);
@@ -1296,7 +1298,7 @@ describe("yield_to_parent as an ordinary tool", () => {
     });
     // The tool really ran, and the loop stopped rather than continuing on the
     // results.
-    const last = core.getMessages().at(-1);
+    const last = core.getProviderMessages().at(-1);
     expect(last).toMatchObject({
       role: "user",
       content: [
@@ -1334,7 +1336,7 @@ describe("yield_to_parent as an ordinary tool", () => {
       type: "yielded",
       value: { result: "all done" },
     });
-    expect(core.getMessages().slice(-2)).toMatchObject([
+    expect(core.getProviderMessages().slice(-2)).toMatchObject([
       {
         content: [
           {
@@ -1486,7 +1488,7 @@ describe("Agent.abort on yielded thread", () => {
     });
     // `abort()` short-circuits on a yielded agent, but the preempting-send path
     // winds the agent's turn down directly: it must not erase the yield either.
-    await core.abortAgentTurn();
+    await core.abort();
     expect(core.yielded).toBeDefined();
     expect(core.lastResult()).toEqual({
       type: "yielded",
@@ -2757,7 +2759,7 @@ describe("Thread.editedFileGroups", () => {
       { path: "/tmp/a.txt", snapshot: "hello", content: "done" },
     ]);
     expect(firstGroup.endNativeMessageIdx).toBe(
-      core.inferenceManager.getNativeMessageIdx(),
+      core["core"].manager.getNativeMessageIdx(),
     );
 
     const next = core.submit({
@@ -2791,7 +2793,7 @@ describe("Thread.editedFileGroups", () => {
       firstGroup.endNativeMessageIdx!,
     );
     expect(core.editedFileGroups[2].endNativeMessageIdx).toBe(
-      core.inferenceManager.getNativeMessageIdx(),
+      core["core"].manager.getNativeMessageIdx(),
     );
   });
 
@@ -2813,7 +2815,7 @@ describe("Thread.editedFileGroups", () => {
     expect(await turn).toEqual({ type: "aborted" });
     const group = core.editedFileGroups[0];
     expect(group.endNativeMessageIdx).toBe(
-      core.inferenceManager.getNativeMessageIdx(),
+      core["core"].manager.getNativeMessageIdx(),
     );
     expect(group.files).toEqual(
       edited ? [{ path: "/tmp/a.txt", snapshot: "hello", content: "bye" }] : [],
@@ -2861,7 +2863,7 @@ describe("Thread.editedFileGroups", () => {
       const stream = await mockClient.awaitStream();
       edit(stream, "edit-1", "hello", "bye");
       const second = await awaitNextStream(mockClient, stream);
-      const midpoint = parent.inferenceManager.getNativeMessageIdx();
+      const midpoint = parent["core"].manager.getNativeMessageIdx();
       edit(second, "edit-2", "bye", "done");
       const third = await awaitNextStream(mockClient, second);
       third.streamText("done");
@@ -2870,7 +2872,7 @@ describe("Thread.editedFileGroups", () => {
       const parentHistory = parent.editedFileGroups;
       const nativeMessageIdx = midLoop
         ? midpoint
-        : parent.inferenceManager.getNativeMessageIdx();
+        : parent["core"].manager.getNativeMessageIdx();
       child = await Thread.clone({
         sourceThread: parent,
         newId: childId,
@@ -3780,7 +3782,7 @@ describe("Agent conversation archive", () => {
       });
       await core.awaitArchiveFlush();
 
-      core.context.compactor = {
+      core["context"].compactor = {
         run: () =>
           Promise.resolve({
             type: "complete",
@@ -3854,7 +3856,7 @@ describe("Agent conversation archive", () => {
         return true;
       });
 
-      const nativeMessageIdx = parent.inferenceManager.getNativeMessageIdx();
+      const nativeMessageIdx = parent["core"].manager.getNativeMessageIdx();
       child = await Thread.clone({
         sourceThread: parent,
         newId: childId,
@@ -3939,10 +3941,10 @@ describe("Agent thread state", () => {
         return true;
       });
 
-      parent.edlRegisters.registers.set("r", "regval");
-      parent.edlRegisters.nextSavedId = 3;
+      parent["core"].edlRegisters.registers.set("r", "regval");
+      parent["core"].edlRegisters.nextSavedId = 3;
 
-      const nativeMessageIdx = parent.inferenceManager.getNativeMessageIdx();
+      const nativeMessageIdx = parent["core"].manager.getNativeMessageIdx();
       child = await Thread.clone({
         sourceThread: parent,
         newId: childId,
@@ -3951,11 +3953,11 @@ describe("Agent thread state", () => {
         callbacks: { onUpdate: () => {} },
       });
 
-      expect(child.edlRegisters.registers.get("r")).toBe("regval");
-      expect(child.edlRegisters.nextSavedId).toBe(3);
+      expect(child["core"].edlRegisters.registers.get("r")).toBe("regval");
+      expect(child["core"].edlRegisters.nextSavedId).toBe(3);
 
-      child.edlRegisters.registers.set("r2", "x");
-      expect(parent.edlRegisters.registers.has("r2")).toBe(false);
+      child["core"].edlRegisters.registers.set("r2", "x");
+      expect(parent["core"].edlRegisters.registers.has("r2")).toBe(false);
     } finally {
       await parent.destroy();
       if (child) await child.destroy();
@@ -3984,7 +3986,7 @@ describe("Thread survives the compaction agent swap", () => {
     mockClient: MockAnthropicClient,
   ): Promise<void> {
     const streamsBefore = mockClient.streams.length;
-    core.context.compactor = {
+    core["context"].compactor = {
       run: () =>
         Promise.resolve({
           type: "complete",
@@ -4054,9 +4056,9 @@ describe("Thread survives the compaction agent swap", () => {
       () => updates++,
     );
     try {
-      const oldAgent = core.inferenceManager;
+      const oldAgent = core["core"].manager;
       await compact(core, mockClient);
-      expect(core.inferenceManager).not.toBe(oldAgent);
+      expect(core["core"].manager).not.toBe(oldAgent);
 
       updates = 0;
       core.setTitle("after compaction");
@@ -4096,7 +4098,7 @@ describe("Thread survives the compaction agent swap", () => {
           text: "stale prefix",
         },
       ]);
-      core.context.compactor = {
+      core["context"].compactor = {
         run: () =>
           Promise.resolve({
             type: "complete",

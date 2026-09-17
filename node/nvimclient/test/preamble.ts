@@ -198,7 +198,7 @@ export async function pollForToolResult(
         throw new Error("No active thread");
       }
 
-      const messages = thread.getProviderMessages();
+      const messages = thread.thread.getProviderMessages();
       for (const message of messages) {
         if (message.role !== "user") continue;
         for (const content of message.content) {

@@ -81,12 +81,12 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
 
     // Wait for second response to be fully processed
     await pollUntil(() => {
-      if (originalThread.getMessages().length >= 4) return true;
+      if (originalThread.thread.getProviderMessages().length >= 4) return true;
       throw new Error("waiting for messages");
     });
 
     await pollUntil(() => {
-      if (originalThread.loopState.type !== "idle")
+      if (originalThread.thread.loopState.type !== "idle")
         throw new Error("waiting for rest");
     });
     resetNotificationLog();
@@ -247,7 +247,7 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
     await fs.writeFile(path.join(nested, "leaf.txt"), "new leaf contents");
     await driver.addContextFiles("after-compact/leaf.txt");
     await pollUntil(() => {
-      expect(Object.keys(originalThread.fileSupervisor.files)).toContain(
+      expect(Object.keys(originalThread.thread.contextFiles.files)).toContain(
         path.join(nested, "context.md"),
       );
     });
@@ -298,7 +298,9 @@ it("does not seed a compact chunk thread with auto-context files", async () => {
       const chunkWrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
       if (chunkWrapper?.state !== "initialized")
         throw new Error("expected an initialized chunk thread");
-      expect(Object.keys(chunkWrapper.thread.fileSupervisor.files)).toEqual([]);
+      expect(
+        Object.keys(chunkWrapper.thread.thread.contextFiles.files),
+      ).toEqual([]);
     },
   );
 });
@@ -375,10 +377,10 @@ it("compact flow without continuation: @compact with no next prompt", async () =
 
     await pollUntil(
       () => {
-        const loopState = thread.loopState;
+        const loopState = thread.thread.loopState;
         if (loopState.type !== "idle")
           throw new Error(`expected idle but got ${loopState.type}`);
-        const turnResult = thread.core.lastResult();
+        const turnResult = thread.thread.lastResult();
         if (turnResult?.type !== "completed")
           throw new Error(`expected stopped but got ${turnResult?.type}`);
         if (turnResult.stopReason !== "end_turn")
@@ -388,7 +390,7 @@ it("compact flow without continuation: @compact with no next prompt", async () =
     );
 
     // Verify messages have been compacted - fresh agent with summary + continuation
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
     expect(messages.length).toBeLessThanOrEqual(4);
   });
 });
@@ -433,7 +435,7 @@ it("lets the user rescue a chunk thread whose turn failed", async () => {
       () => {
         const wrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
         if (wrapper?.state !== "initialized") throw new Error("waiting");
-        if (wrapper.thread.loopState.type !== "idle")
+        if (wrapper.thread.thread.loopState.type !== "idle")
           throw new Error("waiting for the failed chunk thread to settle");
       },
       { timeout: 5000, message: "chunk thread should settle after the error" },
@@ -612,7 +614,7 @@ it("compact flow does not process @file commands in subagent or summary", async 
 
     // The context manager belongs to the thread, not to the agent compaction
     // replaces, so files the user put in context stay in context.
-    const contextFiles = Object.keys(thread.fileSupervisor.files);
+    const contextFiles = Object.keys(thread.thread.contextFiles.files);
     expect(contextFiles.some((f) => f.includes("poem.txt"))).toBe(true);
 
     afterCompactStream.respond({
@@ -759,14 +761,14 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
       const originalThread = driver.magenta.chat.getActiveThread();
 
       // The supervisor built from options should carry the configured threshold.
-      const autoCompact = originalThread.core.context.chatSupervisors!.find(
+      const autoCompact = originalThread.thread.chatSupervisors!.find(
         (s): s is AutoCompactSupervisor => s instanceof AutoCompactSupervisor,
       );
       expect(autoCompact).toBeDefined();
 
       await pollUntil(
         () => {
-          if (originalThread.loopState.type !== "idle")
+          if (originalThread.thread.loopState.type !== "idle")
             throw new Error("waiting for stop");
         },
         { timeout: 2000, message: "thread should come to rest" },
@@ -819,7 +821,7 @@ it("auto-compact triggers when inputTokenCount breaches the supervisor threshold
 
       await pollUntil(
         () => {
-          if (originalThread.loopState.type !== "idle")
+          if (originalThread.thread.loopState.type !== "idle")
             throw new Error("waiting for stop");
         },
         { timeout: 2000, message: "thread should come to rest" },
@@ -1294,7 +1296,7 @@ it("spawns one compact child thread per chunk, carrying the summary forward", as
       const wrapper = driver.magenta.chat.threadWrappers[threadId];
       if (wrapper?.state !== "initialized")
         throw new Error("expected the chunk thread to still be around");
-      expect(wrapper.thread.core.threadType).toBe("compact");
+      expect(wrapper.thread.thread.threadType).toBe("compact");
       expect(wrapper.parentThreadId).toBe(thread.id);
     }
 
@@ -1420,13 +1422,13 @@ it("compact keeps context files after compaction", async () => {
       const thread = driver.magenta.chat.getActiveThread();
 
       await pollUntil(() => {
-        const files = Object.keys(thread.fileSupervisor.files);
+        const files = Object.keys(thread.thread.contextFiles.files);
         if (files.length < 1) throw new Error("expected 1 file");
       });
 
-      expect(Object.keys(thread.fileSupervisor.files)).toHaveLength(1);
+      expect(Object.keys(thread.thread.contextFiles.files)).toHaveLength(1);
 
-      const originalFileSupervisor = thread.fileSupervisor;
+      const originalFileSupervisor = thread.thread.contextFiles;
       // Trigger compaction
       await driver.inputMagentaText("@compact Continue working");
       await driver.send();
@@ -1484,8 +1486,8 @@ it("compact keeps context files after compaction", async () => {
 
       // The replacement core inherits tracked files without retaining the
       // old conversation's delivery state.
-      expect(Object.keys(thread.fileSupervisor.files)).toHaveLength(1);
-      expect(thread.fileSupervisor).not.toBe(originalFileSupervisor);
+      expect(Object.keys(thread.thread.contextFiles.files)).toHaveLength(1);
+      expect(thread.thread.contextFiles).not.toBe(originalFileSupervisor);
       await driver.addContextFiles("poem.txt");
       await driver.assertDisplayBufferContains("- `poem.txt`");
     },
@@ -1653,7 +1655,7 @@ it("deleting the compact child thread aborts the parked submission", async () =>
     );
     // The parent is idle again: nothing is waiting on the deleted thread.
     expect(isCompacting(thread)).toBe(false);
-    expect(thread.loopState.type).toBe("idle");
+    expect(thread.thread.loopState.type).toBe("idle");
   });
 });
 
@@ -1696,7 +1698,7 @@ it("fails the parked submission when the chunk thread yields an empty summary", 
     expect(isCompacting(thread)).toBe(false);
     await pollUntil(
       () => {
-        if (thread.loopState.type !== "idle")
+        if (thread.thread.loopState.type !== "idle")
           throw new Error("waiting for the parent thread to settle");
       },
       { timeout: 2000, message: "parent thread should settle" },
@@ -1787,7 +1789,7 @@ it("delivers @compact typed into a compact thread as ordinary text", async () =>
       () => {
         const wrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
         if (wrapper?.state !== "initialized") throw new Error("waiting");
-        if (wrapper.thread.loopState.type !== "idle")
+        if (wrapper.thread.thread.loopState.type !== "idle")
           throw new Error("waiting for the chunk thread to settle");
       },
       { timeout: 5000, message: "chunk thread should settle" },
@@ -1839,7 +1841,7 @@ it("defers a @next @compact until the turn in flight comes to rest", async () =>
     await driver.inputMagentaText("@next @compact Now do multiplication");
     await driver.send();
     await pollUntil(() => {
-      if (!thread.core.queued.next.length)
+      if (!thread.thread.queued.next.length)
         throw new Error("waiting for the message to be queued");
     });
     expect(isCompacting(thread)).toBe(false);

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import { describe, expect, it } from "vitest";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
@@ -5,6 +6,7 @@ import { pendingMessage } from "../submission/index.ts";
 import {
   awaitNextStream,
   createAgentWithMock,
+  resetThread,
   uniqueThreadId,
 } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
@@ -35,11 +37,11 @@ describe("compaction generation ownership", () => {
     stream.streamText("partial response");
 
     let snapshots = 0;
-    thread.context.compactor = {
+    thread["context"].compactor = {
       run: async (messages) => {
         snapshots++;
         expect(thread.isBusy).toBe(true);
-        expect(thread.core.isActive).toBe(true);
+        expect(thread["core"].isActive).toBe(true);
         expect(await previous).toEqual({ type: "aborted" });
         const snapshot = JSON.stringify(messages);
         await Promise.resolve();
@@ -89,7 +91,7 @@ describe("compaction generation ownership", () => {
     probe.resolve(true);
     expect(await previous).toEqual({ type: "aborted" });
     expect(await sent).toEqual({ type: "aborted" });
-    expect(thread.core.isActive).toBe(true);
+    expect(thread["core"].isActive).toBe(true);
     expect(mockClient.streams).toHaveLength(0);
     await thread.destroy();
   });
@@ -108,13 +110,13 @@ describe("compaction generation ownership", () => {
         reminders: [],
       }),
     });
-    const original = thread.core;
+    const original = thread["core"];
     const dispose = original.dispose.bind(original);
     original.dispose = async () => {
       await dispose();
       await thread.abort();
     };
-    thread.context.compactor = {
+    thread["context"].compactor = {
       run: async () => ({
         type: "complete",
         summary: "summary",
@@ -128,8 +130,8 @@ describe("compaction generation ownership", () => {
         message: pendingMessage("@compact"),
       }),
     ).toEqual({ type: "aborted" });
-    expect(thread.core).not.toBe(original);
-    expect(thread.core.isActive).toBe(true);
+    expect(thread["core"]).not.toBe(original);
+    expect(thread["core"].isActive).toBe(true);
     expect(mockClient.streams).toHaveLength(0);
     await thread.destroy();
   });
@@ -160,8 +162,8 @@ describe("compaction generation ownership", () => {
       uniqueThreadId("compact-yield"),
     );
     const originalResult = thread.result;
-    const originalCore = thread.core;
-    thread.context.compactor = {
+    const originalCore = thread["core"];
+    thread["context"].compactor = {
       run: async () => ({
         type: "complete",
         summary: "work so far",
@@ -174,9 +176,9 @@ describe("compaction generation ownership", () => {
       message: pendingMessage("@compact"),
     });
     const stream = await mockClient.awaitStream();
-    expect(thread.core).not.toBe(originalCore);
+    expect(thread["core"]).not.toBe(originalCore);
     expect(thread.result).toBe(originalResult);
-    const yieldTool = thread.core.toolSpecs.find(
+    const yieldTool = thread["core"].toolSpecs.find(
       (tool) => tool.name === "yield_to_parent",
     );
     expect(yieldTool?.input_schema).toEqual(schema);
@@ -218,7 +220,7 @@ describe("compaction generation ownership", () => {
     );
     const entered = new Defer<void>();
     const outcome = new Defer<CompactionOutcome>();
-    thread.context.compactor = {
+    thread["context"].compactor = {
       run: () => {
         entered.resolve();
         return outcome.promise;
@@ -231,7 +233,7 @@ describe("compaction generation ownership", () => {
     });
     await entered.promise;
     if (action === "reset")
-      await thread.reset({
+      await resetThread(thread, {
         seed: [
           {
             type: "text",
@@ -243,10 +245,10 @@ describe("compaction generation ownership", () => {
       });
     else if (action === "abort") await thread.abort();
     else await thread.destroy();
-    const replacement = thread.core;
+    const replacement = thread["core"];
     outcome.resolve({ type: "complete", summary: "stale", chunkCount: 1 });
     expect(await sent).toEqual({ type: "aborted" });
-    expect(thread.core).toBe(replacement);
+    expect(thread["core"]).toBe(replacement);
     expect(mockClient.streams).toHaveLength(0);
     await thread.destroy();
   });
@@ -281,7 +283,7 @@ describe("ThreadCompactor cancellation", () => {
     );
     const compactor = new ThreadCompactor({
       parentThreadId: thread.id,
-      threadManager: thread.context.threadManager,
+      threadManager: thread["context"].threadManager,
     });
     const run = compactor.run(
       [
@@ -297,13 +299,13 @@ describe("ThreadCompactor cancellation", () => {
         },
       ],
       undefined,
-      thread.interruptionSignal,
+      thread["interruption"].signal,
     );
     await spawned.promise;
     if (action === "discard") compactor.discard();
     else if (action === "abort") await thread.abort();
     else if (action === "reset")
-      await thread.reset({ seed: [], archive: { type: "none" } });
+      await resetThread(thread, { seed: [], archive: { type: "none" } });
     else await thread.destroy();
     const child = "late-child" as ThreadId;
     spawn.resolve(child);
@@ -349,10 +351,18 @@ it("a late first spawn cannot overwrite a newer compaction", async () => {
   ];
   const compactor = new ThreadCompactor({
     parentThreadId: thread.id,
-    threadManager: thread.context.threadManager,
+    threadManager: thread["context"].threadManager,
   });
-  const first = compactor.run(messages, undefined, thread.interruptionSignal);
-  const second = compactor.run(messages, undefined, thread.interruptionSignal);
+  const first = compactor.run(
+    messages,
+    undefined,
+    thread["interruption"].signal,
+  );
+  const second = compactor.run(
+    messages,
+    undefined,
+    thread["interruption"].signal,
+  );
   await Promise.resolve();
   const newer = compactor.current;
   expect(newer?.activeThreadId).toBe(newerChild);
@@ -415,7 +425,7 @@ it.each([
   }
   const compactor = new ThreadCompactor({
     parentThreadId: thread.id,
-    threadManager: thread.context.threadManager,
+    threadManager: thread["context"].threadManager,
   });
   const run = compactor.run(
     [
@@ -431,13 +441,13 @@ it.each([
       },
     ],
     undefined,
-    thread.interruptionSignal,
+    thread["interruption"].signal,
   );
   await waiting.promise;
   expect(thread.isBusy).toBe(false);
   if (action === "abort") await thread.abort();
   else if (action === "reset")
-    await thread.reset({ seed: [], archive: { type: "none" } });
+    await resetThread(thread, { seed: [], archive: { type: "none" } });
   else await thread.destroy();
   expect(await run).toEqual({ type: "aborted" });
   expect(deleted).toEqual([child]);
@@ -470,7 +480,7 @@ it("an immediate submission supersedes a parked compaction before resolution", a
     },
     uniqueThreadId("compact-submit"),
   );
-  thread.context.compactor = {
+  thread["context"].compactor = {
     run: () => {
       entered.resolve();
       return outcome.promise;
@@ -629,7 +639,7 @@ describe("complete submission ownership", () => {
         reminders: [],
       }),
     );
-    const oldCore = thread.core;
+    const oldCore = thread["core"];
     const dispose = oldCore.dispose.bind(oldCore);
     oldCore.dispose = async () => {
       await dispose();
@@ -649,8 +659,8 @@ describe("complete submission ownership", () => {
     release.resolve();
     expect(await sent).toEqual({ type: "aborted" });
     const stream = await mockClient.awaitStream();
-    expect(thread.core).not.toBe(oldCore);
-    expect(thread.core.isActive).toBe(true);
+    expect(thread["core"]).not.toBe(oldCore);
+    expect(thread["core"].isActive).toBe(true);
     expect(JSON.stringify(stream.messages)).toContain("new submission");
     expect(JSON.stringify(stream.messages)).not.toContain(
       "Please continue from where you left off.",

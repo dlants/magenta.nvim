@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -15,6 +16,7 @@ import {
   awaitNextStream,
   cleanupArchive,
   createAgentWithMock,
+  resetThread,
   type TestContextOverrides,
   uniqueThreadId,
 } from "./test-helpers.ts";
@@ -65,7 +67,7 @@ async function fixture(overrides: TestContextOverrides = {}) {
     undefined,
     { onFilesSent, onFileAdded },
   );
-  const manager = thread.fileSupervisor;
+  const manager = thread["core"].fileSupervisor;
   manager.addFileContext(file, "tracked.txt" as RelFilePath, {
     category: FileCategory.TEXT,
     mimeType: "text/plain",
@@ -124,7 +126,7 @@ describe("Thread-owned context delivery", () => {
   it("keeps fixed file notifications across reset and ignores retired emitters", async () => {
     const f = await fixture();
     try {
-      await f.thread.reset({ seed: [], archive: { type: "none" } });
+      await resetThread(f.thread, { seed: [], archive: { type: "none" } });
       expect(f.destroy).toHaveBeenCalledTimes(1);
       f.onFileAdded.mockClear();
       f.onFilesSent.mockClear();
@@ -134,13 +136,13 @@ describe("Thread-owned context delivery", () => {
       expect(f.onFilesSent).not.toHaveBeenCalled();
       const added = path.join(f.cwd, "added.txt") as AbsFilePath;
       await fs.writeFile(added, "new generation content");
-      await f.thread.fileSupervisor.addFiles([
+      await f.thread["core"].fileSupervisor.addFiles([
         added as string as UnresolvedFilePath,
       ]);
       expect(f.onFileAdded).toHaveBeenCalledWith(added);
       expect(await f.request()).toContain("new generation content");
       expect(f.onFilesSent).toHaveBeenCalledTimes(1);
-      expect(f.thread.context.fileIO).toBe(f.fileIO);
+      expect(f.thread["context"].fileIO).toBe(f.fileIO);
     } finally {
       await f.cleanup();
     }
@@ -156,8 +158,12 @@ describe("Thread-owned context delivery", () => {
       fork = await Thread.clone({
         sourceThread: f.thread,
         newId: uniqueThreadId("destination"),
-        nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
-        context: { ...threadCloneContext(f.thread.context), fileIO, gitClient },
+        nativeMessageIdx: f.thread["core"].manager.getNativeMessageIdx(),
+        context: {
+          ...threadCloneContext(f.thread["context"]),
+          fileIO,
+          gitClient,
+        },
         callbacks: { onUpdate: () => {} },
       });
       await f.thread.destroy();
@@ -190,10 +196,10 @@ describe("Thread-owned context delivery", () => {
     );
     try {
       await fileIO.writeFile(file, "retained edit");
-      const oldCore = first.core;
-      await first.reset({ seed: [], archive: { type: "none" } });
-      expect(first.core).not.toBe(oldCore);
-      expect(first.context.fileIO).toBe(fileIO);
+      const oldCore = first["core"];
+      await resetThread(first, { seed: [], archive: { type: "none" } });
+      expect(first["core"]).not.toBe(oldCore);
+      expect(first["context"].fileIO).toBe(fileIO);
       expect(await fileIO.readFile(file)).toBe("retained edit");
       await first.destroy();
       expect(await fileIO.readFile(file)).toBe("retained edit");
@@ -210,13 +216,16 @@ describe("Thread-owned context delivery", () => {
   it("destroy during reset does not construct a replacement generation", async () => {
     const f = await fixture();
     try {
-      const oldCore = f.thread.core;
+      const oldCore = f.thread["core"];
       const constructions = f.create.mock.calls.length;
-      const reset = f.thread.reset({ seed: [], archive: { type: "none" } });
+      const reset = resetThread(f.thread, {
+        seed: [],
+        archive: { type: "none" },
+      });
       const rejected = expect(reset).rejects.toThrow("destroyed");
       await f.thread.destroy();
       await rejected;
-      expect(f.thread.core).toBe(oldCore);
+      expect(f.thread["core"]).toBe(oldCore);
       expect(oldCore.isActive).toBe(false);
       expect(f.create).toHaveBeenCalledTimes(constructions);
       expect(f.destroy).toHaveBeenCalledTimes(1);
@@ -246,12 +255,12 @@ describe("Thread-owned context delivery", () => {
       const first = await f.request();
       expect(first).toContain("original tracked content");
       expect(first).toContain("<system-info>");
-      const oldCore = f.thread.core;
+      const oldCore = f.thread["core"];
       f.setGit();
       await fs.writeFile(f.file, "replacement tracked content\n");
       let replacement: string;
       if (operation === "reset") {
-        await f.thread.reset({
+        await resetThread(f.thread, {
           seed: [
             {
               type: "text",
@@ -264,7 +273,7 @@ describe("Thread-owned context delivery", () => {
         replacement = await f.request();
       } else {
         const previous = f.mockClient.streams.at(-1);
-        f.thread.context.compactor = {
+        f.thread["context"].compactor = {
           run: async () => ({
             type: "complete",
             summary: "replacement summary",
@@ -281,9 +290,9 @@ describe("Thread-owned context delivery", () => {
         stream.finishResponse("end_turn");
         await sent;
       }
-      expect(f.thread.core).not.toBe(oldCore);
+      expect(f.thread["core"]).not.toBe(oldCore);
       expect(oldCore.isActive).toBe(false);
-      expect(f.thread.fileSupervisor).not.toBe(f.manager);
+      expect(f.thread["core"].fileSupervisor).not.toBe(f.manager);
       expect(f.create).toHaveBeenCalledTimes(2);
       expect(f.destroy).toHaveBeenCalledTimes(1);
       expect(replacement).toContain("replacement summary");
@@ -297,8 +306,11 @@ describe("Thread-owned context delivery", () => {
       f.changed.mockClear();
       await fs.writeFile(f.file, "a later tracked edit\n");
       const replacementChanged = vi.fn();
-      f.thread.fileSupervisor.on("pendingUpdatesChanged", replacementChanged);
-      await f.thread.fileSupervisor.refreshPendingUpdates();
+      f.thread["core"].fileSupervisor.on(
+        "pendingUpdatesChanged",
+        replacementChanged,
+      );
+      await f.thread["core"].fileSupervisor.refreshPendingUpdates();
       expect(replacementChanged).toHaveBeenCalled();
       await f.thread.destroy();
       expect(f.destroy).toHaveBeenCalledTimes(1);
@@ -330,12 +342,12 @@ describe("Thread-owned context delivery", () => {
         newId: uniqueThreadId("context-fork"),
         nativeMessageIdx: forkPoint,
         context: {
-          ...threadCloneContext(f.thread.context),
+          ...threadCloneContext(f.thread["context"]),
           contextDelivery: { pollIntervalMs: 60_000 },
         },
         callbacks: { onUpdate: () => {} },
       });
-      const manager = fork.fileSupervisor;
+      const manager = fork["core"].fileSupervisor;
       fork.setTitle("fork context integration");
       expect(JSON.stringify(fork.getProviderMessages())).not.toContain(
         "source-only later request",
@@ -345,13 +357,15 @@ describe("Thread-owned context delivery", () => {
       const forkText = await f.request(fork);
       expect(forkText).toContain("source-only later content");
       expect(f.manager.files[f.file].agentView).toEqual(sourceView);
-      await fork.reset({ seed: [], archive: { type: "none" } });
+      await resetThread(fork, { seed: [], archive: { type: "none" } });
       expect(f.manager.files[f.file].agentView).toEqual(sourceView);
-      expect(fork.fileSupervisor.files[f.file].agentView).toBeUndefined();
+      expect(
+        fork["core"].fileSupervisor.files[f.file].agentView,
+      ).toBeUndefined();
       await f.thread.destroy();
       await fs.writeFile(f.file, "fork after source destruction\n");
       expect(await f.request(fork)).toContain("fork after source destruction");
-      fork.fileSupervisor.removeFileContext(f.file);
+      fork["core"].fileSupervisor.removeFileContext(f.file);
       expect(f.manager.files[f.file]).toBeDefined();
     } finally {
       if (fork) {
@@ -367,7 +381,7 @@ describe("Thread-owned context delivery", () => {
     let fork: Thread | undefined;
     try {
       await f.request();
-      const forkPoint = f.thread.inferenceManager.getNativeMessageIdx();
+      const forkPoint = f.thread["core"].manager.getNativeMessageIdx();
       f.setGit();
       expect(await f.request(f.thread, "observe changed git")).toContain(
         "replacement-branch",
@@ -376,7 +390,7 @@ describe("Thread-owned context delivery", () => {
         sourceThread: f.thread,
         newId: uniqueThreadId("git-rewind"),
         nativeMessageIdx: forkPoint,
-        context: threadCloneContext(f.thread.context),
+        context: threadCloneContext(f.thread["context"]),
         callbacks: { onUpdate: () => {} },
       });
       expect(await f.request(fork, "continue before git update")).toContain(
@@ -400,8 +414,8 @@ describe("Thread-owned context delivery", () => {
       const head = Thread.clone({
         sourceThread: f.thread,
         newId: uniqueThreadId("system-info-head"),
-        nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
-        context: threadCloneContext(f.thread.context),
+        nativeMessageIdx: f.thread["core"].manager.getNativeMessageIdx(),
+        context: threadCloneContext(f.thread["context"]),
         callbacks: { onUpdate: () => {} },
       });
       forks.push(head);
@@ -412,7 +426,7 @@ describe("Thread-owned context delivery", () => {
         sourceThread: f.thread,
         newId: uniqueThreadId("system-info-before"),
         nativeMessageIdx: -1 as NativeMessageIdx,
-        context: threadCloneContext(f.thread.context),
+        context: threadCloneContext(f.thread["context"]),
         callbacks: { onUpdate: () => {} },
       });
       forks.push(before);
@@ -446,13 +460,13 @@ describe("Thread-owned context delivery", () => {
       await submitted;
       const sourceText = JSON.stringify(reminderStream.messages);
       expect(sourceText.match(/Remember the skills/g)).toHaveLength(1);
-      const forkPoint = f.thread.inferenceManager.getNativeMessageIdx();
+      const forkPoint = f.thread["core"].manager.getNativeMessageIdx();
 
       fork = await Thread.clone({
         sourceThread: f.thread,
         newId: uniqueThreadId("reminder-head"),
         nativeMessageIdx: forkPoint,
-        context: threadCloneContext(f.thread.context),
+        context: threadCloneContext(f.thread["context"]),
         callbacks: { onUpdate: () => {} },
       });
       expect(fork.activeReminders).toEqual(new Set(["retain this reminder"]));
@@ -504,9 +518,9 @@ describe("Thread-owned context delivery", () => {
       });
       expect(f.mockClient.streams).toHaveLength(0);
       expect(f.manager.files[f.file].agentView).toBeUndefined();
-      expect(f.thread.gitSupervisor?.gitTracker.getAgentView()?.branch).toBe(
-        "initial-branch",
-      );
+      expect(
+        f.thread["core"].gitSupervisor?.gitTracker.getAgentView()?.branch,
+      ).toBe("initial-branch");
 
       suspend = false;
       const sent = f.thread.submit({
@@ -559,14 +573,14 @@ describe("Thread-owned context delivery", () => {
       fork = await Thread.clone({
         sourceThread: f.thread,
         newId: uniqueThreadId("tip-fork"),
-        nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
+        nativeMessageIdx: f.thread["core"].manager.getNativeMessageIdx(),
         context: {
-          ...threadCloneContext(f.thread.context),
+          ...threadCloneContext(f.thread["context"]),
           contextDelivery: { pollIntervalMs: 60_000 },
         },
         callbacks: { onUpdate: () => {} },
       });
-      const tracker = fork.fileSupervisor;
+      const tracker = fork["core"].fileSupervisor;
       expect(tracker).not.toBe(f.manager);
       expect(tracker.files[f.file].agentView).toEqual(
         f.manager.files[f.file].agentView,
@@ -615,8 +629,8 @@ describe("Thread-owned context delivery", () => {
         });
       const pending = f.manager.getContextUpdate();
       await reading;
-      await f.thread.reset({ seed: [], archive: { type: "none" } });
-      const replacement = f.thread.fileSupervisor;
+      await resetThread(f.thread, { seed: [], archive: { type: "none" } });
+      const replacement = f.thread["core"].fileSupervisor;
       f.changed.mockClear();
       release("stale read content\n");
       expect(await pending).toEqual({});

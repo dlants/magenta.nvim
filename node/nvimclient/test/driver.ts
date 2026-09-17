@@ -684,7 +684,8 @@ vim.rpcnotify(${this.nvim.channelId}, "magentaKey", "${key}")
 
     // Wait for all files to be tracked in the context manager
     await pollUntil(async () => {
-      const fileSupervisor = this.magenta.chat.getActiveThread().fileSupervisor;
+      const fileSupervisor =
+        this.magenta.chat.getActiveThread().thread.contextFiles;
       const tracked = Object.values(fileSupervisor.files).map(
         (f) => f.relFilePath,
       );

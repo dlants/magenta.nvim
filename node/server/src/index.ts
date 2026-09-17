@@ -251,6 +251,7 @@ export {
 } from "./supervisors/git-supervisor.ts";
 export {
   type CompactThreadContext,
+  type ContextFileAccess,
   type EnvironmentConfig,
   type ReminderThreadContext,
   Thread,

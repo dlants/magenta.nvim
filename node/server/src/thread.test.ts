@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import { describe, expect, it, vi } from "vitest";
 import type { ThreadType } from "./chat-types.ts";
 import type { Compactor } from "./compaction/index.ts";
@@ -20,6 +21,7 @@ import {
   awaitNextStream,
   cleanupArchive,
   createAgentWithMock,
+  resetThread,
   uniqueThreadId,
   userTexts,
 } from "./test-helpers.ts";
@@ -261,19 +263,19 @@ describe("deferred submissions", () => {
     const second = await awaitNextStream(mockClient, stream);
     expect(core.activeReminders.has("remember the file")).toBe(true);
 
-    const deliveredAt = core.inferenceManager.getNativeMessageIdx();
+    const deliveredAt = core["core"].manager.getNativeMessageIdx();
     const before = await Thread.clone({
       sourceThread: core,
       newId: uniqueThreadId("deferred-reminder-before"),
       nativeMessageIdx: (deliveredAt - 1) as NativeMessageIdx,
-      context: threadCloneContext(core.context),
+      context: threadCloneContext(core["context"]),
       callbacks: core.callbacks,
     });
     const through = await Thread.clone({
       sourceThread: core,
       newId: uniqueThreadId("deferred-reminder-through"),
       nativeMessageIdx: deliveredAt,
-      context: threadCloneContext(core.context),
+      context: threadCloneContext(core["context"]),
       callbacks: core.callbacks,
     });
     expect(before.activeReminders.has("remember the file")).toBe(false);
@@ -543,7 +545,7 @@ describe("deferred submissions", () => {
 
     // The next stop is the earliest point where it can take effect.
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
-    core.context.compactor = { run: compact };
+    core["context"].compactor = { run: compact };
     toolResultStream.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "aborted" });
     expect(compact).toHaveBeenCalledWith(
@@ -590,7 +592,7 @@ describe("deferred submissions", () => {
       await core.submit({ type: "raw", message: pendingMessage(text) }, "next");
     }
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
-    core.context.compactor = { run: compact };
+    core["context"].compactor = { run: compact };
     stream.finishResponse("end_turn");
 
     // There is no request left to carry "first", so it folds into the prompt
@@ -790,7 +792,7 @@ describe("deferred submissions", () => {
         },
       };
 
-      core.context.compactor = compactor;
+      core["context"].compactor = compactor;
       void core.submit({
         type: "resolved",
         messages: [
@@ -960,7 +962,7 @@ describe("Thread aborts the tools it owns", () => {
     const archive = core.completedTools;
     const stopping =
       action === "reset"
-        ? core.reset({ seed: [], archive: { type: "none" } })
+        ? resetThread(core, { seed: [], archive: { type: "none" } })
         : action === "destroy"
           ? core.destroy()
           : core.abort();
@@ -1431,7 +1433,7 @@ describe("system-info preamble", () => {
 
     // The replacement agent starts from an empty log, so the preamble is due
     // again — the supervisor list survives the swap and has to be re-armed.
-    await core.reset({ seed: [], archive: { type: "none" } });
+    await resetThread(core, { seed: [], archive: { type: "none" } });
     const third = core.submit({
       type: "resolved",
       messages: [
@@ -1588,12 +1590,12 @@ describe("empty send gate", () => {
 describe("replaceable conversation core", () => {
   it("remains usable when reset is interrupted during disposal", async () => {
     const { core, mockClient } = createAgentWithMock();
-    const original = core.core;
-    const reset = core.reset({ seed: [], archive: { type: "none" } });
+    const original = core["core"];
+    const reset = resetThread(core, { seed: [], archive: { type: "none" } });
     await core.abort();
     await reset;
-    expect(core.core).not.toBe(original);
-    expect(core.core.isActive).toBe(true);
+    expect(core["core"]).not.toBe(original);
+    expect(core["core"].isActive).toBe(true);
     const sent = core.submit({
       type: "resolved",
       messages: [
@@ -1614,11 +1616,11 @@ describe("replaceable conversation core", () => {
     const { core } = createAgentWithMock({
       chatSupervisors: [{ hasPendingContent: () => probe.promise }],
     });
-    const original = core.core;
+    const original = core["core"];
     const result = core.result;
-    const originalFileSupervisor = core.fileSupervisor;
-    core.edlRegisters.registers.set("old", "old content");
-    core.edlRegisters.nextSavedId = 4;
+    const originalFileSupervisor = core.contextFiles;
+    core["core"].edlRegisters.registers.set("old", "old content");
+    core["core"].edlRegisters.nextSavedId = 4;
     original.preflightTokenCount = 42;
     const probe = new Defer<boolean>();
 
@@ -1627,7 +1629,7 @@ describe("replaceable conversation core", () => {
       { type: "raw", message: pendingMessage("later") },
       "next",
     );
-    await core.reset({
+    await resetThread(core, {
       seed: [
         {
           type: "text",
@@ -1637,12 +1639,12 @@ describe("replaceable conversation core", () => {
       ],
       archive: { type: "none" },
     });
-    expect(core.core).not.toBe(original);
-    expect(core.fileSupervisor).not.toBe(originalFileSupervisor);
-    expect(core.fileSupervisor.files).toEqual(originalFileSupervisor.files);
+    expect(core["core"]).not.toBe(original);
+    expect(core.contextFiles).not.toBe(originalFileSupervisor);
+    expect(core.contextFiles.files).toEqual(originalFileSupervisor.files);
     expect(core.result).toBe(result);
-    expect(core.edlRegisters.registers.size).toBe(0);
-    expect(core.edlRegisters.nextSavedId).toBe(0);
+    expect(core["core"].edlRegisters.registers.size).toBe(0);
+    expect(core["core"].edlRegisters.nextSavedId).toBe(0);
     expect(core.inputTokenCount).toBeUndefined();
     expect(core.completedTools.size).toBe(0);
     expect(core.queued.next).toEqual([
@@ -1671,7 +1673,7 @@ describe("replaceable conversation core", () => {
     const probe = new Defer<boolean>();
 
     const first = core.submit({ type: "resolved", messages: [] });
-    await core.reset({ seed: [], archive: { type: "none" } });
+    await resetThread(core, { seed: [], archive: { type: "none" } });
     const second = core.submit({
       type: "resolved",
       messages: [
@@ -1729,7 +1731,7 @@ describe("replaceable conversation core", () => {
     stream.finishResponse("end_turn");
     await entered.promise;
     if (action === "reset")
-      await core.reset({ seed: [], archive: { type: "none" } });
+      await resetThread(core, { seed: [], archive: { type: "none" } });
     else await core[action]();
     decision.resolve({ type: "accept" });
     expect(await sent).toEqual({ type: "aborted" });
@@ -1764,7 +1766,7 @@ describe("replaceable conversation core", () => {
       type: "yielded",
       value: { result: "finished" },
     });
-    await core.reset({ seed: [], archive: { type: "none" } });
+    await resetThread(core, { seed: [], archive: { type: "none" } });
     expect(core.result).toBe(result);
     expect(await result).toEqual({
       type: "yielded",
@@ -1813,14 +1815,14 @@ describe("replaceable conversation core", () => {
       newId: uniqueThreadId("fork-result-archive"),
       nativeMessageIdx:
         core.getProviderMessages()[0].content[0].nativeMessageIdx,
-      context: threadCloneContext(core.context),
+      context: threadCloneContext(core["context"]),
       callbacks: core.callbacks,
     });
     expect(fork.completedTools).toBe(core.completedTools);
     expect(fork.completedTools.get(id)).toEqual(original);
     expect(fork.completedTools.get(id)).toBe(original);
     expect(fork.completedTools.size).toBe(2);
-    await core.reset({ seed: [], archive: { type: "none" } });
+    await resetThread(core, { seed: [], archive: { type: "none" } });
     expect(core.completedTools.get(id)).toBe(original);
     expect(fork.completedTools).toBe(core.completedTools);
     await core.destroy();
@@ -1847,7 +1849,7 @@ describe("replaceable conversation core", () => {
       core.submit({ type: "raw", message: pendingMessage("late") }, "next"),
     ).rejects.toThrow("destroyed");
     await expect(
-      core.reset({ seed: [], archive: { type: "none" } }),
+      resetThread(core, { seed: [], archive: { type: "none" } }),
     ).rejects.toThrow("destroyed");
     expect(mockClient.streams).toHaveLength(0);
   });
@@ -1874,7 +1876,7 @@ describe("stale outer submissions", () => {
     const first = core.submit({ type: "resolved", messages: [] });
     await entered.promise;
     if (action === "reset")
-      await core.reset({ seed: [], archive: { type: "none" } });
+      await resetThread(core, { seed: [], archive: { type: "none" } });
     const second = core.submit({
       type: "resolved",
       messages: [
@@ -1941,7 +1943,7 @@ describe("stale outer submissions", () => {
     await entered.promise;
     expect(loopLabel(core.loopState)).toBe("preparing");
     if (action === "reset")
-      await core.reset({ seed: [], archive: { type: "none" } });
+      await resetThread(core, { seed: [], archive: { type: "none" } });
     const second = core.submit({
       type: "resolved",
       messages: [
@@ -2015,7 +2017,7 @@ describe("stale outer submissions", () => {
     stream.finishResponse("tool_use");
     await entered.promise;
     if (action === "reset")
-      await core.reset({ seed: [], archive: { type: "none" } });
+      await resetThread(core, { seed: [], archive: { type: "none" } });
     const second = core.submit({
       type: "resolved",
       messages: [
@@ -2093,7 +2095,7 @@ describe("detached delivery batches", () => {
       await core.submit({ type: "raw", message: pendingMessage(text) }, "next");
     first.finishResponse("end_turn");
     await entered.promise;
-    await core.reset({ seed: [], archive: { type: "none" } });
+    await resetThread(core, { seed: [], archive: { type: "none" } });
     expect(core.queued.next).toEqual([
       { type: "raw", message: pendingMessage("retained") },
     ]);

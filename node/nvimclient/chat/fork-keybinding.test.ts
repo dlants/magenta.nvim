@@ -9,7 +9,7 @@ import type { NvimThread } from "./thread.ts";
  * the cloned history at fork time. */
 function expectForkNotificationQueued(thread: NvimThread): void {
   expect(
-    thread.core.pendingTurnContent.some(
+    thread.thread.pendingTurnContent.some(
       (c) => c.type === "text" && c.text.includes("<fork-notification>"),
     ),
   ).toBe(true);
@@ -56,9 +56,9 @@ it("normal mode F on a previous assistant message creates a fork ending there", 
 
     // The new thread should have native messages [user, assistant]. The
     // fork-notification rides along with the fork's first turn.
-    const native = newThread.agent.log.messages.filter(
-      (m) => m.role !== "user" || m.content.length > 0,
-    );
+    const native = newThread.thread
+      .getProviderMessages()
+      .filter((m) => m.role !== "user" || m.content.length > 0);
     expect(native).toHaveLength(2);
     expectForkNotificationQueued(newThread);
 
@@ -111,7 +111,7 @@ it("normal mode F on a user message keeps that user message", async () => {
     });
 
     const newThread = driver.magenta.chat.getActiveThread();
-    const messages = newThread.agent.log.messages;
+    const messages = newThread.thread.getProviderMessages();
     expect(messages).toHaveLength(3);
     expectForkNotificationQueued(newThread);
   });
@@ -163,7 +163,7 @@ it("normal mode F on assistant message with tool_use extends to keep tool_result
     });
 
     const newThread = driver.magenta.chat.getActiveThread();
-    const messages = newThread.agent.log.messages;
+    const messages = newThread.thread.getProviderMessages();
 
     // Per the truncate algorithm, when forking at the assistant tool_use
     // message, we extend forward through the run of consecutive user
@@ -219,7 +219,7 @@ it("F on first user message keeps just that message and resets input", async () 
     });
 
     const newThread = driver.magenta.chat.getActiveThread();
-    const messages = newThread.agent.log.messages;
+    const messages = newThread.thread.getProviderMessages();
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe("user");
     expectForkNotificationQueued(newThread);

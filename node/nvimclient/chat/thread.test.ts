@@ -157,7 +157,7 @@ it("getMessages correctly interleaves tool requests and responses", async () => 
     );
 
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
 
     // 6, not 8: the continuation's reminder is coalesced into the same user
     // message as the tool result it rides with.
@@ -220,10 +220,10 @@ it("keeps queued messages pending when a submission fails", async () => {
     await driver.inputMagentaText("@async Queued pending message");
     await driver.send();
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.queued.async).toHaveLength(1);
+    expect(thread.thread.queued.async).toHaveLength(1);
     stream.respondWithError(new Error("Simulated error with pending messages"));
     // The queued message was never delivered, so it stays queued.
-    expect(thread.core.queued.async).toHaveLength(1);
+    expect(thread.thread.queued.async).toHaveLength(1);
     await driver.assertDisplayBufferContains("Queued pending message");
     expect(thread.submission).toEqual({
       type: "failed",
@@ -247,7 +247,7 @@ it("keeps the partial turn when the error arrives after assistant content", asyn
       expect(
         driver.magenta.chat
           .getActiveThread()
-          .core.getProviderMessages()
+          .thread.getProviderMessages()
           .map((m) => m.role),
       ).toEqual(["user", "assistant"]),
     );
@@ -272,7 +272,7 @@ it("renders a long pending message trimmed with expand/collapse toggle", async (
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.queued.async).toHaveLength(1);
+    expect(thread.thread.queued.async).toHaveLength(1);
 
     await driver.assertDisplayBufferContains("✉️ queued:");
     await driver.assertDisplayBufferContains("word1");
@@ -285,7 +285,7 @@ it("renders a long pending message trimmed with expand/collapse toggle", async (
     await driver.assertDisplayBufferContains("word60");
     await driver.assertDisplayBufferContains("[collapse]");
     // View-only toggle must not mutate the queue.
-    expect(thread.core.queued.async).toHaveLength(1);
+    expect(thread.thread.queued.async).toHaveLength(1);
 
     await driver.triggerDisplayBufferKeyOnContent("[collapse]", "=");
     await driver.assertDisplayBufferContains("[expand]");
@@ -308,7 +308,7 @@ it("clears pending expand state when the queue drains", async () => {
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.queued.async).toHaveLength(1);
+    expect(thread.thread.queued.async).toHaveLength(1);
 
     // Expand the queued message so index 0 is marked expanded.
     await driver.triggerDisplayBufferKeyOnContent("[expand]", "=");
@@ -324,7 +324,7 @@ it("clears pending expand state when the queue drains", async () => {
 
     const request2 = await driver.mockAnthropic.awaitPendingStream();
     await pollUntil(() => {
-      if (thread.core.queued.async.length !== 0) {
+      if (thread.thread.queued.async.length !== 0) {
         throw new Error("queue not drained yet");
       }
       // The clear rides the debounced re-render, not the drain itself.
@@ -339,7 +339,7 @@ it("clears pending expand state when the queue drains", async () => {
     await driver.inputMagentaText(`@async ${longText}`);
     await driver.send();
 
-    expect(thread.core.queued.async).toHaveLength(1);
+    expect(thread.thread.queued.async).toHaveLength(1);
     // The newly-queued message must render collapsed by default (state was
     // cleared on drain, so index 0 is not stale-expanded).
     await driver.assertDisplayBufferContains("[expand]");
@@ -428,7 +428,7 @@ it("forks a thread with multiple messages into a new thread", async () => {
     await driver.assertDisplayBufferContains("Italy's capital is Rome");
 
     // 8. Verify the forked thread has the full conversation history
-    const messages = newThread.getMessages();
+    const messages = newThread.thread.getProviderMessages();
     expect(sanitizeMessagesForSnapshot(messages)).toMatchSnapshot(
       "forked-thread-messages",
     );
@@ -481,7 +481,7 @@ it("processes @diag keyword to include diagnostics in message", {
 
     // Check the thread message structure
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
 
     // Should have user message and assistant response
     expect(messages.length).toBe(2);
@@ -551,7 +551,7 @@ it("processes @diagnostics keyword to include diagnostics in message", {
 
     // Check the thread message structure
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
 
     // Should have user message and assistant response
     expect(messages.length).toBe(2);
@@ -608,7 +608,7 @@ it("processes @qf keyword to include quickfix list in message", {
 
     // Check the thread message structure
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
 
     // Should have user message and assistant response
     expect(messages.length).toBe(2);
@@ -672,7 +672,7 @@ it("processes @quickfix keyword to include quickfix list in message", {
 
     // Check the thread message structure
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
 
     // Should have user message and assistant response
     expect(messages.length).toBe(2);
@@ -724,7 +724,7 @@ it("handles empty quickfix list with @qf command", {
 
     // Check the thread message structure
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
 
     // Should have user message and assistant response
     expect(messages.length).toBe(2);
@@ -770,7 +770,7 @@ it("processes @buf keyword to include buffers list in message", {
 
     // Check the thread message structure
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
 
     // Should have user message and assistant response
     expect(messages.length).toBe(2);
@@ -827,7 +827,7 @@ it("processes @buffers keyword to include buffers list in message", {
 
     // Check the thread message structure
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
 
     // Should have user message and assistant response
     expect(messages.length).toBe(2);
@@ -876,7 +876,7 @@ it("handles empty buffers list with @buf command", {
 
     // Check the thread message structure
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
 
     // Should have user message and assistant response
     expect(messages.length).toBe(2);
@@ -1047,7 +1047,7 @@ it("handles @file commands", { timeout: 10000 }, async () => {
 
     // Verify both files were added to context manager
     const thread = driver.magenta.chat.getActiveThread();
-    const fileSupervisor = thread.fileSupervisor;
+    const fileSupervisor = thread.thread.contextFiles;
     const files = fileSupervisor.files;
 
     // Check that both files are in the context
@@ -1088,7 +1088,7 @@ it("handles @file command with non-existent file", {
 
     // Check the thread message structure
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
 
     // Should have user message and assistant response
     expect(messages.length).toBe(2);
@@ -1629,8 +1629,8 @@ it("handles @async messages and sends them on end turn", async () => {
 
     // Verify message is queued
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.queued.async).toHaveLength(1);
-    expect(renderPending(thread.core.queued.async[0])).toBe(
+    expect(thread.thread.queued.async).toHaveLength(1);
+    expect(renderPending(thread.thread.queued.async[0])).toBe(
       "Also tell me about JavaScript",
     );
 
@@ -1660,9 +1660,11 @@ it("queues @next messages until the agent next stops", async () => {
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.queued.next).toHaveLength(1);
-    expect(renderPending(thread.core.queued.next[0])).toBe("Then summarize it");
-    expect(thread.core.queued.async).toHaveLength(0);
+    expect(thread.thread.queued.next).toHaveLength(1);
+    expect(renderPending(thread.thread.queued.next[0])).toBe(
+      "Then summarize it",
+    );
+    expect(thread.thread.queued.async).toHaveLength(0);
     await driver.assertDisplayBufferContains("⏭️ queued (next stop):");
 
     // Runner uses a tool - the turn continues mid-stream after it completes.
@@ -1695,7 +1697,7 @@ it("queues @next messages until the agent next stops", async () => {
             ),
       );
     expect(hasNextText(request2)).toBe(false);
-    expect(thread.core.queued.next).toHaveLength(1);
+    expect(thread.thread.queued.next).toHaveLength(1);
 
     // Now the agent fully stops.
     request2.respond({
@@ -1707,7 +1709,7 @@ it("queues @next messages until the agent next stops", async () => {
     // The @next message is now sent as a new turn.
     const request3 = await driver.mockAnthropic.awaitPendingStream();
     expect(hasNextText(request3)).toBe(true);
-    expect(thread.core.queued.next).toHaveLength(0);
+    expect(thread.thread.queued.next).toHaveLength(0);
   });
 });
 
@@ -1722,9 +1724,9 @@ it("expands a queued message's commands at delivery, not when it was typed", asy
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.queued.next).toHaveLength(1);
+    expect(thread.thread.queued.next).toHaveLength(1);
     // The command has not run yet: the file is not in context.
-    expect(Object.keys(thread.fileSupervisor.files)).toHaveLength(0);
+    expect(Object.keys(thread.thread.contextFiles.files)).toHaveLength(0);
 
     const cwd = await getcwd(driver.nvim);
     const poemPath = `${cwd}/poem.txt`;
@@ -1737,9 +1739,9 @@ it("expands a queued message's commands at delivery, not when it was typed", asy
     });
 
     const request2 = await driver.mockAnthropic.awaitPendingStream();
-    expect(thread.core.queued.next).toHaveLength(0);
+    expect(thread.thread.queued.next).toHaveLength(0);
     // The @file: command ran at delivery, not when the message was typed.
-    expect(Object.keys(thread.fileSupervisor.files)).toHaveLength(1);
+    expect(Object.keys(thread.thread.contextFiles.files)).toHaveLength(1);
     request2.respond({
       stopReason: "end_turn",
       text: "will do",

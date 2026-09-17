@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import type { ThreadId } from "@magenta/server";
+import type { ThreadId, ToolName, ToolRequestId } from "@magenta/server";
 import { threadConversationLogPath } from "@magenta/server";
 import { v7 as uuidv7 } from "uuid";
 import { expect, it } from "vitest";
@@ -27,7 +27,7 @@ it("setting a thread title renames both buffers", async () => {
     const threadId = thread.id;
     const buffers = driver.magenta.bufferManager.getThreadBuffers(threadId)!;
 
-    thread.core.setTitle("My Cool Title");
+    thread.thread.setTitle("My Cool Title");
 
     await pollUntil(async () => {
       const displayName = (await driver.nvim.call("nvim_buf_get_name", [
@@ -280,5 +280,95 @@ it("wiping archive UI buffers preserves live threads and archive files", async (
     );
     expect(liveThreadId in driver.magenta.chat.threadWrappers).toBe(true);
     expect(await fs.readFile(logPath, "utf8")).toBe("archive data");
+  });
+});
+
+it.each([
+  "generated",
+  "manual",
+  "destroyed",
+  "failed",
+  "invalid",
+] as const)("automatic title: %s result is isolated from submission and lifecycle", async (outcome) => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    const wrapper = driver.magenta.chat.getActiveThread();
+    const thread = wrapper.thread;
+    await driver.inputMagentaText("Explain this project");
+    await driver.send();
+    const titleRequest =
+      await driver.mockAnthropic.awaitPendingForceToolUseRequest();
+    expect(titleRequest.spec.name).toBe("thread_title");
+    expect(titleRequest.model).toBe(wrapper.context.profile.fastModel);
+    expect(titleRequest.systemPrompt).toBe(thread.systemPrompt);
+    expect(titleRequest.input).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining("Explain this project"),
+      }),
+    ]);
+    const first = await driver.mockAnthropic.awaitPendingStream();
+    first.respond({
+      stopReason: "end_turn",
+      text: "First answer",
+      toolRequests: [],
+    });
+    await pollUntil(() => expect(thread.isBusy).toBe(false));
+    await driver.inputMagentaText("Continue explaining");
+    await driver.send();
+    const second = await driver.mockAnthropic.awaitPendingStream();
+    second.respond({
+      stopReason: "end_turn",
+      text: "Second answer",
+      toolRequests: [],
+    });
+    await pollUntil(() => expect(thread.isBusy).toBe(false));
+    expect(driver.mockAnthropic.forceToolUseRequests).toHaveLength(1);
+    if (outcome === "manual") thread.setTitle("Manual title");
+    if (outcome === "destroyed") await wrapper.destroy();
+    if (outcome === "failed") {
+      titleRequest.defer.reject(new Error("Title service unavailable"));
+    } else if (outcome === "invalid") {
+      await driver.mockAnthropic.respondToForceToolUse({
+        stopReason: "tool_use",
+        toolRequest: {
+          status: "error",
+          rawRequest: {},
+          error: "Invalid title",
+        },
+      });
+    } else {
+      await driver.mockAnthropic.respondToForceToolUse({
+        stopReason: "tool_use",
+        toolRequest: {
+          status: "ok",
+          value: {
+            id: "title" as ToolRequestId,
+            toolName: "thread_title" as ToolName,
+            input: { title: "Automatic title" },
+          },
+        },
+      });
+    }
+    // Drain the promise continuation before inspecting absence of mutation.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const expectedTitle =
+      outcome === "manual"
+        ? "Manual title"
+        : outcome === "generated"
+          ? "Automatic title"
+          : undefined;
+    expect(thread.title).toBe(expectedTitle);
+    expect(thread.lastResult()?.type).toBe("completed");
+    await thread.awaitArchiveFlush();
+    const entries = (
+      await fs.readFile(threadConversationLogPath(thread.id), "utf8")
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.type === "title");
+    expect(entries.map((entry) => entry.title)).toEqual(
+      expectedTitle ? [expectedTitle] : [],
+    );
   });
 });

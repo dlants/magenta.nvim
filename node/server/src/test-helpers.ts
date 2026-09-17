@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle helpers deliberately access private implementation state.
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -492,4 +493,16 @@ export const userTexts = (core: Thread): string[] =>
 
 export function uniqueThreadId(prefix: string): ThreadId {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}` as ThreadId;
+}
+
+/** Administrative resets are test fixtures, not part of Thread's parent API. */
+export function resetThread(
+  thread: Thread,
+  options: Parameters<Thread["replaceCore"]>[0],
+) {
+  thread["interrupt"]();
+  thread["cancelSubmission"]();
+  thread["submission"] = undefined;
+  thread["restoreDetachedBatch"]();
+  return thread["replaceCore"](options);
 }

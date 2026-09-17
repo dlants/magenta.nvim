@@ -190,7 +190,7 @@ it("does not resolve a script's createThread() await on a subagent error", async
       }
 
       await pollUntil(
-        () => threadWrapper.thread.core.lastResult()?.type === "failed",
+        () => threadWrapper.thread.thread.lastResult()?.type === "failed",
       );
 
       // The script's createThread() await must not resolve while the
@@ -201,7 +201,7 @@ it("does not resolve a script's createThread() await on a subagent error", async
 
       // A failed thread is parked, with its log already rolled back, so a
       // fresh send is all the recovery it needs.
-      void threadWrapper.thread.core.submit({
+      void threadWrapper.thread.thread.submit({
         type: "resolved",
         messages: [
           {

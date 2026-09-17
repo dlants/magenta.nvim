@@ -39,7 +39,7 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
       await driver.showSidebar();
       const thread = driver.magenta.chat.getActiveThread();
       expect(
-        await thread.core.submit({ type: "resolved", messages: [] }),
+        await thread.thread.submit({ type: "resolved", messages: [] }),
       ).toEqual({ type: "empty" });
       expect(driver.magenta.chat.getThreadSummary(thread.id).status).toEqual({
         type: "stopped",

@@ -1,7 +1,6 @@
 import type {
   GitContextUpdate,
   GitState,
-  NativeInferenceManager,
   ProviderToolResult,
   SubagentConfig,
   ThreadSupervisor,
@@ -10,10 +9,9 @@ import {
   type AgentInput,
   AutoCompactSupervisor,
   type CompactionRunId,
+  type ContextFileAccess,
   type ContextFiles,
   clientToolCreator,
-  type FileSupervisor,
-  type GitSupervisor,
   loadAgents,
   loopActiveTools,
   MaxTokensSupervisor,
@@ -32,6 +30,7 @@ import {
   type ThreadContextDelivery,
   type ThreadId,
   type ThreadSendResult,
+  ThreadTitle,
   type ThreadType,
   type ToolRequestId,
   threadCloneContext,
@@ -47,11 +46,7 @@ import { displaySnapshotDiff } from "../nvim/displaySnapshotDiff.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 import type { MagentaOptions, Profile } from "../options.ts";
-import {
-  getProvider,
-  type ProviderMessage,
-  type ThreadLoopState,
-} from "../providers/provider.ts";
+import { getProvider } from "../providers/provider.ts";
 import type { SystemInfo, SystemPrompt } from "../providers/system-prompt.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { Sandbox } from "../sandbox-manager.ts";
@@ -275,17 +270,6 @@ export class NvimThread {
   public sandboxViolationHandler: SandboxViolationHandler | undefined;
   public sandboxBypassed = false;
 
-  get fileSupervisor(): FileSupervisor {
-    return this.core.fileSupervisor;
-  }
-  get gitSupervisor(): GitSupervisor {
-    return this.core.gitSupervisor!;
-  }
-
-  get agent(): NativeInferenceManager {
-    return this.core.inferenceManager;
-  }
-
   get isSandboxBypassed(): boolean {
     const sandboxRoot = this.context.getSandboxRoot?.();
     if (sandboxRoot) return sandboxRoot.isSandboxBypassed;
@@ -296,7 +280,7 @@ export class NvimThread {
 
   constructor(
     public id: ThreadId,
-    public readonly core: Thread,
+    public readonly thread: Thread,
     public readonly compactor: ThreadCompactor | undefined,
     public context: NvimThreadContext,
   ) {
@@ -326,7 +310,7 @@ export class NvimThread {
 
     // The status line and the history section both read the compactor, so a
     // chunk boundary has to repaint even though nothing on the thread moved.
-    this.compactor?.on("transition", () => this.onCoreUpdate());
+    this.compactor?.on("transition", () => this.onThreadUpdate());
 
     this.rebuildToolResultMap();
   }
@@ -352,18 +336,55 @@ export class NvimThread {
 
   private animationTimer: ReturnType<typeof setTimeout> | undefined;
 
-  onCoreUpdate(): void {
+  private titleRequested = false;
+
+  onSubmission(messages: readonly AgentInput[]): void {
+    if (
+      this.titleRequested ||
+      this.destroyed ||
+      this.thread.title !== undefined ||
+      this.thread.threadType === "compact" ||
+      !messages.length
+    )
+      return;
+    this.titleRequested = true;
+    const text = messages
+      .filter((content) => content.type === "text")
+      .map((content) => content.text)
+      .join("\n");
+    ThreadTitle.generateTitle(
+      getProvider(this.context.nvim, this.context.profile),
+      this.context.profile.fastModel,
+      this.thread.systemPrompt,
+      text,
+    )
+      .then((title) => {
+        if (
+          title !== undefined &&
+          !this.destroyed &&
+          this.thread.title === undefined
+        )
+          this.thread.setTitle(title);
+      })
+      .catch((error: unknown) => {
+        this.context.nvim.logger.error(
+          `Error getting thread title: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  }
+
+  onThreadUpdate(): void {
     if (this.renderDebounceTimer) return;
     this.renderDebounceTimer = setTimeout(() => {
       this.renderDebounceTimer = undefined;
       if (this.destroyed) return;
       this.rebuildToolResultMap();
-      const title = this.core.title;
+      const title = this.thread.title;
       if (title !== undefined && title !== this.lastAppliedTitle) {
         this.lastAppliedTitle = title;
         this.context.dispatch({
           type: "set-thread-title-effect",
-          id: this.core.id,
+          id: this.thread.id,
           title,
         });
       }
@@ -389,7 +410,7 @@ export class NvimThread {
   private maybeScrollToSubmission(): void {
     if (this.scrollAfterMessageCount === undefined) return;
     if (
-      this.core.getProviderMessages().length <= this.scrollAfterMessageCount
+      this.thread.getProviderMessages().length <= this.scrollAfterMessageCount
     ) {
       return;
     }
@@ -407,7 +428,7 @@ export class NvimThread {
   /** Attach a tracker's structured record to the message its injection is
    * about to produce. */
   recordMessageViewState(patch: MessageViewState): void {
-    const messageCount = this.core.getProviderMessages().length;
+    const messageCount = this.thread.getProviderMessages().length;
     this.state.messageViewState[messageCount] = {
       ...this.state.messageViewState[messageCount],
       ...patch,
@@ -450,10 +471,10 @@ export class NvimThread {
 
   /** Walks the agent's provider messages and collects the tool results.
    * Structured (display-only) data is not carried here — it lives in
-   * `core.completedTools` and is looked up at render time. */
+   * `thread.completedTools` and is looked up at render time. */
   rebuildToolResultMap(): void {
     const next = new Map<ToolRequestId, ProviderToolResult>();
-    for (const message of this.core.getProviderMessages()) {
+    for (const message of this.thread.getProviderMessages()) {
       if (message.role !== "user") continue;
       for (const content of message.content) {
         if (content.type === "tool_result") {
@@ -465,7 +486,7 @@ export class NvimThread {
     // submitted back to the agent (e.g. mid tool_use turn while other tools
     // are still running). The rendering layer needs these to display custom
     // result summaries as soon as the tool completes.
-    const active = loopActiveTools(this.core.loopState);
+    const active = loopActiveTools(this.thread.loopState);
     if (active) {
       for (const entry of active.values()) {
         if (entry.result && !next.has(entry.request.id)) {
@@ -492,23 +513,7 @@ export class NvimThread {
       this.animationTimer = undefined;
     }
 
-    await this.core.destroy();
-  }
-
-  get loopState(): ThreadLoopState {
-    return this.core.loopState;
-  }
-
-  getProviderMessages(): ReadonlyArray<ProviderMessage> {
-    return this.core.getProviderMessages();
-  }
-
-  getMessages(): ProviderMessage[] {
-    return this.core.getMessages();
-  }
-
-  getLastStopTokenCount(): number {
-    return this.core.getLastStopTokenCount();
+    await this.thread.destroy();
   }
 
   update(msg: RootMsg): void {
@@ -520,7 +525,7 @@ export class NvimThread {
   /** A send that preempts the turn in flight also drops that turn's pending
    * sandbox approvals: they belong to the work being abandoned. */
   private rejectPendingSandboxApprovals(): void {
-    if (this.core.isBusy) {
+    if (this.thread.isBusy) {
       this.sandboxViolationHandler?.rejectAll();
     }
   }
@@ -530,7 +535,8 @@ export class NvimThread {
       case "send-message":
         this.rejectPendingSandboxApprovals();
         if (msg.messages.length) {
-          this.scrollAfterMessageCount = this.core.getProviderMessages().length;
+          this.scrollAfterMessageCount =
+            this.thread.getProviderMessages().length;
         }
         this.beginSubmission(
           msg.messages
@@ -539,7 +545,7 @@ export class NvimThread {
             .join("\n"),
         );
         this.observeSubmission(() =>
-          this.core.submit({ type: "resolved", messages: msg.messages }),
+          this.thread.submit({ type: "resolved", messages: msg.messages }),
         );
         return;
 
@@ -551,9 +557,9 @@ export class NvimThread {
           // displace the text a failure would restore.
           this.beginSubmission(message);
         }
-        this.scrollAfterMessageCount = this.core.getProviderMessages().length;
+        this.scrollAfterMessageCount = this.thread.getProviderMessages().length;
         this.observeSubmission(() =>
-          this.core.submit({ type: "raw", message }, delivery),
+          this.thread.submit({ type: "raw", message }, delivery),
         );
         return;
       }
@@ -561,11 +567,11 @@ export class NvimThread {
       case "retry": {
         if (this.submission?.type !== "failed") return;
         this.beginSubmission(this.submission.text);
-        this.observeSubmission(() => this.core.retry());
+        this.observeSubmission(() => this.thread.retry());
         return;
       }
       case "abort": {
-        for (const entry of loopActiveTools(this.core.loopState)?.values() ??
+        for (const entry of loopActiveTools(this.thread.loopState)?.values() ??
           []) {
           entry.handle.abort();
         }
@@ -576,7 +582,7 @@ export class NvimThread {
       }
 
       case "set-title":
-        this.core.setTitle(msg.title);
+        this.thread.setTitle(msg.title);
         return;
 
       case "toggle-system-prompt":
@@ -689,7 +695,7 @@ export class NvimThread {
           delete this.state.editedFilesExpanded[key];
           return;
         }
-        const entry = this.core.editedFileGroups
+        const entry = this.thread.editedFileGroups
           .find((group) => group.id === msg.groupId)
           ?.files.find((file) => file.path === msg.filePath);
         if (!entry) return;
@@ -728,7 +734,10 @@ export class NvimThread {
       case "animation-tick":
         return;
       case "tool-progress":
-        if (!this.core.queued.async.length && !this.core.queued.next.length) {
+        if (
+          !this.thread.queued.async.length &&
+          !this.thread.queued.next.length
+        ) {
           this.state.pendingMessagesExpanded = {};
         }
         return;
@@ -774,9 +783,10 @@ export class NvimThread {
 
   async abortAndWait(): Promise<void> {
     this.sandboxViolationHandler?.rejectAll();
-    const { unsent } = await this.core.abort();
+    const { unsent } = await this.thread.abort();
     const isUserFacing =
-      this.core.threadType === "root" || this.core.threadType === "docker_root";
+      this.thread.threadType === "root" ||
+      this.thread.threadType === "docker_root";
     if (!isUserFacing) return;
     const text = unsent.map((q) => renderPending(q.message)).join("\n");
     if (!text) return;
@@ -858,7 +868,7 @@ export function createNvimThread(
   if (threadType !== "compact") {
     const sourceAutoCompact =
       initialization.type === "fork"
-        ? initialization.sourceThread.context.chatSupervisors?.find(
+        ? initialization.sourceThread.chatSupervisors?.find(
             (supervisor): supervisor is AutoCompactSupervisor =>
               supervisor instanceof AutoCompactSupervisor,
           )
@@ -923,12 +933,13 @@ export function createNvimThread(
       resolveSubmission(
         message,
         context,
-        () => core.fileSupervisor,
+        () => thread.contextFiles,
         compactor !== undefined,
       ),
   };
   const callbacks: ThreadCallbacks = {
-    onUpdate: () => wrapper.onCoreUpdate(),
+    onUpdate: () => wrapper.onThreadUpdate(),
+    onSubmission: (messages) => wrapper.onSubmission(messages),
     onFileAdded: context.onFileAdded,
     onFilesSent: (updates) =>
       wrapper.recordMessageViewState({ contextUpdates: updates }),
@@ -937,7 +948,7 @@ export function createNvimThread(
   };
   // Neither construction path invokes callbacks or resolves submissions. These
   // closures bind to the completed objects before any asynchronous work starts.
-  const core: Thread =
+  const thread: Thread =
     initialization.type === "fork"
       ? Thread.clone({
           sourceThread: initialization.sourceThread,
@@ -952,14 +963,14 @@ export function createNvimThread(
           callbacks,
           context.scriptName ? { scriptName: context.scriptName } : {},
         );
-  const wrapper = new NvimThread(id, core, compactor, context);
+  const wrapper = new NvimThread(id, thread, compactor, context);
   return wrapper;
 }
 
 async function resolveSubmission(
   message: PendingMessage,
   context: NvimThreadContext,
-  getFileSupervisor: () => FileSupervisor,
+  getContextFileAccess: () => ContextFileAccess,
   canCompact: boolean,
 ): Promise<ResolvedSubmission> {
   // A compact thread has no compactor — it *is* a compaction — so
@@ -972,7 +983,7 @@ async function resolveSubmission(
       nvim: context.nvim,
       cwd: context.environment.cwd,
       homeDir: context.environment.homeDir,
-      fileSupervisor: getFileSupervisor(),
+      fileSupervisor: getContextFileAccess(),
       options: context.options,
     });
   const messages: AgentInput[] = [
@@ -1057,20 +1068,13 @@ export async function cloneFromNativeMessageIdx(args: {
     isBypassed: () => bypassRef.get(),
   });
 
-  const sourceCore = sourceThread.core;
+  const sourceServerThread = sourceThread.thread;
   const profile = sourceThread.context.profile;
-  const preserveDelivery =
-    !sourceCore.isBusy &&
-    nativeMessageIdx === sourceCore.inferenceManager.getNativeMessageIdx();
-  const initialGitState = preserveDelivery
-    ? structuredClone(sourceThread.gitSupervisor.gitTracker.getAgentView())
-    : undefined;
-
   // No awaits above: native history and delivery must describe the same instant.
   const thread = createNvimThread(
     newThreadId,
-    { type: "fork", sourceThread: sourceCore, nativeMessageIdx },
-    sourceCore.systemPrompt,
+    { type: "fork", sourceThread: sourceServerThread, nativeMessageIdx },
+    sourceServerThread.systemPrompt,
     {
       dispatch,
       chat,
@@ -1084,8 +1088,7 @@ export async function cloneFromNativeMessageIdx(args: {
       options: getOptions(),
       getDisplayWidth,
       environment,
-      systemInfo: sourceCore.systemInfo,
-      initialGitState,
+      systemInfo: sourceServerThread.systemInfo,
       ...(sourceThread.context.yieldSchema
         ? { yieldSchema: sourceThread.context.yieldSchema }
         : {}),

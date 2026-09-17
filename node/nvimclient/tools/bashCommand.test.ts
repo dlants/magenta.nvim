@@ -1071,10 +1071,10 @@ describe("bash command output logging", () => {
 
       // Get the tool instance and trigger termination
       const thread = driver.magenta.chat.getActiveThread();
-      const active = loopActiveTools(thread.core.loopState);
+      const active = loopActiveTools(thread.thread.loopState);
       if (!active) {
         throw new Error(
-          `Expected running tools, got ${loopLabel(thread.core.loopState)}`,
+          `Expected running tools, got ${loopLabel(thread.thread.loopState)}`,
         );
       }
       const entry = active.get("test-bash-sigterm" as ToolRequestId);
@@ -1160,10 +1160,10 @@ describe("bash command output logging", () => {
 
       // Get the tool instance and trigger termination
       const thread = driver.magenta.chat.getActiveThread();
-      const active = loopActiveTools(thread.core.loopState);
+      const active = loopActiveTools(thread.thread.loopState);
       if (!active) {
         throw new Error(
-          `Expected running tools, got ${loopLabel(thread.core.loopState)}`,
+          `Expected running tools, got ${loopLabel(thread.thread.loopState)}`,
         );
       }
       const entry = active.get("test-bash-sigkill" as ToolRequestId);
@@ -1280,10 +1280,10 @@ wait
 
       // Get the tool instance and trigger termination
       const thread = driver.magenta.chat.getActiveThread();
-      const active = loopActiveTools(thread.core.loopState);
+      const active = loopActiveTools(thread.thread.loopState);
       if (!active) {
         throw new Error(
-          `Expected running tools, got ${loopLabel(thread.core.loopState)}`,
+          `Expected running tools, got ${loopLabel(thread.thread.loopState)}`,
         );
       }
       const entry = active.get("test-bash-tree" as ToolRequestId);

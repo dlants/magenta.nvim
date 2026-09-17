@@ -312,13 +312,13 @@ describe("yield behavior", () => {
       const childWrapper = findChildThread(driver.magenta.chat);
 
       await pollUntil(() => {
-        const yielded = childWrapper.thread.core.yielded;
+        const yielded = childWrapper.thread.thread.yielded;
         if (!yielded) {
           throw new Error("yieldedResponse not set yet");
         }
         return yielded.value.result;
       });
-      expect(childWrapper.thread.core.yielded?.value.result).toBe(
+      expect(childWrapper.thread.thread.yielded?.value.result).toBe(
         "Task result: success",
       );
     });
@@ -373,7 +373,7 @@ describe("yield behavior", () => {
       });
 
       const childWrapper = findChildThread(driver.magenta.chat);
-      const supervisor = childWrapper.thread.core.context.chatSupervisors!.find(
+      const supervisor = childWrapper.thread.thread.chatSupervisors!.find(
         (supervisor): supervisor is SubagentSupervisor =>
           supervisor instanceof SubagentSupervisor,
       )!;
@@ -398,7 +398,7 @@ describe("yield behavior", () => {
       });
 
       const mode = await pollUntil(() => {
-        const m = childWrapper.thread.core.yielded;
+        const m = childWrapper.thread.thread.yielded;
         if (!m) {
           throw new Error("not yielded yet");
         }
@@ -750,7 +750,7 @@ describe("foreach-style parallel agents", () => {
 
         const childWrapper = findChildThread(driver.magenta.chat);
         await pollUntil(() => {
-          if (childWrapper.thread.core.lastResult()?.type === "failed") {
+          if (childWrapper.thread.thread.lastResult()?.type === "failed") {
             return true;
           }
           throw new Error("waiting for child thread to reach error state");
@@ -782,7 +782,7 @@ describe("foreach-style parallel agents", () => {
 
         // A failed thread is parked, with its log already rolled back, so a
         // fresh send is all the recovery it needs.
-        void childWrapper.thread.core.submit({
+        void childWrapper.thread.thread.submit({
           type: "resolved",
           messages: [
             {

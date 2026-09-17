@@ -4,11 +4,11 @@ import { fileURLToPath } from "node:url";
 import {
   type CompactionRunState,
   type CompletedToolInfo,
+  type ContextFileAccess,
   compactionRunChunkIndex,
   compactionRunThreadIds,
   displayPath,
   type EditedFileGroup,
-  type FileSupervisor,
   formatToolSpec,
   formatToolSpecs,
   type LoopState,
@@ -211,7 +211,7 @@ function renderUsage(usage: Usage): VDOMNode {
  */
 const shouldShowContextFiles = (
   loopState: ThreadLoopState,
-  fileSupervisor: FileSupervisor,
+  fileSupervisor: ContextFileAccess,
 ): boolean => {
   return (
     loopState.type === "idle" && Object.keys(fileSupervisor.files).length > 0
@@ -254,7 +254,7 @@ const renderSystemPrompt = (
 };
 
 const renderToolDefinitions = (
-  specs: ProviderToolSpec[],
+  specs: ReadonlyArray<ProviderToolSpec>,
   showToolDefinitions: boolean,
   expandedToolDefinitions: { [toolName: string]: boolean },
   dispatch: Dispatch<Msg>,
@@ -454,7 +454,7 @@ export const view: View<{
   thread: NvimThread;
   dispatch: Dispatch<Msg>;
 }> = ({ thread, dispatch }) => {
-  const threadType = thread.core.threadType;
+  const threadType = thread.thread.threadType;
   const titlePrefix = threadType === "docker_root" ? "🐳 " : "";
   const archiveLink = withBindings(d`[Archive]`, {
     "<CR>": () =>
@@ -463,25 +463,25 @@ export const view: View<{
         id: thread.id,
       }),
   });
-  const titleView = thread.core.title
-    ? d`# ${titlePrefix}${thread.core.title} ${archiveLink}`
+  const titleView = thread.thread.title
+    ? d`# ${titlePrefix}${thread.thread.title} ${archiveLink}`
     : d`# ${titlePrefix}[ Untitled ] ${archiveLink}`;
 
   const systemPromptView = renderSystemPrompt(
-    thread.core.systemPrompt,
+    thread.thread.systemPrompt,
     thread.state.showSystemPrompt,
     dispatch,
   );
 
   const toolDefinitionsView = renderToolDefinitions(
-    thread.core.toolSpecs,
+    thread.thread.toolSpecs,
     thread.state.showToolDefinitions,
     thread.state.expandedToolDefinitions,
     dispatch,
   );
 
-  const messages = thread.getProviderMessages();
-  const loopState = thread.loopState;
+  const messages = thread.thread.getProviderMessages();
+  const loopState = thread.thread.loopState;
 
   // Show logo when empty and not busy
   const isIdle = loopState.type === "idle";
@@ -495,30 +495,34 @@ ${LOGO}
 
 magenta is for agentic flow
 
-${contextFilesView(thread.fileSupervisor, contextViewCtx(thread), {
+${contextFilesView(thread.thread.contextFiles, contextViewCtx(thread), {
   expanded: thread.state.contextFilesExpanded,
   onToggle: () => dispatch({ type: "toggle-context-files-expanded" }),
 })}`;
   }
 
-  const latestUsage = thread.agent.log.latestUsage;
+  const latestUsage = thread.thread.latestUsage;
   const statusView = renderStatus(
     loopState,
     latestUsage,
-    thread.core.lastResult(),
+    thread.thread.lastResult(),
     runningCompaction(thread),
     thread.requestAnimationTick,
-    thread.core.yielded,
+    thread.thread.yielded,
   );
 
   const fileSupervisorView = shouldShowContextFiles(
     loopState,
-    thread.fileSupervisor,
+    thread.thread.contextFiles,
   )
-    ? d`\n${contextFilesView(thread.fileSupervisor, contextViewCtx(thread), {
-        expanded: thread.state.contextFilesExpanded,
-        onToggle: () => dispatch({ type: "toggle-context-files-expanded" }),
-      })}`
+    ? d`\n${contextFilesView(
+        thread.thread.contextFiles,
+        contextViewCtx(thread),
+        {
+          expanded: thread.state.contextFilesExpanded,
+          onToggle: () => dispatch({ type: "toggle-context-files-expanded" }),
+        },
+      )}`
     : d``;
 
   const sandboxView = thread.sandboxViolationHandler?.getPendingViolations()
@@ -531,7 +535,7 @@ ${contextFilesView(thread.fileSupervisor, contextViewCtx(thread), {
     thread.state.compactionViewState,
     dispatch,
   );
-  const editedGroups = thread.core.editedFileGroups.filter(
+  const editedGroups = thread.thread.editedFileGroups.filter(
     (group) =>
       group.endNativeMessageIdx !== undefined && group.files.length > 0,
   );
@@ -556,7 +560,7 @@ ${contextFilesView(thread.fileSupervisor, contextViewCtx(thread), {
     d`${(editedFilesAtMessage.get(messageIdx) ?? []).map((group) =>
       editedFilesSummaryView(group, thread, dispatch),
     )}`;
-  const { async: pendingAsync, next: pendingNext } = thread.core.queued;
+  const { async: pendingAsync, next: pendingNext } = thread.thread.queued;
   const pendingCount = pendingAsync.length;
   const pendingMessagesView =
     pendingCount > 0
@@ -677,7 +681,7 @@ ${contextFilesView(thread.fileSupervisor, contextViewCtx(thread), {
     const contextUpdateView = viewState?.contextUpdates
       ? renderContextUpdate(
           viewState.contextUpdates,
-          thread.fileSupervisor,
+          thread.thread.contextFiles,
           contextViewCtx(thread),
           {
             expandedUpdates: viewState.expandedUpdates ?? {},
@@ -950,7 +954,9 @@ function renderMessageContentBlock(
       };
 
       // Check if tool is active (still running)
-      const activeEntry = loopActiveTools(thread.loopState)?.get(request.id);
+      const activeEntry = loopActiveTools(thread.thread.loopState)?.get(
+        request.id,
+      );
 
       const isActive = !!activeEntry;
       const abortBinding = isActive
@@ -1055,13 +1061,12 @@ function renderMessageContentBlock(
           return d`⚠️ tool result for ${request.id} not found\n`;
         }
 
-        const completedInfo: CompletedToolInfo = thread.core.completedTools.get(
-          request.id,
-        ) ?? {
-          request,
-          result: toolResult,
-          structuredResult: undefined,
-        };
+        const completedInfo: CompletedToolInfo =
+          thread.thread.completedTools.get(request.id) ?? {
+            request,
+            result: toolResult,
+            structuredResult: undefined,
+          };
 
         // Section 5: Result summary. get_files renders its own interactive
         // per-file result in Section 7, so it opts out of the generic summary.
@@ -1218,7 +1223,7 @@ export function findToolResult(
 }
 
 function renderStreamingBlock(thread: NvimThread): string | VDOMNode {
-  const block = loopStreamingBlock(thread.loopState);
+  const block = loopStreamingBlock(thread.thread.loopState);
   if (!block) return d``;
 
   switch (block.type) {

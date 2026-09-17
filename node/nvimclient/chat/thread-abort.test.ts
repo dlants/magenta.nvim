@@ -35,7 +35,7 @@ it("forks a thread while streaming without aborting source", async () => {
     // Per the plan, fork no longer aborts the source. Confirm the streaming
     // request is still live and the source agent is still streaming.
     expect(streamingRequest.aborted).toBe(false);
-    expect(loopLabel(originalThread.loopState)).toBe("streaming");
+    expect(loopLabel(originalThread.thread.loopState)).toBe("streaming");
 
     // Wait for the new thread to become active
     await pollUntil(() => {
@@ -107,7 +107,7 @@ it("forks a thread while waiting for tool use without aborting source", async ()
     const originalThreadId = originalThread.id;
 
     // Verify we're in tool_use mode
-    expect(loopLabel(originalThread.core.loopState)).toBe("running_tools");
+    expect(loopLabel(originalThread.thread.loopState)).toBe("running_tools");
 
     // Fork by pressing F on the assistant's tool-use message text.
     await driver.pressOnDisplayMessage("I'll read your secret file.", "F");
@@ -139,8 +139,8 @@ it("forks a thread while waiting for tool use without aborting source", async ()
 
     // Per the plan, fork no longer aborts the source. The original thread
     // is still in tool_use mode awaiting approval.
-    expect(loopLabel(originalThread.core.loopState)).toBe("running_tools");
-    expect(loopLabel(originalThread.loopState)).toBe("running_tools");
+    expect(loopLabel(originalThread.thread.loopState)).toBe("running_tools");
+    expect(loopLabel(originalThread.thread.loopState)).toBe("running_tools");
   });
 });
 
@@ -190,7 +190,7 @@ it("aborts request when sending new message while waiting for response", async (
 
     // Check the thread message structure - should only have the second exchange
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
     expect(sanitizeMessagesForSnapshot(messages)).toMatchSnapshot();
   });
 });
@@ -240,7 +240,7 @@ it("aborts tool use when sending new message while tool is executing", async () 
 
     // Check the thread message structure
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
+    const messages = thread.thread.getProviderMessages();
     expect(sanitizeMessagesForSnapshot(messages)).toMatchSnapshot();
   });
 });
@@ -441,7 +441,7 @@ it("appends pending messages to input buffer on abort", async () => {
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.queued.async).toHaveLength(1);
+    expect(thread.thread.queued.async).toHaveLength(1);
 
     // Type some in-progress text into the input buffer
     await driver.inputMagentaText("In progress typing");
@@ -471,7 +471,7 @@ it("appends pending messages to input buffer on abort", async () => {
     });
 
     // Queue must be empty after abort
-    expect(thread.core.queued.async).toHaveLength(0);
+    expect(thread.thread.queued.async).toHaveLength(0);
   });
 });
 
@@ -489,7 +489,7 @@ it("recovers pending messages into empty input buffer on abort", async () => {
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.queued.async).toHaveLength(1);
+    expect(thread.thread.queued.async).toHaveLength(1);
 
     // Do not type anything into the input buffer; abort with an empty buffer
     await driver.abort();
@@ -514,7 +514,7 @@ it("recovers pending messages into empty input buffer on abort", async () => {
       }
     });
 
-    expect(thread.core.queued.async).toHaveLength(0);
+    expect(thread.thread.queued.async).toHaveLength(0);
   });
 });
 
@@ -541,7 +541,7 @@ it("removes server_tool_use content when aborted before receiving results", asyn
 
     // Verify the server tool use content is in the message before abort
     const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getProviderMessages();
+    const messages = thread.thread.getProviderMessages();
     const contentTypesBeforeAbort = messages[messages.length - 1].content.map(
       (c) => c.type,
     );
@@ -552,7 +552,7 @@ it("removes server_tool_use content when aborted before receiving results", asyn
     await delay(0);
 
     // The server tool use should be removed since no result was received
-    const messagesAfterAbort = thread.getProviderMessages();
+    const messagesAfterAbort = thread.thread.getProviderMessages();
     // Last message is the abort notification; check the assistant message before it
     const assistantMessage = messagesAfterAbort.findLast(
       (m) => m.role === "assistant",

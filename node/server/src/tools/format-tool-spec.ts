@@ -104,6 +104,8 @@ export function formatToolSpec(spec: ProviderToolSpec): string {
   return lines.join("\n");
 }
 
-export function formatToolSpecs(specs: ProviderToolSpec[]): string {
+export function formatToolSpecs(
+  specs: ReadonlyArray<ProviderToolSpec>,
+): string {
   return specs.map(formatToolSpec).join("\n\n");
 }

@@ -9,12 +9,10 @@ import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
 import { type Compactor, summaryText } from "./compaction/index.ts";
-import type { EdlRegisters } from "./edl/index.ts";
 import type { ThreadLoopState } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
   AgentInput,
-  NativeInferenceManager,
   NativeMessageIdx,
   Provider,
   ProviderMessage,
@@ -43,11 +41,7 @@ import {
   type Files,
   type FileUpdates,
 } from "./supervisors/file-supervisor.ts";
-import type {
-  GitContextUpdate,
-  GitSupervisor,
-} from "./supervisors/git-supervisor.ts";
-import type { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
+import type { GitContextUpdate } from "./supervisors/git-supervisor.ts";
 import type {
   AgentRequestContext,
   OnUpdate,
@@ -66,23 +60,31 @@ import {
 
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type {
-  EditedFilesSupervisor,
   EndTurnAction,
   EndTurnContext,
   RequestAction,
   RequestContext,
   SuspendReason,
-  SystemInfoSupervisor,
   ThreadSupervisor,
 } from "./thread-supervisor.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { ClientToolCreator } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
-import * as ThreadTitle from "./tools/thread-title.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
 import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
+export type ContextFileAccess = Readonly<
+  Pick<
+    FileSupervisor,
+    | "files"
+    | "addFiles"
+    | "addFileContext"
+    | "removeFileContext"
+    | "getPendingUpdates"
+  >
+>;
+
 export interface ThreadContextDelivery {
   initialFiles?: Files;
   pollIntervalMs?: number;
@@ -153,6 +155,7 @@ type FlushedQueue =
   | { type: "compact"; nextPrompt: string | undefined };
 export type ThreadCallbacks = {
   readonly onUpdate: OnUpdate;
+  readonly onSubmission?: (messages: readonly AgentInput[]) => void;
   /** A context supervisor committed a delivery into the request going out.
    * Fixed for the thread lifetime; retired cores cannot publish deliveries. */
   readonly onFilesSent?: (updates: FileUpdates) => void;
@@ -175,42 +178,21 @@ export class Thread {
   get systemInfo(): SystemInfo {
     return this.context.systemInfo;
   }
-  get fileSupervisor(): FileSupervisor {
+  get contextFiles(): ContextFileAccess {
     return this.core.fileSupervisor;
   }
-  get gitSupervisor(): GitSupervisor | undefined {
-    return this.core.gitSupervisor;
-  }
-  private get systemInfoSupervisor(): SystemInfoSupervisor | undefined {
-    return this.core.systemInfoSupervisor;
-  }
-  private get systemReminders(): SystemReminderSupervisor | undefined {
-    return this.core.systemReminders;
-  }
-  private _core: ThreadCore;
+  private core: ThreadCore;
   private interruption = new AbortController();
-  get interruptionSignal(): AbortSignal {
-    return this.interruption.signal;
-  }
   private interrupt(): void {
     const previous = this.interruption;
     this.interruption = new AbortController();
     previous.abort();
   }
 
-  get core(): ThreadCore {
-    return this._core;
-  }
-  get edlRegisters(): EdlRegisters {
-    return this.core.edlRegisters;
-  }
-  get editedFilesSupervisor(): EditedFilesSupervisor {
-    return this.core.editedFilesSupervisor;
-  }
   get editedFileGroups() {
-    return this.editedFilesSupervisor.groups;
+    return this.core.editedFilesSupervisor.groups;
   }
-  get toolSpecs(): ProviderToolSpec[] {
+  get toolSpecs(): ReadonlyArray<ProviderToolSpec> {
     return this.core.toolSpecs;
   }
   get completedTools(): ReadonlyMap<ToolRequestId, CompletedToolInfo> {
@@ -219,15 +201,11 @@ export class Thread {
   getLastStopTokenCount(): number {
     return this.core.getLastStopTokenCount();
   }
-  async abortAgentTurn(): Promise<void> {
-    this.cancelSubmission();
-    await this.core.abortAgentTurn();
-  }
   private threadLogger: ThreadLogger;
 
   constructor(
     public id: ThreadId,
-    public readonly context: ThreadContext,
+    private readonly context: ThreadContext,
     public readonly callbacks: ThreadCallbacks,
     private archiveOptions: ThreadArchiveOptions = {},
     fork?: { source: Thread; nativeMessageIdx: NativeMessageIdx },
@@ -255,7 +233,7 @@ export class Thread {
           : {}),
       },
     );
-    this._core = fork
+    this.core = fork
       ? this.createCore({
           type: "fork",
           source: fork.source.core,
@@ -423,11 +401,13 @@ export class Thread {
 
   private get contextSupervisors(): ReadonlyArray<ThreadSupervisor> {
     return [
-      this.editedFilesSupervisor,
-      ...(this.gitSupervisor ? [this.gitSupervisor] : []),
-      ...(this.systemReminders ? [this.fileSupervisor] : []),
-      ...(this.systemInfoSupervisor ? [this.systemInfoSupervisor] : []),
-      ...(this.systemReminders ? [this.systemReminders] : []),
+      this.core.editedFilesSupervisor,
+      ...(this.core.gitSupervisor ? [this.core.gitSupervisor] : []),
+      ...(this.core.systemReminders ? [this.core.fileSupervisor] : []),
+      ...(this.core.systemInfoSupervisor
+        ? [this.core.systemInfoSupervisor]
+        : []),
+      ...(this.core.systemReminders ? [this.core.systemReminders] : []),
       this.queueFlush,
     ];
   }
@@ -473,22 +453,28 @@ export class Thread {
     return cloned;
   }
   get activeReminders(): ReadonlySet<string> {
-    return this.systemReminders?.activeReminders ?? new Set();
+    return this.core.systemReminders?.activeReminders ?? new Set();
   }
 
   private activateReminder(
     text: string,
     nativeMessageIdx: NativeMessageIdx,
   ): void {
-    this.systemReminders?.activateReminder(text, nativeMessageIdx);
+    this.core.systemReminders?.activateReminder(text, nativeMessageIdx);
   }
   /** Busy from the first request of a submission until the loop comes to
    * rest, which spans the gaps between turns. */
   get isBusy(): boolean {
     return this.loopState.type !== "idle";
   }
-  get inferenceManager(): NativeInferenceManager {
-    return this.core.manager;
+  get nativeMessageIdx(): NativeMessageIdx {
+    return this.core.manager.getNativeMessageIdx();
+  }
+  get latestUsage() {
+    return this.core.manager.log.latestUsage;
+  }
+  get chatSupervisors(): readonly ThreadSupervisor[] {
+    return this.context.chatSupervisors ?? [];
   }
   /** Render state combines the outer submission's lifetime with progress
    * reported by its current agent turn. */
@@ -529,17 +515,11 @@ export class Thread {
     );
     this.callbacks.onUpdate();
   }
-  getToolSpecs(): ProviderToolSpec[] {
-    return this.toolSpecs;
-  }
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
     return this.core.manager.log.messages;
   }
   get inputTokenCount(): number | undefined {
     return this.core.preflightTokenCount;
-  }
-  getMessages(): ProviderMessage[] {
-    return [...this.getProviderMessages()];
   }
   /** Reset replaces this content; the next turn drains it exactly once. */
   private pendingSeed: AgentInput[] = [];
@@ -554,6 +534,7 @@ export class Thread {
     await this.threadLogger.flushed();
   }
   setTitle(title: string): void {
+    this.assertUsable();
     this.#title = title;
     this.threadLogger.recordTitle(title);
     this.handleUpdate();
@@ -571,7 +552,8 @@ export class Thread {
     this.interrupt();
     if (this.yieldState && !this.isBusy) return { unsent: [] };
     const unsent = this.drainQueues();
-    await this.abortAgentTurn();
+    this.cancelSubmission();
+    await this.core.abortAgentTurn();
     if (unsent.length) this.handleUpdate();
     return { unsent };
   }
@@ -616,7 +598,7 @@ export class Thread {
     if (wasBusy) this.drainQueues();
     const submission = new AbortController();
     this.submission = submission;
-    const signal = this.interruptionSignal;
+    const signal = this.interruption.signal;
     const isCurrent = () =>
       this.submission === submission &&
       !submission.signal.aborted &&
@@ -649,22 +631,7 @@ export class Thread {
           text,
           this.core.manager.getPendingUserMessageIdx(),
         );
-      if (
-        this.threadType !== "compact" &&
-        this.title === undefined &&
-        resolved.messages.length
-      ) {
-        this.setThreadTitle(
-          resolved.messages
-            .filter((m) => m.type === "text")
-            .map((m) => m.text)
-            .join("\n"),
-        ).catch((error: Error) =>
-          this.context.logger.error(
-            `Error getting thread title: ${error.message}`,
-          ),
-        );
-      }
+      this.callbacks.onSubmission?.(resolved.messages);
       let result: SendResult = resolved.compact
         ? {
             type: "suspended",
@@ -943,8 +910,8 @@ export class Thread {
     let result = await runTurn(messages);
     for (;;) {
       if (!isCurrentLoop()) return { type: "aborted" };
-      // A yield suspension is the thread's own, raised by `yieldGate`, and
-      // must never escape: an owner would read it as an unclaimed stop.
+      // A successful yield tool raises this suspension internally; it must
+      // never escape as an unclaimed stop at the submission boundary.
       if (result.type === "suspended" && result.reason.kind === "yield") {
         const resolved = await this.resolveYield(
           result.reason.value,
@@ -1153,46 +1120,6 @@ export class Thread {
     }
     return { type: "rest" };
   }
-  async setThreadTitle(userMessage: string): Promise<void> {
-    const request = this.context.provider.forceToolUse({
-      model: this.context.profile.fastModel,
-      input: [
-        {
-          type: "text",
-          text: `\
-The user has provided the following prompt:
-${userMessage}
-Come up with a succinct thread title for this prompt. It must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).
-`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        },
-      ],
-      spec: ThreadTitle.spec,
-      systemPrompt: this.systemPrompt,
-      disableCaching: true,
-    });
-    const result = await request.promise;
-    if (result.toolRequest.status === "ok") {
-      const input = ThreadTitle.validateInput(
-        result.toolRequest.value.input as { [key: string]: unknown },
-      );
-      if (input.status === "ok") {
-        this.setTitle(input.value.title);
-      }
-    }
-  }
-  /** Preserve thread identity, queues, yield/result and tracked context; discard
-   * conversation-local state; the structured-result display archive survives. */
-  async reset(
-    options: Parameters<Thread["resetCore"]>[0],
-  ): Promise<ThreadCore> {
-    this.interrupt();
-    this.cancelSubmission();
-    this.submission = undefined;
-    this.restoreDetachedBatch();
-    return this.replaceCore(options);
-  }
-
   private resetPromise: Promise<ThreadCore> | undefined;
   private async replaceCore(
     options: Parameters<Thread["resetCore"]>[0],
@@ -1227,7 +1154,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     if (this.resetting) throw new Error("Thread reset already in progress");
     this.resetting = true;
     try {
-      const initialFiles = buildClonedFiles(this.fileSupervisor.files);
+      const initialFiles = buildClonedFiles(this.contextFiles.files);
       await this.core.dispose();
       this.assertUsable();
       // Disposal is irreversible: cancellation prevents the caller's follow-up,
@@ -1241,7 +1168,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
         type: "fresh",
         initialFiles,
       });
-      this._core = core;
+      this.core = core;
       this.pendingSeed = isCurrent() ? [...seed] : [];
       this.lastSubmissionResult = undefined;
       this.threadLogger.resetCursor();

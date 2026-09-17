@@ -289,7 +289,7 @@ export class Magenta {
         if (!wrapper || wrapper.state !== "initialized") {
           return 0;
         }
-        return wrapper.thread.getLastStopTokenCount();
+        return wrapper.thread.thread.getLastStopTokenCount();
       },
       () => {
         if (!this.chat.state.activeThreadId) {
@@ -300,10 +300,12 @@ export class Magenta {
         if (!wrapper || wrapper.state !== "initialized") {
           return "";
         }
-        if (wrapper.thread.core.isBusy) {
+        if (wrapper.thread.thread.isBusy) {
           return "⏳";
         }
-        return wrapper.thread.core.lastResult()?.type === "failed" ? "✗" : "✓";
+        return wrapper.thread.thread.lastResult()?.type === "failed"
+          ? "✗"
+          : "✓";
       },
       this.bufferManager,
       () => this.getActiveKey(),
@@ -675,7 +677,7 @@ export class Magenta {
             continue;
           }
 
-          thread.fileSupervisor.addFileContext(
+          thread.thread.contextFiles.addFileContext(
             absFilePath,
             relFilePath,
             fileTypeInfo,

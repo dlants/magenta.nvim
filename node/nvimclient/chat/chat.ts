@@ -268,7 +268,7 @@ export class Chat implements ThreadManager {
             if (
               threadWrapper.parentThreadId === thread.id &&
               threadWrapper.state === "initialized" &&
-              !threadWrapper.thread.core.yielded
+              !threadWrapper.thread.thread.yielded
             ) {
               threadWrapper.thread.update({
                 type: "thread-msg",
@@ -313,7 +313,7 @@ export class Chat implements ThreadManager {
         };
         this.threadWrappers[msg.thread.id] = wrapper;
 
-        msg.thread.core.result.then(
+        msg.thread.thread.result.then(
           (result) => this.settleThreadResult(msg.thread.id, result),
           (e: Error) =>
             this.settleThreadResult(msg.thread.id, {
@@ -589,7 +589,7 @@ export class Chat implements ThreadManager {
     ) {
       const threadState = this.threadWrappers[this.state.activeThreadId];
       if (threadState.state === "initialized") {
-        return threadState.thread.getMessages();
+        return [...threadState.thread.thread.getProviderMessages()];
       }
     }
     return [];
@@ -607,7 +607,7 @@ export class Chat implements ThreadManager {
     })
       .then((discovered) => {
         for (const file of discovered) {
-          thread.fileSupervisor.addFileContext(
+          thread.thread.contextFiles.addFileContext(
             file.absFilePath,
             file.relFilePath,
             file.fileTypeInfo,
@@ -779,13 +779,13 @@ export class Chat implements ThreadManager {
     bypassRef.get = () => thread.isSandboxBypassed;
 
     for (const absFilePath of Object.keys(
-      thread.fileSupervisor.files,
+      thread.thread.contextFiles.files,
     ) as AbsFilePath[]) {
       this.triggerHierarchyDiscovery(thread, absFilePath);
     }
 
     if (contextFiles.length > 0) {
-      await thread.fileSupervisor.addFiles(contextFiles);
+      await thread.thread.contextFiles.addFiles(contextFiles);
     }
 
     this.context.dispatch({
@@ -939,7 +939,7 @@ export class Chat implements ThreadManager {
   threadNeedsAttention(threadId: ThreadId): boolean {
     const wrapper = this.threadWrappers[threadId];
     if (wrapper === undefined || wrapper.state !== "initialized") return false;
-    const core = wrapper.thread.core;
+    const core = wrapper.thread.thread;
     // A yielded thread has finished its work; a streaming thread is actively
     // working. Neither needs the user's attention.
     if (core.yielded) return false;
@@ -1064,12 +1064,12 @@ export class Chat implements ThreadManager {
     }
 
     const thread = threadWrapper.thread;
-    if (thread.core.title) {
-      return thread.core.title;
+    if (thread.thread.title) {
+      return thread.thread.title;
     }
 
     // Find the first user message text
-    const messages = thread.getProviderMessages();
+    const messages = thread.thread.getProviderMessages();
     for (const message of messages) {
       if (message.role === "user") {
         for (const content of message.content) {
@@ -1104,7 +1104,7 @@ export class Chat implements ThreadManager {
     const threadWrapper = this.threadWrappers[threadId];
     const threadType =
       threadWrapper?.state === "initialized"
-        ? threadWrapper.thread.core.threadType
+        ? threadWrapper.thread.thread.threadType
         : undefined;
     const icon = threadType === "docker_root" ? "🐳 " : "";
 
@@ -1128,7 +1128,7 @@ export class Chat implements ThreadManager {
 
     let tokenSuffix = "";
     if (extra?.showTokenCount && threadWrapper?.state === "initialized") {
-      const tokenCount = threadWrapper.thread.core.getLastStopTokenCount();
+      const tokenCount = threadWrapper.thread.thread.getLastStopTokenCount();
       if (tokenCount > 0) {
         tokenSuffix = ` [${formatTokenCount(tokenCount)}]`;
       }
@@ -1394,8 +1394,7 @@ ${rows}${loadMore}`;
     }
 
     const sourceThread = sourceThreadWrapper.thread;
-    const idx =
-      truncateAtMessageIdx ?? sourceThread.agent.getNativeMessageIdx();
+    const idx = truncateAtMessageIdx ?? sourceThread.thread.nativeMessageIdx;
 
     const newThreadId = uuidv7() as ThreadId;
     this.threadWrappers[newThreadId] = {
@@ -1423,8 +1422,8 @@ ${rows}${loadMore}`;
       getDisplayWidth: this.context.getDisplayWidth,
     });
 
-    const markerIdx = thread.core.getProviderMessages().length;
-    thread.core.prependToNextTurn([
+    const markerIdx = thread.thread.getProviderMessages().length;
+    thread.thread.prependToNextTurn([
       {
         type: "text",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -1506,11 +1505,11 @@ ${rows}${loadMore}`;
 
       case "initialized": {
         const thread = threadWrapper.thread;
-        const loopState = thread.loopState;
-        const lastTurnResult = thread.core.lastResult();
+        const loopState = thread.thread.loopState;
+        const lastTurnResult = thread.thread.lastResult();
 
         const summary = {
-          title: thread.core.title,
+          title: thread.thread.title,
           status: (() => {
             // Check mode for thread-specific states first
             const teardownMessage = this.teardownMessages.get(threadId);
@@ -1520,7 +1519,7 @@ ${rows}${loadMore}`;
                 activity: `🐳 ${teardownMessage}`,
               };
             }
-            const yielded = thread.core.yielded;
+            const yielded = thread.thread.yielded;
             if (yielded) {
               return {
                 type: "yielded" as const,
@@ -1667,7 +1666,7 @@ ${rows}${loadMore}`;
       },
     });
 
-    if (opts.label) thread.core.setTitle(opts.label);
+    if (opts.label) thread.thread.setTitle(opts.label);
     return thread.id;
   }
 

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type {
@@ -30,7 +31,7 @@ it("no <context_update> on first turn after fork when files unchanged", async ()
 
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
-    const idx = sourceThread.agent.getNativeMessageIdx();
+    const idx = sourceThread.thread.nativeMessageIdx;
 
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);
 
@@ -76,7 +77,7 @@ it("<context_update> IS sent if a tracked file changes after fork", async () => 
 
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
-    const idx = sourceThread.agent.getNativeMessageIdx();
+    const idx = sourceThread.thread.nativeMessageIdx;
 
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);
 
@@ -119,7 +120,7 @@ it("truncated fork reseeds context delivered only after the fork point", async (
     });
     await driver.assertDisplayBufferContains("Ready for files.");
     const source = driver.magenta.chat.getActiveThread();
-    const forkPoint = source.agent.getNativeMessageIdx();
+    const forkPoint = source.thread.nativeMessageIdx;
     await driver.addContextFiles("poem.txt");
     await driver.inputMagentaText("Now read the poem");
     await driver.send();
@@ -130,7 +131,7 @@ it("truncated fork reseeds context delivered only after the fork point", async (
       toolRequests: [],
     });
     await driver.assertDisplayBufferContains("Read the new context.");
-    expect(source.agent.getNativeMessageIdx()).toBeGreaterThan(forkPoint);
+    expect(source.thread.nativeMessageIdx).toBeGreaterThan(forkPoint);
     await driver.magenta.forkAtMessageAndSwitch(source.id, forkPoint);
     await driver.inputMagentaText("Continue from the earlier point");
     await driver.send();
@@ -180,7 +181,7 @@ it("tool result map survives the fork", async () => {
 
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
-    const idx = sourceThread.agent.getNativeMessageIdx();
+    const idx = sourceThread.thread.nativeMessageIdx;
 
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);
 
@@ -205,7 +206,7 @@ it("sandbox bypass and write approvals use the fork owner", async () => {
     const sourceThread = driver.magenta.chat.getActiveThread();
     sourceThread.sandboxBypassed = true;
 
-    const idx = sourceThread.agent.getNativeMessageIdx();
+    const idx = sourceThread.thread.nativeMessageIdx;
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);
 
     const forkThread = driver.magenta.chat.getActiveThread();
@@ -217,9 +218,9 @@ it("sandbox bypass and write approvals use the fork owner", async () => {
     expect(sourceThread.isSandboxBypassed).toBe(false);
     const destination = path.join(dirs.baseDir, "fork-write.txt");
     driver.mockSandbox.blockWritesTo(destination);
-    const forkIO = forkThread.core.context.fileIO;
+    const forkIO = forkThread.thread["context"].fileIO;
     expect(forkIO).toBe(forkThread.context.environment.fileIO);
-    expect(forkIO).not.toBe(sourceThread.core.context.fileIO);
+    expect(forkIO).not.toBe(sourceThread.thread["context"].fileIO);
     await forkIO.writeFile(destination, "bypassed fork write");
     expect(
       sourceThread.sandboxViolationHandler!.getPendingViolations().size,
@@ -272,22 +273,22 @@ it("source agent is unaffected by clone", async () => {
 
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
-    const messagesBefore = sourceThread.agent.log.messages.length;
-    const statusBefore = sourceThread.loopState;
-    const turnResultBefore = sourceThread.core.lastResult();
+    const messagesBefore = sourceThread.thread.getProviderMessages().length;
+    const statusBefore = sourceThread.thread.loopState;
+    const turnResultBefore = sourceThread.thread.lastResult();
 
-    const idx = sourceThread.agent.getNativeMessageIdx();
+    const idx = sourceThread.thread.nativeMessageIdx;
     await driver.magenta.forkAtMessageAndSwitch(
       sourceThreadId,
       (idx - 1) as NativeMessageIdx,
     );
 
-    const messagesAfter = sourceThread.agent.log.messages.length;
-    const statusAfter = sourceThread.loopState;
+    const messagesAfter = sourceThread.thread.getProviderMessages().length;
+    const statusAfter = sourceThread.thread.loopState;
 
     expect(messagesAfter).toBe(messagesBefore);
     expect(statusAfter.type).toBe(statusBefore.type);
-    expect(sourceThread.core.lastResult()).toEqual(turnResultBefore);
+    expect(sourceThread.thread.lastResult()).toEqual(turnResultBefore);
   });
 });
 
@@ -308,7 +309,7 @@ it("fork appends an id-free fork_notification and records forkedFrom", async () 
 
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
-    const idx = sourceThread.agent.getNativeMessageIdx();
+    const idx = sourceThread.thread.nativeMessageIdx;
 
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);
     // The fork notification rides along with the fork's first turn.
@@ -322,7 +323,7 @@ it("fork appends an id-free fork_notification and records forkedFrom", async () 
     await driver.assertDisplayBufferContains("sure");
 
     const forkThread = driver.magenta.chat.getActiveThread();
-    const messages = forkThread.getProviderMessages();
+    const messages = forkThread.thread.getProviderMessages();
 
     const markerIdx = messages.findIndex((m) =>
       m.content.some((c) => c.type === "fork_notification"),
@@ -360,7 +361,7 @@ it("child shows 'forked from' and <CR> navigates to parent", async () => {
 
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
-    const idx = sourceThread.agent.getNativeMessageIdx();
+    const idx = sourceThread.thread.nativeMessageIdx;
 
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);
     // The fork notification rides along with the fork's first turn.
@@ -402,14 +403,14 @@ it("parent shows 'forked to' (not in agent messages) and <CR> navigates to child
 
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
-    const idx = sourceThread.agent.getNativeMessageIdx();
+    const idx = sourceThread.thread.nativeMessageIdx;
 
     const childThreadId = await driver.magenta.forkAtMessageAndSwitch(
       sourceThreadId,
       idx,
     );
 
-    const parentHasMarker = sourceThread
+    const parentHasMarker = sourceThread.thread
       .getProviderMessages()
       .some((m) => m.content.some((c) => c.type === "fork_notification"));
     expect(parentHasMarker).toBe(false);
@@ -446,9 +447,9 @@ it("agent clone happens exactly once", async () => {
 
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
-    const cloneSpy = vi.spyOn(sourceThread.agent, "clone");
+    const cloneSpy = vi.spyOn(sourceThread.thread["core"].manager, "clone");
 
-    const idx = sourceThread.agent.getNativeMessageIdx();
+    const idx = sourceThread.thread.nativeMessageIdx;
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);
 
     expect(cloneSpy).toHaveBeenCalledTimes(1);
@@ -470,7 +471,7 @@ it("fresh and forked threads resolve their first command with equivalent executi
         .split("\n")[0],
     );
     expect(
-      Object.keys(source.fileSupervisor.files).some((file) =>
+      Object.keys(source.thread.contextFiles.files).some((file) =>
         file.endsWith("poem.txt"),
       ),
     ).toBe(true);
@@ -482,18 +483,20 @@ it("fresh and forked threads resolve their first command with equivalent executi
     await driver.assertDisplayBufferContains("Ready to fork");
     await driver.magenta.forkAtMessageAndSwitch(
       source.id,
-      source.agent.getNativeMessageIdx(),
+      source.thread.nativeMessageIdx,
     );
     const fork = driver.magenta.chat.getActiveThread();
-    expect(fork.core.toolSpecs).toEqual(source.core.toolSpecs);
-    expect(fork.core.context.getScriptRunner?.()).toBe(
-      source.core.context.getScriptRunner?.(),
+    expect(fork.thread.toolSpecs).toEqual(source.thread.toolSpecs);
+    expect(fork.thread["context"].getScriptRunner?.()).toBe(
+      source.thread["context"].getScriptRunner?.(),
     );
     expect(
-      fork.core.context.chatSupervisors!.map((policy) => policy.constructor),
+      fork.thread.chatSupervisors!.map((policy) => policy.constructor),
     ).toEqual([MaxTokensSupervisor, AutoCompactSupervisor]);
-    expect(fork.core.context.resolve).not.toBe(source.core.context.resolve);
-    expect(fork.compactor).toBe(fork.core.context.compactor);
+    expect(fork.thread["context"].resolve).not.toBe(
+      source.thread["context"].resolve,
+    );
+    expect(fork.compactor).toBe(fork.thread["context"].compactor);
     expect(fork.compactor).not.toBe(source.compactor);
     await fs.writeFile(
       path.join(dirs.tmpDir, "fork-only.txt"),
@@ -505,10 +508,10 @@ it("fresh and forked threads resolve their first command with equivalent executi
     expect(JSON.stringify(continued.messages)).toContain(
       "fork command content",
     );
-    expect(Object.keys(fork.fileSupervisor.files)).toContain(
+    expect(Object.keys(fork.thread.contextFiles.files)).toContain(
       path.join(dirs.tmpDir, "fork-only.txt"),
     );
-    expect(Object.keys(source.fileSupervisor.files)).not.toContain(
+    expect(Object.keys(source.thread.contextFiles.files)).not.toContain(
       path.join(dirs.tmpDir, "fork-only.txt"),
     );
     expect(JSON.stringify(continued.messages)).toContain("again");

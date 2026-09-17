@@ -327,6 +327,16 @@ The initial full run encountered an existing process-termination snapshot race i
 
 ## 5. Prune boundaries and extract title generation
 
+### Progress (September 17, 2026)
+
+- [x] Renamed the UI adapter's `core` to `thread`; removed its inference-manager and duplicate message/activity/token accessors. Views and owners use the stable Thread read models directly.
+- [x] Hid ThreadCore, execution dependencies, interruption, administrative reset, and supervisor machinery; removed duplicate tool/message APIs and private forwarding getters. Context files are exposed through a scoped capability without delivery hooks, subscriptions, or disposal.
+- [x] Extracted title generation into the existing thread-title helper. A fixed resolved-submission notification lets the nvim owner request a title once; late results cannot override a manual title or update a destroyed wrapper. Thread retains title/archive mutation.
+- [x] Added provider-controlled title regressions covering one request across successive submissions, manual-title precedence, destruction, provider failure, invalid results, and archive title records. Existing fork/compact, edited-file, retry, abort, and structured-result regressions remain green.
+- [x] Full validation: `npx vitest run` (126 files passed; 1723 tests passed, 2 skipped tests and 1 todo), `npx vitest run node/server/` (60 files; 1047 tests passed), `npx tsc -b`, `npx biome check .` (359 files), and `git diff --check` all passed.
+
+Decisions: the native history boundary and latest usage are read models rather than inference-manager access. Chat policies remain a readonly constructor-supplied list used when cloning policy configuration. Existing white-box lifecycle tests explicitly access private state; administrative reset orchestration moved to the server test helper rather than remaining as an unused production method. Fork git history is already cloned by ThreadCore, so the unused nvim fork git seed was removed. The fixed `onSubmission` notification reports resolved input without moving resolution or first-title eligibility back into the server.
+
 - Goal: parents no longer depend on core lifecycle machinery; remaining Thread APIs represent distinct operations or read models.
 - Rename NvimThread.core to thread and remove misleading agent getter.
 - Audit actual call sites before removing duplicate getters, public abortAgentTurn, inference-manager/context access, and exposed mutable supervisors. Keep core/reset internal unless a real external administrative use requires a separate explicit contract.
