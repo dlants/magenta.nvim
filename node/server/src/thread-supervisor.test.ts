@@ -29,7 +29,10 @@ describe("Thread supervisor arbitration", () => {
       { onBeforeRequest: () => Promise.resolve({ type: "none" }) },
       { onBeforeRequest: () => Promise.resolve(injectText("second")) },
     ];
-    const turn = core.send(userInput("hello"));
+    const turn = core.submit({
+      type: "resolved",
+      messages: userInput("hello"),
+    });
     const stream = await mockClient.awaitStream();
     const texts = core
       .getProviderMessages()
@@ -53,7 +56,7 @@ describe("Thread supervisor arbitration", () => {
         onBeforeRequest: () => Promise.resolve(injectText("pending note")),
       },
     ];
-    const turn = core.send([]);
+    const turn = core.submit({ type: "resolved", messages: [] });
     const stream = await mockClient.awaitStream();
     expect(JSON.stringify(stream.messages)).toContain("pending note");
     stream.finishResponse("end_turn");
@@ -66,7 +69,9 @@ describe("Thread supervisor arbitration", () => {
       {},
       { hasPendingContent: () => Promise.resolve(false) },
     ];
-    expect(await core.send([])).toEqual({ type: "empty" });
+    expect(await core.submit({ type: "resolved", messages: [] })).toEqual({
+      type: "empty",
+    });
     expect(mockClient.streams).toHaveLength(0);
   });
 
@@ -96,12 +101,21 @@ describe("Thread supervisor arbitration", () => {
         },
       },
     ];
-    const turn = core.send(userInput("hello"));
+    const turn = core.submit({
+      type: "resolved",
+      messages: userInput("hello"),
+    });
     const stream = await mockClient.awaitStream();
     stream.finishResponse("end_turn");
     expect(await turn).toEqual({
-      type: "suspended",
-      reason: { kind: "stop", message: "first" },
+      type: "empty",
+    });
+    expect(core.loopState).toMatchObject({
+      type: "idle",
+      lastResult: {
+        type: "suspended",
+        reason: { kind: "stop", message: "first" },
+      },
     });
     expect(observed).toEqual(["last"]);
     expect(mockClient.streams).toHaveLength(1);

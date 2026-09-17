@@ -23,7 +23,6 @@ import {
   parseCompact,
   type ResolvedSubmission,
   renderPending,
-  runSubmission,
   type Submission,
   Thread,
   type ThreadCallbacks,
@@ -344,6 +343,13 @@ export class NvimThread {
       ...(context.initialFiles ? { initialFiles: context.initialFiles } : {}),
       initialGitState: context.initialGitState,
     };
+    this.compactor =
+      threadType === "compact"
+        ? undefined
+        : new ThreadCompactor({
+            parentThreadId: id,
+            threadManager: context.chat,
+          });
     if (createCore) {
       this.core = createCore(this);
     } else {
@@ -361,6 +367,7 @@ export class NvimThread {
       this.core = new Thread(
         id,
         {
+          ...(this.compactor ? { compactor: this.compactor } : {}),
           logger: context.nvim.logger,
           profile: context.profile,
           cwd,
@@ -408,8 +415,6 @@ export class NvimThread {
       );
     }
 
-    this.compactor =
-      threadType === "compact" ? undefined : new ThreadCompactor(this.core);
     // The status line and the history section both read the compactor, so a
     // chunk boundary has to repaint even though nothing on the thread moved.
     this.compactor?.on("transition", () => this.onCoreUpdate());
@@ -556,11 +561,8 @@ export class NvimThread {
 
   /** Turn a finished submission into the effects that used to be broadcast
    * events: the turn-end notification and the rolled-back input text. */
-  /** Every submission this thread issues goes through the compaction loop —
-   * there is no path that reaches `core.send` directly, or auto-compaction
-   * would silently stop working for it. */
-  private runSubmission(start: () => Promise<ThreadSendResult>): void {
-    runSubmission({ thread: this.core, compactor: this.compactor, start }).then(
+  private observeSubmission(start: () => Promise<ThreadSendResult>): void {
+    start().then(
       (result) => this.handleSendResult(result),
       (e: Error) => this.context.nvim.logger.error(e),
     );
@@ -722,6 +724,7 @@ export class NvimThread {
           newId: newThreadId,
           nativeMessageIdx,
           context: {
+            ...(wrapper.compactor ? { compactor: wrapper.compactor } : {}),
             logger: nvim.logger,
             profile,
             cwd: environment.cwd,
@@ -867,7 +870,9 @@ export class NvimThread {
             .map((m) => m.text)
             .join("\n"),
         );
-        this.runSubmission(() => this.core.send(msg.messages));
+        this.observeSubmission(() =>
+          this.core.submit({ type: "resolved", messages: msg.messages }),
+        );
         return;
 
       case "submit-message": {
@@ -879,17 +884,16 @@ export class NvimThread {
           this.beginSubmission(message);
         }
         this.scrollAfterMessageCount = this.core.getProviderMessages().length;
-        // A `@compact` in the message surfaces as a suspension out of
-        // `submit`, which `runSubmission` turns into the same handoff the
-        // token threshold produces.
-        this.runSubmission(() => this.core.submit(message, delivery));
+        this.observeSubmission(() =>
+          this.core.submit({ type: "raw", message }, delivery),
+        );
         return;
       }
 
       case "retry": {
         if (this.submission?.type !== "failed") return;
         this.beginSubmission(this.submission.text);
-        this.runSubmission(() => this.core.send([], { force: true }));
+        this.observeSubmission(() => this.core.retry());
         return;
       }
       case "abort": {

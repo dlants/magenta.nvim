@@ -299,18 +299,27 @@ describe("preflight token count parity", () => {
     ];
     mockClient.mockInputTokenCount = 100;
     expect(
-      await agent.send([
-        {
-          type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          text: "go",
-        },
-      ]),
+      await agent.submit({
+        type: "resolved",
+        messages: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: "go",
+          },
+        ],
+      }),
     ).toEqual({
-      type: "suspended",
-      reason: { kind: "compact", nextPrompt: "wrap up" },
+      type: "empty",
     });
 
+    expect(agent.loopState).toMatchObject({
+      type: "idle",
+      lastResult: {
+        type: "suspended",
+        reason: { kind: "compact", nextPrompt: "wrap up" },
+      },
+    });
     const openai = createTestOpenAIAgent({ executeTools: noExecutor });
     const { core: openaiThread } = createAgentWithMock({
       provider: {

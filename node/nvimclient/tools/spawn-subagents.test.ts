@@ -785,13 +785,16 @@ describe("foreach-style parallel agents", () => {
 
         // A failed thread is parked, with its log already rolled back, so a
         // fresh send is all the recovery it needs.
-        void childWrapper.thread.core.send([
-          {
-            type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            text: "error_task",
-          },
-        ]);
+        void childWrapper.thread.core.submit({
+          type: "resolved",
+          messages: [
+            {
+              type: "text",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: "error_task",
+            },
+          ],
+        });
 
         const retryStream = await driver.mockAnthropic.awaitPendingStream({
           predicate: (s) => s !== subagent1Stream && !s.resolved,

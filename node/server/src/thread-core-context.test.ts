@@ -4,7 +4,6 @@ import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { FsFileIO } from "./capabilities/file-io.ts";
 import type { GitState } from "./capabilities/git-client.ts";
-import { runSubmission } from "./compaction/index.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import {
   type NativeMessageIdx,
@@ -76,9 +75,16 @@ async function fixture() {
   thread.setTitle("context integration");
   async function request(target = thread, text = "continue") {
     const previous = mockClient.streams.at(-1);
-    const sent = target.send([
-      { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
-    ]);
+    const sent = target.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text,
+        },
+      ],
+    });
     const stream = await awaitNextStream(mockClient, previous);
     stream.streamText("done");
     stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
@@ -244,19 +250,27 @@ describe("Thread-owned context delivery", () => {
         replacement = await f.request();
       } else {
         const previous = f.mockClient.streams.at(-1);
-        const sent = runSubmission({
-          thread: f.thread,
-          compactor: {
-            run: async () => ({
-              type: "complete",
-              summary: "replacement summary",
-              chunkCount: 1,
-            }),
-          },
-          start: async () => ({
-            type: "suspended",
-            reason: { kind: "compact", nextPrompt: "resume" },
+        f.thread.context.compactor = {
+          run: async () => ({
+            type: "complete",
+            summary: "replacement summary",
+            chunkCount: 1,
           }),
+        };
+        f.thread.callbacks.resolve = async () => ({
+          compact: true,
+          messages: [
+            {
+              type: "text",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: "resume",
+            },
+          ],
+          reminders: [],
+        });
+        const sent = f.thread.submit({
+          type: "raw",
+          message: pendingMessage("@compact"),
         });
         const stream = await awaitNextStream(f.mockClient, previous);
         replacement = JSON.stringify(stream.messages);
@@ -419,7 +433,7 @@ describe("Thread-owned context delivery", () => {
         reminders: ["retain this reminder"],
       });
       const submitted = f.thread.submit(
-        pendingMessage("activate reminder"),
+        { type: "raw", message: pendingMessage("activate reminder") },
         "now",
       );
       const reminderStream = await f.mockClient.awaitStream();
@@ -469,16 +483,18 @@ describe("Thread-owned context delivery", () => {
       ];
 
       expect(
-        await f.thread.send([
-          {
-            type: "text",
-            text: "start",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          },
-        ]),
+        await f.thread.submit({
+          type: "resolved",
+          messages: [
+            {
+              type: "text",
+              text: "start",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            },
+          ],
+        }),
       ).toEqual({
-        type: "suspended",
-        reason: { kind: "stop", message: "halt" },
+        type: "empty",
       });
       expect(f.mockClient.streams).toHaveLength(0);
       expect(f.manager.files[f.file].agentView).toBeUndefined();
@@ -487,13 +503,16 @@ describe("Thread-owned context delivery", () => {
       );
 
       suspend = false;
-      const sent = f.thread.send([
-        {
-          type: "text",
-          text: "resume",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        },
-      ]);
+      const sent = f.thread.submit({
+        type: "resolved",
+        messages: [
+          {
+            type: "text",
+            text: "resume",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          },
+        ],
+      });
       const stream = await f.mockClient.awaitStream();
       const text = JSON.stringify(stream.messages);
       expect(text).toContain("original tracked content");
@@ -517,15 +536,18 @@ describe("Thread-owned context delivery", () => {
       await f.request();
       await fs.writeFile(f.file, "pending external edit\n");
       await f.manager.refreshPendingUpdates();
-      let sent: ReturnType<Thread["send"]> | undefined;
+      let sent: ReturnType<Thread["submit"]> | undefined;
       if (busy) {
-        sent = f.thread.send([
-          {
-            type: "text",
-            text: "in flight",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          },
-        ]);
+        sent = f.thread.submit({
+          type: "resolved",
+          messages: [
+            {
+              type: "text",
+              text: "in flight",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            },
+          ],
+        });
         await awaitNextStream(f.mockClient, f.mockClient.streams.at(-1));
       }
       fork = await Thread.clone({

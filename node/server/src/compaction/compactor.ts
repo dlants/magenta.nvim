@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import type { ThreadId } from "../chat-types.ts";
 import {
   CHARS_PER_TOKEN,
@@ -12,7 +13,6 @@ import {
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import { Emitter } from "../emitter.ts";
 import type { ProviderMessage } from "../providers/provider-types.ts";
-import type { Thread } from "../thread.ts";
 import type { CompactionOutcome, Compactor } from "./index.ts";
 
 const COMPACT_PROMPT_TEMPLATE = readFileSync(
@@ -59,6 +59,11 @@ export function compactionRunChunkIndex(
   return run.completedThreadIds.length;
 }
 
+export type ThreadCompactorDeps = {
+  parentThreadId: ThreadId;
+  threadManager: ThreadManager;
+};
+
 export type ThreadCompactorEvents = {
   transition: [CompactionRunState];
 };
@@ -76,7 +81,7 @@ export class ThreadCompactor
   private nextRunId = 0;
   private activeRunId: CompactionRunId | undefined;
 
-  constructor(private thread: Thread) {
+  constructor(private readonly deps: ThreadCompactorDeps) {
     super();
   }
 
@@ -88,6 +93,7 @@ export class ThreadCompactor
   async run(
     messages: ReadonlyArray<ProviderMessage>,
     nextPrompt: string | undefined,
+    signal: AbortSignal,
   ): Promise<CompactionOutcome> {
     this.discard();
 
@@ -98,8 +104,6 @@ export class ThreadCompactor
 
     const id = this.nextRunId++ as CompactionRunId;
     this.activeRunId = id;
-    const core = this.thread.core;
-    const signal = this.thread.interruptionSignal;
     const onAbort = () => this.discardRun(id);
     signal.addEventListener("abort", onAbort, { once: true });
     const completed: ThreadId[] = [];
@@ -108,12 +112,7 @@ export class ThreadCompactor
 
     try {
       for (const [chunkIndex, chunk] of chunks.entries()) {
-        if (
-          signal.aborted ||
-          !this.isCurrent(id) ||
-          this.thread.core !== core ||
-          !core.isActive
-        ) {
+        if (signal.aborted || !this.isCurrent(id)) {
           this.discardRun(id);
           return { type: "aborted" };
         }
@@ -122,8 +121,8 @@ export class ThreadCompactor
           "/summary.md": summary,
           "/chunk.md": chunk,
         });
-        const threadId = await this.thread.context.threadManager.spawnThread({
-          parentThreadId: this.thread.id,
+        const threadId = await this.deps.threadManager.spawnThread({
+          parentThreadId: this.deps.parentThreadId,
           threadType: "compact",
           prompt: buildChunkPrompt({
             chunk,
@@ -137,13 +136,8 @@ export class ThreadCompactor
           label: `compact ${chunkIndex + 1}/${chunks.length}`,
         });
 
-        if (
-          signal.aborted ||
-          !this.isCurrent(id) ||
-          this.thread.core !== core ||
-          !core.isActive
-        ) {
-          this.thread.context.threadManager.deleteThread(threadId);
+        if (signal.aborted || !this.isCurrent(id)) {
+          this.deps.threadManager.deleteThread(threadId);
           this.discardRun(id);
           return { type: "aborted" };
         }
@@ -164,13 +158,8 @@ export class ThreadCompactor
 
         if (!this.isCurrent(id)) return { type: "aborted" };
         const result =
-          await this.thread.context.threadManager.awaitThreadResult(threadId);
-        if (
-          signal.aborted ||
-          !this.isCurrent(id) ||
-          this.thread.core !== core ||
-          !core.isActive
-        ) {
+          await this.deps.threadManager.awaitThreadResult(threadId);
+        if (signal.aborted || !this.isCurrent(id)) {
           this.discardRun(id);
           return { type: "aborted" };
         }
@@ -208,12 +197,7 @@ export class ThreadCompactor
     } catch (error) {
       const wasCurrent = this.isCurrent(id);
       this.discardRun(id);
-      if (
-        signal.aborted ||
-        !wasCurrent ||
-        this.thread.core !== core ||
-        !core.isActive
-      ) {
+      if (signal.aborted || !wasCurrent) {
         return { type: "aborted" };
       }
       return {
@@ -238,7 +222,7 @@ export class ThreadCompactor
       threadIds,
     });
     for (const threadId of threadIds) {
-      this.thread.context.threadManager.deleteThread(threadId);
+      this.deps.threadManager.deleteThread(threadId);
     }
   }
 

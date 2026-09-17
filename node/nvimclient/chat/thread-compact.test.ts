@@ -12,6 +12,7 @@ import type { MockStream } from "../providers/mock-anthropic-client.ts";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
+import { notificationLog, resetNotificationLog } from "./notify.ts";
 import type { NvimThread } from "./thread.ts";
 
 function compactorOf(thread: NvimThread): ThreadCompactor {
@@ -84,6 +85,11 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
       throw new Error("waiting for messages");
     });
 
+    await pollUntil(() => {
+      if (originalThread.loopState.type !== "idle")
+        throw new Error("waiting for rest");
+    });
+    resetNotificationLog();
     // User initiates compact with a next prompt
     await driver.inputMagentaText("@compact Now help me with multiplication");
     await driver.send();
@@ -211,6 +217,9 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
     expect(allText).not.toContain("What is 2+2?");
     expect(allText).not.toContain("What about 3+3?");
 
+    expect(
+      notificationLog.filter((entry) => entry.reason === "thread-turn-end"),
+    ).toHaveLength(0);
     // Respond to the continuation
     afterCompactStream.respond({
       stopReason: "end_turn",
@@ -224,6 +233,11 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
     await driver.assertDisplayBufferContains(
       "What multiplication would you like help with?",
     );
+    await pollUntil(() => {
+      expect(
+        notificationLog.filter((entry) => entry.reason === "thread-turn-end"),
+      ).toHaveLength(1);
+    });
   });
 });
 
@@ -698,10 +712,9 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
     async (driver) => {
       await driver.showSidebar();
 
-      // inputTokenCount lags one turn (populated post-flight), so set it high
-      // before the first turn. The first turn's handoff sees an undefined count
-      // and never compacts.
-      driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+      // Keep the initial turn below the configured threshold; compaction is
+      // now part of the same busy lifetime rather than a separate idle gap.
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 100_000;
 
       await driver.inputMagentaText("What is 2+2?");
       await driver.send();

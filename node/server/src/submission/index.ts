@@ -99,3 +99,7 @@ export function parseCompact(message: PendingMessage): {
   const rest = message.replace(COMPACT_PREFIX, "").trim();
   return { compact: true, rest: pendingMessage(rest) };
 }
+
+export type SubmissionInput =
+  | { type: "raw"; message: PendingMessage }
+  | { type: "resolved"; messages: AgentInput[] };

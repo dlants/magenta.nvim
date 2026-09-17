@@ -77,8 +77,8 @@ export {
   type CompactSuspendReason,
   compactionRunChunkIndex,
   compactionRunThreadIds,
-  runSubmission,
   ThreadCompactor,
+  type ThreadCompactorDeps,
   type ThreadCompactorEvents,
 } from "./compaction/index.ts";
 export { provisionContainer } from "./container/provision.ts";
@@ -224,6 +224,7 @@ export {
   renderPending,
   resolveAsText,
   type Submission,
+  type SubmissionInput,
 } from "./submission/index.ts";
 export {
   buildClonedFiles,
@@ -259,7 +260,6 @@ export type {
   OnUpdate,
   QueuedMessage,
   RestResult,
-  SendOptions,
   SendResult,
   ThreadResult,
   ThreadSendResult,

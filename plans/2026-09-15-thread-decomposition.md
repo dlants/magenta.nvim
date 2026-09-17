@@ -234,6 +234,19 @@ Validation uncovered an existing `dd` context-file removal failure, reproduced w
 
 ## 2. Internalize complete submission coordination
 
+### Progress (September 17, 2026)
+
+- [x] Added discriminated raw/resolved `submit` and explicit `retry`; migrated callers and removed `send`, `SendOptions`, and the exported compaction wrapper.
+- [x] Thread now owns one submission across resolution, provider turns, compaction, reset, and continuation. Deferred submissions see the compaction gap as busy; immediate submissions invalidate the previous owner before awaiting work.
+- [x] ThreadCompactor receives only parent ID/ThreadManager dependencies and a per-run AbortSignal. Fresh/fork nvim paths inject the same compactor instance observed by the UI; UI completion observes only the complete public promise.
+- [x] Migrated existing suspension assertions to public rest outcomes while retaining low-level runner suspension coverage and cancellation scenarios.
+- [x] Added cross-compaction raw/resolved deferred-delivery regressions, preserving literal command text and image/document inputs; retry coverage verifies one-time command resolution, no duplicate retained content, and cancellable compaction.
+- [x] Added raw/resolved preemption during irreversible reset and public-submission late-child cleanup tests. Cancelled resets restore a live core without installing stale summaries. Queue draining happens before awaited teardown so an obsolete operation cannot drain replacement work.
+- [x] Verified the real nvim compact flow emits no turn-end notification at the handoff and exactly one after its continuation finishes.
+- [x] Full validation: `npx vitest run` (125 files passed, 1706 tests passed; 2 existing skipped tests and 1 todo), `npx vitest run node/server/` (59 files, 1040 tests passed), `npx tsc -b`, `npx biome check .` (357 files), and `git diff --check`.
+
+Decisions: retain the existing queue storage/entry representation for stage 3, mutable resolver and policy setup for stage 4, and existing administrative reset/core read surfaces for stage 5. The internal reset path retains submission ownership and serializes a replacement submission behind an in-progress irreversible reset. An existing integration test used the former idle compaction gap as a stop boundary; it now keeps the initial turn below the threshold and tests the subsequent threshold crossing. Archive-cleanup fixtures await pending archive writes before deleting their directories.
+
 - Goal: one `submit(SubmissionInput, delivery?)` operation handles raw and resolved content; explicit `retry()` and explicit/automatic compact work without an external runSubmission wrapper.
 - Migrate all raw/programmatic call sites to the discriminated submit input with shared Delivery semantics. Replace empty forced sends with retry(), remove send/SendOptions, and keep post-compaction continuation internal.
 - Change Compactor to per-run cancellation and narrow ThreadCompactor dependencies.

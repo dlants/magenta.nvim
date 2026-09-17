@@ -2,28 +2,29 @@ import { describe, expect, it } from "vitest";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import { pendingMessage } from "../submission/index.ts";
-import { createAgentWithMock, uniqueThreadId } from "../test-helpers.ts";
+import {
+  awaitNextStream,
+  createAgentWithMock,
+  uniqueThreadId,
+} from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { Defer } from "../utils/async.ts";
 import { ThreadCompactor } from "./compactor.ts";
-import { type CompactionOutcome, runSubmission } from "./index.ts";
-
-const compactStart = () =>
-  Promise.resolve({
-    type: "suspended" as const,
-    reason: { kind: "compact" as const, nextPrompt: "continue" },
-  });
+import type { CompactionOutcome } from "./index.ts";
 
 describe("compaction generation ownership", () => {
   it("settles a busy turn before taking the compaction snapshot", async () => {
     const { core: thread, mockClient } = createAgentWithMock();
-    const previous = thread.send([
-      {
-        type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        text: "work",
-      },
-    ]);
+    const previous = thread.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "work",
+        },
+      ],
+    });
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     thread.callbacks.resolve = async () => ({
@@ -32,21 +33,21 @@ describe("compaction generation ownership", () => {
       reminders: [],
     });
     let snapshots = 0;
-    const sent = runSubmission({
-      thread,
-      compactor: {
-        run: async (messages) => {
-          snapshots++;
-          expect(thread.isBusy).toBe(false);
-          expect(thread.core.isActive).toBe(true);
-          expect(await previous).toEqual({ type: "aborted" });
-          const snapshot = JSON.stringify(messages);
-          await Promise.resolve();
-          expect(JSON.stringify(thread.getProviderMessages())).toBe(snapshot);
-          return { type: "aborted" };
-        },
+    thread.context.compactor = {
+      run: async (messages) => {
+        snapshots++;
+        expect(thread.isBusy).toBe(true);
+        expect(thread.core.isActive).toBe(true);
+        expect(await previous).toEqual({ type: "aborted" });
+        const snapshot = JSON.stringify(messages);
+        await Promise.resolve();
+        expect(JSON.stringify(thread.getProviderMessages())).toBe(snapshot);
+        return { type: "aborted" };
       },
-      start: () => thread.submit(pendingMessage("@compact")),
+    };
+    const sent = thread.submit({
+      type: "raw",
+      message: pendingMessage("@compact"),
     });
     expect(await sent).toEqual({ type: "aborted" });
     expect(snapshots).toBe(1);
@@ -66,16 +67,19 @@ describe("compaction generation ownership", () => {
         },
       },
     ];
-    const previous = thread.send([]);
+    const previous = thread.submit({ type: "resolved", messages: [] });
     await entered.promise;
     thread.callbacks.resolve = async () => ({
       compact: true,
       messages: [],
       reminders: [],
     });
-    const sent = thread.submit(pendingMessage("@compact"));
+    const sent = thread.submit({
+      type: "raw",
+      message: pendingMessage("@compact"),
+    });
     await Promise.resolve();
-    expect(thread.loopState).toMatchObject({ type: "running", aborting: true });
+    expect(thread.loopState).toMatchObject({ type: "running" });
     await thread.abort();
     probe.resolve(true);
     expect(await previous).toEqual({ type: "aborted" });
@@ -93,17 +97,28 @@ describe("compaction generation ownership", () => {
       await dispose();
       await thread.abort();
     };
-    expect(
-      await runSubmission({
-        thread,
-        compactor: {
-          run: async () => ({
-            type: "complete",
-            summary: "summary",
-            chunkCount: 1,
-          }),
+    thread.context.compactor = {
+      run: async () => ({
+        type: "complete",
+        summary: "summary",
+        chunkCount: 1,
+      }),
+    };
+    thread.callbacks.resolve = async () => ({
+      compact: true,
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "continue",
         },
-        start: compactStart,
+      ],
+      reminders: [],
+    });
+    expect(
+      await thread.submit({
+        type: "raw",
+        message: pendingMessage("@compact"),
       }),
     ).toEqual({ type: "aborted" });
     expect(thread.core).not.toBe(original);
@@ -128,16 +143,27 @@ describe("compaction generation ownership", () => {
     );
     const originalResult = thread.result;
     const originalCore = thread.core;
-    const sent = runSubmission({
-      thread,
-      compactor: {
-        run: async () => ({
-          type: "complete",
-          summary: "work so far",
-          chunkCount: 1,
-        }),
-      },
-      start: compactStart,
+    thread.context.compactor = {
+      run: async () => ({
+        type: "complete",
+        summary: "work so far",
+        chunkCount: 1,
+      }),
+    };
+    thread.callbacks.resolve = async () => ({
+      compact: true,
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "continue",
+        },
+      ],
+      reminders: [],
+    });
+    const sent = thread.submit({
+      type: "raw",
+      message: pendingMessage("@compact"),
     });
     const stream = await mockClient.awaitStream();
     expect(thread.core).not.toBe(originalCore);
@@ -172,15 +198,26 @@ describe("compaction generation ownership", () => {
     );
     const entered = new Defer<void>();
     const outcome = new Defer<CompactionOutcome>();
-    const sent = runSubmission({
-      thread,
-      compactor: {
-        run: () => {
-          entered.resolve();
-          return outcome.promise;
-        },
+    thread.context.compactor = {
+      run: () => {
+        entered.resolve();
+        return outcome.promise;
       },
-      start: compactStart,
+    };
+    thread.callbacks.resolve = async () => ({
+      compact: true,
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "continue",
+        },
+      ],
+      reminders: [],
+    });
+    const sent = thread.submit({
+      type: "raw",
+      message: pendingMessage("@compact"),
     });
     await entered.promise;
     if (action === "reset")
@@ -232,7 +269,10 @@ describe("ThreadCompactor cancellation", () => {
       },
       uniqueThreadId("compact-spawn-race"),
     );
-    const compactor = new ThreadCompactor(thread);
+    const compactor = new ThreadCompactor({
+      parentThreadId: thread.id,
+      threadManager: thread.context.threadManager,
+    });
     const run = compactor.run(
       [
         {
@@ -247,6 +287,7 @@ describe("ThreadCompactor cancellation", () => {
         },
       ],
       undefined,
+      thread.interruptionSignal,
     );
     await spawned.promise;
     if (action === "discard") compactor.discard();
@@ -296,9 +337,12 @@ it("a late first spawn cannot overwrite a newer compaction", async () => {
       ],
     },
   ];
-  const compactor = new ThreadCompactor(thread);
-  const first = compactor.run(messages, undefined);
-  const second = compactor.run(messages, undefined);
+  const compactor = new ThreadCompactor({
+    parentThreadId: thread.id,
+    threadManager: thread.context.threadManager,
+  });
+  const first = compactor.run(messages, undefined, thread.interruptionSignal);
+  const second = compactor.run(messages, undefined, thread.interruptionSignal);
   await Promise.resolve();
   const newer = compactor.current;
   expect(newer?.activeThreadId).toBe(newerChild);
@@ -339,13 +383,16 @@ it.each([
     uniqueThreadId("compact-parent-destroy"),
   );
   if (action === "destroy-after-yield") {
-    const sent = thread.send([
-      {
-        type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        text: "yield",
-      },
-    ]);
+    const sent = thread.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "yield",
+        },
+      ],
+    });
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "prior-yield" as ToolRequestId,
@@ -356,7 +403,10 @@ it.each([
     expect((await sent).type).toBe("yielded");
     expect((await thread.result).type).toBe("yielded");
   }
-  const compactor = new ThreadCompactor(thread);
+  const compactor = new ThreadCompactor({
+    parentThreadId: thread.id,
+    threadManager: thread.context.threadManager,
+  });
   const run = compactor.run(
     [
       {
@@ -371,6 +421,7 @@ it.each([
       },
     ],
     undefined,
+    thread.interruptionSignal,
   );
   await waiting.promise;
   expect(thread.isBusy).toBe(false);
@@ -394,19 +445,33 @@ it("an immediate submission supersedes a parked compaction before resolution", a
     undefined,
     uniqueThreadId("compact-submit"),
   );
-  const sent = runSubmission({
-    thread,
-    compactor: {
-      run: () => {
-        entered.resolve();
-        return outcome.promise;
-      },
+  thread.context.compactor = {
+    run: () => {
+      entered.resolve();
+      return outcome.promise;
     },
-    start: compactStart,
+  };
+  thread.callbacks.resolve = async () => ({
+    compact: true,
+    messages: [
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "continue",
+      },
+    ],
+    reminders: [],
+  });
+  const sent = thread.submit({
+    type: "raw",
+    message: pendingMessage("@compact"),
   });
   await entered.promise;
   thread.callbacks.resolve = () => resolution.promise;
-  const next = thread.submit(pendingMessage("new prompt"));
+  const next = thread.submit({
+    type: "raw",
+    message: pendingMessage("new prompt"),
+  });
   outcome.resolve({ type: "complete", summary: "stale", chunkCount: 1 });
   expect(await sent).toEqual({ type: "aborted" });
   expect(mockClient.streams).toHaveLength(0);
@@ -414,4 +479,317 @@ it("an immediate submission supersedes a parked compaction before resolution", a
   resolution.resolve({ messages: [], reminders: [], compact: false });
   expect(await next).toEqual({ type: "aborted" });
   await thread.destroy();
+});
+
+describe("complete submission ownership", () => {
+  const text = (value: string) => ({
+    type: "text" as const,
+    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    text: value,
+  });
+
+  it.each([
+    "async",
+    "next",
+  ] as const)("delivers raw and resolved %s entries once after compaction", async (delivery) => {
+    const entered = new Defer<AbortSignal>();
+    const summary = new Defer<CompactionOutcome>();
+    const resolutions: string[] = [];
+    const { core: thread, mockClient } = createAgentWithMock(
+      {
+        compactor: {
+          run: (_messages, _prompt, signal) => {
+            entered.resolve(signal);
+            return summary.promise;
+          },
+        },
+      },
+      uniqueThreadId("deferred-during-compaction"),
+      async (message) => {
+        resolutions.push(message);
+        return {
+          compact: message === "@compact",
+          messages: message === "@compact" ? [] : [text(message)],
+          reminders: [],
+        };
+      },
+    );
+    const sent = thread.submit({
+      type: "raw",
+      message: pendingMessage("@compact"),
+    });
+    const signal = await entered.promise;
+    expect(thread.loopState).toMatchObject({
+      type: "running",
+      activity: { type: "preparing" },
+    });
+    expect(
+      await thread.submit(
+        { type: "raw", message: pendingMessage("deferred raw") },
+        delivery,
+      ),
+    ).toEqual({ type: "queued" });
+    const image = {
+      type: "image" as const,
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      source: {
+        type: "base64" as const,
+        media_type: "image/png" as const,
+        data: "aW1hZ2U=",
+      },
+    };
+    const document = {
+      type: "document" as const,
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      source: {
+        type: "base64" as const,
+        media_type: "application/pdf" as const,
+        data: "ZG9jdW1lbnQ=",
+      },
+    };
+    expect(
+      await thread.submit(
+        {
+          type: "resolved",
+          messages: [text("@compact literal"), image, document],
+        },
+        delivery,
+      ),
+    ).toEqual({ type: "queued" });
+    expect(signal.aborted).toBe(false);
+    expect(resolutions).toEqual(["@compact"]);
+    summary.resolve({
+      type: "complete",
+      summary: "the summary",
+      chunkCount: 1,
+    });
+    let stream = await mockClient.awaitStream();
+    if (delivery === "next") {
+      stream.finishResponse("end_turn");
+      stream = await awaitNextStream(mockClient, stream);
+    }
+    const content = stream
+      .getProviderMessages()
+      .filter((m) => m.role === "user")
+      .flatMap((m) => m.content);
+    expect(
+      content.filter((c) => c.type === "text" && c.text === "deferred raw"),
+    ).toHaveLength(1);
+    expect(
+      content.filter((c) => c.type === "text" && c.text === "@compact literal"),
+    ).toHaveLength(1);
+    expect(content).toContainEqual(
+      expect.objectContaining({ type: "image", source: image.source }),
+    );
+    expect(content).toContainEqual(
+      expect.objectContaining({ type: "document", source: document.source }),
+    );
+    expect(resolutions).toEqual(["@compact", "deferred raw"]);
+    stream.finishResponse("end_turn");
+    expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
+    expect(thread.queuedCount).toBe(0);
+    await thread.destroy();
+  });
+
+  it.each([
+    "raw",
+    "resolved",
+  ] as const)("an immediate %s submission supersedes compaction during reset", async (type) => {
+    const disposing = new Defer<void>();
+    const release = new Defer<void>();
+    const { core: thread, mockClient } = createAgentWithMock(
+      {
+        compactor: {
+          run: async () => ({
+            type: "complete",
+            summary: "old summary",
+            chunkCount: 1,
+          }),
+        },
+      },
+      uniqueThreadId("preempt-reset"),
+      async (message) => ({
+        compact: message === "@compact",
+        messages: [text(message)],
+        reminders: [],
+      }),
+    );
+    const oldCore = thread.core;
+    const dispose = oldCore.dispose.bind(oldCore);
+    oldCore.dispose = async () => {
+      await dispose();
+      disposing.resolve();
+      await release.promise;
+    };
+    const sent = thread.submit({
+      type: "raw",
+      message: pendingMessage("@compact"),
+    });
+    await disposing.promise;
+    const replacement = thread.submit(
+      type === "raw"
+        ? { type, message: pendingMessage("new submission") }
+        : { type, messages: [text("new submission")] },
+    );
+    release.resolve();
+    expect(await sent).toEqual({ type: "aborted" });
+    const stream = await mockClient.awaitStream();
+    expect(thread.core).not.toBe(oldCore);
+    expect(thread.core.isActive).toBe(true);
+    expect(JSON.stringify(stream.messages)).toContain("new submission");
+    expect(JSON.stringify(stream.messages)).not.toContain(
+      "Please continue from where you left off.",
+    );
+    stream.finishResponse("end_turn");
+    expect(await replacement).toEqual({
+      type: "completed",
+      stopReason: "end_turn",
+    });
+    expect(mockClient.streams).toHaveLength(1);
+    await thread.destroy();
+  });
+
+  it.each([
+    false,
+    true,
+  ])("retry bypasses resolution and owns its compact handoff (cancel=%s)", async (cancel) => {
+    const entered = new Defer<void>();
+    const outcome = new Defer<CompactionOutcome>();
+    let resolutions = 0;
+    const { core: thread, mockClient } = createAgentWithMock(
+      {
+        compactor: {
+          run: () => {
+            entered.resolve();
+            return outcome.promise;
+          },
+        },
+      },
+      uniqueThreadId("retry-compaction"),
+      async (message) => {
+        resolutions++;
+        return { compact: false, messages: [text(message)], reminders: [] };
+      },
+    );
+    const first = thread.submit({
+      type: "raw",
+      message: pendingMessage("original content"),
+    });
+    const stream = await mockClient.awaitStream();
+    stream.respondWithError(new Error("request failed"));
+    expect((await first).type).toBe("failed");
+    let compact = true;
+    thread.supervisors = [
+      {
+        onBeforeRequest: async () => {
+          if (!compact) return { type: "none" };
+          compact = false;
+          return {
+            type: "suspend",
+            reason: { kind: "compact", nextPrompt: "resume retry" },
+          };
+        },
+      },
+    ];
+    const retry = thread.retry();
+    await entered.promise;
+    expect(resolutions).toBe(1);
+    expect(
+      thread
+        .getProviderMessages()
+        .flatMap((m) => m.content)
+        .filter((c) => c.type === "text" && c.text === "original content"),
+    ).toHaveLength(1);
+    if (cancel) await thread.abort();
+    outcome.resolve({
+      type: "complete",
+      summary: "retried history",
+      chunkCount: 1,
+    });
+    if (cancel) {
+      expect(await retry).toEqual({ type: "aborted" });
+      expect(mockClient.streams).toHaveLength(1);
+    } else {
+      const resumed = await awaitNextStream(mockClient, stream);
+      expect(JSON.stringify(resumed.messages)).toContain("resume retry");
+      resumed.finishResponse("end_turn");
+      expect(await retry).toEqual({
+        type: "completed",
+        stopReason: "end_turn",
+      });
+    }
+    expect(resolutions).toBe(1);
+    await thread.destroy();
+  });
+
+  it.each([
+    "abort",
+    "destroy",
+    "supersede",
+  ] as const)("%s cleans up a late compact child through public submission ownership", async (action) => {
+    const spawning = new Defer<void>();
+    const spawn = new Defer<ThreadId>();
+    const deleted: ThreadId[] = [];
+    const threadManager = {
+      spawnThread: () => {
+        spawning.resolve();
+        return spawn.promise;
+      },
+      deleteThread: (id: ThreadId) => {
+        deleted.push(id);
+      },
+      awaitThreadResult: async () => {
+        throw new Error("cancelled child must not be awaited");
+      },
+    };
+    const id = uniqueThreadId("public-compact-spawn");
+    const compactor = new ThreadCompactor({
+      parentThreadId: id,
+      threadManager,
+    });
+    const { core: thread, mockClient } = createAgentWithMock(
+      { compactor, threadManager },
+      id,
+    );
+    let compact = true;
+    thread.supervisors = [
+      {
+        onBeforeRequest: async () => {
+          if (!compact) return { type: "none" };
+          compact = false;
+          return {
+            type: "suspend",
+            reason: { kind: "compact", nextPrompt: undefined },
+          };
+        },
+      },
+    ];
+    const sent = thread.submit({
+      type: "resolved",
+      messages: [text("history")],
+    });
+    await spawning.promise;
+    let replacement: ReturnType<typeof thread.submit> | undefined;
+    if (action === "abort") await thread.abort();
+    else if (action === "destroy") await thread.destroy();
+    else
+      replacement = thread.submit({
+        type: "resolved",
+        messages: [text("replacement")],
+      });
+    const child = "late-public-child" as ThreadId;
+    spawn.resolve(child);
+    expect(await sent).toEqual({ type: "aborted" });
+    expect(deleted).toEqual([child]);
+    if (replacement) {
+      const stream = await mockClient.awaitStream();
+      stream.finishResponse("end_turn");
+      expect(await replacement).toEqual({
+        type: "completed",
+        stopReason: "end_turn",
+      });
+    }
+    expect(compactor.current).toBeUndefined();
+    await thread.destroy();
+  });
 });

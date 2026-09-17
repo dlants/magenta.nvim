@@ -8,6 +8,7 @@ import type { GitClient, GitState } from "./capabilities/git-client.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
+import { type Compactor, summaryText } from "./compaction/index.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { ThreadLoopState } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -28,6 +29,7 @@ import {
   type PendingMessage,
   parseCompact,
   type ResolveSubmission,
+  type SubmissionInput,
 } from "./submission/index.ts";
 import {
   buildClonedFiles,
@@ -45,7 +47,6 @@ import type {
   OnUpdate,
   QueuedMessage,
   RestResult,
-  SendOptions,
   SendResult,
   ThreadResult,
   ThreadSendResult,
@@ -91,6 +92,7 @@ export type EnvironmentConfig =
   | { type: "docker"; container: string; cwd: string };
 
 interface ThreadContextBase extends AgentContext {
+  compactor?: Compactor;
   profile: ProviderProfile;
   subagentConfig?: SubagentConfig;
   provider: Provider;
@@ -570,9 +572,9 @@ export class Thread {
   }
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
     this.interrupt();
-    if (this.yieldState) return { unsent: [] };
-    await this.abortAgentTurn();
+    if (this.yieldState && !this.isBusy) return { unsent: [] };
     const unsent = this.drainQueues();
+    await this.abortAgentTurn();
     if (unsent.length) this.handleUpdate();
     return { unsent };
   }
@@ -587,38 +589,152 @@ export class Thread {
     this.resultDefer.resolve(result);
   }
   async submit(
-    message: PendingMessage,
+    input: SubmissionInput,
     delivery: Delivery = "now",
   ): Promise<ThreadSendResult> {
     this.assertUsable();
-    const core = this.core;
     if (delivery !== "now" && this.isBusy) {
-      this.enqueue([message], delivery);
+      this.enqueue(
+        input.type === "raw" ? [input.message] : input.messages,
+        delivery,
+      );
       return { type: "queued" };
     }
-    this.interrupt();
-    const signal = this.interruptionSignal;
-    const resolved = await this.callbacks.resolve(message);
+    return this.startSubmission(input);
+  }
+
+  retry(): Promise<RestResult> {
+    return this.startSubmission({ type: "resolved", messages: [] }, true);
+  }
+
+  private async startSubmission(
+    input: SubmissionInput,
+    force?: true,
+  ): Promise<RestResult> {
     this.assertUsable();
-    if (signal.aborted || this.core !== core || !core.isActive)
-      return { type: "aborted" };
-    if (resolved.compact) {
-      if (this.isBusy) {
-        this.cancelSubmission();
-        await core.abortAgentTurn();
-        if (signal.aborted || this.core !== core || !core.isActive)
-          return { type: "aborted" };
-        this.drainQueues();
+    if (this.yieldState?.tornDown)
+      throw new Error(
+        "This thread's container has been torn down. No further messages can be sent.",
+      );
+    const wasBusy = this.isBusy;
+    this.interrupt();
+    this.cancelSubmission();
+    if (wasBusy) this.drainQueues();
+    const submission = new AbortController();
+    this.submission = submission;
+    const signal = this.interruptionSignal;
+    const isCurrent = () =>
+      this.submission === submission &&
+      !submission.signal.aborted &&
+      !signal.aborted &&
+      !this.destroyed;
+    this.handleUpdate();
+    const finish = (result: RestResult, displayResult: SendResult = result) => {
+      if (this.submission === submission) {
+        this.submission = undefined;
+        this.lastSubmissionResult = displayResult;
+        if (result.type === "yielded") this.settleResult(result);
+        this.handleUpdate();
       }
-      return {
-        type: "suspended",
-        reason: { kind: "compact", nextPrompt: compactPrompt(resolved) },
-      };
+      return result;
+    };
+    try {
+      if (wasBusy) {
+        await this.core.abortAgentTurn();
+        if (!isCurrent()) return finish({ type: "aborted" });
+      }
+      if (this.resetPromise) await this.resetPromise;
+      if (!isCurrent()) return finish({ type: "aborted" });
+      const resolved =
+        input.type === "raw"
+          ? await this.callbacks.resolve(input.message)
+          : { messages: input.messages, reminders: [], compact: false };
+      if (!isCurrent()) return finish({ type: "aborted" });
+      for (const text of resolved.reminders)
+        this.activateReminder(
+          text,
+          this.core.manager.getPendingUserMessageIdx(),
+        );
+      if (
+        this.threadType !== "compact" &&
+        this.title === undefined &&
+        resolved.messages.length
+      ) {
+        this.setThreadTitle(
+          resolved.messages
+            .filter((m) => m.type === "text")
+            .map((m) => m.text)
+            .join("\n"),
+        ).catch((error: Error) =>
+          this.context.logger.error(
+            `Error getting thread title: ${error.message}`,
+          ),
+        );
+      }
+      let result: SendResult = resolved.compact
+        ? {
+            type: "suspended",
+            reason: { kind: "compact", nextPrompt: compactPrompt(resolved) },
+          }
+        : await this.runLoop(resolved.messages, isCurrent, force);
+      while (result.type === "suspended") {
+        if (!isCurrent()) return finish({ type: "aborted" });
+        const reason = result.reason;
+        const compactor = this.context.compactor;
+        if (reason.kind !== "compact" || !compactor)
+          return finish({ type: "empty" }, result);
+        const outcome = await compactor.run(
+          this.getProviderMessages(),
+          reason.nextPrompt,
+          signal,
+        );
+        if (!isCurrent() || outcome.type === "aborted")
+          return finish({ type: "aborted" });
+        if (outcome.type === "error")
+          return finish({
+            type: "failed",
+            error: new Error(`Compaction failed: ${outcome.message}`),
+          });
+        await this.replaceCore(
+          {
+            seed: [
+              {
+                type: "text",
+                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                text: summaryText(outcome.summary),
+              },
+            ],
+            archive: {
+              type: "compaction",
+              summary: outcome.summary,
+              chunkCount: outcome.chunkCount,
+            },
+          },
+          isCurrent,
+        );
+        if (!isCurrent()) return finish({ type: "aborted" });
+        result = await this.runLoop(
+          [
+            {
+              type: "text",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text:
+                reason.nextPrompt?.trim() ||
+                "Please continue from where you left off.",
+            },
+          ],
+          isCurrent,
+        );
+      }
+      return finish(isCurrent() ? result : { type: "aborted" });
+    } catch (error) {
+      if (!isCurrent()) return finish({ type: "aborted" });
+      finish({
+        type: "failed",
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      throw error;
     }
-    for (const text of resolved.reminders) {
-      this.activateReminder(text, this.core.manager.getPendingUserMessageIdx());
-    }
-    return this.sendMessages(resolved.messages);
   }
   /** Flushed in full when the next provider request is issued (@async). */
   private nextRequestQueue: (PendingMessage | AgentInput)[] = [];
@@ -778,66 +894,6 @@ export class Thread {
       content: await this.flushMidTurn(ctx.nativeMessageIdx),
     };
   }
-  async send(
-    messages: AgentInput[],
-    options: SendOptions = {},
-  ): Promise<ThreadSendResult> {
-    this.assertUsable();
-    if (!this.isBusy || !options.queue) this.interrupt();
-    return this.sendMessages(messages, options);
-  }
-  private async sendMessages(
-    messages: AgentInput[],
-    { queue, force }: SendOptions = {},
-  ): Promise<ThreadSendResult> {
-    this.assertUsable();
-    if (this.resetting) throw new Error("Thread reset in progress");
-    if (this.yieldState?.tornDown) {
-      throw new Error(
-        "This thread's container has been torn down. No further messages can be sent.",
-      );
-    }
-    const signal = this.interruptionSignal;
-    if (this.isBusy) {
-      if (queue === "async" || queue === "next") {
-        this.enqueue(messages, queue);
-        return { type: "queued" };
-      }
-      this.cancelSubmission();
-      const core = this.core;
-      await core.abortAgentTurn();
-      this.assertUsable();
-      if (signal.aborted || this.core !== core || this.resetting)
-        return { type: "aborted" };
-      // Sending now supersedes whatever was waiting on the aborted turn.
-      this.drainQueues();
-    }
-    // The compact thread's content is composed by its caller, so it bypasses
-    // context updates, reminders and the queue entirely.
-    if (this.threadType === "compact") {
-      return this.followSubmission(this.runToRest(messages));
-    }
-    const result = this.followSubmission(this.runToRest(messages, force));
-    if (this.title === undefined && messages.length) {
-      this.setThreadTitle(
-        messages
-          .filter((m) => m.type === "text")
-          .map((m) => m.text)
-          .join("\n"),
-      ).catch((err: Error) =>
-        this.context.logger.error(
-          `Error getting thread title: ${err.message}\n${err.stack}`,
-        ),
-      );
-    }
-    return result;
-  }
-  private followSubmission(outcome: Promise<SendResult>): Promise<SendResult> {
-    return outcome.then((r) => {
-      if (r.type === "yielded") this.settleResult(r);
-      return r;
-    });
-  }
   /** Whether a send with no user content is worth a request: only if a
    * supervisor has something to deliver. Standing content — the system
    * reminder, the system-info preamble — does not count, and the probe must
@@ -861,35 +917,6 @@ export class Thread {
     if (!this.submission || this.submission.signal.aborted) return;
     this.submission.abort();
     this.handleUpdate();
-  }
-  private runToRest(
-    submitted: AgentInput[],
-    force?: true,
-  ): Promise<SendResult> {
-    this.cancelSubmission();
-    const submission = new AbortController();
-    this.submission = submission;
-    const core = this.core;
-    const isCurrent = this.currentLoopGuard();
-    this.handleUpdate();
-    const finish = (result: SendResult) => {
-      if (this.submission === submission && this.core === core) {
-        this.submission = undefined;
-        this.lastSubmissionResult = result;
-        this.handleUpdate();
-      }
-      return result;
-    };
-    return this.runLoop(submitted, isCurrent, force).then(
-      finish,
-      (error: unknown) => {
-        finish({
-          type: "failed",
-          error: error instanceof Error ? error : new Error(String(error)),
-        });
-        throw error;
-      },
-    );
   }
   private async runLoop(
     messages: AgentInput[],
@@ -1174,15 +1201,41 @@ Come up with a succinct thread title for this prompt. It must be a single line (
   }
   /** Preserve thread identity, queues, yield/result and tracked context; discard
    * conversation-local state; the structured-result display archive survives. */
-  async reset({
-    seed,
-    archive,
-  }: {
-    seed: AgentInput[];
-    archive:
-      | { type: "compaction"; summary: string; chunkCount: number }
-      | { type: "none" };
-  }): Promise<ThreadCore> {
+  async reset(
+    options: Parameters<Thread["resetCore"]>[0],
+  ): Promise<ThreadCore> {
+    this.interrupt();
+    this.cancelSubmission();
+    this.submission = undefined;
+    return this.replaceCore(options);
+  }
+
+  private resetPromise: Promise<ThreadCore> | undefined;
+  private async replaceCore(
+    options: Parameters<Thread["resetCore"]>[0],
+    isCurrent: () => boolean = () => true,
+  ): Promise<ThreadCore> {
+    const reset = this.resetCore(options, isCurrent);
+    this.resetPromise = reset;
+    try {
+      return await reset;
+    } finally {
+      if (this.resetPromise === reset) this.resetPromise = undefined;
+    }
+  }
+
+  private async resetCore(
+    {
+      seed,
+      archive,
+    }: {
+      seed: AgentInput[];
+      archive:
+        | { type: "compaction"; summary: string; chunkCount: number }
+        | { type: "none" };
+    },
+    isCurrent: () => boolean,
+  ): Promise<ThreadCore> {
     this.assertUsable();
     if (this.yieldState?.tornDown)
       throw new Error(
@@ -1190,15 +1243,13 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       );
     if (this.resetting) throw new Error("Thread reset already in progress");
     this.resetting = true;
-    this.interrupt();
-    this.cancelSubmission();
     try {
       const initialFiles = buildClonedFiles(this.fileSupervisor.files);
       await this.core.dispose();
       this.assertUsable();
       // Disposal is irreversible: cancellation prevents the caller's follow-up,
       // but must not leave this thread pointing at a permanently disposed core.
-      if (archive.type === "compaction")
+      if (isCurrent() && archive.type === "compaction")
         this.threadLogger.recordCompaction({
           summary: archive.summary,
           chunkCount: archive.chunkCount,
@@ -1208,8 +1259,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
         initialFiles,
       });
       this._core = core;
-      this.pendingSeed = [...seed];
-      this.submission = undefined;
+      this.pendingSeed = isCurrent() ? [...seed] : [];
       this.lastSubmissionResult = undefined;
       this.threadLogger.resetCursor();
       this.handleUpdate();

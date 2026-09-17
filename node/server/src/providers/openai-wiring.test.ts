@@ -166,13 +166,16 @@ describe("OpenAI provider wiring", () => {
     // A titled thread doesn't fire the title request, which would otherwise be
     // the most recent stream when the turn's own request is awaited below.
     core.setTitle("test thread");
-    void core.send([
-      {
-        type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        text: "do the task",
-      },
-    ]);
+    void core.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "do the task",
+        },
+      ],
+    });
 
     const stream = await client.awaitStream();
     expect(stream.instructions).toBeTruthy();

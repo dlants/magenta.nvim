@@ -25,15 +25,6 @@ export type ToolInvocationState =
     }
   | { type: "settled" };
 
-export type SendOptions = {
-  /** Issue a request even with no content of our own: a retry re-sends the
-   * log exactly as a failure left it. */
-  force?: true;
-  /** async: run after the current turn. next: run at the next stop.
-   * undefined: abort whatever is running and send now. */
-  queue?: "async" | "next";
-};
-
 /** How one submission ended. Delivered once, to the actor that submitted it —
  * never broadcast. Internal continuations (auto-respond, supervisor nudges,
  * the max_tokens continue-prompt, a compaction handoff) do not produce one:
@@ -59,7 +50,7 @@ export type SendResult =
 /** How a submission ended, as anything outside the thread may see it: a
  * suspension is a handoff to a supervisor, never an outcome. */
 export type RestResult = Exclude<SendResult, { type: "suspended" }>;
-export type ThreadSendResult = SendResult | { type: "queued" };
+export type ThreadSendResult = RestResult | { type: "queued" };
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */
 export type ThreadResult =

@@ -140,7 +140,10 @@ describe("Agent retry logic", () => {
         },
       },
     ];
-    const turn = core.send(userInput("hello"));
+    const turn = core.submit({
+      type: "resolved",
+      messages: userInput("hello"),
+    });
     await vi.advanceTimersByTimeAsync(0);
     let stream = await mockClient.awaitStream();
     stream.respondWithError(make529Error());

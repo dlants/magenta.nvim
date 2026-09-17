@@ -201,13 +201,16 @@ it("does not resolve a script's createThread() await on a subagent error", async
 
       // A failed thread is parked, with its log already rolled back, so a
       // fresh send is all the recovery it needs.
-      void threadWrapper.thread.core.send([
-        {
-          type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          text: "work on thing",
-        },
-      ]);
+      void threadWrapper.thread.core.submit({
+        type: "resolved",
+        messages: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: "work on thing",
+          },
+        ],
+      });
 
       const retryStream = await driver.mockAnthropic.awaitPendingStream({
         predicate: (s) => s !== stream && !s.resolved,
