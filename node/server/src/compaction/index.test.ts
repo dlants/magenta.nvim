@@ -14,7 +14,13 @@ import type { CompactionOutcome } from "./index.ts";
 
 describe("compaction generation ownership", () => {
   it("settles a busy turn before taking the compaction snapshot", async () => {
-    const { core: thread, mockClient } = createAgentWithMock();
+    const { core: thread, mockClient } = createAgentWithMock({
+      resolve: async () => ({
+        compact: true,
+        messages: [],
+        reminders: [],
+      }),
+    });
     const previous = thread.submit({
       type: "resolved",
       messages: [
@@ -27,11 +33,7 @@ describe("compaction generation ownership", () => {
     });
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
-    thread.callbacks.resolve = async () => ({
-      compact: true,
-      messages: [],
-      reminders: [],
-    });
+
     let snapshots = 0;
     thread.context.compactor = {
       run: async (messages) => {
@@ -56,24 +58,27 @@ describe("compaction generation ownership", () => {
   });
 
   it("cancels a busy compaction while the old loop is settling", async () => {
-    const { core: thread, mockClient } = createAgentWithMock();
+    const { core: thread, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          hasPendingContent: () => {
+            entered.resolve();
+            return probe.promise;
+          },
+        },
+      ],
+      resolve: async () => ({
+        compact: true,
+        messages: [],
+        reminders: [],
+      }),
+    });
     const entered = new Defer<void>();
     const probe = new Defer<boolean>();
-    thread.supervisors = [
-      {
-        hasPendingContent: () => {
-          entered.resolve();
-          return probe.promise;
-        },
-      },
-    ];
+
     const previous = thread.submit({ type: "resolved", messages: [] });
     await entered.promise;
-    thread.callbacks.resolve = async () => ({
-      compact: true,
-      messages: [],
-      reminders: [],
-    });
+
     const sent = thread.submit({
       type: "raw",
       message: pendingMessage("@compact"),
@@ -90,7 +95,19 @@ describe("compaction generation ownership", () => {
   });
 
   it("does not continue when reset disposal is interrupted", async () => {
-    const { core: thread, mockClient } = createAgentWithMock();
+    const { core: thread, mockClient } = createAgentWithMock({
+      resolve: async () => ({
+        compact: true,
+        messages: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: "continue",
+          },
+        ],
+        reminders: [],
+      }),
+    });
     const original = thread.core;
     const dispose = original.dispose.bind(original);
     original.dispose = async () => {
@@ -104,17 +121,7 @@ describe("compaction generation ownership", () => {
         chunkCount: 1,
       }),
     };
-    thread.callbacks.resolve = async () => ({
-      compact: true,
-      messages: [
-        {
-          type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          text: "continue",
-        },
-      ],
-      reminders: [],
-    });
+
     expect(
       await thread.submit({
         type: "raw",
@@ -136,6 +143,17 @@ describe("compaction generation ownership", () => {
     };
     const { core: thread, mockClient } = createAgentWithMock(
       {
+        resolve: async () => ({
+          compact: true,
+          messages: [
+            {
+              type: "text",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: "continue",
+            },
+          ],
+          reminders: [],
+        }),
         threadType: "subagent" as ThreadType,
         yieldSchema: schema,
       },
@@ -150,17 +168,7 @@ describe("compaction generation ownership", () => {
         chunkCount: 1,
       }),
     };
-    thread.callbacks.resolve = async () => ({
-      compact: true,
-      messages: [
-        {
-          type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          text: "continue",
-        },
-      ],
-      reminders: [],
-    });
+
     const sent = thread.submit({
       type: "raw",
       message: pendingMessage("@compact"),
@@ -193,7 +201,19 @@ describe("compaction generation ownership", () => {
     "abort",
   ] as const)("does not apply a stale summary after %s", async (action) => {
     const { core: thread, mockClient } = createAgentWithMock(
-      undefined,
+      {
+        resolve: async () => ({
+          compact: true,
+          messages: [
+            {
+              type: "text",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: "continue",
+            },
+          ],
+          reminders: [],
+        }),
+      },
       uniqueThreadId("stale-compact"),
     );
     const entered = new Defer<void>();
@@ -204,17 +224,7 @@ describe("compaction generation ownership", () => {
         return outcome.promise;
       },
     };
-    thread.callbacks.resolve = async () => ({
-      compact: true,
-      messages: [
-        {
-          type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          text: "continue",
-        },
-      ],
-      reminders: [],
-    });
+
     const sent = thread.submit({
       type: "raw",
       message: pendingMessage("@compact"),
@@ -442,7 +452,22 @@ it("an immediate submission supersedes a parked compaction before resolution", a
     Awaited<ReturnType<import("../submission/index.ts").ResolveSubmission>>
   >();
   const { core: thread, mockClient } = createAgentWithMock(
-    undefined,
+    {
+      resolve: (message) =>
+        message === "@compact"
+          ? Promise.resolve({
+              compact: true,
+              messages: [
+                {
+                  type: "text",
+                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                  text: "continue",
+                },
+              ],
+              reminders: [],
+            })
+          : resolution.promise,
+    },
     uniqueThreadId("compact-submit"),
   );
   thread.context.compactor = {
@@ -451,23 +476,13 @@ it("an immediate submission supersedes a parked compaction before resolution", a
       return outcome.promise;
     },
   };
-  thread.callbacks.resolve = async () => ({
-    compact: true,
-    messages: [
-      {
-        type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        text: "continue",
-      },
-    ],
-    reminders: [],
-  });
+
   const sent = thread.submit({
     type: "raw",
     message: pendingMessage("@compact"),
   });
   await entered.promise;
-  thread.callbacks.resolve = () => resolution.promise;
+
   const next = thread.submit({
     type: "raw",
     message: pendingMessage("new prompt"),
@@ -656,8 +671,21 @@ describe("complete submission ownership", () => {
     const entered = new Defer<void>();
     const outcome = new Defer<CompactionOutcome>();
     let resolutions = 0;
+    let compact = false;
     const { core: thread, mockClient } = createAgentWithMock(
       {
+        chatSupervisors: [
+          {
+            onBeforeRequest: async () => {
+              if (!compact) return { type: "none" };
+              compact = false;
+              return {
+                type: "suspend",
+                reason: { kind: "compact", nextPrompt: "resume retry" },
+              };
+            },
+          },
+        ],
         compactor: {
           run: () => {
             entered.resolve();
@@ -678,19 +706,8 @@ describe("complete submission ownership", () => {
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("request failed"));
     expect((await first).type).toBe("failed");
-    let compact = true;
-    thread.supervisors = [
-      {
-        onBeforeRequest: async () => {
-          if (!compact) return { type: "none" };
-          compact = false;
-          return {
-            type: "suspend",
-            reason: { kind: "compact", nextPrompt: "resume retry" },
-          };
-        },
-      },
-    ];
+    compact = true;
+
     const retry = thread.retry();
     await entered.promise;
     expect(resolutions).toBe(1);
@@ -748,22 +765,26 @@ describe("complete submission ownership", () => {
       threadManager,
     });
     const { core: thread, mockClient } = createAgentWithMock(
-      { compactor, threadManager },
+      {
+        chatSupervisors: [
+          {
+            onBeforeRequest: async () => {
+              if (!compact) return { type: "none" };
+              compact = false;
+              return {
+                type: "suspend",
+                reason: { kind: "compact", nextPrompt: undefined },
+              };
+            },
+          },
+        ],
+        compactor,
+        threadManager,
+      },
       id,
     );
     let compact = true;
-    thread.supervisors = [
-      {
-        onBeforeRequest: async () => {
-          if (!compact) return { type: "none" };
-          compact = false;
-          return {
-            type: "suspend",
-            reason: { kind: "compact", nextPrompt: undefined },
-          };
-        },
-      },
-    ];
+
     const sent = thread.submit({
       type: "resolved",
       messages: [text("history")],

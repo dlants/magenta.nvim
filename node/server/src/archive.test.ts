@@ -13,7 +13,10 @@ import {
 import type { ThreadId } from "./chat-types.ts";
 import { threadConversationLogPath, threadMetaPath } from "./utils/files.ts";
 
-const TEST_BASE_DIR = path.join(os.tmpdir(), "magenta-test-archive");
+const TEST_BASE_DIR = path.join(
+  os.tmpdir(),
+  `magenta-archive-list-${uuidv7()}`,
+);
 
 async function makeThreadDir(threadId: ThreadId, meta?: object): Promise<void> {
   const dir = path.join(TEST_BASE_DIR, "threads", threadId);

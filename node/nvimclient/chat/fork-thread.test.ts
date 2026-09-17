@@ -5,6 +5,7 @@ import type {
   ToolName,
   ToolRequestId,
 } from "@magenta/server";
+import { AutoCompactSupervisor, MaxTokensSupervisor } from "@magenta/server";
 import { expect, it, vi } from "vitest";
 import { getcwd } from "../nvim/nvim.ts";
 import { withDriver } from "../test/preamble.ts";
@@ -453,5 +454,69 @@ it("agent clone happens exactly once", async () => {
     expect(cloneSpy).toHaveBeenCalledTimes(1);
 
     cloneSpy.mockRestore();
+  });
+});
+
+it("fresh and forked threads resolve their first command with equivalent execution wiring", async () => {
+  await withDriver({}, async (driver, dirs) => {
+    await driver.showSidebar();
+    const source = driver.magenta.chat.getActiveThread();
+    await driver.inputMagentaText("Read @file:poem.txt");
+    await driver.send();
+    const first = await driver.mockAnthropic.awaitPendingStream();
+    expect(JSON.stringify(first.messages)).toContain(
+      (await fs.readFile(path.join(dirs.tmpDir, "poem.txt"), "utf8"))
+        .trim()
+        .split("\n")[0],
+    );
+    expect(
+      Object.keys(source.fileSupervisor.files).some((file) =>
+        file.endsWith("poem.txt"),
+      ),
+    ).toBe(true);
+    first.respond({
+      stopReason: "end_turn",
+      text: "Ready to fork",
+      toolRequests: [],
+    });
+    await driver.assertDisplayBufferContains("Ready to fork");
+    await driver.magenta.forkAtMessageAndSwitch(
+      source.id,
+      source.agent.getNativeMessageIdx(),
+    );
+    const fork = driver.magenta.chat.getActiveThread();
+    expect(fork.core.toolSpecs).toEqual(source.core.toolSpecs);
+    expect(fork.core.context.getScriptRunner?.()).toBe(
+      source.core.context.getScriptRunner?.(),
+    );
+    expect(
+      fork.core.context.chatSupervisors!.map((policy) => policy.constructor),
+    ).toEqual([MaxTokensSupervisor, AutoCompactSupervisor]);
+    expect(fork.core.context.resolve).not.toBe(source.core.context.resolve);
+    expect(fork.compactor).toBe(fork.core.context.compactor);
+    expect(fork.compactor).not.toBe(source.compactor);
+    await fs.writeFile(
+      path.join(dirs.tmpDir, "fork-only.txt"),
+      "fork command content",
+    );
+    await driver.inputMagentaText("Read @file:fork-only.txt again");
+    await driver.send();
+    const continued = await driver.mockAnthropic.awaitPendingStream();
+    expect(JSON.stringify(continued.messages)).toContain(
+      "fork command content",
+    );
+    expect(Object.keys(fork.fileSupervisor.files)).toContain(
+      path.join(dirs.tmpDir, "fork-only.txt"),
+    );
+    expect(Object.keys(source.fileSupervisor.files)).not.toContain(
+      path.join(dirs.tmpDir, "fork-only.txt"),
+    );
+    expect(JSON.stringify(continued.messages)).toContain("again");
+    continued.respond({
+      stopReason: "end_turn",
+      text: "Fork resolved",
+      toolRequests: [],
+    });
+    await driver.assertDisplayBufferContains("Fork resolved");
   });
 });

@@ -221,6 +221,7 @@ function baseTestContext(
   overrides: TestContextOverrides = {},
 ): ThreadContext {
   const base = {
+    resolve: resolveAsText,
     logger: noopLogger,
     profile: {
       provider: "mock",
@@ -289,7 +290,10 @@ export function createAgentWithMock(
 } {
   const mockClient = new MockAnthropicClient();
   const provider = createMockProvider(mockClient);
-  const context = baseTestContext(provider, overrides);
+  const context = baseTestContext(provider, {
+    ...overrides,
+    ...(resolve ? { resolve } : {}),
+  });
 
   return {
     core: new Thread(
@@ -298,7 +302,6 @@ export function createAgentWithMock(
       {
         ...callbacks,
         onUpdate: onUpdate ?? (() => {}),
-        resolve: resolve ?? resolveAsText,
       },
       {
         baseDir: TEST_ARCHIVE_DIR,

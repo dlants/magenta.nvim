@@ -21,7 +21,7 @@ import type {
   ProviderMessage,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import { pendingMessage, resolveAsText } from "./submission/index.ts";
+import { pendingMessage } from "./submission/index.ts";
 import {
   awaitNextStream,
   cleanupArchive,
@@ -260,6 +260,14 @@ describe("Thread.submit result", () => {
     { result: '{"count":3}', type: "text", text: "not a wrapper" },
   ])("passes custom input unchanged to hooks and consumers: %j", async (input) => {
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onYield: async (value) => {
+            expect(value).toEqual(input);
+            return { type: "accept", resultPrefix: "synced" };
+          },
+        },
+      ],
       threadType: "subagent" as ThreadType,
       yieldSchema: {
         type: "object",
@@ -267,14 +275,7 @@ describe("Thread.submit result", () => {
         required: ["result"],
       },
     });
-    core.supervisors = [
-      {
-        onYield: async (value) => {
-          expect(value).toEqual(input);
-          return { type: "accept", resultPrefix: "synced" };
-        },
-      },
-    ];
+
     const result = core.submit({
       type: "resolved",
       messages: [
@@ -489,15 +490,20 @@ describe("Thread turn loop", () => {
   });
   it("delivers a queued message before an end-turn supervisor can suspend", async () => {
     const threadId = uniqueThreadId("queue-beats-suspend");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
-    core.supervisors = [
+    const { core, mockClient } = createAgentWithMock(
       {
-        onEndTurnWithoutYield: () => ({
-          type: "suspend" as const,
-          reason: { kind: "stop" as const, message: "halt" },
-        }),
+        chatSupervisors: [
+          {
+            onEndTurnWithoutYield: () => ({
+              type: "suspend" as const,
+              reason: { kind: "stop" as const, message: "halt" },
+            }),
+          },
+        ],
       },
-    ];
+      threadId,
+    );
+
     const sent = core.submit({
       type: "resolved",
       messages: [
@@ -531,10 +537,10 @@ describe("Thread turn loop", () => {
   });
   it("keeps the submitted message in the log when a continuation fails", async () => {
     const { core, mockClient } = createAgentWithMock(
-      undefined,
+      { chatSupervisors: [MaxTokensSupervisor.create()] },
       uniqueThreadId("continuation-failure"),
     );
-    core.supervisors = [MaxTokensSupervisor.create()];
+
     const sent = core.submit({
       type: "resolved",
       messages: [
@@ -597,27 +603,24 @@ describe("Thread submissions across a compaction handoff", () => {
   };
 
   /** Suspends once, at the first stop. */
-  const compactOnce = (core: Thread, nextPrompt: string | undefined) => {
+  const compactOnce = (nextPrompt: string | undefined): ThreadSupervisor => {
     let asked = false;
-    core.supervisors = [
-      {
-        onEndTurnWithoutYield: () => {
-          if (asked) return { type: "none" as const };
-          asked = true;
-          return {
-            type: "suspend" as const,
-            reason: { kind: "compact", nextPrompt },
-          };
-        },
+    return {
+      onEndTurnWithoutYield: () => {
+        if (asked) return { type: "none" };
+        asked = true;
+        return { type: "suspend", reason: { kind: "compact", nextPrompt } };
       },
-    ];
+    };
   };
 
   it("stays pending until the post-compaction turn comes to rest", async () => {
     const threadId = uniqueThreadId("send-compaction");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    const { core, mockClient } = createAgentWithMock(
+      { chatSupervisors: [compactOnce("carry on")] },
+      threadId,
+    );
     try {
-      compactOnce(core, "carry on");
       const compactor = stubCompactor();
       const oldAgent = core.inferenceManager;
       let settled: ThreadSendResult | undefined;
@@ -661,12 +664,15 @@ describe("Thread submissions across a compaction handoff", () => {
 
   it("falls back to the default continuation when the prompt resolves to nothing", async () => {
     const threadId = uniqueThreadId("send-compaction-empty-prompt");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    const { core, mockClient } = createAgentWithMock(
+      { chatSupervisors: [compactOnce("   ")] },
+      threadId,
+    );
     try {
       // The owner resolves the `@compact` prompt at handoff time; a prompt made
       // entirely of commands can expand to nothing, and an empty user turn is
       // not something to send.
-      compactOnce(core, "   ");
+
       const oldAgent = core.inferenceManager;
       core.context.compactor = stubCompactor();
       const result = core.submit({
@@ -705,23 +711,27 @@ describe("Thread submissions across a compaction handoff", () => {
 
   it("stays pending across two consecutive handoffs, reseeding each time", async () => {
     const threadId = uniqueThreadId("send-compaction-twice");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
-    try {
-      const prompts = ["first continuation", "second continuation"];
-      let handoffs = 0;
-      core.supervisors = [
-        {
-          onEndTurnWithoutYield: () => {
-            if (handoffs >= prompts.length) return { type: "none" as const };
-            const nextPrompt = prompts[handoffs];
-            handoffs++;
-            return {
-              type: "suspend" as const,
-              reason: { kind: "compact" as const, nextPrompt },
-            };
+    const prompts = ["first continuation", "second continuation"];
+    let handoffs = 0;
+    const { core, mockClient } = createAgentWithMock(
+      {
+        chatSupervisors: [
+          {
+            onEndTurnWithoutYield: () => {
+              if (handoffs >= prompts.length) return { type: "none" as const };
+              const nextPrompt = prompts[handoffs];
+              handoffs++;
+              return {
+                type: "suspend" as const,
+                reason: { kind: "compact" as const, nextPrompt },
+              };
+            },
           },
-        },
-      ];
+        ],
+      },
+      threadId,
+    );
+    try {
       const calls: (string | undefined)[] = [];
       const compactor: Compactor = {
         run: (_messages, nextPrompt) => {
@@ -784,9 +794,11 @@ describe("Thread submissions across a compaction handoff", () => {
 
   it("resolves failed when the summarizing pass errors out", async () => {
     const threadId = uniqueThreadId("compaction-error");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    const { core, mockClient } = createAgentWithMock(
+      { chatSupervisors: [compactOnce(undefined)] },
+      threadId,
+    );
     try {
-      compactOnce(core, undefined);
       core.context.compactor = stubCompactor({
         type: "error",
         message: "boom",
@@ -814,21 +826,25 @@ describe("Thread submissions across a compaction handoff", () => {
 
   it("treats a suspension nobody claims as a plain stop", async () => {
     const threadId = uniqueThreadId("suspend-unclaimed");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
-    try {
-      let asked = false;
-      core.supervisors = [
-        {
-          onEndTurnWithoutYield: () => {
-            if (asked) return { type: "none" as const };
-            asked = true;
-            return {
-              type: "suspend" as const,
-              reason: { kind: "stop" as const, message: "budget exhausted" },
-            };
+    let asked = false;
+    const { core, mockClient } = createAgentWithMock(
+      {
+        chatSupervisors: [
+          {
+            onEndTurnWithoutYield: () => {
+              if (asked) return { type: "none" as const };
+              asked = true;
+              return {
+                type: "suspend" as const,
+                reason: { kind: "stop" as const, message: "budget exhausted" },
+              };
+            },
           },
-        },
-      ];
+        ],
+      },
+      threadId,
+    );
+    try {
       const compactor = stubCompactor();
       core.context.compactor = compactor;
       const result = core.submit({
@@ -1169,8 +1185,9 @@ describe("MaxTokensSupervisor", () => {
   };
 
   it("continues a truncated text-only response", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [MaxTokensSupervisor.create()];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [MaxTokensSupervisor.create()],
+    });
 
     void core.submit({
       type: "resolved",
@@ -1191,9 +1208,10 @@ describe("MaxTokensSupervisor", () => {
   });
 
   it("is the only supervisor to speak on max_tokens, and spends no restart", async () => {
-    const { core, mockClient } = createAgentWithMock();
     const unsupervised = UnsupervisedSupervisor.create();
-    core.supervisors = [MaxTokensSupervisor.create(), unsupervised];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [MaxTokensSupervisor.create(), unsupervised],
+    });
 
     void core.submit({
       type: "resolved",
@@ -1223,12 +1241,13 @@ describe("MaxTokensSupervisor", () => {
   });
   it("takes precedence over a subagent's yield-tag nudge", async () => {
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        MaxTokensSupervisor.create(),
+        SubagentSupervisor.create(),
+      ],
       threadType: "subagent" as ThreadType,
     });
-    core.supervisors = [
-      MaxTokensSupervisor.create(),
-      SubagentSupervisor.create(),
-    ];
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -1329,11 +1348,12 @@ describe("yield_to_parent as an ordinary tool", () => {
   });
   it("wins over a compaction the same turn would otherwise trigger", async () => {
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
+      ],
       threadType: "subagent" as ThreadType,
     });
-    core.supervisors = [
-      AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-    ];
+
     mockClient.mockInputTokenCount = 50;
     const compactions = trackCompactions(core);
     const sent = core.submit({
@@ -1589,9 +1609,9 @@ describe("Agent.abort appends user abort message", () => {
 describe("SubagentSupervisor yield tag detection", () => {
   it("nudges agent when it writes a <yield_to_parent> XML tag instead of calling the tool", async () => {
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [SubagentSupervisor.create()],
       threadType: "subagent" as ThreadType,
     });
-    core.supervisors = [SubagentSupervisor.create()];
 
     void core.submit({
       type: "resolved",
@@ -1632,9 +1652,9 @@ describe("SubagentSupervisor yield tag detection", () => {
 
   it("does not intervene when agent stops without a yield tag", async () => {
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [SubagentSupervisor.create()],
       threadType: "subagent" as ThreadType,
     });
-    core.supervisors = [SubagentSupervisor.create()];
 
     void core.submit({
       type: "resolved",
@@ -1664,10 +1684,12 @@ function countOccurrences(value: unknown, needle: string): number {
 
 describe("AutoCompactSupervisor integration", () => {
   it("compacts at the gate of the request whose conversation breaches the threshold", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
-      AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-    ];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
+      ],
+    });
+
     mockClient.mockInputTokenCount = 50;
 
     const compactions = trackCompactions(core);
@@ -1716,10 +1738,12 @@ describe("AutoCompactSupervisor integration", () => {
   });
 
   it("does not trigger compaction when input tokens are below the threshold", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
-      AutoCompactSupervisor.create({ threshold: 100000, nextPrompt: "go" }),
-    ];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        AutoCompactSupervisor.create({ threshold: 100000, nextPrompt: "go" }),
+      ],
+    });
+
     mockClient.mockInputTokenCount = 50;
 
     const compactions = trackCompactions(core);
@@ -1749,11 +1773,12 @@ describe("AutoCompactSupervisor integration", () => {
   it("triggers compaction on a tool_use handoff after tools resolve", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
+      ],
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
-    core.supervisors = [
-      AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-    ];
+
     mockClient.mockInputTokenCount = 50;
 
     const compactions = trackCompactions(core);
@@ -1785,11 +1810,13 @@ describe("AutoCompactSupervisor integration", () => {
   });
 
   it("compacts at the gate of the continuation a max_tokens stop asks for", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
-      MaxTokensSupervisor.create(),
-      AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-    ];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        MaxTokensSupervisor.create(),
+        AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
+      ],
+    });
+
     mockClient.mockInputTokenCount = 50;
 
     const compactions = trackCompactions(core);
@@ -1819,17 +1846,19 @@ describe("AutoCompactSupervisor integration", () => {
   });
 
   it("appends an injected text to the message log", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    let injected = false;
-    core.supervisors = [
-      {
-        onBeforeRequest: () => {
-          if (injected) return Promise.resolve({ type: "none" as const });
-          injected = true;
-          return Promise.resolve(injectText("remember this"));
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: () => {
+            if (injected) return Promise.resolve({ type: "none" as const });
+            injected = true;
+            return Promise.resolve(injectText("remember this"));
+          },
         },
-      },
-    ];
+      ],
+    });
+    let injected = false;
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -1866,37 +1895,38 @@ describe("AutoCompactSupervisor integration", () => {
   it("injects an image on the tool_use continuation, after the tool result", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: () => {
+            // The opening request is skipped: the injection belongs on the
+            // continuation that carries the tool result.
+            requests++;
+            if (injected || requests === 1) {
+              return Promise.resolve({ type: "none" as const });
+            }
+            injected = true;
+            return Promise.resolve({
+              type: "inject" as const,
+              content: [
+                {
+                  type: "image" as const,
+                  source: {
+                    type: "base64" as const,
+                    media_type: "image/png" as const,
+                    data: "aW1n",
+                  },
+                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                },
+              ],
+            });
+          },
+        },
+      ],
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     let injected = false;
     let requests = 0;
-    core.supervisors = [
-      {
-        onBeforeRequest: () => {
-          // The opening request is skipped: the injection belongs on the
-          // continuation that carries the tool result.
-          requests++;
-          if (injected || requests === 1) {
-            return Promise.resolve({ type: "none" as const });
-          }
-          injected = true;
-          return Promise.resolve({
-            type: "inject" as const,
-            content: [
-              {
-                type: "image" as const,
-                source: {
-                  type: "base64" as const,
-                  media_type: "image/png" as const,
-                  data: "aW1n",
-                },
-                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              },
-            ],
-          });
-        },
-      },
-    ];
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -1921,36 +1951,38 @@ describe("AutoCompactSupervisor integration", () => {
     stream2.finishResponse("end_turn");
   });
   it("keeps the injection in the log when a compaction follows it", async () => {
-    const { core, mockClient } = createAgentWithMock();
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        // max_tokens plans a continuation, so the stop reaches the
+        // before-request supervisors at all.
+        MaxTokensSupervisor.create(),
+        {
+          onBeforeRequest: () => {
+            // The opening request of the send is skipped; the note rides the
+            // continuation the max_tokens nudge produces.
+            requests++;
+            if (asked || requests === 1)
+              return Promise.resolve({ type: "none" as const });
+            asked = true;
+            return Promise.resolve(injectText("note"));
+          },
+        },
+        {
+          onBeforeRequest: () =>
+            Promise.resolve(
+              asked
+                ? {
+                    type: "suspend" as const,
+                    reason: { kind: "compact", nextPrompt: "carry on" },
+                  }
+                : { type: "none" as const },
+            ),
+        },
+      ],
+    });
     let asked = false;
     let requests = 0;
-    core.supervisors = [
-      // max_tokens plans a continuation, so the stop reaches the
-      // before-request supervisors at all.
-      MaxTokensSupervisor.create(),
-      {
-        onBeforeRequest: () => {
-          // The opening request of the send is skipped; the note rides the
-          // continuation the max_tokens nudge produces.
-          requests++;
-          if (asked || requests === 1)
-            return Promise.resolve({ type: "none" as const });
-          asked = true;
-          return Promise.resolve(injectText("note"));
-        },
-      },
-      {
-        onBeforeRequest: () =>
-          Promise.resolve(
-            asked
-              ? {
-                  type: "suspend" as const,
-                  reason: { kind: "compact", nextPrompt: "carry on" },
-                }
-              : { type: "none" as const },
-          ),
-      },
-    ];
+
     const compactions = trackCompactions(core);
     void core.submit({
       type: "resolved",
@@ -1979,33 +2011,34 @@ describe("AutoCompactSupervisor integration", () => {
   it("appends a tool_use-path injection immediately when a compaction follows", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: () => {
+            requests++;
+            if (asked || requests === 1) {
+              return Promise.resolve({ type: "none" as const });
+            }
+            asked = true;
+            return Promise.resolve(injectText("tool-path note"));
+          },
+        },
+        {
+          onBeforeRequest: () =>
+            Promise.resolve(
+              asked
+                ? {
+                    type: "suspend" as const,
+                    reason: { kind: "compact", nextPrompt: "carry on" },
+                  }
+                : { type: "none" as const },
+            ),
+        },
+      ],
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     let asked = false;
     let requests = 0;
-    core.supervisors = [
-      {
-        onBeforeRequest: () => {
-          requests++;
-          if (asked || requests === 1) {
-            return Promise.resolve({ type: "none" as const });
-          }
-          asked = true;
-          return Promise.resolve(injectText("tool-path note"));
-        },
-      },
-      {
-        onBeforeRequest: () =>
-          Promise.resolve(
-            asked
-              ? {
-                  type: "suspend" as const,
-                  reason: { kind: "compact", nextPrompt: "carry on" },
-                }
-              : { type: "none" as const },
-          ),
-      },
-    ];
+
     const compactions = trackCompactions(core);
     void core.submit({
       type: "resolved",
@@ -2031,17 +2064,19 @@ describe("AutoCompactSupervisor integration", () => {
     );
   });
   it("keeps an injection in the log when the next request fails", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    let injected = false;
-    core.supervisors = [
-      {
-        onBeforeRequest: () => {
-          if (injected) return Promise.resolve({ type: "none" as const });
-          injected = true;
-          return Promise.resolve(injectText("survive the failure"));
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: () => {
+            if (injected) return Promise.resolve({ type: "none" as const });
+            injected = true;
+            return Promise.resolve(injectText("survive the failure"));
+          },
         },
-      },
-    ];
+      ],
+    });
+    let injected = false;
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -2094,17 +2129,19 @@ describe("AutoCompactSupervisor integration", () => {
     stream3.finishResponse("end_turn");
   });
   it("keeps an injection in the log when the next request is aborted", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    let injected = false;
-    core.supervisors = [
-      {
-        onBeforeRequest: () => {
-          if (injected) return Promise.resolve({ type: "none" as const });
-          injected = true;
-          return Promise.resolve(injectText("survive the abort"));
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: () => {
+            if (injected) return Promise.resolve({ type: "none" as const });
+            injected = true;
+            return Promise.resolve(injectText("survive the abort"));
+          },
         },
-      },
-    ];
+      ],
+    });
+    let injected = false;
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -2159,8 +2196,6 @@ describe("AutoCompactSupervisor integration", () => {
   });
 
   it("consults all supervisors in order and the first compaction wins", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    const calls: string[] = [];
     const first: ThreadSupervisor = {
       onEndTurnWithoutYield: () => {
         calls.push("first");
@@ -2185,7 +2220,10 @@ describe("AutoCompactSupervisor integration", () => {
         };
       },
     };
-    core.supervisors = [first, second, third];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [first, second, third],
+    });
+    const calls: string[] = [];
 
     const compactions = trackCompactions(core);
 
@@ -2213,20 +2251,21 @@ describe("AutoCompactSupervisor integration", () => {
   });
 
   it("injects on the opening request of a send, ahead of the user content", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    let requests = 0;
-    core.supervisors = [
-      {
-        onBeforeRequest: () => {
-          requests++;
-          return Promise.resolve(
-            requests === 1
-              ? injectText("submission note")
-              : { type: "none" as const },
-          );
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: () => {
+            requests++;
+            return Promise.resolve(
+              requests === 1
+                ? injectText("submission note")
+                : { type: "none" as const },
+            );
+          },
         },
-      },
-    ];
+      ],
+    });
+    let requests = 0;
 
     void core.submit({
       type: "resolved",
@@ -2252,17 +2291,18 @@ describe("AutoCompactSupervisor integration", () => {
   });
 
   it("consults onBeforeRequest exactly once per request across a handoff", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    let requests = 0;
-    core.supervisors = [
-      MaxTokensSupervisor.create(),
-      {
-        onBeforeRequest: () => {
-          requests++;
-          return Promise.resolve({ type: "none" as const });
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        MaxTokensSupervisor.create(),
+        {
+          onBeforeRequest: () => {
+            requests++;
+            return Promise.resolve({ type: "none" as const });
+          },
         },
-      },
-    ];
+      ],
+    });
+    let requests = 0;
 
     void core.submit({
       type: "resolved",
@@ -2295,16 +2335,18 @@ describe("AutoCompactSupervisor integration", () => {
     expect(requests).toBe(2);
   });
   it("does not consult onBeforeRequest at a stop that issues no request", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    let requests = 0;
-    core.supervisors = [
-      {
-        onBeforeRequest: () => {
-          requests++;
-          return Promise.resolve({ type: "none" as const });
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: () => {
+            requests++;
+            return Promise.resolve({ type: "none" as const });
+          },
         },
-      },
-    ];
+      ],
+    });
+    let requests = 0;
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -2345,27 +2387,29 @@ describe("AutoCompactSupervisor integration", () => {
   });
 
   it("reports tool results before the continuation's before-request hook, with output tokens", async () => {
-    const { core, mockClient } = createAgentWithMock();
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onToolResults: (results) => {
+            events.push(`results:${results.size}`);
+          },
+          onBeforeRequest: (ctx) => {
+            events.push("request");
+            requests++;
+            // Only a continuation has a finished assistant message behind it.
+            if (requests > 1) {
+              continuationOutputTokens = ctx.outputTokenCount;
+            }
+            return Promise.resolve({ type: "none" as const });
+          },
+          hasPendingContent: () => Promise.resolve(false),
+        },
+      ],
+    });
     const events: string[] = [];
     let continuationOutputTokens: number | undefined;
     let requests = 0;
-    core.supervisors = [
-      {
-        onToolResults: (results) => {
-          events.push(`results:${results.size}`);
-        },
-        onBeforeRequest: (ctx) => {
-          events.push("request");
-          requests++;
-          // Only a continuation has a finished assistant message behind it.
-          if (requests > 1) {
-            continuationOutputTokens = ctx.outputTokenCount;
-          }
-          return Promise.resolve({ type: "none" as const });
-        },
-        hasPendingContent: () => Promise.resolve(false),
-      },
-    ];
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -2403,6 +2447,18 @@ describe("AutoCompactSupervisor integration", () => {
       },
     );
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onToolResults: (results) => {
+            events.push(`results:${results.size}`);
+          },
+          onBeforeRequest: () => {
+            events.push("request");
+            return Promise.resolve({ type: "none" as const });
+          },
+          hasPendingContent: () => Promise.resolve(false),
+        },
+      ],
       fileIO: {
         readFile: async () => "file contents",
         writeFile: async () => {},
@@ -2411,18 +2467,7 @@ describe("AutoCompactSupervisor integration", () => {
       } as unknown as ThreadContext["fileIO"],
     });
     const events: string[] = [];
-    core.supervisors = [
-      {
-        onToolResults: (results) => {
-          events.push(`results:${results.size}`);
-        },
-        onBeforeRequest: () => {
-          events.push("request");
-          return Promise.resolve({ type: "none" as const });
-        },
-        hasPendingContent: () => Promise.resolve(false),
-      },
-    ];
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -2452,21 +2497,22 @@ describe("AutoCompactSupervisor integration", () => {
   });
   it("reports tool results when the turn yields instead of continuing", async () => {
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onToolResults: (results) => {
+            events.push(`results:${results.size}`);
+          },
+          onBeforeRequest: () => {
+            events.push("request");
+            return Promise.resolve({ type: "none" as const });
+          },
+          hasPendingContent: () => Promise.resolve(false),
+        },
+      ],
       threadType: "subagent",
     });
     const events: string[] = [];
-    core.supervisors = [
-      {
-        onToolResults: (results) => {
-          events.push(`results:${results.size}`);
-        },
-        onBeforeRequest: () => {
-          events.push("request");
-          return Promise.resolve({ type: "none" as const });
-        },
-        hasPendingContent: () => Promise.resolve(false),
-      },
-    ];
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -2494,16 +2540,18 @@ describe("AutoCompactSupervisor integration", () => {
   });
 
   it("drops a submission aborted while its before-request hooks are in flight", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    const gate = new Defer<void>();
-    core.supervisors = [
-      {
-        onBeforeRequest: async () => {
-          await gate.promise;
-          return injectText("late note");
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: async () => {
+            await gate.promise;
+            return injectText("late note");
+          },
         },
-      },
-    ];
+      ],
+    });
+    const gate = new Defer<void>();
+
     const sent = core.submit({
       type: "resolved",
       messages: [
@@ -2524,13 +2572,14 @@ describe("AutoCompactSupervisor integration", () => {
     expect(mockClient.streams.length).toBe(0);
   });
   it("issues a request for a submission-time injection with no user content", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
-      {
-        hasPendingContent: () => Promise.resolve(true),
-        onBeforeRequest: () => Promise.resolve(injectText("solo note")),
-      },
-    ];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          hasPendingContent: () => Promise.resolve(true),
+          onBeforeRequest: () => Promise.resolve(injectText("solo note")),
+        },
+      ],
+    });
 
     void core.submit({ type: "resolved", messages: [] });
     const stream = await mockClient.awaitStream();
@@ -2540,10 +2589,12 @@ describe("AutoCompactSupervisor integration", () => {
   });
 
   it("compacts from a plain send, exactly once, when already over threshold", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
-      AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-    ];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
+      ],
+    });
+
     mockClient.mockInputTokenCount = 200;
 
     const compactions = trackCompactions(core);
@@ -2577,7 +2628,13 @@ describe("Thread.onToolApplied", () => {
       "/tmp/a.txt": "hello",
       "/tmp/b.txt": "other",
     });
+    const collector = (supervisor: number): ThreadSupervisor => ({
+      onToolApplied: ({ absFilePath, tool }) => {
+        applied.push({ supervisor, path: absFilePath, type: tool.type });
+      },
+    });
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [collector(0), collector(1)],
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     const applied: {
@@ -2585,12 +2642,6 @@ describe("Thread.onToolApplied", () => {
       path: AbsFilePath;
       type: ToolApplied["type"];
     }[] = [];
-    const collector = (supervisor: number): ThreadSupervisor => ({
-      onToolApplied: ({ absFilePath, tool }) => {
-        applied.push({ supervisor, path: absFilePath, type: tool.type });
-      },
-    });
-    core.supervisors = [collector(0), collector(1)];
 
     void core.submit({
       type: "resolved",
@@ -2634,15 +2685,15 @@ describe("Thread.onToolApplied", () => {
   it("keeps editedFileGroups bookkeeping when a subscriber throws", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onToolApplied: () => {
+            throw new Error("subscriber blew up");
+          },
+        },
+      ],
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
-    core.supervisors = [
-      {
-        onToolApplied: () => {
-          throw new Error("subscriber blew up");
-        },
-      },
-    ];
 
     void core.submit({
       type: "resolved",
@@ -2825,7 +2876,7 @@ describe("Thread.editedFileGroups", () => {
         newId: childId,
         nativeMessageIdx,
         context: threadCloneContext(context),
-        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+        callbacks: { onUpdate: () => {} },
       });
       expect(child.editedFileGroups).toEqual([
         {
@@ -3691,7 +3742,22 @@ describe("Agent conversation archive", () => {
 
   it("inserts a compaction marker between agent generations and keeps appending", async () => {
     const threadId = uniqueThreadId("archive-compact");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    const { core, mockClient } = createAgentWithMock(
+      {
+        resolve: async () => ({
+          compact: true,
+          messages: [
+            {
+              type: "text",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: "",
+            },
+          ],
+          reminders: [],
+        }),
+      },
+      threadId,
+    );
 
     try {
       void core.submit({
@@ -3722,17 +3788,7 @@ describe("Agent conversation archive", () => {
             chunkCount: 2,
           }),
       };
-      core.callbacks.resolve = async () => ({
-        compact: true,
-        messages: [
-          {
-            type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            text: "",
-          },
-        ],
-        reminders: [],
-      });
+
       const compactPromise = core.submit({
         type: "raw",
         message: pendingMessage("@compact"),
@@ -3804,7 +3860,7 @@ describe("Agent conversation archive", () => {
         newId: childId,
         nativeMessageIdx,
         context: threadCloneContext(context),
-        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+        callbacks: { onUpdate: () => {} },
       });
 
       void child.submit({
@@ -3863,7 +3919,6 @@ describe("Agent thread state", () => {
       mockClient,
       context,
     } = createAgentWithMock(undefined, parentId);
-
     let child: Thread | undefined;
     try {
       void parent.submit({
@@ -3893,7 +3948,7 @@ describe("Agent thread state", () => {
         newId: childId,
         nativeMessageIdx,
         context: threadCloneContext(context),
-        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+        callbacks: { onUpdate: () => {} },
       });
 
       expect(child.edlRegisters.registers.get("r")).toBe("regval");
@@ -3911,6 +3966,17 @@ describe("Agent thread state", () => {
 });
 
 describe("Thread survives the compaction agent swap", () => {
+  const compactResolver = async () => ({
+    compact: true,
+    messages: [
+      {
+        type: "text" as const,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "",
+      },
+    ],
+    reminders: [],
+  });
   /** Drive a compaction handoff to completion, including the post-compaction
    * continuation turn the fresh agent issues. */
   async function compact(
@@ -3926,17 +3992,7 @@ describe("Thread survives the compaction agent swap", () => {
           chunkCount: 1,
         }),
     };
-    core.callbacks.resolve = async () => ({
-      compact: true,
-      messages: [
-        {
-          type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          text: "",
-        },
-      ],
-      reminders: [],
-    });
+
     const compactPromise = core.submit({
       type: "raw",
       message: pendingMessage("@compact"),
@@ -3957,7 +4013,10 @@ describe("Thread survives the compaction agent swap", () => {
 
   it("keeps structured tool results recorded before the compaction", async () => {
     const threadId = uniqueThreadId("compact-structured");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    const { core, mockClient } = createAgentWithMock(
+      { resolve: compactResolver },
+      threadId,
+    );
     try {
       const map = core.completedTools as Map<ToolRequestId, CompletedToolInfo>;
       map.set("req-1" as ToolRequestId, {
@@ -3989,7 +4048,7 @@ describe("Thread survives the compaction agent swap", () => {
     const threadId = uniqueThreadId("compact-events");
     let updates = 0;
     const { core, mockClient } = createAgentWithMock(
-      undefined,
+      { resolve: compactResolver },
       threadId,
       undefined,
       () => updates++,
@@ -4011,7 +4070,22 @@ describe("Thread survives the compaction agent swap", () => {
 
   it("seeds the replacement agent's prefix with the summary alone", async () => {
     const threadId = uniqueThreadId("compact-prefix");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    const { core, mockClient } = createAgentWithMock(
+      {
+        resolve: async () => ({
+          compact: true,
+          messages: [
+            {
+              type: "text",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: "",
+            },
+          ],
+          reminders: [],
+        }),
+      },
+      threadId,
+    );
     try {
       // Queued on the pre-compaction agent, which the swap discards: the
       // prefix belongs to the message list being replaced.
@@ -4030,17 +4104,7 @@ describe("Thread survives the compaction agent swap", () => {
             chunkCount: 1,
           }),
       };
-      core.callbacks.resolve = async () => ({
-        compact: true,
-        messages: [
-          {
-            type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            text: "",
-          },
-        ],
-        reminders: [],
-      });
+
       const compactPromise = core.submit({
         type: "raw",
         message: pendingMessage("@compact"),
@@ -4079,8 +4143,10 @@ describe("Thread preflight token count", () => {
 
   it("issues no count when no hook asks for one", async () => {
     const seen: (number | undefined)[] = [];
-    const { core: agent, mockClient } = createAgentWithMock();
-    agent.supervisors = [noteCount(seen)];
+    const { core: agent, mockClient } = createAgentWithMock({
+      chatSupervisors: [noteCount(seen)],
+    });
+
     mockClient.mockInputTokenCount = 42;
     const turn = agent.submit({
       type: "resolved",
@@ -4103,12 +4169,14 @@ describe("Thread preflight token count", () => {
 
   it("counts once per request, immediately before the first hook that asks", async () => {
     const seen: (number | undefined)[] = [];
-    const { core: agent, mockClient } = createAgentWithMock();
-    agent.supervisors = [
-      noteCount(seen),
-      noteCount(seen, true),
-      noteCount(seen, true),
-    ];
+    const { core: agent, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        noteCount(seen),
+        noteCount(seen, true),
+        noteCount(seen, true),
+      ],
+    });
+
     mockClient.mockInputTokenCount = 42;
     const turn = agent.submit({
       type: "resolved",
@@ -4133,8 +4201,10 @@ describe("Thread preflight token count", () => {
 
   it("clears the count when it fails rather than reporting a stale one", async () => {
     const seen: (number | undefined)[] = [];
-    const { core: agent, mockClient } = createAgentWithMock();
-    agent.supervisors = [noteCount(seen, true)];
+    const { core: agent, mockClient } = createAgentWithMock({
+      chatSupervisors: [noteCount(seen, true)],
+    });
+
     mockClient.mockInputTokenCount = 42;
     const first = agent.submit({
       type: "resolved",
@@ -4178,17 +4248,19 @@ describe("Thread preflight token count", () => {
   });
   it("does not count when an earlier hook has already suspended", async () => {
     const seen: (number | undefined)[] = [];
-    const { core: agent, mockClient } = createAgentWithMock();
-    agent.supervisors = [
-      {
-        onBeforeRequest: () =>
-          Promise.resolve({
-            type: "suspend",
-            reason: { kind: "stop", message: "held" },
-          }),
-      },
-      noteCount(seen, true),
-    ];
+    const { core: agent, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: () =>
+            Promise.resolve({
+              type: "suspend",
+              reason: { kind: "stop", message: "held" },
+            }),
+        },
+        noteCount(seen, true),
+      ],
+    });
+
     mockClient.mockInputTokenCount = 42;
     expect(
       await agent.submit({
@@ -4562,16 +4634,18 @@ describe("nativeMessageIdx plumbing", () => {
   };
 
   it("onBeforeRequest reports the idx its injection lands at, on the opening request", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    const seen: NativeMessageIdx[] = [];
-    core.supervisors = [
-      {
-        onBeforeRequest: (ctx) => {
-          seen.push(ctx.nativeMessageIdx);
-          return Promise.resolve(injectText("INJECTED-OPENING"));
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: (ctx) => {
+            seen.push(ctx.nativeMessageIdx);
+            return Promise.resolve(injectText("INJECTED-OPENING"));
+          },
         },
-      },
-    ];
+      ],
+    });
+    const seen: NativeMessageIdx[] = [];
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -4598,23 +4672,24 @@ describe("nativeMessageIdx plumbing", () => {
   it("onBeforeRequest reports the tool-result message on a continuation, because the injection merges into it", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/b.txt": "other" });
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: (ctx) => {
+            requestIdx.push(ctx.nativeMessageIdx);
+            return Promise.resolve(
+              injectText(`INJECTED-${requestIdx.length - 1}`),
+            );
+          },
+          onToolResults: (_results, nativeMessageIdx) => {
+            resultIdx.push(nativeMessageIdx);
+          },
+        },
+      ],
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     const requestIdx: NativeMessageIdx[] = [];
     const resultIdx: NativeMessageIdx[] = [];
-    core.supervisors = [
-      {
-        onBeforeRequest: (ctx) => {
-          requestIdx.push(ctx.nativeMessageIdx);
-          return Promise.resolve(
-            injectText(`INJECTED-${requestIdx.length - 1}`),
-          );
-        },
-        onToolResults: (_results, nativeMessageIdx) => {
-          resultIdx.push(nativeMessageIdx);
-        },
-      },
-    ];
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -4647,20 +4722,21 @@ describe("nativeMessageIdx plumbing", () => {
   it("onToolResults and onToolApplied report the idx of the message that holds the tool result", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/b.txt": "other" });
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onToolApplied: ({ nativeMessageIdx }) => {
+            appliedIdx.push(nativeMessageIdx);
+          },
+          onToolResults: (_results, nativeMessageIdx) => {
+            resultIdx.push(nativeMessageIdx);
+          },
+        },
+      ],
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     const appliedIdx: NativeMessageIdx[] = [];
     const resultIdx: NativeMessageIdx[] = [];
-    core.supervisors = [
-      {
-        onToolApplied: ({ nativeMessageIdx }) => {
-          appliedIdx.push(nativeMessageIdx);
-        },
-        onToolResults: (_results, nativeMessageIdx) => {
-          resultIdx.push(nativeMessageIdx);
-        },
-      },
-    ];
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -4701,20 +4777,21 @@ describe("nativeMessageIdx plumbing", () => {
       "/tmp/c.txt": "more",
     });
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onToolApplied: ({ nativeMessageIdx }) => {
+            appliedIdx.push(nativeMessageIdx);
+          },
+          onToolResults: (_results, nativeMessageIdx) => {
+            resultIdx.push(nativeMessageIdx);
+          },
+        },
+      ],
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     const appliedIdx: NativeMessageIdx[] = [];
     const resultIdx: NativeMessageIdx[] = [];
-    core.supervisors = [
-      {
-        onToolApplied: ({ nativeMessageIdx }) => {
-          appliedIdx.push(nativeMessageIdx);
-        },
-        onToolResults: (_results, nativeMessageIdx) => {
-          resultIdx.push(nativeMessageIdx);
-        },
-      },
-    ];
+
     void core.submit({
       type: "resolved",
       messages: [

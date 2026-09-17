@@ -25,7 +25,7 @@ import {
 } from "./test-helpers.ts";
 import { Thread, type ThreadContext, threadCloneContext } from "./thread.ts";
 import type { QueuedMessage } from "./thread-api.ts";
-import { injectText, SystemInfoSupervisor } from "./thread-supervisor.ts";
+import { injectText } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
 
@@ -421,19 +421,22 @@ describe("deferred submissions", () => {
 
   it("does not drain the async queue into an agent-internal submission", async () => {
     const { core, mockClient } = createAgentWithMock(
-      { threadType: "subagent" as ThreadType },
+      {
+        chatSupervisors: [
+          {
+            onYield: async () => {
+              if (rejected) return { type: "none" as const };
+              rejected = true;
+              return { type: "reject" as const, message: "not done yet" };
+            },
+          },
+        ],
+        threadType: "subagent" as ThreadType,
+      },
       uniqueThreadId("deferred-yield-rejection"),
     );
     let rejected = false;
-    core.supervisors = [
-      {
-        onYield: async () => {
-          if (rejected) return { type: "none" as const };
-          rejected = true;
-          return { type: "reject" as const, message: "not done yet" };
-        },
-      },
-    ];
+
     void core.submit({
       type: "resolved",
       messages: [
@@ -606,25 +609,30 @@ describe("deferred submissions", () => {
 
   it("keeps a queue flushed for a stop-suspended request for the next request", async () => {
     const threadId = uniqueThreadId("deferred-stop-suspend");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    let requests = 0;
+    let suspend = true;
+    const { core, mockClient } = createAgentWithMock(
+      {
+        chatSupervisors: [
+          {
+            onBeforeRequest: () =>
+              Promise.resolve(
+                suspend && ++requests > 1
+                  ? {
+                      type: "suspend" as const,
+                      reason: { kind: "stop" as const, message: "halt" },
+                    }
+                  : { type: "none" as const },
+              ),
+          },
+        ],
+      },
+      threadId,
+    );
     try {
-      let suspend = true;
       // Not the opening request of the send: the one the stop-time flush
       // produces.
-      let requests = 0;
-      core.supervisors = [
-        {
-          onBeforeRequest: () =>
-            Promise.resolve(
-              suspend && ++requests > 1
-                ? {
-                    type: "suspend" as const,
-                    reason: { kind: "stop" as const, message: "halt" },
-                  }
-                : { type: "none" as const },
-            ),
-        },
-      ];
+
       const first = core.submit({
         type: "resolved",
         messages: [
@@ -670,22 +678,26 @@ describe("deferred submissions", () => {
   });
   it("keeps a system reminder pending across a suspended request", async () => {
     const threadId = uniqueThreadId("reminder-suspend");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    let suspend = true;
+    const { core, mockClient } = createAgentWithMock(
+      {
+        chatSupervisors: [
+          {
+            onBeforeRequest: () =>
+              Promise.resolve(
+                suspend
+                  ? {
+                      type: "suspend" as const,
+                      reason: { kind: "stop" as const, message: "halt" },
+                    }
+                  : { type: "none" as const },
+              ),
+          },
+        ],
+      },
+      threadId,
+    );
     try {
-      let suspend = true;
-      core.supervisors = [
-        {
-          onBeforeRequest: () =>
-            Promise.resolve(
-              suspend
-                ? {
-                    type: "suspend" as const,
-                    reason: { kind: "stop" as const, message: "halt" },
-                  }
-                : { type: "none" as const },
-            ),
-        },
-      ];
       expect(
         await core.submit({
           type: "resolved",
@@ -728,8 +740,24 @@ describe("deferred submissions", () => {
   it("carries a queue flushed for a suspended request onto the handoff", async () => {
     const threadId = uniqueThreadId("deferred-compact");
     const calls: string[] = [];
+    let requests = 0;
+    let compacted = false;
     const { core, mockClient } = createAgentWithMock(
-      undefined,
+      {
+        chatSupervisors: [
+          {
+            onBeforeRequest: () =>
+              Promise.resolve(
+                !compacted && ++requests > 1
+                  ? {
+                      type: "suspend" as const,
+                      reason: { kind: "compact", nextPrompt: undefined },
+                    }
+                  : { type: "none" as const },
+              ),
+          },
+        ],
+      },
       threadId,
       (message) => {
         calls.push(message);
@@ -747,21 +775,6 @@ describe("deferred submissions", () => {
       },
     );
     try {
-      let compacted = false;
-      let requests = 0;
-      core.supervisors = [
-        {
-          onBeforeRequest: () =>
-            Promise.resolve(
-              !compacted && ++requests > 1
-                ? {
-                    type: "suspend" as const,
-                    reason: { kind: "compact", nextPrompt: undefined },
-                  }
-                : { type: "none" as const },
-            ),
-        },
-      ];
       let queueAtHandoff = -1;
       let callsAtHandoff = -1;
       const compactor: Compactor = {
@@ -876,6 +889,7 @@ describe("Thread aborts the tools it owns", () => {
     );
     const { core, mockClient } = createAgentWithMock(
       {
+        chatSupervisors: [{ onToolResults }],
         fileIO: {
           readFile: async () => "file contents",
           writeFile: async () => {},
@@ -885,7 +899,7 @@ describe("Thread aborts the tools it owns", () => {
       },
       uniqueThreadId(threadId),
     );
-    core.supervisors = [{ onToolResults }];
+
     const sent = core.submit({
       type: "resolved",
       messages: [
@@ -1214,21 +1228,23 @@ describe("Thread.abort between turns", () => {
   it("issues no continuation when the abort races the stop", async () => {
     let onUpdate: () => void = () => {};
     const { core, mockClient } = createAgentWithMock(
-      undefined,
+      {
+        chatSupervisors: [
+          {
+            onBeforeRequest: () => {
+              if (++requests > 1) stopConsultations.push("continuation");
+              return Promise.resolve({ type: "none" as const });
+            },
+          },
+        ],
+      },
       uniqueThreadId("abort-at-stop"),
       undefined,
       () => onUpdate(),
     );
     const stopConsultations: string[] = [];
     let requests = 0;
-    core.supervisors = [
-      {
-        onBeforeRequest: () => {
-          if (++requests > 1) stopConsultations.push("continuation");
-          return Promise.resolve({ type: "none" as const });
-        },
-      },
-    ];
+
     const sent = core.submit({
       type: "resolved",
       messages: [
@@ -1380,21 +1396,9 @@ describe("system-info preamble", () => {
 
   it("rides the first request only, and the first one after a reset", async () => {
     const { core, mockClient } = createAgentWithMock(
-      undefined,
+      { contextDelivery: {} },
       uniqueThreadId("system-info-preamble"),
     );
-    // One instance per core generation, not one per consultation: the
-    // supervisor's own state is what decides which request carries the
-    // preamble.
-    const armSystemInfo = () => {
-      core.supervisors = [
-        SystemInfoSupervisor.create({
-          systemInfo: core.systemInfo,
-          alreadyInjected: false,
-        }),
-      ];
-    };
-    armSystemInfo();
     const first = core.submit({
       type: "resolved",
       messages: [
@@ -1428,7 +1432,6 @@ describe("system-info preamble", () => {
     // The replacement agent starts from an empty log, so the preamble is due
     // again — the supervisor list survives the swap and has to be re-armed.
     await core.reset({ seed: [], archive: { type: "none" } });
-    armSystemInfo();
     const third = core.submit({
       type: "resolved",
       messages: [
@@ -1448,13 +1451,16 @@ describe("system-info preamble", () => {
 
 describe("empty send gate", () => {
   it("issues a request for an empty send when a supervisor has content", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
-      {
-        hasPendingContent: () => Promise.resolve(true),
-        onBeforeRequest: () => Promise.resolve(injectText("# context update")),
-      },
-    ];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          hasPendingContent: () => Promise.resolve(true),
+          onBeforeRequest: () =>
+            Promise.resolve(injectText("# context update")),
+        },
+      ],
+    });
+
     const sent = core.submit({ type: "resolved", messages: [] });
     const stream = await mockClient.awaitStream();
     expect(userTexts(core)).toContain("# context update");
@@ -1463,8 +1469,10 @@ describe("empty send gate", () => {
   });
 
   it("issues no request for an empty send when nothing is pending", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [{ hasPendingContent: () => Promise.resolve(false) }];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [{ hasPendingContent: () => Promise.resolve(false) }],
+    });
+
     expect(await core.submit({ type: "resolved", messages: [] })).toEqual({
       type: "empty",
     });
@@ -1473,7 +1481,9 @@ describe("empty send gate", () => {
 
   it("issues no request for a standing reminder alone, and still delivers it later", async () => {
     const { core, mockClient } = createAgentWithMock(
-      undefined,
+      {
+        chatSupervisors: [{ hasPendingContent: () => Promise.resolve(false) }],
+      },
       uniqueThreadId("empty-send-reminder"),
       (message) =>
         Promise.resolve({
@@ -1490,7 +1500,7 @@ describe("empty send gate", () => {
           reminders: ["stay on task"],
         }),
     );
-    core.supervisors = [{ hasPendingContent: () => Promise.resolve(false) }];
+
     expect(
       await core.submit({ type: "raw", message: pendingMessage("") }),
     ).toEqual({ type: "empty" });
@@ -1514,9 +1524,11 @@ describe("empty send gate", () => {
   });
 
   it("supersedes an empty send whose probe is still in flight", async () => {
-    const { core, mockClient } = createAgentWithMock();
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [{ hasPendingContent: () => probe.promise }],
+    });
     const probe = new Defer<boolean>();
-    core.supervisors = [{ hasPendingContent: () => probe.promise }];
+
     const first = core.submit({ type: "resolved", messages: [] });
     const second = core.submit({
       type: "resolved",
@@ -1538,8 +1550,6 @@ describe("empty send gate", () => {
     expect(core.isBusy).toBe(false);
   });
   it("does not consume pending content when the send is gated off", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    let available = false;
     const supervisor = {
       hasPendingContent: () => Promise.resolve(available),
       onBeforeRequest: () =>
@@ -1549,7 +1559,11 @@ describe("empty send gate", () => {
             : { type: "none" as const },
         ),
     };
-    core.supervisors = [supervisor];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [supervisor],
+    });
+    let available = false;
+
     await core.submit({ type: "resolved", messages: [] });
     expect(mockClient.streams.length).toBe(0);
 
@@ -1597,7 +1611,9 @@ describe("replaceable conversation core", () => {
   });
 
   it("replaces conversation state but preserves the result contract and queues", async () => {
-    const { core } = createAgentWithMock();
+    const { core } = createAgentWithMock({
+      chatSupervisors: [{ hasPendingContent: () => probe.promise }],
+    });
     const original = core.core;
     const result = core.result;
     const originalFileSupervisor = core.fileSupervisor;
@@ -1605,7 +1621,7 @@ describe("replaceable conversation core", () => {
     core.edlRegisters.nextSavedId = 4;
     original.preflightTokenCount = 42;
     const probe = new Defer<boolean>();
-    core.supervisors = [{ hasPendingContent: () => probe.promise }];
+
     const sent = core.submit({ type: "resolved", messages: [] });
     await core.submit(
       { type: "raw", message: pendingMessage("later") },
@@ -1649,9 +1665,11 @@ describe("replaceable conversation core", () => {
   });
 
   it("an old probe cannot finish the replacement's first loop", async () => {
-    const { core, mockClient } = createAgentWithMock();
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [{ hasPendingContent: () => probe.promise }],
+    });
     const probe = new Defer<boolean>();
-    core.supervisors = [{ hasPendingContent: () => probe.promise }];
+
     const first = core.submit({ type: "resolved", messages: [] });
     await core.reset({ seed: [], archive: { type: "none" } });
     const second = core.submit({
@@ -1679,18 +1697,19 @@ describe("replaceable conversation core", () => {
     "destroy",
   ] as const)("%s invalidates a pending yield decision", async (action) => {
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onYield: () => {
+            entered.resolve();
+            return decision.promise;
+          },
+        },
+      ],
       threadType: "subagent" as ThreadType,
     });
     const entered = new Defer<void>();
     const decision = new Defer<{ type: "accept" }>();
-    core.supervisors = [
-      {
-        onYield: () => {
-          entered.resolve();
-          return decision.promise;
-        },
-      },
-    ];
+
     const sent = core.submit({
       type: "resolved",
       messages: [
@@ -1841,15 +1860,17 @@ describe("stale outer submissions", () => {
   ] as const)("%s prevents a stale pending-content probe from finishing the replacement", async (action) => {
     const entered = new Defer<void>();
     const pending = new Defer<boolean>();
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
-      {
-        hasPendingContent: () => {
-          entered.resolve();
-          return pending.promise;
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          hasPendingContent: () => {
+            entered.resolve();
+            return pending.promise;
+          },
         },
-      },
-    ];
+      ],
+    });
+
     const first = core.submit({ type: "resolved", messages: [] });
     await entered.promise;
     if (action === "reset")
@@ -1961,17 +1982,20 @@ describe("stale outer submissions", () => {
   }) => {
     const entered = new Defer<void>();
     const gate = new Defer<typeof decision>();
+    let yields = 0;
     const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onYield: () => {
+            if (yields++ > 0) return Promise.resolve({ type: "none" as const });
+            entered.resolve();
+            return gate.promise;
+          },
+        },
+      ],
       threadType: "subagent",
     });
-    core.supervisors = [
-      {
-        onYield: () => {
-          entered.resolve();
-          return gate.promise;
-        },
-      },
-    ];
+
     const first = core.submit({
       type: "resolved",
       messages: [
@@ -2015,7 +2039,7 @@ describe("stale outer submissions", () => {
       "yield_to_parent" as ToolName,
       { result: "new result" },
     );
-    core.supervisors = [];
+
     replacement.finishResponse("tool_use");
     const expected = {
       type: "yielded",

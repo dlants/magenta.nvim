@@ -2,16 +2,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
-  type EndTurnAction,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   pollUntil,
+  SubagentSupervisor,
   type ThreadId,
-  type ThreadSupervisor,
   type ToolName,
   type ToolRequestId,
-  type YieldAction,
 } from "@magenta/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Chat } from "../chat/chat.ts";
 import { withDriver } from "../test/preamble.ts";
 
@@ -375,16 +373,15 @@ describe("yield behavior", () => {
       });
 
       const childWrapper = findChildThread(driver.magenta.chat);
-      const mockSupervisor: ThreadSupervisor = {
-        onEndTurnWithoutYield: (): EndTurnAction => ({ type: "none" }),
-        onYield: async (): Promise<YieldAction> => ({
-          type: "accept",
-          resultPrefix:
-            "[Worker branch: magenta/worker-test123 (forked from main), 2 commit(s) synced to host]",
-        }),
-      };
-      childWrapper.thread.supervisors = [mockSupervisor];
-
+      const supervisor = childWrapper.thread.core.context.chatSupervisors!.find(
+        (supervisor): supervisor is SubagentSupervisor =>
+          supervisor instanceof SubagentSupervisor,
+      )!;
+      vi.spyOn(supervisor, "onYield").mockResolvedValue({
+        type: "accept",
+        resultPrefix:
+          "[Worker branch: magenta/worker-test123 (forked from main), 2 commit(s) synced to host]",
+      });
       subagentStream.respond({
         stopReason: "tool_use",
         text: "Done with the task.",

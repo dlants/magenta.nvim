@@ -22,13 +22,15 @@ const context: RequestContext = {
 
 describe("Thread supervisor arbitration", () => {
   it("applies request injections in supervisor order, ignoring quiet supervisors", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
-      { onBeforeRequest: () => Promise.resolve(injectText("first")) },
-      {},
-      { onBeforeRequest: () => Promise.resolve({ type: "none" }) },
-      { onBeforeRequest: () => Promise.resolve(injectText("second")) },
-    ];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        { onBeforeRequest: () => Promise.resolve(injectText("first")) },
+        {},
+        { onBeforeRequest: () => Promise.resolve({ type: "none" }) },
+        { onBeforeRequest: () => Promise.resolve(injectText("second")) },
+      ],
+    });
+
     const turn = core.submit({
       type: "resolved",
       messages: userInput("hello"),
@@ -47,15 +49,17 @@ describe("Thread supervisor arbitration", () => {
   });
 
   it("asks pending-content supervisors before issuing a content-only request", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
-      { hasPendingContent: () => Promise.resolve(false) },
-      {},
-      {
-        hasPendingContent: () => Promise.resolve(true),
-        onBeforeRequest: () => Promise.resolve(injectText("pending note")),
-      },
-    ];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        { hasPendingContent: () => Promise.resolve(false) },
+        {},
+        {
+          hasPendingContent: () => Promise.resolve(true),
+          onBeforeRequest: () => Promise.resolve(injectText("pending note")),
+        },
+      ],
+    });
+
     const turn = core.submit({ type: "resolved", messages: [] });
     const stream = await mockClient.awaitStream();
     expect(JSON.stringify(stream.messages)).toContain("pending note");
@@ -64,11 +68,14 @@ describe("Thread supervisor arbitration", () => {
   });
 
   it("issues no request when no supervisor has pending content", async () => {
-    const { core, mockClient } = createAgentWithMock({ threadType: "compact" });
-    core.supervisors = [
-      {},
-      { hasPendingContent: () => Promise.resolve(false) },
-    ];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {},
+        { hasPendingContent: () => Promise.resolve(false) },
+      ],
+      threadType: "compact",
+    });
+
     expect(await core.submit({ type: "resolved", messages: [] })).toEqual({
       type: "empty",
     });
@@ -76,31 +83,33 @@ describe("Thread supervisor arbitration", () => {
   });
 
   it("lets the first suspension win over an end-turn nudge and later suspension", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    const observed: string[] = [];
-    core.supervisors = [
-      {
-        onEndTurnWithoutYield: () => ({
-          type: "send-message",
-          text: "keep going",
-        }),
-      },
-      {
-        onEndTurnWithoutYield: () => ({
-          type: "suspend",
-          reason: { kind: "stop", message: "first" },
-        }),
-      },
-      {
-        onEndTurnWithoutYield: () => {
-          observed.push("last");
-          return {
-            type: "suspend",
-            reason: { kind: "stop", message: "second" },
-          };
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onEndTurnWithoutYield: () => ({
+            type: "send-message",
+            text: "keep going",
+          }),
         },
-      },
-    ];
+        {
+          onEndTurnWithoutYield: () => ({
+            type: "suspend",
+            reason: { kind: "stop", message: "first" },
+          }),
+        },
+        {
+          onEndTurnWithoutYield: () => {
+            observed.push("last");
+            return {
+              type: "suspend",
+              reason: { kind: "stop", message: "second" },
+            };
+          },
+        },
+      ],
+    });
+    const observed: string[] = [];
+
     const turn = core.submit({
       type: "resolved",
       messages: userInput("hello"),

@@ -12,14 +12,12 @@ import type {
 } from "@magenta/server";
 import {
   type ArchiveEntry,
-  AutoCompactSupervisor,
   Defer,
   deleteArchivedThread,
   listArchivedThreads,
   loadAgents,
   MCPToolManagerImpl,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  SubagentSupervisor,
   ThreadTitle,
   threadCreatedAt,
 } from "@magenta/server";
@@ -63,8 +61,11 @@ import { shortenPath } from "../utils/files.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
 import type { CommandRegistry } from "./commands/registry.ts";
 import type { SandboxRoot } from "./thread.ts";
-import { NvimThread } from "./thread.ts";
-import { DockerSupervisor } from "./thread-supervisor.ts";
+import {
+  cloneFromNativeMessageIdx,
+  createNvimThread,
+  type NvimThread,
+} from "./thread.ts";
 import { renderYield, view as threadView } from "./thread-view.ts";
 
 const ARCHIVE_PAGE_SIZE = 50;
@@ -739,23 +740,41 @@ export class Chat implements ThreadManager {
       ...(subagentConfig ? { subagentConfig } : {}),
     });
 
-    const thread = new NvimThread(threadId, threadType, systemPrompt, {
-      onFileAdded: (path) => this.triggerHierarchyDiscovery(thread, path),
-      ...this.context,
-      options: this.context.getOptions(),
-      mcpToolManager: this.mcpToolManager,
-      profile,
-      chat: this,
-      environment,
-      initialFiles,
-      initialGitState,
-      systemInfo,
-      ...(subagentConfig ? { subagentConfig } : {}),
-      ...(getParentThread ? { getParentThread } : {}),
-      ...(getSandboxRoot ? { getSandboxRoot } : {}),
-      ...(yieldSchema ? { yieldSchema } : {}),
-      ...(scriptName ? { scriptName } : {}),
-    });
+    const thread = createNvimThread(
+      threadId,
+      threadType,
+      systemPrompt,
+      {
+        onFileAdded: (path) => this.triggerHierarchyDiscovery(thread, path),
+        ...this.context,
+        options: this.context.getOptions(),
+        mcpToolManager: this.mcpToolManager,
+        profile,
+        chat: this,
+        environment,
+        initialFiles,
+        initialGitState,
+        systemInfo,
+        ...(subagentConfig ? { subagentConfig } : {}),
+        ...(getParentThread ? { getParentThread } : {}),
+        ...(getSandboxRoot ? { getSandboxRoot } : {}),
+        ...(yieldSchema ? { yieldSchema } : {}),
+        ...(scriptName ? { scriptName } : {}),
+      },
+      {
+        ...(dockerSpawnConfig ? { docker: dockerSpawnConfig } : {}),
+        ...(autoCompactThreshold !== undefined ? { autoCompactThreshold } : {}),
+        ...(autoCompactPrompt !== undefined ? { autoCompactPrompt } : {}),
+        onDockerProgress: (message) => {
+          this.teardownMessages.set(threadId, message);
+          this.context.dispatch({
+            type: "thread-msg",
+            id: threadId,
+            msg: { type: "tool-progress" },
+          });
+        },
+      },
+    );
 
     bypassRef.get = () => thread.isSandboxBypassed;
 
@@ -767,47 +786,6 @@ export class Chat implements ThreadManager {
 
     if (contextFiles.length > 0) {
       await thread.fileSupervisor.addFiles(contextFiles);
-    }
-
-    const autoCompact =
-      threadType === "compact"
-        ? []
-        : [
-            AutoCompactSupervisor.create({
-              threshold:
-                autoCompactThreshold ??
-                this.context.getOptions().autoCompactThreshold,
-              nextPrompt:
-                autoCompactPrompt ??
-                this.context.getOptions().autoCompactPrompt,
-            }),
-          ];
-
-    if (dockerSpawnConfig?.supervised) {
-      thread.supervisors = [
-        DockerSupervisor.create({
-          containerName: dockerSpawnConfig.containerName,
-          workspacePath: dockerSpawnConfig.workspacePath,
-          hostDir: dockerSpawnConfig.hostDir,
-          onProgress: (message) => {
-            this.teardownMessages.set(thread.id, message);
-            this.context.dispatch({
-              type: "thread-msg",
-              id: thread.id,
-              msg: { type: "tool-progress" },
-            });
-          },
-        }),
-        ...autoCompact,
-      ];
-    } else if (
-      threadType === "subagent" ||
-      threadType === "docker_root" ||
-      threadType === "compact"
-    ) {
-      thread.supervisors = [SubagentSupervisor.create(), ...autoCompact];
-    } else {
-      thread.supervisors = autoCompact;
     }
 
     this.context.dispatch({
@@ -1428,7 +1406,7 @@ ${rows}${loadMore}`;
       lastViewedTime: Date.now(),
     };
 
-    const thread = await NvimThread.cloneFromNativeMessageIdx({
+    const thread = await cloneFromNativeMessageIdx({
       onFileAdded: (path) => this.triggerHierarchyDiscovery(thread, path),
       sourceThread,
       newThreadId,

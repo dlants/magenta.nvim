@@ -98,6 +98,8 @@ export type EnvironmentConfig =
   | { type: "docker"; container: string; cwd: string };
 
 interface ThreadContextBase extends AgentContext {
+  readonly resolve: ResolveSubmission;
+  readonly chatSupervisors?: readonly ThreadSupervisor[];
   compactor?: Compactor;
   profile: ProviderProfile;
   subagentConfig?: SubagentConfig;
@@ -151,7 +153,6 @@ type FlushedQueue =
   | { type: "compact"; nextPrompt: string | undefined };
 export type ThreadCallbacks = {
   readonly onUpdate: OnUpdate;
-  resolve: ResolveSubmission;
   /** A context supervisor committed a delivery into the request going out.
    * Fixed for the thread lifetime; retired cores cannot publish deliveries. */
   readonly onFilesSent?: (updates: FileUpdates) => void;
@@ -222,16 +223,6 @@ export class Thread {
     this.cancelSubmission();
     await this.core.abortAgentTurn();
   }
-  private _supervisors: ThreadSupervisor[] = [];
-  /** The owner's supervisors. They lead the list — a suspension one of them
-   * raises has to be visible to every context supervisor before any of those
-   * can commit a delivery. */
-  get supervisors(): ThreadSupervisor[] {
-    return this._supervisors;
-  }
-  set supervisors(supervisors: ThreadSupervisor[]) {
-    this._supervisors = supervisors;
-  }
   private threadLogger: ThreadLogger;
 
   constructor(
@@ -280,33 +271,6 @@ export class Thread {
     onBeforeRequest: (ctx: RequestContext) => this.queueFlushAction(ctx),
   };
 
-  private preflightRecorder!: ThreadSupervisor;
-  private yieldGate!: ThreadSupervisor;
-
-  private createGates(): void {
-    this.preflightRecorder = {
-      onBeforeRequest: async (ctx) => {
-        this.core.preflightTokenCount = ctx.inputTokenCount;
-        return { type: "none" };
-      },
-    };
-    this.yieldGate = {
-      onToolResults: (results) => {
-        for (const [id, result] of results) {
-          if (result.status !== "ok") continue;
-          const completed = this.resultArchive.get(id);
-          if (completed?.request.toolName === "yield_to_parent") {
-            return {
-              kind: "yield",
-              value: completed.request.input as YieldValue,
-            };
-          }
-        }
-        return undefined;
-      },
-    };
-  }
-
   private coreCallbacks(getCore: () => ThreadCore): ThreadCoreCallbacks {
     const isCurrent = () =>
       this.core === getCore() && getCore().isActive && !this.destroyed;
@@ -327,16 +291,33 @@ export class Thread {
       onBeforeRequest: () => this.beforeRequest(getCore()),
       onToolResults: (results, idx) => {
         let suspend: SuspendReason | undefined;
-        for (const supervisor of this.orderedSupervisors) {
-          if (!isCurrent()) break;
-          try {
-            const asked = supervisor.onToolResults?.(results, idx);
-            suspend ??= asked;
-          } catch (error) {
-            this.context.logger.error(
-              `onToolResults hook threw: ${error instanceof Error ? error.message : String(error)}`,
-            );
+        const consult = (supervisors: readonly ThreadSupervisor[]) => {
+          for (const supervisor of supervisors) {
+            if (!isCurrent()) break;
+            try {
+              const asked = supervisor.onToolResults?.(results, idx);
+              suspend ??= asked;
+            } catch (error) {
+              this.context.logger.error(
+                `onToolResults hook threw: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
           }
+        };
+        consult(this.context.chatSupervisors ?? []);
+        if (isCurrent()) {
+          for (const [id, result] of results) {
+            if (result.status !== "ok") continue;
+            const completed = this.resultArchive.get(id);
+            if (completed?.request.toolName === "yield_to_parent") {
+              suspend ??= {
+                kind: "yield",
+                value: completed.request.input as YieldValue,
+              };
+              break;
+            }
+          }
+          consult(this.contextSupervisors);
         }
         return suspend;
       },
@@ -370,42 +351,49 @@ export class Thread {
     let suspend: SuspendReason | undefined;
     let tokenCount: number | undefined;
     let counted = false;
-    for (const supervisor of this.orderedSupervisors) {
-      if (!isCurrent()) break;
-      if (!supervisor.onBeforeRequest) continue;
-      if (supervisor.requestPreflightTokenCount && !counted && !suspend) {
-        counted = true;
-        try {
-          tokenCount = await manager.countTokens?.();
-        } catch (error) {
-          this.context.logger.warn(
-            `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
+    const consult = async (supervisors: readonly ThreadSupervisor[]) => {
+      for (const supervisor of supervisors) {
         if (!isCurrent()) break;
-      }
-      const action = await supervisor.onBeforeRequest({
-        inputTokenCount: tokenCount,
-        outputTokenCount: manager.log.messages.reduce(
-          (total, message) => total + (message.usage?.outputTokens ?? 0),
-          0,
-        ),
-        nativeMessageIdx: manager.getPendingUserMessageIdx(),
-        ...(suspend === undefined
-          ? { status: "pending" as const }
-          : { status: "suspended" as const, reason: suspend }),
-      });
-      if (!isCurrent()) break;
-      if (action.type === "suspend") suspend ??= action.reason;
-      else if (action.type === "inject") {
-        for (const block of action.content) {
-          injections.push(
-            block.type === "text"
-              ? { ...block, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }
-              : block,
-          );
+        if (!supervisor.onBeforeRequest) continue;
+        if (supervisor.requestPreflightTokenCount && !counted && !suspend) {
+          counted = true;
+          try {
+            tokenCount = await manager.countTokens?.();
+          } catch (error) {
+            this.context.logger.warn(
+              `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          if (!isCurrent()) break;
+        }
+        const action = await supervisor.onBeforeRequest({
+          inputTokenCount: tokenCount,
+          outputTokenCount: manager.log.messages.reduce(
+            (total, message) => total + (message.usage?.outputTokens ?? 0),
+            0,
+          ),
+          nativeMessageIdx: manager.getPendingUserMessageIdx(),
+          ...(suspend === undefined
+            ? { status: "pending" as const }
+            : { status: "suspended" as const, reason: suspend }),
+        });
+        if (!isCurrent()) break;
+        if (action.type === "suspend") suspend ??= action.reason;
+        else if (action.type === "inject") {
+          for (const block of action.content) {
+            injections.push(
+              block.type === "text"
+                ? { ...block, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }
+                : block,
+            );
+          }
         }
       }
+    };
+    await consult(this.context.chatSupervisors ?? []);
+    if (isCurrent()) {
+      core.preflightTokenCount = tokenCount;
+      await consult(this.contextSupervisors);
     }
     return suspend === undefined
       ? { type: "proceed", injections }
@@ -428,9 +416,13 @@ export class Thread {
 
   private get orderedSupervisors(): ReadonlyArray<ThreadSupervisor> {
     return [
-      ...this._supervisors,
-      this.preflightRecorder,
-      this.yieldGate,
+      ...(this.context.chatSupervisors ?? []),
+      ...this.contextSupervisors,
+    ];
+  }
+
+  private get contextSupervisors(): ReadonlyArray<ThreadSupervisor> {
+    return [
       this.editedFilesSupervisor,
       ...(this.gitSupervisor ? [this.gitSupervisor] : []),
       ...(this.systemReminders ? [this.fileSupervisor] : []),
@@ -443,7 +435,6 @@ export class Thread {
   private createCore(
     opts: ThreadCoreInitialization = { type: "fresh" },
   ): ThreadCore {
-    this.createGates();
     const core = new ThreadCore(
       this.id,
       this.context,
@@ -650,7 +641,7 @@ export class Thread {
       if (!isCurrent()) return finish({ type: "aborted" });
       const resolved =
         input.type === "raw"
-          ? await this.callbacks.resolve(input.message)
+          ? await this.context.resolve(input.message)
           : { messages: input.messages, reminders: [], compact: false };
       if (!isCurrent()) return finish({ type: "aborted" });
       for (const text of resolved.reminders)
@@ -857,7 +848,7 @@ export class Thread {
     if (entry.type === "resolved")
       return { compact: false, messages: [entry.input], reminders: [] };
     try {
-      const resolved = await this.callbacks.resolve(entry.message);
+      const resolved = await this.context.resolve(entry.message);
       if (!isCurrent()) return undefined;
       for (const text of resolved.reminders) {
         this.activateReminder(text, nativeMessageIdx);

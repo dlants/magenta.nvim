@@ -293,10 +293,12 @@ describe("preflight token count parity", () => {
    * `AutoCompactSupervisor` cannot fire — auto-compaction is an
    * anthropic-only feature until openai grows a counting endpoint. */
   it("suspends for compaction on anthropic and not on openai", async () => {
-    const { core: agent, mockClient } = createAgentWithMock();
-    agent.supervisors = [
-      AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
-    ];
+    const { core: agent, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
+      ],
+    });
+
     mockClient.mockInputTokenCount = 100;
     expect(
       await agent.submit({
@@ -322,6 +324,9 @@ describe("preflight token count parity", () => {
     });
     const openai = createTestOpenAIAgent({ executeTools: noExecutor });
     const { core: openaiThread } = createAgentWithMock({
+      chatSupervisors: [
+        AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
+      ],
       provider: {
         createInferenceManager: () => openai.agent.manager,
         forceToolUse: () => {
@@ -329,9 +334,7 @@ describe("preflight token count parity", () => {
         },
       },
     });
-    openaiThread.supervisors = [
-      AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
-    ];
+
     // Only exercise the request gate: the resting end-turn policy can compact
     // from reported usage even when preflight counting is unavailable.
     const sendPromise = openaiThread.core.runTurn([

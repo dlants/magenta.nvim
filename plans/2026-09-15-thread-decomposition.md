@@ -294,6 +294,16 @@ Decisions: administrative reset synchronously restores untouched detached entrie
 
 ## 4. Centralize construction and policy composition
 
+### Progress (September 17, 2026)
+
+- [x] Shared nvim construction functions assemble fresh/fork execution dependencies, the compactor, delivery-time resolver, fixed callbacks, and ordered chat policies before constructing the UI wrapper. NvimThread no longer constructs server Threads or installs policies/resolvers.
+- [x] Resolution is a readonly execution dependency; chatSupervisors are constructor-supplied, readonly, and survive core replacement. Removed both mutable supervisor setters and replaced preflight/yield pseudo-supervisors with fixed execution bookkeeping between chat and context policies.
+- [x] Migrated server fixtures to constructor-supplied policies/resolvers, including stateful policies for tests that previously swapped hooks during a submission. Bare fixtures still default to no chat policies.
+- [x] Added construction-policy coverage for compact, Docker-root, and supervised Docker configurations; fresh/fork command resolution and equivalent tools; script-fork yield-schema/auto-compaction override retention; and hierarchy discovery on the first file added after real compaction.
+- [x] Full-project validation: `npx vitest run` (126 files passed; 1717 tests passed, 2 skipped tests and 1 todo), `npx vitest run node/server/` (60 files, 1047 tests passed), `npx tsc -b`, `npx biome check .` (359 files checked), and `git diff --check` all passed.
+
+Decisions: construction functions remain alongside the UI wrapper in the existing nvim thread module, avoiding a new factory abstraction. Forks now use the same script-runner/tool assembly and policy composition as fresh threads. Existing core/read/title surfaces are retained for stage 5. Repeated core-suite runs exposed archive.test.ts deleting the directory concurrently used by server Thread archive fixtures. Isolated that suite in its own UUID-named directory rather than changing production behavior or serializing the test runner. Fork construction preserves per-script yield schemas and clones the source auto-compaction configuration; mutable conversation-local history still belongs to ThreadCore. An initial full run hit a timing-sensitive attention-badge assertion in unrelated hierarchy rendering; the final full run passed without changing that test.
+
 - Goal: fresh/fork dependency assembly has one implementation, and NvimThread only wraps an already-configured Thread.
 - Extract shared construction functions within the nvim layer; fresh and fork paths share provider/tool/resolver assembly while preserving their different history/environment rules.
 - Construct ThreadCompactor independently and pass the same instance to execution and UI observation.

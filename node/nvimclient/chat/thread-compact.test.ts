@@ -238,6 +238,34 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
         notificationLog.filter((entry) => entry.reason === "thread-turn-end"),
       ).toHaveLength(1);
     });
+    const nested = path.join(originalThread.context.cwd, "after-compact");
+    await fs.mkdir(nested);
+    await fs.writeFile(
+      path.join(nested, "context.md"),
+      "hierarchy discovered after compaction",
+    );
+    await fs.writeFile(path.join(nested, "leaf.txt"), "new leaf contents");
+    await driver.addContextFiles("after-compact/leaf.txt");
+    await pollUntil(() => {
+      expect(Object.keys(originalThread.fileSupervisor.files)).toContain(
+        path.join(nested, "context.md"),
+      );
+    });
+    await driver.inputMagentaText("Read @file:after-compact/leaf.txt");
+    await driver.send();
+    const withHierarchy = await driver.mockAnthropic.awaitPendingStream();
+    expect(JSON.stringify(withHierarchy.messages)).toContain(
+      "hierarchy discovered after compaction",
+    );
+    expect(JSON.stringify(withHierarchy.messages)).toContain(
+      "new leaf contents",
+    );
+    withHierarchy.respond({
+      stopReason: "end_turn",
+      text: "Hierarchy received",
+      toolRequests: [],
+    });
+    await driver.assertDisplayBufferContains("after-compact/context.md");
   });
 });
 
@@ -731,7 +759,7 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
       const originalThread = driver.magenta.chat.getActiveThread();
 
       // The supervisor built from options should carry the configured threshold.
-      const autoCompact = originalThread.supervisors.find(
+      const autoCompact = originalThread.core.context.chatSupervisors!.find(
         (s): s is AutoCompactSupervisor => s instanceof AutoCompactSupervisor,
       );
       expect(autoCompact).toBeDefined();
@@ -761,145 +789,143 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
 });
 
 it("auto-compact triggers when inputTokenCount breaches the supervisor threshold", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-
-    // Nothing asks for a token count until the supervisor below is attached,
-    // so the first turn never compacts regardless of the mock value.
-    driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
-
-    // Build up some conversation history
-    await driver.inputMagentaText("What is 2+2?");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream({
-      message: "initial request",
-    });
-    request1.respond({
-      stopReason: "end_turn",
-      text: "2+2 equals 4.",
-      toolRequests: [],
-    });
-
-    const originalThread = driver.magenta.chat.getActiveThread();
-
-    await pollUntil(
-      () => {
-        if (originalThread.loopState.type !== "idle")
-          throw new Error("waiting for stop");
+  await withDriver(
+    {
+      options: {
+        autoCompactThreshold: 160_000,
+        autoCompactPrompt: "Now help me with multiplication",
       },
-      { timeout: 2000, message: "thread should come to rest" },
-    );
-    // Auto-compact is now a supervisor concern. Attach one (after the first
-    // turn's handoff already ran) with a threshold below the current count and
-    // a configured nextPrompt so the next handoff triggers compaction.
-    originalThread.supervisors = [
-      AutoCompactSupervisor.create({
-        threshold: 160_000,
-        nextPrompt: "Now help me with multiplication",
-      }),
-    ];
+    },
+    async (driver) => {
+      await driver.showSidebar();
 
-    // The next send consults the supervisor before its opening request, so the
-    // over-threshold token count compacts instead of issuing that request.
-    await driver.inputMagentaText("Another question");
-    await driver.send();
+      // Keep the initial request below the configured threshold.
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 100_000;
 
-    // The thread should enter compacting mode automatically
-    await pollUntil(
-      () => {
-        if (!isCompacting(originalThread))
-          throw new Error("expected the thread to be compacting");
-      },
-      { timeout: 2000, message: "thread should auto-compact" },
-    );
+      // Build up some conversation history
+      await driver.inputMagentaText("What is 2+2?");
+      await driver.send();
 
-    if (!isCompacting(originalThread)) throw new Error("expected compacting");
+      const request1 = await driver.mockAnthropic.awaitPendingStream({
+        message: "initial request",
+      });
+      request1.respond({
+        stopReason: "end_turn",
+        text: "2+2 equals 4.",
+        toolRequests: [],
+      });
 
-    // Complete the compact subagent flow
-    const compactSubagentStream = await driver.mockAnthropic.awaitPendingStream(
-      {
-        message: "compact subagent stream",
-      },
-    );
+      const originalThread = driver.magenta.chat.getActiveThread();
 
-    const subagentMessages = compactSubagentStream.getProviderMessages();
-    const userMsg = subagentMessages.find((m) => m.role === "user");
-    expect(userMsg).toBeDefined();
-    const textContent = userMsg!.content
-      .filter(
-        (c): c is Extract<typeof c, { type: "text" | "context_update" }> =>
-          c.type === "text" || c.type === "context_update",
-      )
-      .map((c) => c.text)
-      .join("");
-    expect(textContent).toContain("2+2 equals 4");
-
-    const edlScript = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked basic arithmetic: 2+2=4\nCOMPACT_SUMMARY`;
-
-    compactSubagentStream.respond({
-      stopReason: "tool_use",
-      text: "I'll compact this conversation.",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: "edl_1" as ToolRequestId,
-            toolName: "edl" as ToolName,
-            input: { script: edlScript },
-          },
+      await pollUntil(
+        () => {
+          if (originalThread.loopState.type !== "idle")
+            throw new Error("waiting for stop");
         },
-      ],
-    });
+        { timeout: 2000, message: "thread should come to rest" },
+      );
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+      // The next send consults the supervisor before its opening request, so the
+      // over-threshold token count compacts instead of issuing that request.
+      await driver.inputMagentaText("Another question");
+      await driver.send();
 
-    const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "compact subagent after EDL",
-    });
+      // The thread should enter compacting mode automatically
+      await pollUntil(
+        () => {
+          if (!isCompacting(originalThread))
+            throw new Error("expected the thread to be compacting");
+        },
+        { timeout: 2000, message: "thread should auto-compact" },
+      );
 
-    yieldChunk(afterEdlStream);
+      if (!isCompacting(originalThread)) throw new Error("expected compacting");
 
-    // Reset mock token count so the post-compact conversation doesn't re-trigger
-    driver.mockAnthropic.mockClient.mockInputTokenCount = 1000;
+      // Complete the compact subagent flow
+      const compactSubagentStream =
+        await driver.mockAnthropic.awaitPendingStream({
+          message: "compact subagent stream",
+        });
 
-    // After compact, the parent thread should resume with the next prompt
-    const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "after compact continuation",
-    });
+      const subagentMessages = compactSubagentStream.getProviderMessages();
+      const userMsg = subagentMessages.find((m) => m.role === "user");
+      expect(userMsg).toBeDefined();
+      const textContent = userMsg!.content
+        .filter(
+          (c): c is Extract<typeof c, { type: "text" | "context_update" }> =>
+            c.type === "text" || c.type === "context_update",
+        )
+        .map((c) => c.text)
+        .join("");
+      expect(textContent).toContain("2+2 equals 4");
 
-    const afterCompactMessages = afterCompactStream.getProviderMessages();
-    const hasNextPrompt = afterCompactMessages.some(
-      (m) =>
-        m.role === "user" &&
-        m.content.some(
-          (c) =>
-            c.type === "text" &&
-            c.text.includes("Now help me with multiplication"),
-        ),
-    );
-    expect(hasNextPrompt).toBe(true);
+      const edlScript = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked basic arithmetic: 2+2=4\nCOMPACT_SUMMARY`;
 
-    // The summary should be present
-    const allText = afterCompactMessages
-      .flatMap((m) =>
-        m.content
-          .filter(
-            (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
-          )
-          .map((c) => c.text),
-      )
-      .join("");
-    expect(allText).toContain("User asked basic arithmetic");
+      compactSubagentStream.respond({
+        stopReason: "tool_use",
+        text: "I'll compact this conversation.",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "edl_1" as ToolRequestId,
+              toolName: "edl" as ToolName,
+              input: { script: edlScript },
+            },
+          },
+        ],
+      });
 
-    afterCompactStream.respond({
-      stopReason: "end_turn",
-      text: "Sure! What multiplication would you like help with?",
-      toolRequests: [],
-    });
+      const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
+        message: "compact subagent after EDL",
+      });
 
-    await driver.assertDisplayBufferContains(
-      "What multiplication would you like help with?",
-    );
-  });
+      yieldChunk(afterEdlStream);
+
+      // Reset mock token count so the post-compact conversation doesn't re-trigger
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 1000;
+
+      // After compact, the parent thread should resume with the next prompt
+      const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
+        message: "after compact continuation",
+      });
+
+      const afterCompactMessages = afterCompactStream.getProviderMessages();
+      const hasNextPrompt = afterCompactMessages.some(
+        (m) =>
+          m.role === "user" &&
+          m.content.some(
+            (c) =>
+              c.type === "text" &&
+              c.text.includes("Now help me with multiplication"),
+          ),
+      );
+      expect(hasNextPrompt).toBe(true);
+
+      // The summary should be present
+      const allText = afterCompactMessages
+        .flatMap((m) =>
+          m.content
+            .filter(
+              (c): c is Extract<typeof c, { type: "text" }> =>
+                c.type === "text",
+            )
+            .map((c) => c.text),
+        )
+        .join("");
+      expect(allText).toContain("User asked basic arithmetic");
+
+      afterCompactStream.respond({
+        stopReason: "end_turn",
+        text: "Sure! What multiplication would you like help with?",
+        toolRequests: [],
+      });
+
+      await driver.assertDisplayBufferContains(
+        "What multiplication would you like help with?",
+      );
+    },
+  );
 });
 
 it("auto-compact uses the configured next prompt from options", async () => {

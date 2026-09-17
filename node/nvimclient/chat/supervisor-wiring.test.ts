@@ -1,5 +1,6 @@
 import {
   AutoCompactSupervisor,
+  MaxTokensSupervisor,
   type NativeMessageIdx,
   SubagentSupervisor,
   type ThreadId,
@@ -7,9 +8,12 @@ import {
   type ToolRequestId,
 } from "@magenta/server";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
+import { v7 as uuidv7 } from "uuid";
 import { expect, it } from "vitest";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import { withDriver } from "../test/preamble.ts";
+import { createNvimThread } from "./thread.ts";
+import { DockerSupervisor } from "./thread-supervisor.ts";
 
 it("root/user threads get an AutoCompactSupervisor", async () => {
   await withDriver({}, async (driver) => {
@@ -18,10 +22,14 @@ it("root/user threads get an AutoCompactSupervisor", async () => {
     const thread = driver.magenta.chat.getActiveThread();
 
     expect(
-      thread.supervisors.some((s) => s instanceof AutoCompactSupervisor),
+      thread.core.context.chatSupervisors!.some(
+        (s) => s instanceof AutoCompactSupervisor,
+      ),
     ).toBe(true);
     expect(
-      thread.supervisors.some((s) => s instanceof SubagentSupervisor),
+      thread.core.context.chatSupervisors!.some(
+        (s) => s instanceof SubagentSupervisor,
+      ),
     ).toBe(false);
   });
 });
@@ -66,7 +74,7 @@ it("subagent threads get both SubagentSupervisor and AutoCompactSupervisor", asy
     const childWrapper = chat.threadWrappers[childThreadId!];
     if (childWrapper.state !== "initialized")
       throw new Error("Expected initialized child thread");
-    const supervisors = childWrapper.thread.supervisors;
+    const supervisors = childWrapper.thread.core.context.chatSupervisors!;
 
     expect(supervisors.some((s) => s instanceof SubagentSupervisor)).toBe(true);
     expect(supervisors.some((s) => s instanceof AutoCompactSupervisor)).toBe(
@@ -91,7 +99,11 @@ it("a truncated response is continued via MaxTokensSupervisor", async () => {
     );
   });
 });
-const emptyYieldSchema: JSONSchemaType = { type: "object", properties: {} };
+const yieldSchema: JSONSchemaType = {
+  type: "object",
+  properties: { count: { type: "number" } },
+  required: ["count"],
+};
 
 it("script-spawned thread honors per-thread autoCompactThreshold override", async () => {
   await withDriver(
@@ -103,7 +115,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
         scriptInvocationId: "inv-override" as ScriptInvocationId,
         scriptName: "test-script",
         prompt: "do work",
-        yieldSchema: emptyYieldSchema,
+        yieldSchema: yieldSchema,
         getSandboxRoot: () => undefined,
         autoCompactThreshold: 100_000,
       });
@@ -112,7 +124,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
         scriptInvocationId: "inv-default" as ScriptInvocationId,
         scriptName: "test-script",
         prompt: "do work",
-        yieldSchema: emptyYieldSchema,
+        yieldSchema: yieldSchema,
         getSandboxRoot: () => undefined,
       });
 
@@ -121,7 +133,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
         const wrapper = chat.threadWrappers[id];
         if (wrapper.state !== "initialized")
           throw new Error("expected initialized thread");
-        const sup = wrapper.thread.supervisors.find(
+        const sup = wrapper.thread.core.context.chatSupervisors!.find(
           (s): s is AutoCompactSupervisor => s instanceof AutoCompactSupervisor,
         );
         if (!sup) throw new Error("expected AutoCompactSupervisor");
@@ -144,6 +156,84 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
       expect(await ask(overridden, 100_000)).toBe("suspend");
       expect(await ask(fallback, 100_000)).toBe("none");
       expect(await ask(fallback, 300_000)).toBe("suspend");
+      const sourceWrapper = chat.threadWrappers[overriddenId];
+      if (sourceWrapper.state !== "initialized")
+        throw new Error("expected source thread");
+      await sourceWrapper.thread.abortAndWait();
+      const forkId = await chat.handleForkThread({
+        sourceThreadId: overriddenId,
+      });
+      const forkWrapper = chat.threadWrappers[forkId];
+      if (forkWrapper.state !== "initialized")
+        throw new Error("expected fork thread");
+      expect(forkWrapper.thread.core.toolSpecs).toEqual(
+        sourceWrapper.thread.core.toolSpecs,
+      );
+      expect(forkWrapper.thread.core.context.yieldSchema).toEqual(yieldSchema);
+      expect(await ask(getSupervisor(forkId), 100_000)).toBe("suspend");
+      expect(getSupervisor(forkId)).not.toBe(overridden);
     },
   );
+});
+
+it.each([
+  {
+    threadType: "compact" as const,
+    supervised: false,
+    expected: [MaxTokensSupervisor, SubagentSupervisor],
+  },
+  {
+    threadType: "docker_root" as const,
+    supervised: false,
+    expected: [MaxTokensSupervisor, SubagentSupervisor, AutoCompactSupervisor],
+  },
+  {
+    threadType: "subagent" as const,
+    supervised: true,
+    expected: [MaxTokensSupervisor, DockerSupervisor, AutoCompactSupervisor],
+  },
+])("constructs $threadType supervised=$supervised with ordered, stable policies", async ({
+  threadType,
+  supervised,
+  expected,
+}) => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    const source = driver.magenta.chat.getActiveThread();
+    // Use the real local collaborators: policy assembly requires no live container.
+    const thread = createNvimThread(
+      uuidv7() as ThreadId,
+      threadType,
+      source.core.systemPrompt,
+      {
+        ...source.context,
+        onFileAdded: () => {},
+      },
+      supervised
+        ? {
+            docker: {
+              containerName: "worker",
+              imageName: "worker-image",
+              workspacePath: "/workspace",
+              hostDir: source.context.cwd,
+              supervised: true,
+            },
+          }
+        : {},
+    );
+    try {
+      const policies = thread.core.context.chatSupervisors!;
+      expect(policies.map((policy) => policy.constructor)).toEqual(expected);
+      expect(thread.compactor).toBe(thread.core.context.compactor);
+      expect(thread.compactor === undefined).toBe(threadType === "compact");
+      const resolve = thread.core.context.resolve;
+      const callbacks = thread.core.callbacks;
+      await thread.core.reset({ seed: [], archive: { type: "none" } });
+      expect(thread.core.context.chatSupervisors).toBe(policies);
+      expect(thread.core.context.resolve).toBe(resolve);
+      expect(thread.core.callbacks).toBe(callbacks);
+    } finally {
+      await thread.destroy();
+    }
+  });
 });

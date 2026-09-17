@@ -15,6 +15,7 @@ import {
   awaitNextStream,
   cleanupArchive,
   createAgentWithMock,
+  type TestContextOverrides,
   uniqueThreadId,
 } from "./test-helpers.ts";
 import { Thread, threadCloneContext } from "./thread.ts";
@@ -27,7 +28,7 @@ import {
   type UnresolvedFilePath,
 } from "./utils/files.ts";
 
-async function fixture() {
+async function fixture(overrides: TestContextOverrides = {}) {
   const cwd = (await fs.mkdtemp(
     path.join(os.tmpdir(), "thread-context-"),
   )) as NvimCwd;
@@ -57,6 +58,7 @@ async function fixture() {
         pollIntervalMs: 60_000,
       },
       gitClient: { getState: async () => git },
+      ...overrides,
     },
     uniqueThreadId("core-context"),
     undefined,
@@ -156,7 +158,7 @@ describe("Thread-owned context delivery", () => {
         newId: uniqueThreadId("destination"),
         nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
         context: { ...threadCloneContext(f.thread.context), fileIO, gitClient },
-        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+        callbacks: { onUpdate: () => {} },
       });
       await f.thread.destroy();
       expect(await f.request(fork)).toContain("destination content");
@@ -227,7 +229,19 @@ describe("Thread-owned context delivery", () => {
     "reset",
     "compaction",
   ] as const)("%s reseeds files and preamble with a fresh tracker without replaying delivered comments", async (operation) => {
-    const f = await fixture();
+    const f = await fixture({
+      resolve: async () => ({
+        compact: true,
+        messages: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: "resume",
+          },
+        ],
+        reminders: [],
+      }),
+    });
     try {
       const first = await f.request();
       expect(first).toContain("original tracked content");
@@ -257,17 +271,7 @@ describe("Thread-owned context delivery", () => {
             chunkCount: 1,
           }),
         };
-        f.thread.callbacks.resolve = async () => ({
-          compact: true,
-          messages: [
-            {
-              type: "text",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              text: "resume",
-            },
-          ],
-          reminders: [],
-        });
+
         const sent = f.thread.submit({
           type: "raw",
           message: pendingMessage("@compact"),
@@ -329,7 +333,7 @@ describe("Thread-owned context delivery", () => {
           ...threadCloneContext(f.thread.context),
           contextDelivery: { pollIntervalMs: 60_000 },
         },
-        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+        callbacks: { onUpdate: () => {} },
       });
       const manager = fork.fileSupervisor;
       fork.setTitle("fork context integration");
@@ -373,7 +377,7 @@ describe("Thread-owned context delivery", () => {
         newId: uniqueThreadId("git-rewind"),
         nativeMessageIdx: forkPoint,
         context: threadCloneContext(f.thread.context),
-        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+        callbacks: { onUpdate: () => {} },
       });
       expect(await f.request(fork, "continue before git update")).toContain(
         "replacement-branch",
@@ -398,7 +402,7 @@ describe("Thread-owned context delivery", () => {
         newId: uniqueThreadId("system-info-head"),
         nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
         context: threadCloneContext(f.thread.context),
-        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+        callbacks: { onUpdate: () => {} },
       });
       forks.push(head);
       const headText = await f.request(head, "continue at head");
@@ -409,7 +413,7 @@ describe("Thread-owned context delivery", () => {
         newId: uniqueThreadId("system-info-before"),
         nativeMessageIdx: -1 as NativeMessageIdx,
         context: threadCloneContext(f.thread.context),
-        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+        callbacks: { onUpdate: () => {} },
       });
       forks.push(before);
       const beforeText = await f.request(before, "start before preamble");
@@ -425,13 +429,14 @@ describe("Thread-owned context delivery", () => {
   });
 
   it("a head fork retains standing and activated reminder history", async () => {
-    const f = await fixture();
-    let fork: Thread | undefined;
-    try {
-      f.thread.callbacks.resolve = async (message) => ({
+    const f = await fixture({
+      resolve: async (message) => ({
         ...(await resolveAsText(message)),
         reminders: ["retain this reminder"],
-      });
+      }),
+    });
+    let fork: Thread | undefined;
+    try {
       const submitted = f.thread.submit(
         { type: "raw", message: pendingMessage("activate reminder") },
         "now",
@@ -448,7 +453,7 @@ describe("Thread-owned context delivery", () => {
         newId: uniqueThreadId("reminder-head"),
         nativeMessageIdx: forkPoint,
         context: threadCloneContext(f.thread.context),
-        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+        callbacks: { onUpdate: () => {} },
       });
       expect(fork.activeReminders).toEqual(new Set(["retain this reminder"]));
       const forkText = await f.request(fork, "continue at head");
@@ -464,11 +469,9 @@ describe("Thread-owned context delivery", () => {
   });
 
   it("a suspended request commits no context or reminder delivery", async () => {
-    const f = await fixture();
-    try {
-      f.setGit();
-      let suspend = true;
-      f.thread.supervisors = [
+    let suspend = true;
+    const f = await fixture({
+      chatSupervisors: [
         {
           onBeforeRequest: () =>
             Promise.resolve(
@@ -480,7 +483,10 @@ describe("Thread-owned context delivery", () => {
                 : { type: "none" as const },
             ),
         },
-      ];
+      ],
+    });
+    try {
+      f.setGit();
 
       expect(
         await f.thread.submit({
@@ -558,7 +564,7 @@ describe("Thread-owned context delivery", () => {
           ...threadCloneContext(f.thread.context),
           contextDelivery: { pollIntervalMs: 60_000 },
         },
-        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+        callbacks: { onUpdate: () => {} },
       });
       const tracker = fork.fileSupervisor;
       expect(tracker).not.toBe(f.manager);

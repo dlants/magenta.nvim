@@ -44,6 +44,7 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
   const client = new MockOpenAIClient();
   const provider = createProvider(client);
   const context: ThreadContext = {
+    resolve: resolveAsText,
     logger: noopLogger,
     profile: {
       name: "openai-test",
@@ -110,7 +111,7 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
     core: new Thread(
       "openai-thread" as ThreadId,
       context,
-      { onUpdate: () => {}, resolve: resolveAsText },
+      { onUpdate: () => {} },
       {
         baseDir: path.join(os.tmpdir(), "magenta-test-archive"),
       },
