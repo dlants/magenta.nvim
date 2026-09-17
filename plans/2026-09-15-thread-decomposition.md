@@ -317,6 +317,14 @@ Decisions: construction functions remain alongside the UI wrapper in the existin
   - After compact reset, adding a context file still triggers hierarchy discovery and appears in the next request/UI.
   - Run script/subagent creation/result tests; keep narrow ThreadManager and IPC contracts unchanged.
 
+### Stage 4 review follow-up
+
+- [x] Replaced independent factory `threadType`/optional `fork` inputs with a discriminated fresh/fork initialization union. Fresh construction supplies the type; fork construction derives it exclusively from the source before assembling policies, compaction, and resolver dependencies, matching `Thread.clone`.
+- [x] Migrated all construction callers and added a compact-fork regression verifying the inherited type, absence of both UI/server compactors, and exact MaxTokens/Subagent policy composition.
+- [x] Full-project validation: `npx vitest run` (126 files passed; 1718 tests passed, 2 skipped tests and 1 todo), `npx tsc -b`, `npx biome check .`, and `git diff --check` passed.
+
+The initial full run encountered an existing process-termination snapshot race in thread-abort.test.ts (SIGTERM versus bash exit 143 output). The complete rerun passed without modifying unrelated abort behavior or snapshots.
+
 ## 5. Prune boundaries and extract title generation
 
 - Goal: parents no longer depend on core lifecycle machinery; remaining Thread APIs represent distinct operations or read models.

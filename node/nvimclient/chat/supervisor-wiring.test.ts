@@ -203,7 +203,7 @@ it.each([
     // Use the real local collaborators: policy assembly requires no live container.
     const thread = createNvimThread(
       uuidv7() as ThreadId,
-      threadType,
+      { type: "fresh", threadType },
       source.core.systemPrompt,
       {
         ...source.context,
@@ -234,6 +234,46 @@ it.each([
       expect(thread.core.callbacks).toBe(callbacks);
     } finally {
       await thread.destroy();
+    }
+  });
+});
+
+it("forks compact threads without a compactor or auto-compaction policy", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    const root = driver.magenta.chat.getActiveThread();
+    const context = { ...root.context, onFileAdded: () => {} };
+    const source = createNvimThread(
+      uuidv7() as ThreadId,
+      { type: "fresh", threadType: "compact" },
+      root.core.systemPrompt,
+      context,
+    );
+    try {
+      const fork = createNvimThread(
+        uuidv7() as ThreadId,
+        {
+          type: "fork",
+          sourceThread: source.core,
+          nativeMessageIdx: source.core.inferenceManager.getNativeMessageIdx(),
+        },
+        source.core.systemPrompt,
+        context,
+      );
+      try {
+        expect(fork.core.threadType).toBe("compact");
+        expect(fork.compactor).toBeUndefined();
+        expect(fork.core.context.compactor).toBeUndefined();
+        expect(
+          fork.core.context.chatSupervisors!.map(
+            (policy) => policy.constructor,
+          ),
+        ).toEqual([MaxTokensSupervisor, SubagentSupervisor]);
+      } finally {
+        await fork.destroy();
+      }
+    } finally {
+      await source.destroy();
     }
   });
 });

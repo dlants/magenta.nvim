@@ -742,7 +742,7 @@ export class Chat implements ThreadManager {
 
     const thread = createNvimThread(
       threadId,
-      threadType,
+      { type: "fresh", threadType },
       systemPrompt,
       {
         onFileAdded: (path) => this.triggerHierarchyDiscovery(thread, path),

@@ -789,7 +789,13 @@ export class NvimThread {
 
 export function createNvimThread(
   id: ThreadId,
-  threadType: ThreadType,
+  initialization:
+    | { type: "fresh"; threadType: ThreadType }
+    | {
+        type: "fork";
+        sourceThread: Thread;
+        nativeMessageIdx: NativeMessageIdx;
+      },
   systemPrompt: SystemPrompt,
   context: NvimThreadContext,
   policy: {
@@ -798,8 +804,11 @@ export function createNvimThread(
     autoCompactThreshold?: number;
     autoCompactPrompt?: string;
   } = {},
-  fork?: { sourceThread: Thread; nativeMessageIdx: NativeMessageIdx },
 ): NvimThread {
+  const threadType =
+    initialization.type === "fresh"
+      ? initialization.threadType
+      : initialization.sourceThread.threadType;
   const env = context.environment;
   const isDocker = env.environmentConfig.type === "docker";
   const cwd = isDocker ? env.cwd : context.cwd;
@@ -847,10 +856,13 @@ export function createNvimThread(
     chatSupervisors.push(SubagentSupervisor.create());
   }
   if (threadType !== "compact") {
-    const sourceAutoCompact = fork?.sourceThread.context.chatSupervisors?.find(
-      (supervisor): supervisor is AutoCompactSupervisor =>
-        supervisor instanceof AutoCompactSupervisor,
-    );
+    const sourceAutoCompact =
+      initialization.type === "fork"
+        ? initialization.sourceThread.context.chatSupervisors?.find(
+            (supervisor): supervisor is AutoCompactSupervisor =>
+              supervisor instanceof AutoCompactSupervisor,
+          )
+        : undefined;
     chatSupervisors.push(
       sourceAutoCompact
         ? AutoCompactSupervisor.clone({ source: sourceAutoCompact })
@@ -925,19 +937,21 @@ export function createNvimThread(
   };
   // Neither construction path invokes callbacks or resolves submissions. These
   // closures bind to the completed objects before any asynchronous work starts.
-  const core: Thread = fork
-    ? Thread.clone({
-        ...fork,
-        newId: id,
-        context: threadCloneContext(dependencies),
-        callbacks,
-      })
-    : new Thread(
-        id,
-        dependencies,
-        callbacks,
-        context.scriptName ? { scriptName: context.scriptName } : {},
-      );
+  const core: Thread =
+    initialization.type === "fork"
+      ? Thread.clone({
+          sourceThread: initialization.sourceThread,
+          nativeMessageIdx: initialization.nativeMessageIdx,
+          newId: id,
+          context: threadCloneContext(dependencies),
+          callbacks,
+        })
+      : new Thread(
+          id,
+          dependencies,
+          callbacks,
+          context.scriptName ? { scriptName: context.scriptName } : {},
+        );
   const wrapper = new NvimThread(id, core, compactor, context);
   return wrapper;
 }
@@ -1055,7 +1069,7 @@ export async function cloneFromNativeMessageIdx(args: {
   // No awaits above: native history and delivery must describe the same instant.
   const thread = createNvimThread(
     newThreadId,
-    sourceCore.threadType,
+    { type: "fork", sourceThread: sourceCore, nativeMessageIdx },
     sourceCore.systemPrompt,
     {
       dispatch,
@@ -1082,8 +1096,6 @@ export async function cloneFromNativeMessageIdx(args: {
         ? { subagentConfig: sourceThread.context.subagentConfig }
         : {}),
     },
-    {},
-    { sourceThread: sourceCore, nativeMessageIdx },
   );
 
   thread.sandboxBypassed = sourceThread.isSandboxBypassed;
