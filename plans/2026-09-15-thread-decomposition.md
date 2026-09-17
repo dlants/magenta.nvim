@@ -348,6 +348,13 @@ Decisions: the native history boundary and latest usage are read models rather t
   - Automatic title is generated once, manual title wins over a late response, failed title generation does not fail a submission, and destroyed threads are not updated.
   - Archive title and compaction records still flush correctly; shared structured tool results still render after reset/fork.
 
+### Stage 5/6 review follow-up
+
+- [x] Removed all `ContextFileAccess` to `FileSupervisor` downcasts from context-manager integration tests. Delivery/event assertions use a typed `getFileSupervisor` test helper that reads the actual current core supervisor; file-inspection assertions retain the narrow production capability.
+- The helper stays in server test support and uses the existing explicit white-box access pattern without casts or changes to the production API. Replacing the context-file capability with a narrower implementation cannot silently break supervisor-dependent tests.
+- [x] Focused context-manager suite passed (22 tests).
+- [x] Full-project validation: `npx vitest run` (126 files passed; 1723 tests passed, 2 skipped and 1 todo), `npx tsc -b`, `npx biome check .` (359 files checked), and `git diff --check` passed.
+
 ## 6. Integration validation and documentation
 
 - Goal: remove transitional APIs and document the final ownership model instead of retaining parallel old/new paths.

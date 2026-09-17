@@ -45,6 +45,7 @@ import type {
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
+import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { Thread, type ThreadCallbacks, type ThreadContext } from "./thread.ts";
 import type { SendResult } from "./thread-api.ts";
 import { executeToolBatch } from "./tool-executor.ts";
@@ -493,6 +494,11 @@ export const userTexts = (core: Thread): string[] =>
 
 export function uniqueThreadId(prefix: string): ThreadId {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}` as ThreadId;
+}
+
+/** Delivery and event assertions need the actual supervisor, not ContextFileAccess. */
+export function getFileSupervisor(thread: Thread): FileSupervisor {
+  return thread["core"].fileSupervisor;
 }
 
 /** Administrative resets are test fixtures, not part of Thread's parent API. */

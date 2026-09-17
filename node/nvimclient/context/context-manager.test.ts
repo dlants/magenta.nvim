@@ -2,7 +2,6 @@ import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type {
-  FileSupervisor,
   ProviderMessage,
   ProviderMessageContent,
   ThreadId,
@@ -15,6 +14,7 @@ import {
   resolveFilePath,
   type UnresolvedFilePath,
 } from "@magenta/server";
+import { getFileSupervisor } from "@magenta/server/src/test-helpers.ts";
 import { describe, expect, it } from "vitest";
 import { getAllWindows, getcwd } from "../nvim/nvim.ts";
 import { withDriver } from "../test/preamble.ts";
@@ -26,8 +26,9 @@ it("returns diff when file is edited on disk", async () => {
     await driver.showSidebar();
 
     // Get the context manager from the driver
-    const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-      .contextFiles as FileSupervisor;
+    const fileSupervisor = getFileSupervisor(
+      driver.magenta.chat.getActiveThread().thread,
+    );
 
     const cwd = await getcwd(driver.nvim);
     const absFilePath = resolveFilePath(
@@ -73,8 +74,9 @@ it("returns diff when disk changes even if buffer has unsaved changes", async ()
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
-    const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-      .contextFiles as FileSupervisor;
+    const fileSupervisor = getFileSupervisor(
+      driver.magenta.chat.getActiveThread().thread,
+    );
 
     const cwd = await getcwd(driver.nvim);
     const absFilePath = resolveFilePath(
@@ -280,8 +282,9 @@ it("handles file deletion during buffer tracking", async () => {
     await driver.showSidebar();
 
     // Get the context manager from the driver
-    const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-      .contextFiles as FileSupervisor;
+    const fileSupervisor = getFileSupervisor(
+      driver.magenta.chat.getActiveThread().thread,
+    );
 
     const cwd = await getcwd(driver.nvim);
     const tempFilePath = resolveFilePath(
@@ -326,8 +329,8 @@ it("issuing a getFile request adds the file to the context but doesn't send its 
     await driver.showSidebar();
 
     // Get the context manager from the driver
-    const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-      .contextFiles as FileSupervisor;
+    const fileSupervisor =
+      driver.magenta.chat.getActiveThread().thread.contextFiles;
 
     // Verify context is empty initially
     expect(fileSupervisor.files).toEqual({});
@@ -557,8 +560,8 @@ it("large context files are summarized and rendered with a (summary) badge", asy
         toolRequests: [],
       });
 
-      const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-        .contextFiles as FileSupervisor;
+      const fileSupervisor =
+        driver.magenta.chat.getActiveThread().thread.contextFiles;
       const cwd = await getcwd(driver.nvim);
       const absHuge = resolveFilePath(
         cwd,
@@ -602,8 +605,9 @@ it("large context files are summarized and rendered with a (summary) badge", asy
 it("out-of-process file change surfaces in the pending-context view", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
-    const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-      .contextFiles as FileSupervisor;
+    const fileSupervisor = getFileSupervisor(
+      driver.magenta.chat.getActiveThread().thread,
+    );
 
     const cwd = await getcwd(driver.nvim);
     const absFilePath = resolveFilePath(
@@ -664,8 +668,8 @@ describe("hierarchy context discovery", () => {
           toolRequests: [],
         });
 
-        const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-          .contextFiles as FileSupervisor;
+        const fileSupervisor =
+          driver.magenta.chat.getActiveThread().thread.contextFiles;
         await pollUntil(() => {
           const paths = Object.values(fileSupervisor.files).map(
             (f) => f.relFilePath as string,
@@ -692,8 +696,8 @@ describe("hierarchy context discovery", () => {
       },
       async (driver) => {
         await driver.showSidebar();
-        const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-          .contextFiles as FileSupervisor;
+        const fileSupervisor =
+          driver.magenta.chat.getActiveThread().thread.contextFiles;
 
         await driver.inputMagentaText("Please read the leaf file");
         await driver.send();
@@ -807,8 +811,8 @@ describe("hierarchy context discovery", () => {
       },
       async (driver) => {
         await driver.showSidebar();
-        const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-          .contextFiles as FileSupervisor;
+        const fileSupervisor =
+          driver.magenta.chat.getActiveThread().thread.contextFiles;
         await pollUntil(() => {
           const paths = Object.values(fileSupervisor.files).map(
             (f) => f.relFilePath as string,
@@ -885,8 +889,9 @@ describe("hierarchy context discovery", () => {
       },
       async (driver) => {
         await driver.showSidebar();
-        const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-          .contextFiles as FileSupervisor;
+        const fileSupervisor = getFileSupervisor(
+          driver.magenta.chat.getActiveThread().thread,
+        );
 
         const addedEvents: string[] = [];
         fileSupervisor.on("fileAdded", (absFilePath) => {
@@ -924,8 +929,8 @@ describe("hierarchy context discovery", () => {
         await driver.showSidebar();
         await driver.addContextFiles("nested/dir/file.txt");
 
-        const fileSupervisor = driver.magenta.chat.getActiveThread().thread
-          .contextFiles as FileSupervisor;
+        const fileSupervisor =
+          driver.magenta.chat.getActiveThread().thread.contextFiles;
         const paths = Object.values(fileSupervisor.files).map(
           (f) => f.relFilePath,
         );
