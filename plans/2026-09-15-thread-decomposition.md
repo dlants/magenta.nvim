@@ -287,6 +287,11 @@ Decisions: administrative reset synchronously restores untouched detached entrie
   - A failed resolution is visible and does not wedge later delivery.
   - Drained text survives compact suspension exactly once; abort reports unsent entries with correct delivery labels.
 
+### Stage 3 review follow-up
+
+- [x] Made both `Queues` properties readonly as well as their array values, preventing typed callers from replacing the live mailbox queues through `Thread.queued`. Internal storage remains mutable only through mailbox operations.
+- [x] Validation: `npx vitest run` (126 files passed; 1713 tests passed, 2 skipped tests and 1 todo), `npx tsc -b`, `npx biome check .` (359 files checked), and `git diff --check` all passed.
+
 ## 4. Centralize construction and policy composition
 
 - Goal: fresh/fork dependency assembly has one implementation, and NvimThread only wraps an already-configured Thread.

@@ -6,8 +6,8 @@ export type QueueEntry =
   | { type: "raw"; message: PendingMessage }
   | { type: "resolved"; input: AgentInput };
 export type Queues = {
-  async: ReadonlyArray<QueueEntry>;
-  next: ReadonlyArray<QueueEntry>;
+  readonly async: ReadonlyArray<QueueEntry>;
+  readonly next: ReadonlyArray<QueueEntry>;
 };
 export type QueuedMessage = { when: DeferredDelivery; message: QueueEntry };
 
