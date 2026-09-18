@@ -775,6 +775,8 @@ export function createNvimThread(
       },
   systemPrompt: SystemPrompt,
   context: NvimThreadContext,
+  /** Only consulted for fresh conversation threads; a fork inherits the
+   * source's compaction settings and a compaction thread has none. */
   policy: {
     docker?: DockerSpawnConfig;
     onDockerProgress?: (message: string) => void;
@@ -794,31 +796,44 @@ export function createNvimThread(
   };
   // Neither construction path invokes callbacks or resolves submissions. These
   // closures bind to the completed objects before any asynchronous work starts.
+  const archiveOptions = context.scriptName
+    ? { archiveOptions: { scriptName: context.scriptName } }
+    : {};
   const { thread, compactor } = assembleThread({
     id,
     initialization:
-      initialization.type === "fresh"
-        ? {
-            type: "fresh",
-            threadType: initialization.threadType,
-            ...(context.scriptName
-              ? { archiveOptions: { scriptName: context.scriptName } }
-              : {}),
-          }
-        : initialization,
+      initialization.type !== "fresh"
+        ? initialization
+        : initialization.threadType === "compact"
+          ? { type: "fresh", threadType: "compact", ...archiveOptions }
+          : {
+              type: "fresh",
+              threadType: initialization.threadType,
+              ...archiveOptions,
+              policy: {
+                ...(policy.docker
+                  ? {
+                      docker: {
+                        ...policy.docker,
+                        ...(policy.onDockerProgress
+                          ? { onProgress: policy.onDockerProgress }
+                          : {}),
+                      },
+                    }
+                  : {}),
+                autoCompactThreshold:
+                  policy.autoCompactThreshold ??
+                  context.options.autoCompactThreshold,
+                autoCompactPrompt:
+                  policy.autoCompactPrompt ?? context.options.autoCompactPrompt,
+              },
+            },
     context: prepareThreadContext(
       systemPrompt,
       context,
       () => threadRef as Thread,
     ),
     callbacks,
-    policy: {
-      ...policy,
-      autoCompactThreshold:
-        policy.autoCompactThreshold ?? context.options.autoCompactThreshold,
-      autoCompactPrompt:
-        policy.autoCompactPrompt ?? context.options.autoCompactPrompt,
-    },
   });
   threadRef = thread;
   wrapper = new NvimThread(id, thread, compactor, context);

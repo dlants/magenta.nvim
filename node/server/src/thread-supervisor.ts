@@ -383,6 +383,18 @@ export class AutoCompactSupervisor implements ThreadSupervisor {
     return new AutoCompactSupervisor(opts.nextPrompt, opts.threshold ?? 300000);
   }
 
+  /** `ThreadSupervisor` is an interface, not a closed union, so a `kind`
+   * discriminant would not narrow a `ThreadSupervisor[]` lookup either. The
+   * runtime check lives here rather than at the call site. */
+  static find(
+    supervisors: readonly ThreadSupervisor[],
+  ): AutoCompactSupervisor | undefined {
+    return supervisors.find(
+      (supervisor): supervisor is AutoCompactSupervisor =>
+        supervisor instanceof AutoCompactSupervisor,
+    );
+  }
+
   static clone(args: { source: AutoCompactSupervisor }): AutoCompactSupervisor {
     return new AutoCompactSupervisor(
       args.source.nextPrompt,

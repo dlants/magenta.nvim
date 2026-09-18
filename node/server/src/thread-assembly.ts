@@ -22,16 +22,17 @@ import {
 } from "./thread-supervisor.ts";
 import { generateTitle } from "./tools/thread-title.ts";
 
-/** Construction knobs that are decided per thread rather than per environment.
- * Defaults (option fallbacks) are resolved by the host before assembly, so
- * assembly never reads editor options. */
-export type ThreadPolicy = {
-  docker?: DockerSpawnConfig;
-  onDockerProgress?: (message: string) => void;
+/** Construction knobs for a conversation thread. A compaction thread cannot
+ * carry them: it is itself a compaction and never auto-compacts. Option
+ * fallbacks are resolved by the host, so assembly never reads editor
+ * options. */
+export type ChatThreadPolicy = {
+  /** Progress reporting is only meaningful for a supervised docker thread, so
+   * it lives inside the docker config rather than beside it. */
+  docker?: DockerSpawnConfig & { onProgress?: (message: string) => void };
   autoCompactThreshold?: number;
-  /** Required for non-compact threads: the handoff prompt an automatic
-   * compaction continues with. Hosts resolve their own default. */
-  autoCompactPrompt?: string;
+  /** The handoff prompt an automatic compaction continues with. */
+  autoCompactPrompt: string;
 };
 
 /** The dependencies a host prepares. Conversation kind, chat supervisors and
@@ -41,10 +42,20 @@ export type PreparedThreadContext = Omit<
   "chatSupervisors" | "compactor"
 >;
 
+export type ChatThreadType = Exclude<ThreadType, "compact">;
+
+/** A fork inherits both its conversation kind and its compaction knobs from
+ * its source, so it carries no policy of its own. */
 export type ThreadInitialization =
   | {
       type: "fresh";
-      threadType: ThreadType;
+      threadType: "compact";
+      archiveOptions?: ThreadArchiveOptions;
+    }
+  | {
+      type: "fresh";
+      threadType: ChatThreadType;
+      policy: ChatThreadPolicy;
       archiveOptions?: ThreadArchiveOptions;
     }
   | {
@@ -53,10 +64,23 @@ export type ThreadInitialization =
       nativeMessageIdx: NativeMessageIdx;
     };
 
-export type AssembledThread = {
-  thread: Thread;
-  compactor: ThreadCompactor | undefined;
-};
+/** Only a conversation thread has a compactor. The compact variant keeps the
+ * key present as `undefined` so callers can destructure either variant, while
+ * the invalid combinations stay unrepresentable. */
+export type AssembledThread =
+  | { threadType: "compact"; thread: Thread; compactor?: undefined }
+  | { threadType: ChatThreadType; thread: Thread; compactor: ThreadCompactor };
+
+/** The fresh/fork distinction resolved down to what construction needs: which
+ * conversation kind, and where its auto-compaction settings come from. */
+type Conversation =
+  | { threadType: "compact" }
+  | {
+      threadType: ChatThreadType;
+      autoCompact:
+        | { type: "policy"; policy: ChatThreadPolicy }
+        | { type: "inherit"; source: AutoCompactSupervisor };
+    };
 
 /** Build a ready Thread (plus its compactor) from prepared dependencies.
  * Callers get handles, not a construction recipe: supervisor ordering,
@@ -67,110 +91,128 @@ export function assembleThread(args: {
   initialization: ThreadInitialization;
   context: PreparedThreadContext;
   callbacks: ThreadCallbacks;
-  policy?: ThreadPolicy;
 }): AssembledThread {
   const { id, initialization, context, callbacks } = args;
-  const policy = args.policy ?? {};
-  const threadType =
-    initialization.type === "fresh"
-      ? initialization.threadType
-      : initialization.sourceThread.threadType;
+  const conversation = resolveConversation(initialization);
+  const docker =
+    initialization.type === "fresh" && initialization.threadType !== "compact"
+      ? initialization.policy.docker
+      : undefined;
 
-  const compactor =
-    threadType === "compact"
-      ? undefined
-      : new ThreadCompactor({
-          parentThreadId: id,
-          threadManager: context.threadManager,
-        });
-
-  const chatSupervisors = buildChatSupervisors(
-    threadType,
-    initialization,
-    policy,
-  );
-
-  const base = {
-    ...context,
-    ...(compactor ? { compactor } : {}),
-    chatSupervisors,
-  };
-  const dependencies: ThreadContext =
-    threadType === "compact"
-      ? { ...base, threadType }
-      : { ...base, threadType };
-
-  // Neither construction path invokes callbacks or resolves submissions, so
-  // the title scheduler can close over the thread it is about to observe.
-  let thread!: Thread;
-  const titleScheduler = createTitleScheduler(() => thread, context);
+  const titles = createTitleScheduler(context);
   const wrappedCallbacks: ThreadCallbacks = {
     ...callbacks,
     onSubmission: (messages) => {
-      titleScheduler(messages);
+      titles.onSubmission(messages);
       callbacks.onSubmission?.(messages);
     },
   };
 
-  thread =
-    initialization.type === "fork"
-      ? Thread.clone({
-          sourceThread: initialization.sourceThread,
-          nativeMessageIdx: initialization.nativeMessageIdx,
-          newId: id,
-          context: threadCloneContext(dependencies),
-          callbacks: wrappedCallbacks,
-        })
-      : new Thread(
-          id,
-          dependencies,
-          wrappedCallbacks,
-          initialization.archiveOptions ?? {},
-        );
+  const base = {
+    ...context,
+    chatSupervisors: buildChatSupervisors(conversation, docker),
+  };
 
-  return { thread, compactor };
+  const build = (dependencies: ThreadContext): Thread => {
+    const thread =
+      initialization.type === "fork"
+        ? Thread.clone({
+            sourceThread: initialization.sourceThread,
+            nativeMessageIdx: initialization.nativeMessageIdx,
+            newId: id,
+            context: threadCloneContext(dependencies),
+            callbacks: wrappedCallbacks,
+          })
+        : new Thread(
+            id,
+            dependencies,
+            wrappedCallbacks,
+            initialization.archiveOptions ?? {},
+          );
+    // Construction invokes no callbacks and resolves no submissions, so the
+    // scheduler is attached before it can be consulted.
+    titles.attach(thread);
+    return thread;
+  };
+
+  if (conversation.threadType === "compact") {
+    return {
+      threadType: "compact",
+      thread: build({ ...base, threadType: "compact" }),
+    };
+  }
+
+  const compactor = new ThreadCompactor({
+    parentThreadId: id,
+    threadManager: context.threadManager,
+  });
+  return {
+    threadType: conversation.threadType,
+    compactor,
+    thread: build({
+      ...base,
+      threadType: conversation.threadType,
+      compactor,
+    }),
+  };
+}
+
+function resolveConversation(
+  initialization: ThreadInitialization,
+): Conversation {
+  if (initialization.type === "fresh") {
+    return initialization.threadType === "compact"
+      ? { threadType: "compact" }
+      : {
+          threadType: initialization.threadType,
+          autoCompact: { type: "policy", policy: initialization.policy },
+        };
+  }
+  const source = initialization.sourceThread;
+  if (source.threadType === "compact") return { threadType: "compact" };
+  const sourceAutoCompact = AutoCompactSupervisor.find(source.chatSupervisors);
+  if (!sourceAutoCompact) {
+    throw new Error(
+      `Cannot fork thread ${source.id}: no auto-compaction supervisor to inherit`,
+    );
+  }
+  return {
+    threadType: source.threadType,
+    autoCompact: { type: "inherit", source: sourceAutoCompact },
+  };
 }
 
 function buildChatSupervisors(
-  threadType: ThreadType,
-  initialization: ThreadInitialization,
-  policy: ThreadPolicy,
+  conversation: Conversation,
+  docker: ChatThreadPolicy["docker"],
 ): ThreadSupervisor[] {
   const supervisors: ThreadSupervisor[] = [MaxTokensSupervisor.create()];
-  if (policy.docker?.supervised) {
+  if (docker?.supervised) {
     supervisors.push(
       DockerSupervisor.create({
-        containerName: policy.docker.containerName,
-        workspacePath: policy.docker.workspacePath,
-        hostDir: policy.docker.hostDir,
-        ...(policy.onDockerProgress
-          ? { onProgress: policy.onDockerProgress }
-          : {}),
+        containerName: docker.containerName,
+        workspacePath: docker.workspacePath,
+        hostDir: docker.hostDir,
+        ...(docker.onProgress ? { onProgress: docker.onProgress } : {}),
       }),
     );
   } else if (
-    threadType === "subagent" ||
-    threadType === "docker_root" ||
-    threadType === "compact"
+    conversation.threadType === "subagent" ||
+    conversation.threadType === "docker_root" ||
+    conversation.threadType === "compact"
   ) {
     supervisors.push(SubagentSupervisor.create());
   }
-  if (threadType !== "compact") {
-    const sourceAutoCompact =
-      initialization.type === "fork"
-        ? initialization.sourceThread.chatSupervisors?.find(
-            (supervisor): supervisor is AutoCompactSupervisor =>
-              supervisor instanceof AutoCompactSupervisor,
-          )
-        : undefined;
+  if (conversation.threadType !== "compact") {
+    const { autoCompact } = conversation;
     supervisors.push(
-      sourceAutoCompact
-        ? AutoCompactSupervisor.clone({ source: sourceAutoCompact })
+      autoCompact.type === "inherit"
+        ? AutoCompactSupervisor.clone({ source: autoCompact.source })
         : AutoCompactSupervisor.create({
-            ...(policy.autoCompactThreshold !== undefined
-              ? { threshold: policy.autoCompactThreshold }
+            ...(autoCompact.policy.autoCompactThreshold !== undefined
+              ? { threshold: autoCompact.policy.autoCompactThreshold }
               : {}),
-            nextPrompt: policy.autoCompactPrompt ?? "",
+            nextPrompt: autoCompact.policy.autoCompactPrompt,
           }),
     );
   }
@@ -179,44 +221,51 @@ function buildChatSupervisors(
 
 /** Request a title once, from the first submission that carries text. A late
  * response cannot overwrite an explicit label or a destroyed thread. */
-function createTitleScheduler(
-  getThread: () => Thread,
-  context: PreparedThreadContext,
-): (messages: readonly AgentInput[]) => void {
+function createTitleScheduler(context: PreparedThreadContext): {
+  attach: (thread: Thread) => void;
+  onSubmission: (messages: readonly AgentInput[]) => void;
+} {
   let requested = false;
-  return (messages) => {
-    const thread = getThread();
-    if (
-      requested ||
-      thread.isDestroyed ||
-      thread.title !== undefined ||
-      thread.threadType === "compact" ||
-      !messages.length
-    )
-      return;
-    requested = true;
-    const text = messages
-      .filter((content) => content.type === "text")
-      .map((content) => content.text)
-      .join("\n");
-    generateTitle(
-      context.provider,
-      context.profile.fastModel,
-      thread.systemPrompt,
-      text,
-    )
-      .then((title) => {
-        if (
-          title !== undefined &&
-          !thread.isDestroyed &&
-          thread.title === undefined
-        )
-          thread.setTitle(title);
-      })
-      .catch((error: unknown) => {
-        context.logger.error(
-          `Error getting thread title: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
+  let thread: Thread | undefined;
+  return {
+    attach: (attached) => {
+      thread = attached;
+    },
+    onSubmission: (messages) => {
+      if (
+        !thread ||
+        requested ||
+        thread.isDestroyed ||
+        thread.title !== undefined ||
+        thread.threadType === "compact" ||
+        !messages.length
+      )
+        return;
+      const target = thread;
+      requested = true;
+      const text = messages
+        .filter((content) => content.type === "text")
+        .map((content) => content.text)
+        .join("\n");
+      generateTitle(
+        context.provider,
+        context.profile.fastModel,
+        target.systemPrompt,
+        text,
+      )
+        .then((title) => {
+          if (
+            title !== undefined &&
+            !target.isDestroyed &&
+            target.title === undefined
+          )
+            target.setTitle(title);
+        })
+        .catch((error: unknown) => {
+          context.logger.error(
+            `Error getting thread title: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+    },
   };
 }

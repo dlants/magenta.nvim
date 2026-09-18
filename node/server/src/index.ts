@@ -275,9 +275,9 @@ export type {
 export {
   type AssembledThread,
   assembleThread,
+  type ChatThreadPolicy,
   type PreparedThreadContext,
   type ThreadInitialization,
-  type ThreadPolicy,
 } from "./thread-assembly.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {

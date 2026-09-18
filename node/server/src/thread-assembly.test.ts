@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ThreadId } from "./chat-types.ts";
 import { DockerSupervisor } from "./docker-supervisor.ts";
 import {
+  type NativeMessageIdx,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type Provider,
   type ProviderToolUseResponse,
@@ -14,9 +15,9 @@ import {
 } from "./test-helpers.ts";
 import {
   assembleThread,
+  type ChatThreadPolicy,
   type PreparedThreadContext,
   type ThreadInitialization,
-  type ThreadPolicy,
 } from "./thread-assembly.ts";
 import {
   AutoCompactSupervisor,
@@ -48,9 +49,34 @@ function titleResponse(title: string): ProviderToolUseResponse {
   } as unknown as ProviderToolUseResponse;
 }
 
+const defaultPolicy: ChatThreadPolicy = {
+  autoCompactPrompt: "continue where you left off",
+};
+
+function freshRoot(policy?: Partial<ChatThreadPolicy>): ThreadInitialization {
+  return {
+    type: "fresh",
+    threadType: "root",
+    archiveOptions: { baseDir: TEST_ARCHIVE_DIR },
+    policy: { ...defaultPolicy, ...policy },
+  };
+}
+
+/** `threshold`/`nextPrompt` are private construction state with no reader on
+ * the supervisor; a fork's inheritance is only observable by looking. */
+function autoCompactSettings(supervisor: AutoCompactSupervisor): {
+  threshold: number;
+  nextPrompt: string;
+} {
+  const { threshold, nextPrompt } = supervisor as unknown as {
+    threshold: number;
+    nextPrompt: string;
+  };
+  return { threshold, nextPrompt };
+}
+
 function setup(args?: {
   initialization?: ThreadInitialization;
-  policy?: ThreadPolicy;
   id?: ThreadId;
 }) {
   const id = args?.id ?? uniqueThreadId("assembly");
@@ -77,14 +103,9 @@ function setup(args?: {
   const prepared: PreparedThreadContext = { ...rest, provider };
   const assembled = assembleThread({
     id,
-    initialization: args?.initialization ?? {
-      type: "fresh",
-      threadType: "root",
-      archiveOptions: { baseDir: TEST_ARCHIVE_DIR },
-    },
+    initialization: args?.initialization ?? freshRoot(),
     context: prepared,
     callbacks: { onUpdate: () => {} },
-    ...(args?.policy ? { policy: args.policy } : {}),
   });
   return { id, ...assembled, titleDefer, forceToolUse };
 }
@@ -135,6 +156,7 @@ describe("assembleThread", () => {
         type: "fresh",
         threadType: "subagent",
         archiveOptions: { baseDir: TEST_ARCHIVE_DIR },
+        policy: defaultPolicy,
       },
     });
     expect(subagent.thread.chatSupervisors.map((s) => s.constructor)).toEqual([
@@ -142,6 +164,18 @@ describe("assembleThread", () => {
       SubagentSupervisor,
       AutoCompactSupervisor,
     ]);
+
+    const dockerRoot = setup({
+      initialization: {
+        type: "fresh",
+        threadType: "docker_root",
+        archiveOptions: { baseDir: TEST_ARCHIVE_DIR },
+        policy: defaultPolicy,
+      },
+    });
+    expect(dockerRoot.thread.chatSupervisors.map((s) => s.constructor)).toEqual(
+      [MaxTokensSupervisor, SubagentSupervisor, AutoCompactSupervisor],
+    );
 
     const compact = setup({
       initialization: {
@@ -157,7 +191,7 @@ describe("assembleThread", () => {
     expect(compact.compactor).toBeUndefined();
 
     const docker = setup({
-      policy: {
+      initialization: freshRoot({
         docker: {
           containerName: "container",
           imageName: "image",
@@ -165,7 +199,7 @@ describe("assembleThread", () => {
           hostDir: "/host",
           supervised: true,
         },
-      },
+      }),
     });
     expect(docker.thread.chatSupervisors.map((s) => s.constructor)).toEqual([
       MaxTokensSupervisor,
@@ -173,7 +207,69 @@ describe("assembleThread", () => {
       AutoCompactSupervisor,
     ]);
 
-    for (const { id, thread } of [root, subagent, compact, docker]) {
+    for (const { id, thread } of [
+      root,
+      subagent,
+      dockerRoot,
+      compact,
+      docker,
+    ]) {
+      await thread.destroy();
+      await cleanupArchive(id);
+    }
+  });
+
+  it("passes the host's compaction knobs to a fresh thread", async () => {
+    const { id, thread } = setup({
+      initialization: freshRoot({
+        autoCompactThreshold: 1234,
+        autoCompactPrompt: "keep going",
+      }),
+    });
+    const supervisor = AutoCompactSupervisor.find(thread.chatSupervisors);
+    expect(supervisor && autoCompactSettings(supervisor)).toEqual({
+      threshold: 1234,
+      nextPrompt: "keep going",
+    });
+    await thread.destroy();
+    await cleanupArchive(id);
+  });
+
+  it("inherits kind, compaction settings and title generation on a fork", async () => {
+    const source = setup({
+      initialization: {
+        type: "fresh",
+        threadType: "subagent",
+        archiveOptions: { baseDir: TEST_ARCHIVE_DIR },
+        policy: { autoCompactThreshold: 4321, autoCompactPrompt: "resume" },
+      },
+    });
+    const fork = setup({
+      initialization: {
+        type: "fork",
+        sourceThread: source.thread,
+        nativeMessageIdx: 0 as NativeMessageIdx,
+      },
+    });
+
+    expect(fork.thread.threadType).toEqual("subagent");
+    expect(fork.thread.chatSupervisors.map((s) => s.constructor)).toEqual([
+      MaxTokensSupervisor,
+      SubagentSupervisor,
+      AutoCompactSupervisor,
+    ]);
+    const supervisor = AutoCompactSupervisor.find(fork.thread.chatSupervisors);
+    expect(supervisor && autoCompactSettings(supervisor)).toEqual({
+      threshold: 4321,
+      nextPrompt: "resume",
+    });
+
+    fork.thread.callbacks.onSubmission?.(titleText);
+    fork.titleDefer.resolve(titleResponse("Forked work"));
+    await fork.titleDefer.promise;
+    await vi.waitFor(() => expect(fork.thread.title).toEqual("Forked work"));
+
+    for (const { id, thread } of [source, fork]) {
       await thread.destroy();
       await cleanupArchive(id);
     }
