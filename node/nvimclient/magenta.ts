@@ -9,6 +9,7 @@ import {
   readThreadMeta,
   renderThreadLogToMarkdown,
   ScriptManager,
+  Session,
   type ThreadId,
   threadConversationLogPath,
 } from "@magenta/server";
@@ -24,6 +25,7 @@ import { Lsp } from "./capabilities/lsp.ts";
 import { StraceUnavailableError } from "./capabilities/strace.ts";
 import { Chat } from "./chat/chat.ts";
 import { CommandRegistry } from "./chat/commands/registry.ts";
+import { NvimSessionHost } from "./chat/session-host.ts";
 import {
   type BufNr,
   type Line,
@@ -110,6 +112,10 @@ function formatAsQuote(text: string): string {
 export class Magenta {
   public sidebar: Sidebar;
   public bufferManager: BufferManager;
+  /** The one implicit session: the authoritative thread registry. */
+  public session: Session;
+  /** Editor-backed preparation/approval collaborators for that session. */
+  public host: NvimSessionHost;
   public chat: Chat;
   /** Session-owned script execution. */
   public scripts: ScriptManager;
@@ -224,7 +230,7 @@ export class Magenta {
       }
     };
 
-    this.chat = new Chat({
+    const hostContext = {
       dispatch: this.dispatch,
       commandRegistry: this.commandRegistry,
       getDisplayWidth: () => {
@@ -240,43 +246,51 @@ export class Magenta {
       getOptions: () => this.options,
       lsp: this.lsp,
       sandbox: this.sandbox,
-      removeThreadBuffers: (ids) => {
-        for (const id of ids) {
-          bufferManager.removeThread(id).catch((e: Error) => {
-            this.nvim.logger.error(
-              `Error removing buffers for thread ${id}: ${e.message}`,
-            );
-          });
-        }
+    };
+    this.host = new NvimSessionHost(hostContext);
+    this.session = new Session(this.host);
+    this.chat = new Chat(
+      {
+        ...hostContext,
+        removeThreadBuffers: (ids) => {
+          for (const id of ids) {
+            bufferManager.removeThread(id).catch((e: Error) => {
+              this.nvim.logger.error(
+                `Error removing buffers for thread ${id}: ${e.message}`,
+              );
+            });
+          }
+        },
+        removeArchivedThreadBuffers: (ids) => {
+          for (const id of ids) {
+            bufferManager.removeArchivedThread(id).catch((e: Error) => {
+              this.nvim.logger.error(
+                `Error removing buffer for archived thread ${id}: ${e.message}`,
+              );
+            });
+          }
+        },
       },
-      removeArchivedThreadBuffers: (ids) => {
-        for (const id of ids) {
-          bufferManager.removeArchivedThread(id).catch((e: Error) => {
-            this.nvim.logger.error(
-              `Error removing buffer for archived thread ${id}: ${e.message}`,
-            );
-          });
-        }
-      },
-    });
-
+      { session: this.session, host: this.host },
+    );
     this.scripts = new ScriptManager({
-      session: this.chat.session,
+      session: this.session,
       logger: this.nvim.logger,
       cwd: this.cwd,
       homeDir: this.homeDir,
       getScriptsPaths: () => this.options.scriptsPaths,
       sandbox: {
-        isThreadBypassed: (threadId) => this.chat.isSandboxBypassed(threadId),
+        isThreadBypassed: (threadId) =>
+          this.host.isSandboxBypassed(threadId, this.session),
         registerSandboxRoot: (threadId, getSandboxRoot) =>
-          this.chat.host.registerSandboxRoot(threadId, getSandboxRoot),
+          this.host.registerSandboxRoot(threadId, getSandboxRoot),
         approveAllPendingInSubtree: (threadId) =>
-          this.chat.approveAllPendingInSubtree(threadId),
+          this.host.approveAllPendingInSubtree(threadId, this.session),
       },
     });
     // Wired before any thread exists, so the run_script tool always has a
     // catalog to read.
-    this.chat.scriptRunner = this.scripts;
+    this.session.scriptRunner = this.scripts;
     this.scriptManager = new ScriptController({
       dispatch: this.dispatch,
       chat: this.chat,
@@ -321,7 +335,11 @@ export class Magenta {
       },
       this.bufferManager,
       () => this.getActiveKey(),
-      () => this.chat.isSandboxBypassed(this.chat.state.activeThreadId),
+      () =>
+        this.host.isSandboxBypassed(
+          this.chat.state.activeThreadId,
+          this.session,
+        ),
     );
   }
 
@@ -449,7 +467,7 @@ export class Magenta {
   }
 
   async createAndSwitchToNewThread(): Promise<ThreadId> {
-    const threadId = await this.chat.createNewThread();
+    const threadId = await this.session.createRootThread();
     await this.bufferManager.registerThread(threadId);
     this.dispatch({
       type: "chat-msg",
@@ -460,7 +478,7 @@ export class Magenta {
   }
 
   async createAndSwitchToAgentThread(agentName: string): Promise<ThreadId> {
-    const threadId = await this.chat.createNewAgentThread(agentName);
+    const threadId = await this.session.createAgentThread(agentName);
     await this.bufferManager.registerThread(threadId);
     this.dispatch({
       type: "chat-msg",
@@ -1139,7 +1157,13 @@ ${lines.join("\n")}
 
   destroy() {
     this.scriptManager.dispose();
-    void this.scripts.dispose();
+    this.chat.dispose();
+    void this.scripts
+      .dispose()
+      .then(() => this.session.dispose())
+      .catch((e: Error) =>
+        this.nvim.logger.error(`Error disposing session: ${e.message}`),
+      );
     // BufferManager's mounted apps will be cleaned up when nvim exits
   }
 
@@ -1381,7 +1405,7 @@ ${lines.join("\n")}
     );
 
     // Create the first thread eagerly so there's always an active thread
-    const initialThreadId = await magenta.chat.createNewThread();
+    const initialThreadId = await magenta.session.createRootThread();
     magenta.activeBuffers =
       await magenta.bufferManager.registerThread(initialThreadId);
     magenta.dispatch({

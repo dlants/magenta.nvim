@@ -854,7 +854,7 @@ it("keeps the script running after its triggering thread is deleted", async () =
 
       const triggeringThreadId = driver.magenta.chat.state.activeThreadId;
       if (!triggeringThreadId) throw new Error("no active thread");
-      driver.magenta.chat.deleteThread(triggeringThreadId);
+      driver.magenta.session.deleteThread(triggeringThreadId);
 
       // The invocation outlives the thread that triggered it.
       const stream =
@@ -983,6 +983,39 @@ it("toggling the invocation sandbox approves a spawned thread's pending permissi
   );
 });
 
+it("owner shutdown disposes the scripts and the session", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        await setupScript(tmpDir, LONG_LIVED_SCRIPT);
+      },
+    },
+    async (driver) => {
+      const { scripts, session } = driver.magenta;
+      await pollUntil(() => scripts.getCatalog().some((s) => s.name === "foo"));
+      const id = scripts.startScript("foo", {}, { sandboxBypassed: false });
+      await pollUntil(() =>
+        (scripts.invocations.get(id)?.logs ?? []).some((l) =>
+          l.startsWith("child "),
+        ),
+      );
+      const childPid = scripts.childPid(id);
+      expect(session.listThreads().length).toBeGreaterThan(0);
+      driver.magenta.destroy();
+      const childDead = () => {
+        if (childPid === undefined) return true;
+        try {
+          process.kill(childPid, 0);
+          return false;
+        } catch {
+          return true;
+        }
+      };
+      await pollUntil(() => session.listThreads().length === 0 && childDead());
+      await expect(session.createRootThread()).rejects.toThrow("disposed");
+    },
+  );
+});
 it("dispose terminates running invocations and rejects new ones", async () => {
   await withDriver(
     {

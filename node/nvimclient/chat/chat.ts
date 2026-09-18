@@ -6,17 +6,15 @@ import type {
   ScriptRunner,
   StopReason,
   ThreadId,
-  ThreadResult,
 } from "@magenta/server";
 import {
   type ArchiveEntry,
   deleteArchivedThread,
   listArchivedThreads,
-  Session,
+  type Session,
   threadCreatedAt,
 } from "@magenta/server";
 import type { Lsp } from "../capabilities/lsp.ts";
-import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { RootMsg } from "../root-msg.ts";
@@ -29,7 +27,7 @@ import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import { shortenPath } from "../utils/files.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
 import type { CommandRegistry } from "./commands/registry.ts";
-import { NvimSessionHost } from "./session-host.ts";
+import type { NvimSessionHost } from "./session-host.ts";
 import { NvimThread } from "./thread.ts";
 import { renderYield, view as threadView } from "./thread-view.ts";
 
@@ -159,7 +157,7 @@ type StoppedReason =
 /** The view adapter over a Session: selection, expansion, viewed timestamps,
  * archive navigation and the NvimThread wrappers. The session owns identity,
  * hierarchy, construction and lifecycle; lifecycle methods here delegate. */
-export class Chat implements ThreadManager {
+export class Chat {
   state: ChatState;
   readonly session: Session;
   readonly host: NvimSessionHost;
@@ -171,10 +169,6 @@ export class Chat implements ThreadManager {
 
   get scriptRunner(): ScriptRunner | undefined {
     return this.session.scriptRunner;
-  }
-
-  set scriptRunner(runner: ScriptRunner | undefined) {
-    this.session.scriptRunner = runner;
   }
 
   constructor(
@@ -192,17 +186,17 @@ export class Chat implements ThreadManager {
       /** Expands `@file:`, `@diff`, ... when a submission is delivered. */
       commandRegistry: CommandRegistry;
     },
-    /** Attach to an existing session instead of owning a fresh one. The view
-     * cache is then seeded from the records that already exist. */
-    existing?: { session: Session; host: NvimSessionHost },
+    /** The session this view adapts. Magenta owns it; the view cache is
+     * seeded from whatever records already exist. */
+    session: { session: Session; host: NvimSessionHost },
   ) {
     this.state = {
       state: "thread-overview",
       activeThreadId: undefined,
     };
 
-    this.host = existing?.host ?? new NvimSessionHost(this.context);
-    this.session = existing?.session ?? new Session(this.host);
+    this.host = session.host;
+    this.session = session.session;
     this.session.on("changed", this.syncThread);
     this.session.on("removed", this.removeThreadView);
     this.session.on("filesSent", this.onFilesSent);
@@ -212,6 +206,16 @@ export class Chat implements ThreadManager {
     }
   }
 
+  /** Detach the view from the session. Thread execution is session-owned, so
+   * this only drops listeners and view-local wrappers; it destroys nothing. */
+  dispose(): void {
+    this.session.off("changed", this.syncThread);
+    this.session.off("removed", this.removeThreadView);
+    this.session.off("filesSent", this.onFilesSent);
+    this.session.off("gitSent", this.onGitSent);
+    for (const view of this.threadViews.values()) view.dispose();
+    this.threadViews.clear();
+  }
   /** Project one session record into the shape the views read. */
   private wrapper(id: ThreadId): ThreadWrapper | undefined {
     const record = this.session.getThread(id);
@@ -586,14 +590,6 @@ export class Chat implements ThreadManager {
     return [];
   }
 
-  createNewThread(): Promise<ThreadId> {
-    return this.session.createRootThread();
-  }
-
-  createNewAgentThread(agentName: string): Promise<ThreadId> {
-    return this.session.createAgentThread(agentName);
-  }
-
   private getRootAncestorId(threadId: ThreadId): ThreadId {
     return this.session.getRootAncestorId(threadId);
   }
@@ -617,20 +613,6 @@ export class Chat implements ThreadManager {
 
   approveAllPendingInSubtree(threadId: ThreadId): void {
     this.host.approveAllPendingInSubtree(threadId, this.session);
-  }
-
-  spawnThread(
-    opts: Parameters<ThreadManager["spawnThread"]>[0],
-  ): Promise<ThreadId> {
-    return this.session.spawnThread(opts);
-  }
-
-  deleteThread(threadId: ThreadId): void {
-    this.session.deleteThread(threadId);
-  }
-
-  awaitThreadResult(threadId: ThreadId): Promise<ThreadResult> {
-    return this.session.awaitThreadResult(threadId);
   }
 
   private collectSubtreeViolationViews(

@@ -437,6 +437,42 @@ it("records observed activity and ignores unknown ids", async () => {
   expect(session.getThread(id)!.lastActivityTime).toBeGreaterThan(before);
   expect(changed).toEqual([id]);
 });
+it("disposal settles streaming work once, drains cleanup and rejects new work", async () => {
+  const { session, mockClient, context } = fixture();
+  const root = await session.createRootThread();
+  const record = session.getThread(root);
+  if (record?.state !== "initialized") throw new Error("expected root");
+  const compactChild = await session.createThread({
+    parent: root,
+    profile: context.profile,
+    threadType: "compact",
+  });
+  const submission = record.thread.submit({
+    type: "raw",
+    message: pendingMessage("stream something"),
+  });
+  const stream = await mockClient.awaitStream();
+  stream.streamText("partial");
+  const changed: ThreadId[] = [];
+  session.on("changed", (id) => changed.push(id));
+  const disposal = session.dispose();
+  // The in-flight request is cancelled rather than left dangling.
+  await disposal;
+  expect(stream.aborted).toBe(true);
+  await expect(submission).resolves.toBeDefined();
+  expect(session.listThreads()).toEqual([]);
+  // Retained results settle exactly once, for the subtree as well.
+  await expect(session.awaitThreadResult(root)).resolves.toMatchObject({
+    type: "aborted",
+  });
+  await expect(session.awaitThreadResult(compactChild)).resolves.toMatchObject({
+    type: "aborted",
+  });
+  // Idempotent, listener-free, and closed to new work.
+  await session.dispose();
+  expect(changed).toEqual([]);
+  await expect(session.createRootThread()).rejects.toThrow("disposed");
+});
 it("keeps two sessions' registries independent", async () => {
   const a = fixture();
   const b = fixture();

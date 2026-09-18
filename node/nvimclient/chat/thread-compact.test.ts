@@ -1640,7 +1640,7 @@ it("deleting the compact child thread aborts the parked submission", async () =>
     );
 
     const chunkThreadId = compactorOf(thread).current!.activeThreadId;
-    driver.magenta.chat.deleteThread(chunkThreadId);
+    driver.magenta.session.deleteThread(chunkThreadId);
 
     await pollUntil(
       () => {

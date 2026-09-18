@@ -112,7 +112,7 @@ it("a thread that fails to construct takes the view out of thread-selected", asy
     expect(chat.state.state).toBe("thread-selected");
     chat.host.prepareThread = () =>
       Promise.reject(new Error("preparation exploded"));
-    await expect(chat.createNewThread()).rejects.toThrow(
+    await expect(chat.session.createRootThread()).rejects.toThrow(
       "preparation exploded",
     );
     expect(chat.state.state).toBe("thread-overview");

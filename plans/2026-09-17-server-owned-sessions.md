@@ -155,7 +155,7 @@ Move the self-contained IPC declarations into the server package and make `sdk/p
 
 # Stages
 
-> Status: stages 1-4 complete (see progress notes under each stage).
+> Status: all stages complete (see progress notes under each stage).
 > A previous unscoped attempt at this plan was left uncommitted in the working
 > tree; it is preserved in `git stash` as "wip broad session attempt
 > (pre stage-1)" and stage 1 was implemented fresh from `main`.
@@ -298,5 +298,17 @@ Move the self-contained IPC declarations into the server package and make `sdk/p
   - `npx tsc -b` verifies the server cannot import Neovim or root SDK implementation files.
   - Run targeted tests after each stage, then `npx vitest run` and `npx biome check .`.
   - Verify existing SDK scripts still launch through the production bundle path, not only under the test driver.
+
+- Progress:
+  - [x] `Magenta` constructs the one implicit session: it builds a shared `hostContext`, then `NvimSessionHost`, then `Session`, then the server `ScriptManager` (wired as `session.scriptRunner` before any thread exists), then `Chat` and `ScriptController` as views. `magenta.session`/`magenta.host` are the owners; `Chat` no longer constructs either (its second constructor argument is now required).
+  - [x] `Magenta.destroy()` disposes the script controller, disposes the `Chat` view, then `scripts.dispose()` followed by `session.dispose()`. `Chat.dispose()` only drops session listeners and `NvimThread` wrappers — it destroys nothing server-side.
+  - [x] Temporary forwarding removed: `Chat` no longer implements `ThreadManager` and lost `spawnThread`/`deleteThread`/`awaitThreadResult`/`createNewThread`/`createNewAgentThread` and the `scriptRunner` setter. Magenta calls `session.createRootThread()`/`createAgentThread()` directly and routes the script sandbox capability through `host` + `session` instead of through the view. Remaining `Chat` methods (`abortThread`, sandbox bypass queries, `handleForkThread`) are view-facing and stay.
+  - [x] No root-side result defers or duplicate registries remain (`Defer` in the root project is only the TEA render/mock-provider usage).
+  - [x] `context.md` gained a `## Sessions` section describing Session/host/ScriptManager ownership and the single implicit session, and the `## Core → Root bridge` section now describes `Chat`/`ScriptController` as view adapters. It explicitly does not claim detach/reattach works.
+  - [x] Tests: `node/server/src/session.test.ts` "disposal settles streaming work once, drains cleanup and rejects new work" (in-flight stream aborted, submission settles, subtree results settle once, idempotent + listener-free + closed to new work); `node/nvimclient/scripts/script-manager.test.ts` "owner shutdown disposes the scripts and the session" (`Magenta.destroy` kills the running child and empties the registry). Disposal during pending preparation and during compaction-adjacent (compact child) construction were already covered by the stage-2 cases.
+  - [x] `npx tsc -b`, `npx biome check .` and the full `npx vitest run` are green; `npm run bundle` still produces `dist/magenta.mjs`, and the fixture-script integration tests exercise the SDK's type-only `sdk/protocol.ts` re-export.
+- Decisions/deviations:
+  - `Chat`'s constructor takes `{ session, host }` as a required second argument rather than an optional attach hook, so the duplicate construction path is gone; the view-adapter test passes the driver's session explicitly.
+  - `Magenta.destroy()` stays synchronous (it is called from a nvim notification path); disposal is chained as a tracked promise that logs failures rather than changing the shutdown signature.
 
 Completion criterion: Chat and the root script controller can be removed as observers without losing the authoritative thread/script registry or requiring them to drive execution. Editor-dependent services may still be supplied by the in-process host until part 2.

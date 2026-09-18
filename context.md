@@ -56,13 +56,22 @@ The root project uses a **single-dispatch TEA architecture**:
 - **Controllers** (e.g. `Chat`, `NvimThread`) — each maintains its own state and filters `RootMsg` for messages relevant to it. Each controller has a `myDispatch` that wraps local messages into the appropriate `RootMsg` variant.
 - **`view`** — declarative TUI rendering using the `d` template literal, with `withBindings` for interactive elements.
 
+## Sessions
+
+**`Session`** (`node/server/src/session.ts`) is the authoritative thread registry. `Magenta` (`node/nvimclient/magenta.ts`) constructs exactly one implicit session, its `NvimSessionHost`, the server `ScriptManager`, and the view adapters; `Magenta.destroy` disposes the script manager and then the session. There is no session picker or global session registry yet, and detach/reattach across processes does not work: the host is in-process.
+
+- Session owns identity, parent/script-invocation associations, pending creation and its cancellation, construction policy (fresh vs. fork), bootstrap submission, labels/title scheduling, lifecycle results, subtree abort, deletion and disposal. It implements `ThreadManager`, so subagent tools and compact children route through it.
+- `assembleThread` (`node/server/src/thread-assembly.ts`) builds the ready `{ thread, compactor }` pair: supervisor ordering, compactor creation and automatic title generation. Session never touches `ThreadCore` or compaction replacement.
+- `SessionHost` (implemented by `NvimSessionHost`, `node/nvimclient/chat/session-host.ts`) is the only editor seam: per-thread environment/provider/prompt preparation, the delivery-time resolver, hierarchy discovery, and approval/sandbox-bypass capabilities.
+- The server `ScriptManager` (`node/server/src/scripts/script-manager.ts`) is session-owned: catalog, child-process IPC, logs, invocation lifecycle, titles and the invocation⇄thread association. It is wired as `session.scriptRunner` before any thread exists.
+- Execution never depends on a view: starting input, settling results, and aborting scripts require no `RootMsg` dispatch.
+
 ## Core → Root bridge
 
-`createNvimThread` and `cloneFromNativeMessageIdx` in `node/nvimclient/chat/thread.ts` assemble fresh/fork environment dependencies, ordered chat policies, compactor, delivery-time resolver, and fixed callbacks. `NvimThread` wraps the ready server handle as `thread`; it owns UI state, debounced dispatch, input/error presentation, and automatic title requests, not server execution setup.
-
+`Chat` (`node/nvimclient/chat/chat.ts`) is a view adapter over the session: selection, expansion, viewed timestamps, archive navigation, buffers and the `NvimThread` wrappers. `threadWrappers` is a read-only projection of `session.listThreads()`; `Chat.dispose()` drops listeners and wrappers without destroying anything server-side. `ScriptController` (`node/nvimclient/scripts/script-manager.ts`) is the equivalent adapter for scripts. `NvimThread` wraps a ready server handle as `thread`; it owns UI state, debounced dispatch, and input/error presentation, not server execution setup.
 - `onUpdate` schedules a `tool-progress` dispatch; views read `thread.loopState`, provider messages, tool results, usage, and edited files directly.
-- `onFileAdded` wires Chat hierarchy discovery; `onFilesSent`/`onGitSent` record display metadata. Thread forwards core notifications only while that core is current, so replacement requires no subscriptions or rewiring by parents.
-- `onSubmission` reports resolved input to the title owner. The helper in `tools/thread-title.ts` generates the title; the wrapper guards late results, and Thread owns title/archive mutation.
+- `onFileAdded` reaches the host's hierarchy discovery; `onFilesSent`/`onGitSent` are forwarded by Session with the thread id so the view can record display metadata. Thread forwards core notifications only while that core is current, so replacement requires no subscriptions or rewiring by parents.
+- `onSubmission` reports resolved input to the title scheduler in `thread-assembly.ts`, which uses the helper in `tools/thread-title.ts`, guards late results, and lets Thread own title/archive mutation. No view is involved.
 - The wrapper observes the complete `submit`/`retry` promise once for completion notification and error presentation. It neither wraps execution for compaction nor checks the private core. Compactor transition events are observed only to repaint history/status.
 
 Use `thread.contextFiles` for current file inspection/mutation rather than exposing FileSupervisor delivery hooks or lifetime controls. Resolve this capability at delivery time, not by capturing a retired core. Fixed callbacks may close over the completed wrapper because construction does not invoke them.
