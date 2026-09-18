@@ -1,71 +1,38 @@
 import type {
-  AgentInput,
-  FileIO,
+  FileUpdates,
+  GitContextUpdate,
   NativeMessageIdx,
   RestResult,
   ScriptRunner,
   StopReason,
-  SubagentConfig,
   ThreadId,
   ThreadResult,
-  ThreadType,
 } from "@magenta/server";
 import {
   type ArchiveEntry,
-  Defer,
   deleteArchivedThread,
   listArchivedThreads,
-  loadAgents,
-  MCPToolManagerImpl,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  ThreadTitle,
+  Session,
   threadCreatedAt,
 } from "@magenta/server";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import { v7 as uuidv7 } from "uuid";
 import type { Lsp } from "../capabilities/lsp.ts";
-import type {
-  DockerSpawnConfig,
-  ThreadManager,
-} from "../capabilities/thread-manager.ts";
-import {
-  autoContextFilesToInitialFiles,
-  discoverHierarchyContext,
-  resolveAutoContext,
-} from "../context/auto-context.ts";
-import {
-  createDockerEnvironment,
-  createLocalEnvironment,
-  type EnvironmentConfig,
-} from "../environment.ts";
+import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { MagentaOptions, Profile } from "../options.ts";
-import { getProvider } from "../providers/provider.ts";
-import {
-  buildSystemInfo,
-  createSystemPrompt,
-} from "../providers/system-prompt.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { Sandbox } from "../sandbox-manager.ts";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { d, type VDOMNode, withBindings, withError } from "../tea/view.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type {
-  AbsFilePath,
-  HomeDir,
-  NvimCwd,
-  UnresolvedFilePath,
-} from "../utils/files.ts";
+import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import { shortenPath } from "../utils/files.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
 import type { CommandRegistry } from "./commands/registry.ts";
-import type { SandboxRoot } from "./thread.ts";
-import {
-  cloneFromNativeMessageIdx,
-  createNvimThread,
-  type NvimThread,
-} from "./thread.ts";
+import { NvimSessionHost } from "./session-host.ts";
+import { NvimThread, type SandboxRoot } from "./thread.ts";
 import { renderYield, view as threadView } from "./thread-view.ts";
 
 const ARCHIVE_PAGE_SIZE = 50;
@@ -122,15 +89,6 @@ type ChatState =
     } & ArchiveStateFields);
 
 export type Msg =
-  | {
-      type: "thread-initialized";
-      thread: NvimThread;
-    }
-  | {
-      type: "thread-error";
-      id: ThreadId;
-      error: Error;
-    }
   | {
       type: "set-active-thread";
       id: ThreadId;
@@ -191,18 +149,24 @@ type StoppedReason =
   | StopReason
   | Exclude<RestResult["type"], "completed" | "failed">;
 
+/** The view adapter over a Session: selection, expansion, viewed timestamps,
+ * archive navigation and the NvimThread wrappers. The session owns identity,
+ * hierarchy, construction and lifecycle; lifecycle methods here delegate. */
 export class Chat implements ThreadManager {
   state: ChatState;
+  /** View cache over the session's records, keyed by thread id. */
   public threadWrappers: { [id: ThreadId]: ThreadWrapper };
-  public scriptRunner: ScriptRunner | undefined = undefined;
-  private mcpToolManager: MCPToolManagerImpl;
+  readonly session: Session;
+  readonly host: NvimSessionHost;
   private expandedThreads: Set<ThreadId>;
-  /** One deferred per thread, so `awaitThreadResult` can be called before the
-   * thread finishes initializing — or after it has already yielded. */
-  private threadResults: Map<ThreadId, Defer<ThreadResult>>;
-  /** Docker teardown progress. The core has no opinion about containers, so
-   * the message a supervisor reports lives with the shell that owns them. */
-  private teardownMessages: Map<ThreadId, string>;
+
+  get scriptRunner(): ScriptRunner | undefined {
+    return this.session.scriptRunner;
+  }
+
+  set scriptRunner(runner: ScriptRunner | undefined) {
+    this.session.scriptRunner = runner;
+  }
 
   constructor(
     private context: {
@@ -222,18 +186,96 @@ export class Chat implements ThreadManager {
   ) {
     this.threadWrappers = {};
     this.expandedThreads = new Set();
-    this.threadResults = new Map();
-    this.teardownMessages = new Map();
     this.state = {
       state: "thread-overview",
       activeThreadId: undefined,
     };
 
-    this.mcpToolManager = new MCPToolManagerImpl(
-      this.context.getOptions().mcpServers,
-      { logger: this.context.nvim.logger },
-    );
+    this.host = new NvimSessionHost(this.context);
+    this.session = new Session(this.host);
+    this.session.on("changed", this.syncThread);
+    this.session.on("removed", this.removeThreadView);
+    this.session.on("filesSent", this.onFilesSent);
+    this.session.on("gitSent", this.onGitSent);
   }
+
+  /** Mirror one session record into the view cache, creating the NvimThread
+   * wrapper the first time a thread is ready. */
+  private syncThread = (id: ThreadId): void => {
+    const record = this.session.getThread(id);
+    if (!record) return;
+    const previous = this.threadWrappers[id];
+    const fields = {
+      parentThreadId: record.parentThreadId,
+      ...(record.scriptInvocationId
+        ? {
+            scriptInvocationId: record.scriptInvocationId as ScriptInvocationId,
+          }
+        : {}),
+      depth: record.parentThreadId
+        ? (this.threadWrappers[record.parentThreadId]?.depth ?? 0) + 1
+        : 0,
+      lastActivityTime: Math.max(
+        record.lastActivityTime,
+        previous?.lastActivityTime ?? 0,
+      ),
+      lastViewedTime: previous?.lastViewedTime ?? Date.now(),
+    };
+    switch (record.state) {
+      case "pending":
+        this.threadWrappers[id] = { ...fields, state: "pending" };
+        return;
+      case "error":
+        this.threadWrappers[id] = {
+          ...fields,
+          state: "error",
+          error: record.error,
+        };
+        if (this.state.state === "thread-selected") {
+          this.state = { state: "thread-overview", activeThreadId: id };
+        }
+        return;
+      case "initialized": {
+        const thread =
+          previous?.state === "initialized"
+            ? previous.thread
+            : new NvimThread(id, record.thread, record.compactor, {
+                ...this.host.contexts.get(id)!,
+                chat: this,
+              });
+        this.threadWrappers[id] = { ...fields, state: "initialized", thread };
+        thread.onThreadUpdate();
+        return;
+      }
+      default:
+        assertUnreachable(record);
+    }
+  };
+
+  private removeThreadView = (id: ThreadId): void => {
+    const wrapper = this.threadWrappers[id];
+    if (wrapper?.state === "initialized") wrapper.thread.dispose();
+    delete this.threadWrappers[id];
+    this.expandedThreads.delete(id);
+    this.context.removeThreadBuffers?.([id]);
+    if (this.state.activeThreadId === id) {
+      this.state = { state: "thread-overview", activeThreadId: undefined };
+    }
+  };
+
+  private onFilesSent = (id: ThreadId, updates: FileUpdates): void => {
+    const wrapper = this.threadWrappers[id];
+    if (wrapper?.state === "initialized") {
+      wrapper.thread.recordMessageViewState({ contextUpdates: updates });
+    }
+  };
+
+  private onGitSent = (id: ThreadId, update: GitContextUpdate): void => {
+    const wrapper = this.threadWrappers[id];
+    if (wrapper?.state === "initialized") {
+      wrapper.thread.recordMessageViewState({ gitUpdate: update });
+    }
+  };
 
   update(msg: RootMsg) {
     if (msg.type === "chat-msg") {
@@ -259,27 +301,6 @@ export class Chat implements ThreadManager {
         if (msg.msg.type === "permission-pending-change") {
           this.threadWrappers[msg.id].lastActivityTime = Date.now();
         }
-
-        if (msg.msg.type === "abort") {
-          // Find all child threads of the parent thread and abort them directly
-          for (const [threadId, threadWrapper] of Object.entries(
-            this.threadWrappers,
-          )) {
-            if (
-              threadWrapper.parentThreadId === thread.id &&
-              threadWrapper.state === "initialized" &&
-              !threadWrapper.thread.thread.yielded
-            ) {
-              threadWrapper.thread.update({
-                type: "thread-msg",
-                id: threadId as ThreadId,
-                msg: {
-                  type: "abort",
-                },
-              });
-            }
-          }
-        }
       }
     }
   }
@@ -298,62 +319,6 @@ export class Chat implements ThreadManager {
 
   private myUpdate(msg: Msg) {
     switch (msg.type) {
-      case "thread-initialized": {
-        const prev = this.threadWrappers[msg.thread.id];
-        const wrapper: ThreadWrapper = {
-          state: "initialized",
-          thread: msg.thread,
-          parentThreadId: prev.parentThreadId,
-          ...(prev.scriptInvocationId
-            ? { scriptInvocationId: prev.scriptInvocationId }
-            : {}),
-          depth: prev.depth,
-          lastActivityTime: prev.lastActivityTime,
-          lastViewedTime: prev.lastViewedTime,
-        };
-        this.threadWrappers[msg.thread.id] = wrapper;
-
-        msg.thread.thread.result.then(
-          (result) => this.settleThreadResult(msg.thread.id, result),
-          (e: Error) =>
-            this.settleThreadResult(msg.thread.id, {
-              type: "aborted",
-              reason: e.message,
-            }),
-        );
-
-        return;
-      }
-
-      case "thread-error": {
-        const thread = this.threadWrappers[msg.id];
-        this.threadWrappers[msg.id] = {
-          state: "error",
-          error: msg.error,
-          parentThreadId: thread.parentThreadId,
-          ...(thread.scriptInvocationId
-            ? { scriptInvocationId: thread.scriptInvocationId }
-            : {}),
-          depth: thread.depth,
-          lastActivityTime: thread.lastActivityTime,
-          lastViewedTime: thread.lastViewedTime,
-        };
-
-        if (this.state.state === "thread-selected") {
-          this.state = {
-            state: "thread-overview",
-            activeThreadId: msg.id,
-          };
-        }
-
-        this.settleThreadResult(msg.id, {
-          type: "aborted",
-          reason: msg.error.message,
-        });
-
-        return;
-      }
-
       case "set-active-thread":
         if (msg.id in this.threadWrappers) {
           this.markActiveThreadViewed();
@@ -422,16 +387,13 @@ export class Chat implements ThreadManager {
         };
         return;
 
-      case "delete-thread": {
-        const rootId = this.getRootAncestorId(msg.id);
-        this.deleteThreadSubtree(rootId);
+      case "delete-thread":
+        this.session.deleteThread(this.session.getRootAncestorId(msg.id));
         return;
-      }
 
-      case "delete-thread-subtree": {
-        this.deleteThreadSubtree(msg.id);
+      case "delete-thread-subtree":
+        this.session.deleteThread(msg.id);
         return;
-      }
 
       case "toggle-thread-expand":
         if (this.expandedThreads.has(msg.id)) {
@@ -595,321 +557,84 @@ export class Chat implements ThreadManager {
     return [];
   }
 
-  private triggerHierarchyDiscovery(
-    thread: NvimThread,
-    absFilePath: AbsFilePath,
-  ): void {
-    discoverHierarchyContext(absFilePath, {
-      nvim: this.context.nvim,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-      options: this.context.getOptions(),
-    })
-      .then((discovered) => {
-        for (const file of discovered) {
-          thread.thread.contextFiles.addFileContext(
-            file.absFilePath,
-            file.relFilePath,
-            file.fileTypeInfo,
-          );
-        }
-      })
-      .catch((err: Error) => {
-        this.context.nvim.logger.error(
-          `Error discovering hierarchy context for ${absFilePath}: ${err.message}`,
-        );
-      });
+  createNewThread(): Promise<ThreadId> {
+    return this.session.createRootThread();
   }
 
-  private async createThreadWithContext({
-    threadId,
-    profile,
-    contextFiles = [],
-    parent,
-    inputMessages,
-    threadType,
-    subagentConfig,
-    fileIO,
-    environmentConfig,
-    dockerSpawnConfig,
-    getParentThread,
-    getSandboxRoot,
-    yieldSchema,
-    scriptInvocationId,
-    scriptName,
-    autoCompactThreshold,
-    autoCompactPrompt,
-  }: {
-    threadId: ThreadId;
-    profile: Profile;
-    contextFiles?: UnresolvedFilePath[];
-    parent?: ThreadId;
-    inputMessages?: AgentInput[];
-    threadType: ThreadType;
-    subagentConfig?: SubagentConfig;
-    fileIO?: FileIO;
-    environmentConfig?: EnvironmentConfig;
-    dockerSpawnConfig?: DockerSpawnConfig | undefined;
-    getParentThread?: () => NvimThread | undefined;
-    getSandboxRoot?: () => SandboxRoot | undefined;
-    yieldSchema?: JSONSchemaType;
-    scriptInvocationId?: ScriptInvocationId;
-    scriptName?: string;
-    autoCompactThreshold?: number;
-    autoCompactPrompt?: string;
-  }) {
-    this.threadWrappers[threadId] = {
-      state: "pending",
-      parentThreadId: parent,
-      ...(scriptInvocationId ? { scriptInvocationId } : {}),
-      depth: parent ? (this.threadWrappers[parent]?.depth ?? 0) + 1 : 0,
-      lastActivityTime: Date.now(),
-      lastViewedTime: Date.now(),
-    };
-
-    const resolvedConfig: EnvironmentConfig = environmentConfig ?? {
-      type: "local",
-    };
-
-    const bypassRef = { get: () => false as boolean };
-
-    const [autoContextFiles, environment] = await Promise.all([
-      // auto-context is discovered against the host filesystem, so it is
-      // meaningless for a thread whose fileIO is a sandbox that doesn't contain
-      // those paths - they would immediately be reported as deleted.
-      fileIO
-        ? Promise.resolve([])
-        : resolveAutoContext({
-            ...this.context,
-            options: this.context.getOptions(),
-          }),
-      resolvedConfig.type === "docker"
-        ? createDockerEnvironment({
-            container: resolvedConfig.container,
-            cwd: resolvedConfig.cwd,
-            threadId,
-          })
-        : Promise.resolve(
-            createLocalEnvironment({
-              nvim: this.context.nvim,
-              lsp: this.context.lsp,
-
-              cwd: resolvedConfig.cwd ?? this.context.cwd,
-              homeDir: this.context.homeDir,
-              getOptions: this.context.getOptions,
-              threadId,
-              sandbox: this.context.sandbox,
-              onPendingChange: () =>
-                this.context.dispatch({
-                  type: "thread-msg",
-                  id: threadId,
-                  msg: { type: "permission-pending-change" },
-                }),
-              isBypassed: () => bypassRef.get(),
-            }),
-          ),
-      this.scriptRunner?.discover(),
-    ]);
-
-    const initialFiles = autoContextFilesToInitialFiles(autoContextFiles);
-
-    if (fileIO) {
-      environment.fileIO = fileIO;
-      environment.sandboxViolationHandler = undefined;
-    }
-
-    const initialGitState = await environment.gitClient.getState();
-
-    const systemInfo = await buildSystemInfo({
-      nvim: this.context.nvim,
-      cwd: environment.cwd,
-      systemInfoOverrides: {
-        git: initialGitState,
-        ...(resolvedConfig.type === "docker"
-          ? { platform: "linux (docker)", cwd: environment.cwd }
-          : {}),
-      },
-    });
-
-    const systemPrompt = await createSystemPrompt(threadType, {
-      nvim: this.context.nvim,
-      cwd: environment.cwd,
-      options: this.context.getOptions(),
-      fileIO: environment.fileIO,
-      homeDir: environment.homeDir,
-      ...(subagentConfig ? { subagentConfig } : {}),
-    });
-
-    const thread = createNvimThread(
-      threadId,
-      { type: "fresh", threadType },
-      systemPrompt,
-      {
-        onFileAdded: (path) => this.triggerHierarchyDiscovery(thread, path),
-        ...this.context,
-        options: this.context.getOptions(),
-        mcpToolManager: this.mcpToolManager,
-        profile,
-        chat: this,
-        environment,
-        initialFiles,
-        initialGitState,
-        systemInfo,
-        ...(subagentConfig ? { subagentConfig } : {}),
-        ...(getParentThread ? { getParentThread } : {}),
-        ...(getSandboxRoot ? { getSandboxRoot } : {}),
-        ...(yieldSchema ? { yieldSchema } : {}),
-        ...(scriptName ? { scriptName } : {}),
-      },
-      {
-        ...(dockerSpawnConfig ? { docker: dockerSpawnConfig } : {}),
-        ...(autoCompactThreshold !== undefined ? { autoCompactThreshold } : {}),
-        ...(autoCompactPrompt !== undefined ? { autoCompactPrompt } : {}),
-        onDockerProgress: (message) => {
-          this.teardownMessages.set(threadId, message);
-          this.context.dispatch({
-            type: "thread-msg",
-            id: threadId,
-            msg: { type: "tool-progress" },
-          });
-        },
-      },
-    );
-
-    bypassRef.get = () => thread.isSandboxBypassed;
-
-    for (const absFilePath of Object.keys(
-      thread.thread.contextFiles.files,
-    ) as AbsFilePath[]) {
-      this.triggerHierarchyDiscovery(thread, absFilePath);
-    }
-
-    if (contextFiles.length > 0) {
-      await thread.thread.contextFiles.addFiles(contextFiles);
-    }
-
-    this.context.dispatch({
-      type: "chat-msg",
-      msg: {
-        type: "thread-initialized",
-        thread,
-      },
-    });
-
-    if (inputMessages) {
-      this.context.dispatch({
-        type: "thread-msg",
-        id: threadId,
-        msg: {
-          type: "send-message",
-          messages: inputMessages,
-        },
-      });
-    }
-
-    return thread;
-  }
-
-  async createNewThread(): Promise<ThreadId> {
-    const id = uuidv7() as ThreadId;
-
-    await this.createThreadWithContext({
-      threadId: id,
-      profile: getActiveProfile(
-        this.context.getOptions().profiles,
-        this.context.getOptions().activeProfile,
-      ),
-      threadType: "root",
-    });
-
-    return id;
-  }
-
-  async createNewAgentThread(agentName: string): Promise<ThreadId> {
-    const agents = loadAgents({
-      cwd: this.context.cwd,
-      logger: this.context.nvim.logger,
-      options: this.context.getOptions(),
-    });
-    const agentDef = agents[agentName];
-    if (!agentDef) {
-      throw new Error(
-        `Agent "${agentName}" not found. Available agents: ${Object.keys(agents).join(", ")}`,
-      );
-    }
-
-    const id = uuidv7() as ThreadId;
-    const subagentConfig: SubagentConfig = {
-      agentName: agentDef.name,
-      systemPrompt: agentDef.systemPrompt,
-      systemReminder: agentDef.systemReminder,
-      tier: agentDef.tier,
-    };
-
-    await this.createThreadWithContext({
-      threadId: id,
-      profile: getActiveProfile(
-        this.context.getOptions().profiles,
-        this.context.getOptions().activeProfile,
-      ),
-      threadType: "root",
-      ...(subagentConfig ? { subagentConfig } : {}),
-    });
-
-    return id;
+  createNewAgentThread(agentName: string): Promise<ThreadId> {
+    return this.session.createAgentThread(agentName);
   }
 
   private getRootAncestorId(threadId: ThreadId): ThreadId {
-    let current = threadId;
-    let parentId = this.threadWrappers[current]?.parentThreadId;
-    while (parentId !== undefined) {
-      current = parentId;
-      parentId = this.threadWrappers[current]?.parentThreadId;
-    }
-    return current;
+    return this.session.getRootAncestorId(threadId);
   }
 
-  private deleteThreadSubtree(rootId: ThreadId): void {
-    const childrenMap = this.buildChildrenMap();
-    const idsToDelete: ThreadId[] = [];
-    const collectIds = (id: ThreadId) => {
-      idsToDelete.push(id);
-      for (const childId of childrenMap.get(id) ?? []) {
-        collectIds(childId);
-      }
-    };
-    collectIds(rootId);
+  private buildChildrenMap(): Map<ThreadId, ThreadId[]> {
+    return this.session.buildChildrenMap();
+  }
 
-    for (const id of idsToDelete) {
-      const wrapper = this.threadWrappers[id];
-      if (wrapper?.state === "initialized") {
-        wrapper.thread.destroy().catch((e: Error) => {
-          this.context.nvim.logger.error(
-            `Error destroying thread ${id} during delete: ${e.message}`,
-          );
-        });
-      }
-      delete this.threadWrappers[id];
-      this.settleThreadResult(id, {
-        type: "aborted",
-        reason: "thread deleted",
-      });
-      this.threadResults.delete(id);
-    }
+  /** Abort a thread and its descendants. */
+  abortThread(threadId: ThreadId): ReturnType<Session["abortThread"]> {
+    return this.session.abortThread(threadId);
+  }
 
-    this.context.removeThreadBuffers?.(idsToDelete);
+  isSandboxBypassed(threadId: ThreadId | undefined): boolean {
+    return this.host.isSandboxBypassed(threadId, this.session);
+  }
 
-    this.expandedThreads.delete(rootId);
+  toggleSandboxBypass(threadId: ThreadId): void {
+    this.host.toggleSandboxBypass(threadId, this.session);
+  }
 
-    if (
-      this.state.activeThreadId &&
-      idsToDelete.includes(this.state.activeThreadId)
-    ) {
-      this.state = {
-        state: "thread-overview",
-        activeThreadId: undefined,
-      };
-    }
+  approveAllPendingInSubtree(threadId: ThreadId): void {
+    this.host.approveAllPendingInSubtree(threadId, this.session);
+  }
+
+  spawnThread(
+    opts: Parameters<ThreadManager["spawnThread"]>[0],
+  ): Promise<ThreadId> {
+    return this.session.spawnThread(opts);
+  }
+
+  deleteThread(threadId: ThreadId): void {
+    this.session.deleteThread(threadId);
+  }
+
+  awaitThreadResult(threadId: ThreadId): Promise<ThreadResult> {
+    return this.session.awaitThreadResult(threadId);
+  }
+
+  /** The bypass state of a script-owned thread lives with its invocation, so
+   * it is registered against the reserved id before creation starts. */
+  spawnScriptThread(opts: {
+    scriptInvocationId: ScriptInvocationId;
+    scriptName: string;
+    prompt: string;
+    yieldSchema: JSONSchemaType;
+    getSandboxRoot: () => SandboxRoot | undefined;
+    profile?: Profile;
+    cwd?: string;
+    contextFiles?: string[];
+    systemReminder?: string;
+    autoCompactThreshold?: number;
+    autoCompactPrompt?: string;
+  }): Promise<ThreadId> {
+    const { getSandboxRoot, ...rest } = opts;
+    const threadId = uuidv7() as ThreadId;
+    this.host.registerSandboxRoot(threadId, getSandboxRoot);
+    return this.session.spawnScriptThread({ ...rest, threadId });
+  }
+
+  generateScriptTitle(
+    scriptName: string,
+    description: string,
+    parameters: unknown,
+  ): Promise<string | undefined> {
+    return this.session.generateScriptTitle(
+      scriptName,
+      description,
+      parameters,
+    );
   }
 
   private collectSubtreeViolationViews(
@@ -990,39 +715,9 @@ export class Chat implements ThreadManager {
    * Collect pending-permission views for a script-owned thread's subtree, so a
    * collapsed script row never hides a blocking permission prompt.
    */
-  approveAllPendingInSubtree(threadId: ThreadId): void {
-    this.approveSubtreePending(threadId, this.buildChildrenMap());
-  }
-
-  private approveSubtreePending(
-    threadId: ThreadId,
-    childrenMap: Map<ThreadId, ThreadId[]>,
-  ): void {
-    const wrapper = this.threadWrappers[threadId];
-    if (wrapper?.state === "initialized") {
-      wrapper.thread.sandboxViolationHandler?.approveAll();
-    }
-    for (const childId of childrenMap.get(threadId) ?? []) {
-      this.approveSubtreePending(childId, childrenMap);
-    }
-  }
 
   collectScriptSubtreeViolationViews(threadId: ThreadId): VDOMNode[] {
     return this.collectSubtreeViolationViews(threadId, this.buildChildrenMap());
-  }
-
-  private buildChildrenMap(): Map<ThreadId, ThreadId[]> {
-    const childrenMap = new Map<ThreadId, ThreadId[]>();
-    for (const [idStr, threadWrapper] of Object.entries(this.threadWrappers)) {
-      const parentId = threadWrapper.parentThreadId;
-      if (parentId !== undefined) {
-        if (!childrenMap.has(parentId)) {
-          childrenMap.set(parentId, []);
-        }
-        childrenMap.get(parentId)!.push(idStr as ThreadId);
-      }
-    }
-    return childrenMap;
   }
 
   private formatThreadStatus(threadId: ThreadId): string {
@@ -1381,6 +1076,9 @@ ${rows}${loadMore}`;
     return threadWrapper.thread;
   }
 
+  /** Fork through the session, then copy the display context the new thread
+   * inherits: per-message view state up to the fork point, the fork marker, and
+   * the source's outgoing fork list. */
   async handleForkThread({
     sourceThreadId,
     truncateAtMessageIdx,
@@ -1388,63 +1086,50 @@ ${rows}${loadMore}`;
     sourceThreadId: ThreadId;
     truncateAtMessageIdx?: NativeMessageIdx;
   }): Promise<ThreadId> {
-    const sourceThreadWrapper = this.threadWrappers[sourceThreadId];
-    if (!sourceThreadWrapper || sourceThreadWrapper.state !== "initialized") {
+    const sourceWrapper = this.threadWrappers[sourceThreadId];
+    if (!sourceWrapper || sourceWrapper.state !== "initialized") {
       throw new Error(`Thread ${sourceThreadId} not available for forking`);
     }
-
-    const sourceThread = sourceThreadWrapper.thread;
+    const sourceThread = sourceWrapper.thread;
     const idx = truncateAtMessageIdx ?? sourceThread.thread.nativeMessageIdx;
 
-    const newThreadId = uuidv7() as ThreadId;
-    this.threadWrappers[newThreadId] = {
-      state: "pending",
-      parentThreadId: undefined,
-      depth: 0,
-      lastActivityTime: Date.now(),
-      lastViewedTime: Date.now(),
-    };
+    const newThreadId = await this.session.forkThread(sourceThreadId, idx);
+    const wrapper = this.threadWrappers[newThreadId];
+    if (!wrapper || wrapper.state !== "initialized") return newThreadId;
+    const thread = wrapper.thread;
 
-    const thread = await cloneFromNativeMessageIdx({
-      onFileAdded: (path) => this.triggerHierarchyDiscovery(thread, path),
-      sourceThread,
+    this.host.setSandboxBypassed(
       newThreadId,
-      nativeMessageIdx: idx,
-      chat: this,
-      mcpToolManager: this.mcpToolManager,
-      dispatch: this.context.dispatch,
-      nvim: this.context.nvim,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-      lsp: this.context.lsp,
-      sandbox: this.context.sandbox,
-      getOptions: this.context.getOptions,
-      getDisplayWidth: this.context.getDisplayWidth,
-    });
+      this.isSandboxBypassed(sourceThreadId),
+    );
+
+    for (const [idxStr, viewState] of Object.entries(
+      sourceThread.state.messageViewState,
+    )) {
+      const messageIdx = Number(idxStr);
+      if (messageIdx > idx) continue;
+      thread.state.messageViewState[messageIdx] = {
+        ...(viewState.contextUpdates
+          ? { contextUpdates: { ...viewState.contextUpdates } }
+          : {}),
+        ...(viewState.gitUpdate ? { gitUpdate: viewState.gitUpdate } : {}),
+        ...(viewState.expandedUpdates
+          ? { expandedUpdates: { ...viewState.expandedUpdates } }
+          : {}),
+        ...(viewState.expandedContent
+          ? { expandedContent: { ...viewState.expandedContent } }
+          : {}),
+      };
+    }
 
     const markerIdx = thread.thread.getProviderMessages().length;
-    thread.thread.prependToNextTurn([
-      {
-        type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        text: "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
-      },
-    ]);
     thread.state.messageViewState[markerIdx] = {
       ...thread.state.messageViewState[markerIdx],
       forkedFrom: sourceThreadId,
     };
-
     sourceThread.state.forkedTo.push({
       childThreadId: newThreadId,
       atMessageIdx: idx,
-    });
-    this.context.dispatch({
-      type: "chat-msg",
-      msg: {
-        type: "thread-initialized",
-        thread,
-      },
     });
 
     return newThreadId;
@@ -1461,13 +1146,6 @@ ${rows}${loadMore}`;
   }
   getThreadPendingApprovalTools(_threadId: ThreadId): never[] {
     return [];
-  }
-
-  isSandboxBypassed(threadId: ThreadId | undefined): boolean {
-    if (!threadId) return false;
-    const wrapper = this.threadWrappers[threadId];
-    if (!wrapper || wrapper.state !== "initialized") return false;
-    return wrapper.thread.isSandboxBypassed;
   }
 
   /** How a resting thread stopped: the turn's stop reason, or the kind of the
@@ -1512,7 +1190,7 @@ ${rows}${loadMore}`;
           title: thread.thread.title,
           status: (() => {
             // Check mode for thread-specific states first
-            const teardownMessage = this.teardownMessages.get(threadId);
+            const teardownMessage = this.session.teardownMessages.get(threadId);
             if (teardownMessage) {
               return {
                 type: "running" as const,
@@ -1579,204 +1257,6 @@ ${rows}${loadMore}`;
     }
   }
 
-  private threadResultDefer(threadId: ThreadId): Defer<ThreadResult> {
-    let defer = this.threadResults.get(threadId);
-    if (!defer) {
-      defer = new Defer<ThreadResult>();
-      this.threadResults.set(threadId, defer);
-    }
-    return defer;
-  }
-
-  private settleThreadResult(threadId: ThreadId, result: ThreadResult): void {
-    this.teardownMessages.delete(threadId);
-    this.threadResultDefer(threadId).resolve(result);
-  }
-
-  async spawnThread(opts: {
-    parentThreadId: ThreadId;
-    prompt: string;
-    threadType: ThreadType;
-    subagentConfig?: SubagentConfig;
-    contextFiles?: UnresolvedFilePath[];
-    dockerSpawnConfig?: DockerSpawnConfig;
-    cwd?: string;
-    fileIO?: FileIO;
-    label?: string;
-  }): Promise<ThreadId> {
-    const parentThreadId = opts.parentThreadId;
-    const parentThreadWrapper = this.threadWrappers[parentThreadId];
-    if (!parentThreadWrapper || parentThreadWrapper.state !== "initialized") {
-      throw new Error(`Parent thread ${parentThreadId} not available`);
-    }
-
-    const parentThread = parentThreadWrapper.thread;
-    const subagentThreadId = uuidv7() as ThreadId;
-
-    const subagentProfile: Profile = opts.subagentConfig?.fastModel
-      ? {
-          ...parentThread.context.profile,
-          model: parentThread.context.profile.fastModel,
-          thinking: undefined,
-          reasoning: undefined,
-        }
-      : opts.subagentConfig?.thinkingModel
-        ? {
-            ...parentThread.context.profile,
-            model: parentThread.context.profile.thinkingModel,
-          }
-        : parentThread.context.profile;
-
-    let environmentConfig: EnvironmentConfig;
-    if (opts.dockerSpawnConfig) {
-      environmentConfig = {
-        type: "docker",
-        container: opts.dockerSpawnConfig.containerName,
-        cwd: opts.dockerSpawnConfig.workspacePath,
-      };
-    } else if (opts.cwd) {
-      environmentConfig = {
-        type: "local",
-        cwd: opts.cwd as NvimCwd,
-      };
-    } else {
-      environmentConfig = parentThread.context.environment.environmentConfig;
-    }
-
-    const thread = await this.createThreadWithContext({
-      threadId: subagentThreadId,
-      profile: subagentProfile,
-      contextFiles: opts.contextFiles || [],
-      parent: parentThreadId,
-      inputMessages: [
-        {
-          type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          text: opts.prompt,
-        },
-      ],
-      threadType: opts.threadType,
-      ...(opts.subagentConfig ? { subagentConfig: opts.subagentConfig } : {}),
-      environmentConfig,
-      ...(opts.fileIO ? { fileIO: opts.fileIO } : {}),
-      dockerSpawnConfig: opts.dockerSpawnConfig,
-      getParentThread: () => {
-        const wrapper = this.threadWrappers[parentThreadId];
-        return wrapper?.state === "initialized" ? wrapper.thread : undefined;
-      },
-    });
-
-    if (opts.label) thread.thread.setTitle(opts.label);
-    return thread.id;
-  }
-
-  deleteThread(threadId: ThreadId): void {
-    this.deleteThreadSubtree(threadId);
-  }
-
-  async spawnScriptThread(opts: {
-    scriptInvocationId: ScriptInvocationId;
-    scriptName: string;
-    prompt: string;
-    yieldSchema: JSONSchemaType;
-    getSandboxRoot: () => SandboxRoot | undefined;
-    profile?: Profile;
-    cwd?: string;
-    contextFiles?: string[];
-    systemReminder?: string;
-    autoCompactThreshold?: number;
-    autoCompactPrompt?: string;
-  }): Promise<ThreadId> {
-    const threadId = uuidv7() as ThreadId;
-    const profile =
-      opts.profile ??
-      getActiveProfile(
-        this.context.getOptions().profiles,
-        this.context.getOptions().activeProfile,
-      );
-
-    const environmentConfig: EnvironmentConfig = {
-      type: "local",
-      ...(opts.cwd ? { cwd: opts.cwd as NvimCwd } : {}),
-    };
-
-    const thread = await this.createThreadWithContext({
-      threadId,
-      profile,
-      ...(opts.contextFiles
-        ? { contextFiles: opts.contextFiles as UnresolvedFilePath[] }
-        : {}),
-      inputMessages: [
-        {
-          type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          text: opts.prompt,
-        },
-      ],
-      threadType: "subagent",
-      environmentConfig,
-      ...(opts.systemReminder
-        ? { subagentConfig: { systemReminder: opts.systemReminder } }
-        : {}),
-      scriptInvocationId: opts.scriptInvocationId,
-      scriptName: opts.scriptName,
-      yieldSchema: opts.yieldSchema,
-      getSandboxRoot: opts.getSandboxRoot,
-      ...(opts.autoCompactThreshold !== undefined
-        ? { autoCompactThreshold: opts.autoCompactThreshold }
-        : {}),
-      ...(opts.autoCompactPrompt !== undefined
-        ? { autoCompactPrompt: opts.autoCompactPrompt }
-        : {}),
-    });
-
-    return thread.id;
-  }
-
-  /** Generate a concise title for a script invocation, mirroring how thread
-   * titles are generated: a fast-model forced tool-use call. */
-  async generateScriptTitle(
-    scriptName: string,
-    description: string,
-    parameters: unknown,
-  ): Promise<string | undefined> {
-    const profile = getActiveProfile(
-      this.context.getOptions().profiles,
-      this.context.getOptions().activeProfile,
-    );
-    const request = getProvider(this.context.nvim, profile).forceToolUse({
-      model: profile.fastModel,
-      input: [
-        {
-          type: "text",
-          text: `\
-A script has been invoked. Come up with a succinct title describing this specific invocation.
-
-Script name: ${scriptName}
-Description: ${description}
-Parameters: ${JSON.stringify(parameters)}
-
-The title must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        },
-      ],
-      spec: ThreadTitle.spec,
-      disableCaching: true,
-    });
-    const result = await request.promise;
-    if (result.toolRequest.status === "ok") {
-      const input = ThreadTitle.validateInput(
-        result.toolRequest.value.input as { [key: string]: unknown },
-      );
-      if (input.status === "ok") return input.value.title;
-    }
-    return undefined;
-  }
-
-  awaitThreadResult(threadId: ThreadId): Promise<ThreadResult> {
-    return this.threadResultDefer(threadId).promise;
-  }
-
   renderSingleThread(threadId: ThreadId) {
     const threadWrapper = this.threadWrappers[threadId];
 
@@ -1821,12 +1301,4 @@ The title must be a single line (no newlines) and a few words long (ideally arou
         assertUnreachable(threadWrapper);
     }
   }
-}
-
-function getActiveProfile(profiles: Profile[], activeProfile: string) {
-  const profile = profiles.find((p) => p.name === activeProfile);
-  if (!profile) {
-    throw new Error(`Profile ${activeProfile} not found.`);
-  }
-  return profile;
 }

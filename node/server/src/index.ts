@@ -214,6 +214,15 @@ export {
   type ReminderKind,
 } from "./providers/system-reminders.ts";
 export {
+  type PreparedThread,
+  Session,
+  type SessionCreateOptions,
+  type SessionHost,
+  type SessionId,
+  type SessionThread,
+  type ThreadPreparation,
+} from "./session.ts";
+export {
   compactPrompt,
   type Delivery,
   type PendingMessage,

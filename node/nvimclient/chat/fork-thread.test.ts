@@ -204,7 +204,7 @@ it("sandbox bypass and write approvals use the fork owner", async () => {
 
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
-    sourceThread.sandboxBypassed = true;
+    driver.magenta.chat.host.setSandboxBypassed(sourceThreadId, true);
 
     const idx = sourceThread.thread.nativeMessageIdx;
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);
@@ -212,7 +212,7 @@ it("sandbox bypass and write approvals use the fork owner", async () => {
     const forkThread = driver.magenta.chat.getActiveThread();
     expect(forkThread.isSandboxBypassed).toBe(true);
 
-    sourceThread.sandboxBypassed = false;
+    driver.magenta.chat.host.setSandboxBypassed(sourceThreadId, false);
 
     expect(forkThread.isSandboxBypassed).toBe(true);
     expect(sourceThread.isSandboxBypassed).toBe(false);
@@ -228,8 +228,8 @@ it("sandbox bypass and write approvals use the fork owner", async () => {
     expect(
       forkThread.sandboxViolationHandler!.getPendingViolations().size,
     ).toBe(0);
-    forkThread.sandboxBypassed = false;
-    sourceThread.sandboxBypassed = true;
+    driver.magenta.chat.host.setSandboxBypassed(forkThread.id, false);
+    driver.magenta.chat.host.setSandboxBypassed(sourceThreadId, true);
     const writing = forkIO.writeFile(destination, "approved fork write");
     await pollUntil(() => {
       expect(

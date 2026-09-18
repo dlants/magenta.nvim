@@ -10,11 +10,9 @@ import {
   type ToolRequestId,
 } from "@magenta/server";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import { v7 as uuidv7 } from "uuid";
 import { expect, it } from "vitest";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import { withDriver } from "../test/preamble.ts";
-import { createNvimThread } from "./thread.ts";
 
 it("root/user threads get an AutoCompactSupervisor", async () => {
   await withDriver({}, async (driver) => {
@@ -202,82 +200,63 @@ it.each([
 }) => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
-    const source = driver.magenta.chat.getActiveThread();
+    const chat = driver.magenta.chat;
     // Use the real local collaborators: policy assembly requires no live container.
-    const thread = createNvimThread(
-      uuidv7() as ThreadId,
-      { type: "fresh", threadType },
-      source.thread.systemPrompt,
-      {
-        ...source.context,
-        onFileAdded: () => {},
-      },
-      supervised
+    const id = await chat.session.createThread({
+      profile: chat.host.getActiveProfile(),
+      threadType,
+      ...(supervised
         ? {
-            docker: {
+            dockerSpawnConfig: {
               containerName: "worker",
               imageName: "worker-image",
               workspacePath: "/workspace",
-              hostDir: source.context.cwd,
+              hostDir: chat.getActiveThread().context.cwd,
               supervised: true,
             },
           }
-        : {},
-    );
+        : {}),
+    });
+    const record = chat.session.getThread(id);
+    if (record?.state !== "initialized")
+      throw new Error("expected an initialized thread");
+    const thread = record.thread;
     try {
-      const policies = thread.thread.chatSupervisors!;
+      const policies = thread.chatSupervisors!;
       expect(policies.map((policy) => policy.constructor)).toEqual(expected);
-      expect(thread.compactor).toBe(thread.thread["context"].compactor);
-      expect(thread.compactor === undefined).toBe(threadType === "compact");
-      const resolve = thread.thread["context"].resolve;
-      const callbacks = thread.thread.callbacks;
-      await thread.thread["replaceCore"]({
+      expect(record.compactor).toBe(thread["context"].compactor);
+      expect(record.compactor === undefined).toBe(threadType === "compact");
+      const resolve = thread["context"].resolve;
+      const callbacks = thread.callbacks;
+      await thread["replaceCore"]({
         seed: [],
         archive: { type: "none" },
       });
-      expect(thread.thread.chatSupervisors).toBe(policies);
-      expect(thread.thread["context"].resolve).toBe(resolve);
-      expect(thread.thread.callbacks).toBe(callbacks);
+      expect(thread.chatSupervisors).toBe(policies);
+      expect(thread["context"].resolve).toBe(resolve);
+      expect(thread.callbacks).toBe(callbacks);
     } finally {
-      await thread.destroy();
+      chat.session.deleteThread(id);
     }
   });
 });
-
 it("forks compact threads without a compactor or auto-compaction policy", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
-    const root = driver.magenta.chat.getActiveThread();
-    const context = { ...root.context, onFileAdded: () => {} };
-    const source = createNvimThread(
-      uuidv7() as ThreadId,
-      { type: "fresh", threadType: "compact" },
-      root.thread.systemPrompt,
-      context,
-    );
-    try {
-      const fork = createNvimThread(
-        uuidv7() as ThreadId,
-        {
-          type: "fork",
-          sourceThread: source.thread,
-          nativeMessageIdx: source.thread.nativeMessageIdx,
-        },
-        source.thread.systemPrompt,
-        context,
-      );
-      try {
-        expect(fork.thread.threadType).toBe("compact");
-        expect(fork.compactor).toBeUndefined();
-        expect(fork.thread["context"].compactor).toBeUndefined();
-        expect(
-          fork.thread.chatSupervisors!.map((policy) => policy.constructor),
-        ).toEqual([MaxTokensSupervisor, SubagentSupervisor]);
-      } finally {
-        await fork.destroy();
-      }
-    } finally {
-      await source.destroy();
-    }
+    const chat = driver.magenta.chat;
+    const sourceId = await chat.session.createThread({
+      profile: chat.host.getActiveProfile(),
+      threadType: "compact",
+    });
+    const forkId = await chat.session.forkThread(sourceId);
+    const fork = chat.session.getThread(forkId);
+    if (fork?.state !== "initialized")
+      throw new Error("expected an initialized fork");
+    expect(fork.thread.threadType).toBe("compact");
+    expect(fork.compactor).toBeUndefined();
+    expect(fork.thread["context"].compactor).toBeUndefined();
+    expect(
+      fork.thread.chatSupervisors!.map((policy) => policy.constructor),
+    ).toEqual([MaxTokensSupervisor, SubagentSupervisor]);
   });
 });

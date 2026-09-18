@@ -906,6 +906,17 @@ describe("per-agent expansion", () => {
 
       // Wait for result to appear
       await driver.assertDisplayBufferContains("Do a task and report back");
+      // Let the parent thread finish so the row is the completed result row,
+      // not the in-flight progress row.
+      const parentResume =
+        await driver.mockAnthropic.awaitPendingStreamWithText(
+          "All sub-agents completed",
+        );
+      parentResume.respond({
+        stopReason: "end_turn",
+        text: "All done.",
+        toolRequests: [],
+      });
 
       // Verify yielded text is NOT shown initially
       const displayBuffer = driver.getDisplayBuffer();

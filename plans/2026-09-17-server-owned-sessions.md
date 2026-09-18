@@ -155,7 +155,7 @@ Move the self-contained IPC declarations into the server package and make `sdk/p
 
 # Stages
 
-> Status: stage 1 complete (see progress notes under the stage).
+> Status: stages 1-2 complete (see progress notes under each stage).
 > A previous unscoped attempt at this plan was left uncommitted in the working
 > tree; it is preserved in `git stash` as "wip broad session attempt
 > (pre stage-1)" and stage 1 was implemented fresh from `main`.
@@ -200,6 +200,24 @@ Move the self-contained IPC declarations into the server package and make `sdk/p
   - Defer-controlled deletion during preparation and parent deletion during child creation release resources without late registration/submission.
   - Result waiting works before initialization, after yield, after failure/deletion, and through compaction; unknown IDs fail explicitly.
   - Subtree abort/delete leaves unrelated roots untouched. Two Session instances reject each other's IDs and share no registry state.
+
+- Progress:
+  - [x] `Session` (`node/server/src/session.ts`) is the authoritative registry: `SessionThread` records (identity, parent, script invocation, last activity, and the resolved `SessionCreateOptions`), pending-creation `AbortController`s, per-thread `release` handles, retained result defers, docker teardown messages, and a tracked cleanup set drained by `dispose()`. It implements `ThreadManager`, so subagent tools and compact children route through it.
+  - [x] Construction goes through stage 1's `assembleThread`: Session builds the `ThreadInitialization` (fresh policy vs. fork) and forwards thread-id-tagged callbacks; supervisors, compactor and title generation stay in assembly rather than being duplicated.
+  - [x] `SessionHost.prepareThread(request, session, signal)` is the only editor seam. `NvimSessionHost` (`node/nvimclient/chat/session-host.ts`) owns auto-context/environment/system-info/system-prompt preparation, the per-thread `PreparedNvimContext` map the view wraps, the delivery-time resolver, `discoverHierarchy`, and approval capabilities (`rejectApprovals`, `isSandboxBypassed`, `toggleSandboxBypass`, `setSandboxBypassed`, `approveAllPendingInSubtree`). Bypass ancestry is resolved from session metadata (`getRootAncestorId`) plus a registered script-invocation sandbox root.
+  - [x] Session owns root/agent creation (`createRootThread`, `createAgentThread` via `host.getAgents`), child profile/environment derivation (`spawnThread` reads the parent record), script-thread creation, script titles, fork registration (`forkThread`), bootstrap submission (`inputMessages` submitted directly, no dispatch), labels before title scheduling, subtree abort, deletion and disposal.
+  - [x] `Chat` is now a view adapter: it constructs the host + Session, mirrors records into `threadWrappers` on `changed`/`removed`, forwards `filesSent`/`gitSent` into message view state, and delegates every lifecycle method (`createNewThread`, `createNewAgentThread`, `handleForkThread`, `spawnThread`, `spawnScriptThread`, `deleteThread`, `abortThread`, `awaitThreadResult`, `generateScriptTitle`, bypass/approval queries). Its own state is selection, expansion, viewed timestamps, archive navigation and buffers.
+  - [x] `createNvimThread`/`cloneFromNativeMessageIdx` are gone from `node/nvimclient/chat/thread.ts`; `NvimThread` wraps ready handles, reads bypass through the session, and `abortAndWait` goes through `chat.abortThread` (subtree abort with only the requested thread's unsent input returned).
+  - [x] Tests: `node/server/src/session.test.ts` (12 cases) covers construction/fork policy with no view, child profile/environment derivation, preparation failure + unknown-id rejection, Defer-gated deletion/abort during preparation with exactly-once release, parent deletion invalidating an in-flight child while other roots survive, compact children/forks, bootstrap input settling a yield with retained post-deletion results, approval rejection plus release when destruction throws, docker-source fork rejection, index-frozen forks, and two independent sessions. Root integration tests (supervisor wiring, fork thread/keybinding, compaction, scripts, buffer manager, archive) pass unchanged except where they constructed threads directly.
+
+- Decisions/deviations:
+  - The record retains its `SessionCreateOptions` (with the host-resolved `environmentConfig` substituted after preparation). Child derivation and fork policy read that, never a view wrapper.
+  - Forks capture the `nativeMessageIdx` at request time rather than snapshotting history: `Thread.clone` truncates to that index, so a source that advances during preparation cannot widen the fork. A source whose core is *replaced* (compaction) mid-preparation is not supported; the stashed pre-stage-1 attempt used a `captureFork` closure for that, which stage 1's assembly API does not expose.
+  - `abortThread` issues every `thread.abort()` before its first await, so a caller that dispatched an abort can observe it having landed synchronously (an existing subagent test depends on this).
+  - `PreparedThread.archiveBaseDir` lets the host say where archives go; tests point it at the scratch archive dir instead of the user's.
+  - Chat's `Msg` no longer has `thread-initialized`/`thread-error`: records are mirrored from session events instead of dispatched.
+  - Owner shutdown still does not call `Session.dispose()`; per the plan that consolidation belongs to stage 5.
+  - `node/nvimclient/chat/supervisor-wiring.test.ts` white-box cases that called `createNvimThread` now create threads through `session.createThread`/`forkThread`. One `spawn_subagents` expansion test was made deterministic (it pressed `=` while the row could still be the in-flight progress row).
 
 ## 3. Make Chat a presentation adapter
 

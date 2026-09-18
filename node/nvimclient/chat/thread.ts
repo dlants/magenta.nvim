@@ -6,46 +6,30 @@ import type {
 } from "@magenta/server";
 import {
   type AgentInput,
-  assembleThread,
   type CompactionRunId,
-  type ContextFileAccess,
   type ContextFiles,
-  clientToolCreator,
-  loadAgents,
   loopActiveTools,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
-  type PendingMessage,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type PreparedThreadContext,
-  parseCompact,
-  type ResolvedSubmission,
   renderPending,
   type Submission,
   type Thread,
-  type ThreadCallbacks,
   type ThreadCompactor,
-  type ThreadContextDelivery,
   type ThreadId,
   type ThreadSendResult,
-  type ThreadType,
   type ToolRequestId,
 } from "@magenta/server";
 import * as diff from "diff";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import type { Lsp } from "../capabilities/lsp.ts";
 import type { SandboxViolationHandler } from "../capabilities/sandbox-violation-handler.ts";
-import type { DockerSpawnConfig } from "../capabilities/thread-manager.ts";
 import type { FileUpdates } from "../context/context-manager.ts";
-import { createLocalEnvironment, type Environment } from "../environment.ts";
+import type { Environment } from "../environment.ts";
 import { displaySnapshotDiff } from "../nvim/displaySnapshotDiff.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 import type { MagentaOptions, Profile } from "../options.ts";
-import { getProvider } from "../providers/provider.ts";
-import type { SystemInfo, SystemPrompt } from "../providers/system-prompt.ts";
+import type { SystemInfo } from "../providers/system-prompt.ts";
 import type { RootMsg } from "../root-msg.ts";
-import type { Sandbox } from "../sandbox-manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type {
@@ -235,7 +219,6 @@ export type NvimThreadContext = {
   yieldSchema?: JSONSchemaType;
   scriptName?: string;
   environment: Environment;
-  onFileAdded: (path: AbsFilePath) => void;
   initialFiles?: ContextFiles;
   initialGitState?: GitState | undefined;
   subagentConfig?: SubagentConfig;
@@ -263,14 +246,10 @@ export class NvimThread {
   private myDispatch: Dispatch<Msg>;
   private lastAppliedTitle: string | undefined;
   public sandboxViolationHandler: SandboxViolationHandler | undefined;
-  public sandboxBypassed = false;
 
+  /** Bypass belongs to the root of the thread tree, which the session knows. */
   get isSandboxBypassed(): boolean {
-    const sandboxRoot = this.context.getSandboxRoot?.();
-    if (sandboxRoot) return sandboxRoot.isSandboxBypassed;
-    const parent = this.context.getParentThread?.();
-    if (parent) return parent.isSandboxBypassed;
-    return this.sandboxBypassed;
+    return this.context.chat.isSandboxBypassed(this.id);
   }
 
   constructor(
@@ -716,24 +695,9 @@ export class NvimThread {
         this.state.compactionViewState[msg.runId] = vs;
         return;
       }
-      case "toggle-sandbox-bypass": {
-        let root: NvimThread = this;
-        let parentThread = root.context.getParentThread?.();
-        while (parentThread) {
-          root = parentThread;
-          parentThread = root.context.getParentThread?.();
-        }
-        const sandboxRoot = root.context.getSandboxRoot?.();
-        if (sandboxRoot?.toggle) {
-          sandboxRoot.toggle();
-        } else {
-          root.sandboxBypassed = !root.sandboxBypassed;
-        }
-        if (root.isSandboxBypassed) {
-          root.context.chat.approveAllPendingInSubtree(root.id);
-        }
+      case "toggle-sandbox-bypass":
+        this.context.chat.toggleSandboxBypass(this.id);
         return;
-      }
 
       case "fork-message":
         // Handled at the Magenta dispatch level; ignored here.
@@ -744,9 +708,11 @@ export class NvimThread {
     }
   }
 
+  /** Abort this thread and its descendants. Only this thread's unsent input
+   * comes back to the input buffer; a descendant's input is not the user's to
+   * resume here. */
   async abortAndWait(): Promise<void> {
-    this.sandboxViolationHandler?.rejectAll();
-    const { unsent } = await this.thread.abort();
+    const { unsent } = await this.context.chat.abortThread(this.id);
     const isUserFacing =
       this.thread.threadType === "root" ||
       this.thread.threadType === "docker_root";
@@ -758,321 +724,4 @@ export class NvimThread {
       msg: { type: "append-to-input", threadId: this.id, text },
     });
   }
-}
-
-/** Prepare the editor-dependent dependencies a thread needs, hand them to
- * server-side assembly, and wrap the resulting handles for the UI. Everything
- * server-typed (supervisor ordering, compactor wiring, title generation) lives
- * in `assembleThread`; this adapter only supplies collaborators. */
-export function createNvimThread(
-  id: ThreadId,
-  initialization:
-    | { type: "fresh"; threadType: ThreadType }
-    | {
-        type: "fork";
-        sourceThread: Thread;
-        nativeMessageIdx: NativeMessageIdx;
-      },
-  systemPrompt: SystemPrompt,
-  context: NvimThreadContext,
-  /** Only consulted for fresh conversation threads; a fork inherits the
-   * source's compaction settings and a compaction thread has none. */
-  policy: {
-    docker?: DockerSpawnConfig;
-    onDockerProgress?: (message: string) => void;
-    autoCompactThreshold?: number;
-    autoCompactPrompt?: string;
-  } = {},
-): NvimThread {
-  let wrapper!: NvimThread;
-  let threadRef: Thread | undefined;
-  const callbacks: ThreadCallbacks = {
-    onUpdate: () => wrapper.onThreadUpdate(),
-    onFileAdded: context.onFileAdded,
-    onFilesSent: (updates) =>
-      wrapper.recordMessageViewState({ contextUpdates: updates }),
-    onGitSent: (update) =>
-      wrapper.recordMessageViewState({ gitUpdate: update }),
-  };
-  // Neither construction path invokes callbacks or resolves submissions. These
-  // closures bind to the completed objects before any asynchronous work starts.
-  const archiveOptions = context.scriptName
-    ? { archiveOptions: { scriptName: context.scriptName } }
-    : {};
-  const { thread, compactor } = assembleThread({
-    id,
-    initialization:
-      initialization.type !== "fresh"
-        ? initialization
-        : initialization.threadType === "compact"
-          ? { type: "fresh", threadType: "compact", ...archiveOptions }
-          : {
-              type: "fresh",
-              threadType: initialization.threadType,
-              ...archiveOptions,
-              policy: {
-                ...(policy.docker
-                  ? {
-                      docker: {
-                        ...policy.docker,
-                        ...(policy.onDockerProgress
-                          ? { onProgress: policy.onDockerProgress }
-                          : {}),
-                      },
-                    }
-                  : {}),
-                autoCompactThreshold:
-                  policy.autoCompactThreshold ??
-                  context.options.autoCompactThreshold,
-                autoCompactPrompt:
-                  policy.autoCompactPrompt ?? context.options.autoCompactPrompt,
-              },
-            },
-    context: prepareThreadContext(
-      systemPrompt,
-      context,
-      () => threadRef as Thread,
-    ),
-    callbacks,
-  });
-  threadRef = thread;
-  wrapper = new NvimThread(id, thread, compactor, context);
-  return wrapper;
-}
-
-/** The root adapter: editor-backed collaborators in server-typed shape. */
-function prepareThreadContext(
-  systemPrompt: SystemPrompt,
-  context: NvimThreadContext,
-  getThread: () => Thread,
-): PreparedThreadContext {
-  const env = context.environment;
-  const isDocker = env.environmentConfig.type === "docker";
-  const cwd = isDocker ? env.cwd : context.cwd;
-  const homeDir = isDocker ? env.homeDir : context.homeDir;
-  const contextDelivery: ThreadContextDelivery = {
-    ...(context.initialFiles ? { initialFiles: context.initialFiles } : {}),
-    initialGitState: context.initialGitState,
-  };
-  const getAgents = () =>
-    loadAgents({
-      cwd,
-      logger: context.nvim.logger,
-      options: context.options,
-    });
-  const getScriptRunner = () => context.chat.scriptRunner;
-  const maxConcurrentSubagents = context.options.maxConcurrentSubagents || 3;
-  const maxConcurrentFastSubagents =
-    context.options.maxConcurrentFastSubagents || 8;
-  return {
-    logger: context.nvim.logger,
-    profile: context.profile,
-    cwd,
-    homeDir,
-    contextDelivery,
-    ...(context.subagentConfig
-      ? { subagentConfig: context.subagentConfig }
-      : {}),
-    systemPrompt,
-    systemInfo: context.systemInfo,
-    mcpToolManager: context.mcpToolManager,
-    threadManager: context.chat,
-    getScriptRunner,
-    fileIO: env.fileIO,
-    gitClient: env.gitClient,
-    clientToolCreator: clientToolCreator({
-      logger: context.nvim.logger,
-      lspClient: env.lspClient,
-      ...(env.luaExecutor !== undefined
-        ? { luaExecutor: env.luaExecutor }
-        : {}),
-      mcpToolManager: context.mcpToolManager,
-      cwd,
-      homeDir,
-      maxConcurrentSubagents,
-      maxConcurrentFastSubagents,
-      fileIO: env.fileIO,
-      shell: env.shell,
-      threadManager: context.chat,
-      getScriptRunner,
-      getAgents,
-    }),
-    availableCapabilities: env.availableCapabilities,
-    environmentConfig: env.environmentConfig,
-    ...(context.options.dockerfile
-      ? { subagentDockerfile: context.options.dockerfile }
-      : {}),
-    ...(context.yieldSchema ? { yieldSchema: context.yieldSchema } : {}),
-    getAgents,
-    provider: getProvider(context.nvim, context.profile),
-    resolve: (message: PendingMessage) =>
-      resolveSubmission(
-        message,
-        context,
-        () => getThread().contextFiles,
-        getThread().threadType !== "compact",
-      ),
-  };
-}
-
-async function resolveSubmission(
-  message: PendingMessage,
-  context: NvimThreadContext,
-  getContextFileAccess: () => ContextFileAccess,
-  canCompact: boolean,
-): Promise<ResolvedSubmission> {
-  // A compact thread has no compactor — it *is* a compaction — so
-  // `@compact` typed into one is ordinary text.
-  const { compact, rest } = canCompact
-    ? parseCompact(message)
-    : { compact: false, rest: message };
-  const { processedText, additionalContent, reminders } =
-    await context.commandRegistry.processMessage(rest, {
-      nvim: context.nvim,
-      cwd: context.environment.cwd,
-      homeDir: context.environment.homeDir,
-      fileSupervisor: getContextFileAccess(),
-      options: context.options,
-    });
-  const messages: AgentInput[] = [
-    {
-      type: "text",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      text: processedText,
-    },
-  ];
-  for (const content of additionalContent) {
-    if (
-      content.type === "text" ||
-      content.type === "image" ||
-      content.type === "document"
-    ) {
-      messages.push(content);
-    }
-  }
-  return { compact, messages, reminders };
-}
-
-/** Build an independent fork of `sourceThread` frozen at `nativeMessageIdx`.
- * Native and context histories are cloned synchronously. The source
- * is not aborted, no auto-context is re-resolved, and no system prompt is
- * regenerated. The result is a new NvimThread with its own environment and
- * UI state, ready to continue from the snapshot. */
-export async function cloneFromNativeMessageIdx(args: {
-  sourceThread: NvimThread;
-  newThreadId: ThreadId;
-  nativeMessageIdx: NativeMessageIdx;
-  chat: Chat;
-  mcpToolManager: MCPToolManagerImpl;
-  dispatch: Dispatch<RootMsg>;
-  nvim: Nvim;
-  cwd: NvimCwd;
-  homeDir: HomeDir;
-  lsp: Lsp;
-  sandbox: Sandbox;
-  getOptions: () => MagentaOptions;
-  getDisplayWidth: () => number;
-  onFileAdded: (path: AbsFilePath) => void;
-}): Promise<NvimThread> {
-  const {
-    sourceThread,
-    newThreadId,
-    nativeMessageIdx,
-    chat,
-    mcpToolManager,
-    dispatch,
-    nvim,
-    cwd,
-    homeDir,
-    lsp,
-    sandbox,
-    getOptions,
-    getDisplayWidth,
-  } = args;
-
-  const sourceEnvConfig = sourceThread.context.environment.environmentConfig;
-  if (sourceEnvConfig.type !== "local") {
-    throw new Error(
-      `Thread.cloneFromNativeMessageIdx only supports local-source forks for MVP (got ${sourceEnvConfig.type}). Docker-source forks are a follow-up.`,
-    );
-  }
-
-  const bypassRef = { get: () => false as boolean };
-
-  const environment = createLocalEnvironment({
-    nvim,
-    lsp,
-    cwd,
-    homeDir,
-    getOptions,
-    threadId: newThreadId,
-    sandbox,
-    onPendingChange: () =>
-      dispatch({
-        type: "thread-msg",
-        id: newThreadId,
-        msg: { type: "permission-pending-change" },
-      }),
-    isBypassed: () => bypassRef.get(),
-  });
-
-  const sourceServerThread = sourceThread.thread;
-  const profile = sourceThread.context.profile;
-  // No awaits above: native history and delivery must describe the same instant.
-  const thread = createNvimThread(
-    newThreadId,
-    { type: "fork", sourceThread: sourceServerThread, nativeMessageIdx },
-    sourceServerThread.systemPrompt,
-    {
-      dispatch,
-      chat,
-      mcpToolManager,
-      profile,
-      commandRegistry: sourceThread.context.commandRegistry,
-      onFileAdded: args.onFileAdded,
-      nvim,
-      cwd,
-      homeDir,
-      options: getOptions(),
-      getDisplayWidth,
-      environment,
-      systemInfo: sourceServerThread.systemInfo,
-      ...(sourceThread.context.yieldSchema
-        ? { yieldSchema: sourceThread.context.yieldSchema }
-        : {}),
-      ...(sourceThread.context.scriptName
-        ? { scriptName: sourceThread.context.scriptName }
-        : {}),
-      ...(sourceThread.context.subagentConfig
-        ? { subagentConfig: sourceThread.context.subagentConfig }
-        : {}),
-    },
-  );
-
-  thread.sandboxBypassed = sourceThread.isSandboxBypassed;
-  bypassRef.get = () => thread.isSandboxBypassed;
-
-  thread.rebuildToolResultMap();
-
-  for (const [idxStr, viewState] of Object.entries(
-    sourceThread.state.messageViewState,
-  )) {
-    const idx = Number(idxStr);
-    if (idx <= nativeMessageIdx) {
-      thread.state.messageViewState[idx] = {
-        ...(viewState.contextUpdates
-          ? { contextUpdates: { ...viewState.contextUpdates } }
-          : {}),
-        ...(viewState.gitUpdate ? { gitUpdate: viewState.gitUpdate } : {}),
-        ...(viewState.expandedUpdates
-          ? { expandedUpdates: { ...viewState.expandedUpdates } }
-          : {}),
-        ...(viewState.expandedContent
-          ? { expandedContent: { ...viewState.expandedContent } }
-          : {}),
-      };
-    }
-  }
-
-  return thread;
 }
