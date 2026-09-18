@@ -54,10 +54,13 @@ import {
 } from "./thread-core.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import {
+  coreLivenessCheck,
   type RequestAction,
   type RequestContext,
+  type SubmissionGuard,
   SupervisorChain,
   type SuspendReason,
+  submissionGuard,
   type ThreadSupervisor,
 } from "./thread-supervisor.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
@@ -255,8 +258,9 @@ export class Thread {
       chain = new SupervisorChain(() => this.orderedSupervisors(core), {
         logger: this.context.logger,
         guard: () => this.turnGuard(core),
-        coreIsCurrent: () =>
-          this.core === core && core.isActive && !this.destroyed,
+        coreIsCurrent: coreLivenessCheck(
+          () => this.core === core && core.isActive && !this.destroyed,
+        ),
         countTokens: () =>
           core.manager.countTokens?.() ?? Promise.resolve(undefined),
       });
@@ -830,7 +834,7 @@ export class Thread {
   /** The submission guard narrowed to the core the caller is running against:
    * a turn cannot outlive the core it was issued on, even though its
    * submission can (compaction replaces the core mid-submission). */
-  private turnGuard(core: ThreadCore = this.core): () => boolean {
+  private turnGuard(core: ThreadCore = this.core): SubmissionGuard {
     const generation = this.generation;
     // With no live submission (a turn driven directly against the core) there
     // is nothing to go stale relative to, so the guard is core liveness
@@ -838,7 +842,7 @@ export class Thread {
     const live = generation
       ? () => this.isCurrent(generation)
       : () => !this.destroyed;
-    return () => live() && this.core === core && core.isActive;
+    return submissionGuard(() => live() && this.core === core && core.isActive);
   }
   private async runLoop(
     messages: AgentInput[],

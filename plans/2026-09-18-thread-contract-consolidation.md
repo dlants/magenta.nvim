@@ -167,6 +167,14 @@ Decisions / deviations:
 - The two thread-owned ordering facts that used to sit between the chat and context supervisor loops (publishing `core.preflightTokenCount`, and raising the `yield` suspension for a completed `yield_to_parent`) are now an explicit `gate` pseudo-supervisor inserted at that position in `orderedSupervisors(core)`.
 - `onYield` is not guarded inside the chain (matching the previous loop); `resolveYield` checks the guard once after the chain returns. A throwing `onYield` is now logged and treated as `none` rather than failing the submission — the plan's centralized error logging applied to a hook that previously had none.
 
+Review follow-ups (stage 2):
+
+- One declaration for the combined before-request shape: `CombinedRequestAction` (thread-supervisor.ts) is canonical and `agent.ts`'s `BeforeRequestDecision` is an alias of it, so the runner's input and the chain's output cannot drift.
+- `SupervisorChain` no longer claims `implements ThreadSupervisor` (a vacuous claim, since every member is optional, and misleading because the chain is not nestable as a member). It implements a new `SupervisorFanOut` interface describing the combined surface, and `ThreadCoreCallbacks.supervisor` is `Pick<SupervisorFanOut, "onToolApplied" | "onToolResults" | "beforeRequest">` — exactly what core drives.
+- The two liveness predicates are branded: `SubmissionGuard` (per-hook, submission-scoped) and `CoreLivenessCheck` (core liveness, for hooks recording what a turn already did), minted by `submissionGuard`/`coreLivenessCheck`, so `forEach` call sites cannot silently swap them.
+- Added coverage in `thread-supervisor.test.ts`: a throwing `onYield` is skipped and a later `reject` still wins; a lone throwing `onYield` degrades to accept rather than wedging the turn; a chat supervisor's `onToolResults` stop beats the yield gate (the ordering invariant that moved from a hard-coded step into a chain member); a throwing `hasPendingContent` is skipped and a later member's `true` still issues the request.
+- `onEndTurnWithoutYield` being guarded by the submission guard is intentional: a preempting submission should truncate the remaining end-turn nudges, since any suspension or nudge they produce belongs to a turn that is no longer live. Left uncovered by a dedicated test; the abort/preemption suites in `thread.test.ts` pin the surrounding behaviour.
+
 ## thread status
 
 - Goal: one `ThreadStatus` union; `lastSubmissionResult`, `yieldState`, `resultSettled`, `destroyed` removed; `finish()` loses its `displayResult` parameter and unclaimed suspensions surface as `{type:"stopped"}`.

@@ -18,7 +18,10 @@ import type {
   ToolInvocationState,
   ToolResultsHook,
 } from "./thread-api.ts";
-import type { SuspendReason } from "./thread-supervisor.ts";
+import type {
+  CombinedRequestAction,
+  SuspendReason,
+} from "./thread-supervisor.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 
 export interface AgentContext {
@@ -242,9 +245,9 @@ export function runAgentLoop(
   };
 }
 
-export type BeforeRequestDecision = {
-  injections: AgentInput[];
-} & ({ type: "proceed" } | { type: "suspend"; reason: SuspendReason });
+/** The combined decision the supervisor chain produces. One declaration, so
+ * the runner's input and the chain's output cannot drift. */
+export type BeforeRequestDecision = CombinedRequestAction;
 
 function completeToolResults(
   requested: ReadonlyArray<RequestedTool>,

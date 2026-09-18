@@ -36,7 +36,7 @@ import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
 import type { SendResult, ToolInvocationState } from "./thread-api.ts";
 import {
   EditedFilesSupervisor,
-  type SupervisorChain,
+  type SupervisorFanOut,
   SystemInfoSupervisor,
 } from "./thread-supervisor.ts";
 import { executeToolBatch } from "./tool-executor.ts";
@@ -70,8 +70,12 @@ export type ContextDelivery = {
 
 export interface ThreadCoreCallbacks {
   onUpdate: () => void;
-  /** The single fan-out point to the thread's supervisors. */
-  supervisor: SupervisorChain;
+  /** The single fan-out point to the thread's supervisors. Narrowed to the
+   * three hooks core actually drives. */
+  supervisor: Pick<
+    SupervisorFanOut,
+    "onToolApplied" | "onToolResults" | "beforeRequest"
+  >;
 }
 
 export type ThreadCoreSeed = {

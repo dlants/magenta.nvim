@@ -140,15 +140,52 @@ export type CombinedRequestAction = { injections: AgentInput[] } & (
   | { type: "suspend"; reason: SuspendReason }
 );
 
+/** Answers "is the submission this hook was started for still the live one".
+ * Obtained fresh per hook and checked between members. */
+export type SubmissionGuard = (() => boolean) & {
+  readonly __guard: "submission";
+};
+
+/** Answers the looser "is this core still the thread's core". True for a turn
+ * that is unwinding under an abort, so hooks that record what already
+ * happened keep running. */
+export type CoreLivenessCheck = (() => boolean) & { readonly __guard: "core" };
+
+export function submissionGuard(check: () => boolean): SubmissionGuard {
+  return check as SubmissionGuard;
+}
+
+export function coreLivenessCheck(check: () => boolean): CoreLivenessCheck {
+  return check as CoreLivenessCheck;
+}
+
+/** The chain's own surface. Deliberately not `ThreadSupervisor`: the chain
+ * combines its members' decisions, so its before-request hook returns a
+ * `CombinedRequestAction` that no single supervisor can express, and it is
+ * not itself nestable as a member. */
+export interface SupervisorFanOut {
+  onAgentLoopStart(nativeMessageIdx: NativeMessageIdx): void;
+  onAgentLoopStop(nativeMessageIdx: NativeMessageIdx): void;
+  onToolApplied: OnToolAppliedHook;
+  onToolResults(
+    results: ToolResults,
+    nativeMessageIdx: NativeMessageIdx,
+  ): SuspendReason | undefined;
+  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction;
+  onYield(value: YieldValue): Promise<YieldAction>;
+  hasPendingContent(): Promise<boolean>;
+  beforeRequest(facts: RequestFacts): Promise<CombinedRequestAction>;
+}
+
 export type SupervisorChainDeps = {
   logger: Logger;
   /** Called once at the start of a hook; the guard it returns is checked
    * between members so a submission that lands mid-fan-out stops the rest. */
-  guard: () => () => boolean;
+  guard: () => SubmissionGuard;
   /** Looser liveness for the hooks that record what the turn already did —
    * loop start/stop, applied tools, tool results. They must still run for a
    * turn that is unwinding under an abort. */
-  coreIsCurrent: () => boolean;
+  coreIsCurrent: CoreLivenessCheck;
   /** Supplied lazily because only a declaring member forces the count. */
   countTokens: () => Promise<number | undefined>;
 };
@@ -157,7 +194,7 @@ export type SupervisorChainDeps = {
  * combination rules — first suspend wins, injections concatenate in member
  * order, end-turn texts join, first accept/reject wins — plus the guarding and
  * error logging that used to be repeated per hook. */
-export class SupervisorChain implements ThreadSupervisor {
+export class SupervisorChain implements SupervisorFanOut {
   constructor(
     private readonly members: () => readonly ThreadSupervisor[],
     private readonly deps: SupervisorChainDeps,
@@ -171,7 +208,7 @@ export class SupervisorChain implements ThreadSupervisor {
 
   private forEach(
     hook: string,
-    isCurrent: () => boolean,
+    isCurrent: SubmissionGuard | CoreLivenessCheck,
     visit: (supervisor: ThreadSupervisor) => void,
   ): void {
     for (const supervisor of this.members()) {
