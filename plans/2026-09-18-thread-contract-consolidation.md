@@ -144,6 +144,9 @@ Decisions / deviations:
 - The separate `interruption` controller is gone: one controller per generation is both the preemption signal and the signal handed to the compactor. `destroy()` now cancels the live generation instead of interrupting, preserving compaction cancellation on destroy.
 - `resetting` + `resetPromise` collapse into one `reset: Promise<ThreadCore> | undefined`, which is both the re-entrancy guard and what a preempting submission awaits.
 - `test-helpers.resetThread` no longer calls `interrupt()`; it cancels the generation and clears it.
+- Review follow-ups: `replaceCore` now performs the re-entrancy check synchronously before creating the reset promise, so a rejected second call can no longer displace the live one (`resetCore` lost its own check); `Generation` carries a branded `id` minted only by `Thread.mintGeneration`; `turnGuard` no longer returns a permanently-false guard when there is no live generation — with no submission to be stale relative to it falls back to core liveness (some tests drive `core.runTurn` directly, outside any submission).
+- Deferred: modelling `generation` + aborted as a discriminated submission state (`idle`/`running`/`aborting`) is stage 3's `ThreadStatus` work, so `loopState` keeps decoding the pair for now.
+- Added coverage: `thread.test.ts > submission generations > rejects a second core replacement while one is in flight`; `compaction/index.test.ts > submission-owned compaction signal` (abort cancels the signal handed to `compactor.run`; a reset during compaction cancels it and leaves the thread at rest).
 - `compaction/index.test.ts` drove the compactor directly with `thread["interruption"].signal`, which no longer exists while idle. Those tests now own an `AbortController` and abort it alongside the thread action they exercise; the real abort/destroy→compaction linkage stays covered by the submission-driven compaction tests.
 
 ## supervisor chain

@@ -148,7 +148,11 @@ type FlushedQueue =
 /** One live submission's identity. Every staleness check is "am I still the
  * live generation": the generation is cleared when its submission finishes and
  * cancelled by abort, destroy or a preempting submission. */
+type GenerationId = number & { readonly __generation: unique symbol };
 type Generation = {
+  /** Minted only by Thread, so a foreign object cannot pose as a
+   * generation. */
+  readonly id: GenerationId;
   /** Cancelled by abort/destroy/preemption; passed to the compactor. */
   readonly controller: AbortController;
 };
@@ -623,7 +627,7 @@ export class Thread {
     const wasBusy = this.isBusy;
     this.cancelSubmission();
     if (wasBusy) this.drainQueues();
-    const generation: Generation = { controller: new AbortController() };
+    const generation = this.mintGeneration();
     this.generation = generation;
     const signal = generation.controller.signal;
     const isCurrent = () => this.isCurrent(generation);
@@ -875,6 +879,13 @@ export class Thread {
    * generation so a late continuation cannot act on the replacement
    * submission. */
   private generation: Generation | undefined;
+  private nextGenerationId = 0;
+  private mintGeneration(): Generation {
+    return {
+      id: this.nextGenerationId++ as GenerationId,
+      controller: new AbortController(),
+    };
+  }
   private lastSubmissionResult: SendResult | undefined;
   private cancelSubmission(): void {
     const generation = this.generation;
@@ -894,11 +905,13 @@ export class Thread {
    * submission can (compaction replaces the core mid-submission). */
   private turnGuard(core: ThreadCore = this.core): () => boolean {
     const generation = this.generation;
-    return () =>
-      generation !== undefined &&
-      this.isCurrent(generation) &&
-      this.core === core &&
-      core.isActive;
+    // With no live submission (a turn driven directly against the core) there
+    // is nothing to go stale relative to, so the guard is core liveness
+    // alone rather than a permanently false check.
+    const live = generation
+      ? () => this.isCurrent(generation)
+      : () => !this.destroyed;
+    return () => live() && this.core === core && core.isActive;
   }
   private async runLoop(
     messages: AgentInput[],
@@ -1160,6 +1173,9 @@ export class Thread {
     options: Parameters<Thread["resetCore"]>[0],
     isCurrent: () => boolean = () => true,
   ): Promise<ThreadCore> {
+    // Synchronous re-entrancy guard: a second caller must not be able to
+    // overwrite the in-flight reset with its own rejected promise.
+    if (this.reset) throw new Error("Thread reset already in progress");
     const reset = this.resetCore(options, isCurrent);
     this.reset = reset;
     try {
@@ -1186,7 +1202,6 @@ export class Thread {
       throw new Error(
         "This thread's container has been torn down. Cannot reset.",
       );
-    if (this.reset) throw new Error("Thread reset already in progress");
     const initialFiles = buildClonedFiles(this.contextFiles.files);
     await this.core.dispose();
     this.assertUsable();

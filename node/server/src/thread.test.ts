@@ -1960,6 +1960,24 @@ describe("submission generations", () => {
     stream.finishResponse("end_turn");
     expect((await second).type).toBe("completed");
   });
+  it("rejects a second core replacement while one is in flight", async () => {
+    const { core } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("overlapping-reset"),
+    );
+    const options = { seed: [], archive: { type: "none" as const } };
+    const first = core["replaceCore"](options);
+    const inflight = core["reset"];
+    expect(inflight).toBeDefined();
+    // The guard is synchronous, so the rejected second call cannot have
+    // displaced the live reset even before anything is awaited.
+    const second = core["replaceCore"](options);
+    expect(core["reset"]).toBe(inflight);
+    await expect(second).rejects.toThrow("reset already in progress");
+    await first;
+    expect(core["reset"]).toBeUndefined();
+    await core.destroy();
+  });
   it("settles the lifecycle result when destroy lands mid-turn", async () => {
     const { core, mockClient } = createAgentWithMock();
     const sent = core.submit({

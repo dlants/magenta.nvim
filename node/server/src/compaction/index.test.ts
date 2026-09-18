@@ -823,3 +823,76 @@ describe("complete submission ownership", () => {
     await thread.destroy();
   });
 });
+describe("submission-owned compaction signal", () => {
+  const text = (value: string) => ({
+    type: "text" as const,
+    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    text: value,
+  });
+  const startCompactingThread = (id: string) => {
+    const entered = new Defer<void>();
+    const outcome = new Defer<CompactionOutcome>();
+    let signal: AbortSignal | undefined;
+    let compact = true;
+    const { core: thread } = createAgentWithMock(
+      {
+        chatSupervisors: [
+          {
+            onBeforeRequest: async () => {
+              if (!compact) return { type: "none" };
+              compact = false;
+              return {
+                type: "suspend",
+                reason: { kind: "compact", nextPrompt: undefined },
+              };
+            },
+          },
+        ],
+        compactor: {
+          run: (_messages, _prompt, runSignal) => {
+            signal = runSignal;
+            entered.resolve();
+            return outcome.promise;
+          },
+        },
+      },
+      uniqueThreadId(id),
+    );
+    const sent = thread.submit({
+      type: "resolved",
+      messages: [text("history")],
+    });
+    return {
+      thread,
+      sent,
+      entered,
+      outcome,
+      signalOf: () => signal,
+    };
+  };
+  it("abort cancels the signal handed to the compactor", async () => {
+    const { thread, sent, entered, outcome, signalOf } = startCompactingThread(
+      "compaction-signal-abort",
+    );
+    await entered.promise;
+    expect(signalOf()?.aborted).toBe(false);
+    await thread.abort();
+    expect(signalOf()?.aborted).toBe(true);
+    outcome.resolve({ type: "aborted" });
+    expect(await sent).toEqual({ type: "aborted" });
+    expect(thread.isBusy).toBe(false);
+    await thread.destroy();
+  });
+  it("a reset during compaction cancels it and leaves the thread at rest", async () => {
+    const { thread, sent, entered, outcome, signalOf } = startCompactingThread(
+      "compaction-signal-reset",
+    );
+    await entered.promise;
+    await resetThread(thread, { seed: [], archive: { type: "none" } });
+    outcome.resolve({ type: "aborted" });
+    expect(signalOf()?.aborted).toBe(true);
+    expect(await sent).toEqual({ type: "aborted" });
+    expect(thread.isBusy).toBe(false);
+    await thread.destroy();
+  });
+});
