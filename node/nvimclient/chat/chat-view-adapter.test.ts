@@ -123,3 +123,20 @@ it("a thread that fails to construct takes the view out of thread-selected", asy
     expect(chat.threadWrappers[failedId]?.state).toBe("error");
   });
 });
+
+it("a disposed view observes no further session events", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    const chat = driver.magenta.chat;
+    const session = chat.session;
+    const existingId = chat.getActiveThread().id;
+    chat.dispose();
+    expect(chat["threadViews"].size).toBe(0);
+    // Session mutations after dispose must not repopulate the view cache.
+    const newId = await session.createRootThread();
+    expect(chat["threadViews"].size).toBe(0);
+    session.deleteThread(newId);
+    session.deleteThread(existingId);
+    expect(chat["threadViews"].size).toBe(0);
+  });
+});

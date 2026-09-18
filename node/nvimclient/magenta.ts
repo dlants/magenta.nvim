@@ -1158,8 +1158,13 @@ ${lines.join("\n")}
   destroy() {
     this.scriptManager.dispose();
     this.chat.dispose();
+    // The session must be disposed even if script teardown fails, otherwise
+    // in-flight threads never settle.
     void this.scripts
       .dispose()
+      .catch((e: Error) =>
+        this.nvim.logger.error(`Error disposing scripts: ${e.message}`),
+      )
       .then(() => this.session.dispose())
       .catch((e: Error) =>
         this.nvim.logger.error(`Error disposing session: ${e.message}`),

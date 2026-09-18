@@ -1016,6 +1016,21 @@ it("owner shutdown disposes the scripts and the session", async () => {
     },
   );
 });
+it("a failing script disposal still disposes the session", async () => {
+  await withDriver({}, async (driver) => {
+    const { scripts, session } = driver.magenta;
+    const realDispose = scripts.dispose.bind(scripts);
+    scripts.dispose = async () => {
+      await realDispose();
+      throw new Error("script teardown blew up");
+    };
+    expect(session.listThreads().length).toBeGreaterThan(0);
+    driver.magenta.destroy();
+    await pollUntil(() => session.listThreads().length === 0);
+    await expect(session.createRootThread()).rejects.toThrow("disposed");
+  });
+});
+
 it("dispose terminates running invocations and rejects new ones", async () => {
   await withDriver(
     {

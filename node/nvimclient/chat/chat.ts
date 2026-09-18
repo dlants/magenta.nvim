@@ -188,15 +188,15 @@ export class Chat {
     },
     /** The session this view adapts. Magenta owns it; the view cache is
      * seeded from whatever records already exist. */
-    session: { session: Session; host: NvimSessionHost },
+    { session, host }: { session: Session; host: NvimSessionHost },
   ) {
     this.state = {
       state: "thread-overview",
       activeThreadId: undefined,
     };
 
-    this.host = session.host;
-    this.session = session.session;
+    this.host = host;
+    this.session = session;
     this.session.on("changed", this.syncThread);
     this.session.on("removed", this.removeThreadView);
     this.session.on("filesSent", this.onFilesSent);
