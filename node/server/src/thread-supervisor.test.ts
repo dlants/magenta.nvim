@@ -82,6 +82,88 @@ describe("Thread supervisor arbitration", () => {
     expect(mockClient.streams).toHaveLength(0);
   });
 
+  it("keeps injections in supervisor order with the user's own content last", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        { onBeforeRequest: () => Promise.resolve(injectText("first")) },
+        { onBeforeRequest: () => Promise.resolve(injectText("second")) },
+      ],
+    });
+    const turn = core.submit({
+      type: "resolved",
+      messages: userInput("hello"),
+    });
+    const stream = await mockClient.awaitStream();
+    const body = JSON.stringify(stream.messages);
+    expect(body.indexOf("first")).toBeLessThan(body.indexOf("second"));
+    expect(body.indexOf("second")).toBeLessThan(body.indexOf("hello"));
+    stream.finishResponse("end_turn");
+    await turn;
+  });
+  it("lets the first before-request suspension win, with later hooks told it suspended", async () => {
+    const observed: (string | undefined)[] = [];
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: () =>
+            Promise.resolve({
+              type: "suspend",
+              reason: { kind: "stop", message: "first" },
+            }),
+        },
+        {
+          onBeforeRequest: (ctx: RequestContext) => {
+            observed.push(
+              ctx.status === "suspended" ? ctx.reason.kind : undefined,
+            );
+            return Promise.resolve({
+              type: "suspend",
+              reason: { kind: "stop", message: "second" },
+            });
+          },
+        },
+      ],
+    });
+    expect(
+      await core.submit({ type: "resolved", messages: userInput("hello") }),
+    ).toEqual({ type: "empty" });
+    expect(core.loopState).toMatchObject({
+      type: "idle",
+      lastResult: {
+        type: "suspended",
+        reason: { kind: "stop", message: "first" },
+      },
+    });
+    expect(observed).toEqual(["stop"]);
+    expect(mockClient.streams).toHaveLength(0);
+  });
+  it("logs a supervisor that throws in every hook without wedging the turn", async () => {
+    const boom = () => {
+      throw new Error("boom");
+    };
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onAgentLoopStart: boom,
+          onAgentLoopStop: boom,
+          onBeforeRequest: boom,
+          onToolResults: boom,
+          onEndTurnWithoutYield: boom,
+          onToolApplied: boom,
+        },
+        { onBeforeRequest: () => Promise.resolve(injectText("survivor")) },
+      ],
+    });
+    const turn = core.submit({
+      type: "resolved",
+      messages: userInput("hello"),
+    });
+    const stream = await mockClient.awaitStream();
+    expect(JSON.stringify(stream.messages)).toContain("survivor");
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    expect(await turn).toMatchObject({ type: "completed" });
+  });
   it("lets the first suspension win over an end-turn nudge and later suspension", async () => {
     const { core, mockClient } = createAgentWithMock({
       chatSupervisors: [

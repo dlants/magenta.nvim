@@ -4,7 +4,6 @@ import {
   runAgentLoop,
   type ToolExecution,
 } from "./agent.ts";
-import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
 import type { FileIO } from "./capabilities/file-io.ts";
 import type { GitClient, GitState } from "./capabilities/git-client.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
@@ -34,13 +33,10 @@ import {
   GitSupervisor,
 } from "./supervisors/git-supervisor.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
-import type {
-  SendResult,
-  ToolInvocationState,
-  ToolResultsHook,
-} from "./thread-api.ts";
+import type { SendResult, ToolInvocationState } from "./thread-api.ts";
 import {
   EditedFilesSupervisor,
+  type SupervisorChain,
   SystemInfoSupervisor,
 } from "./thread-supervisor.ts";
 import { executeToolBatch } from "./tool-executor.ts";
@@ -74,9 +70,8 @@ export type ContextDelivery = {
 
 export interface ThreadCoreCallbacks {
   onUpdate: () => void;
-  onBeforeRequest: () => Promise<BeforeRequestDecision>;
-  onToolResults: ToolResultsHook;
-  onToolApplied: OnToolAppliedHook;
+  /** The single fan-out point to the thread's supervisors. */
+  supervisor: SupervisorChain;
 }
 
 export type ThreadCoreSeed = {
@@ -245,7 +240,7 @@ export class ThreadCore {
       edlRegisters: this.edlRegisters,
       onToolApplied: (absFilePath, tool, fileTypeInfo) => {
         if (this.isActive)
-          callbacks.onToolApplied({
+          callbacks.supervisor.onToolApplied({
             absFilePath,
             tool,
             fileTypeInfo,
@@ -354,6 +349,17 @@ export class ThreadCore {
     return this.resultMessageIdx;
   }
 
+  private async beforeRequest(): Promise<BeforeRequestDecision> {
+    if (!this.isActive) return { type: "proceed", injections: [] };
+    return this.callbacks.supervisor.beforeRequest({
+      outputTokenCount: this.manager.log.messages.reduce(
+        (total, message) => total + (message.usage?.outputTokens ?? 0),
+        0,
+      ),
+      nativeMessageIdx: this.manager.getPendingUserMessageIdx(),
+    });
+  }
+
   async runTurn(messages: AgentInput[]): Promise<SendResult> {
     if (!this.isActive) return { type: "aborted" };
     const turn = runAgentLoop(
@@ -362,13 +368,10 @@ export class ThreadCore {
         manager: this.manager,
         executeTools: (requests, publishTools) =>
           this.executeTools(requests, publishTools),
-        onBeforeRequest: () =>
-          this.isActive
-            ? this.callbacks.onBeforeRequest()
-            : Promise.resolve({ type: "proceed", injections: [] }),
+        onBeforeRequest: () => this.beforeRequest(),
         onToolResults: (results, idx) =>
           this.isActive
-            ? this.callbacks.onToolResults(results, idx)
+            ? this.callbacks.supervisor.onToolResults(results, idx)
             : undefined,
 
         onUpdate: () => this.handleUpdate(),

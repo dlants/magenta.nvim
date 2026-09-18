@@ -1,7 +1,6 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import type { AgentContext, BeforeRequestDecision } from "./agent.ts";
+import type { AgentContext } from "./agent.ts";
 import type { AgentsMap } from "./agents/agents.ts";
-import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
 import type { GitState } from "./capabilities/git-client.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
@@ -54,13 +53,12 @@ import {
   type ThreadCoreSeed,
 } from "./thread-core.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
-import type {
-  EndTurnAction,
-  EndTurnContext,
-  RequestAction,
-  RequestContext,
-  SuspendReason,
-  ThreadSupervisor,
+import {
+  type RequestAction,
+  type RequestContext,
+  SupervisorChain,
+  type SuspendReason,
+  type ThreadSupervisor,
 } from "./thread-supervisor.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type {
@@ -188,6 +186,9 @@ export class Thread {
     return this.core.getContextDelivery(nativeMessageIdx);
   }
   private core: ThreadCore;
+  /** One chain per core: its members include that core's context
+   * supervisors. */
+  private readonly chains = new WeakMap<ThreadCore, SupervisorChain>();
 
   get editedFileGroups() {
     return this.core.editedFilesSupervisor.groups;
@@ -248,154 +249,86 @@ export class Thread {
     onBeforeRequest: (ctx: RequestContext) => this.queueFlushAction(ctx),
   };
 
+  private chainFor(core: ThreadCore): SupervisorChain {
+    let chain = this.chains.get(core);
+    if (!chain) {
+      chain = new SupervisorChain(() => this.orderedSupervisors(core), {
+        logger: this.context.logger,
+        guard: () => this.turnGuard(core),
+        coreIsCurrent: () =>
+          this.core === core && core.isActive && !this.destroyed,
+        countTokens: () =>
+          core.manager.countTokens?.() ?? Promise.resolve(undefined),
+      });
+      this.chains.set(core, chain);
+    }
+    return chain;
+  }
+
+  private get chain(): SupervisorChain {
+    return this.chainFor(this.core);
+  }
+
   private coreCallbacks(getCore: () => ThreadCore): ThreadCoreCallbacks {
-    const isCurrent = () =>
-      this.core === getCore() && getCore().isActive && !this.destroyed;
+    const thread = this;
     return {
       onUpdate: () => {
-        if (isCurrent()) this.handleUpdate();
+        const core = getCore();
+        if (this.core === core && core.isActive && !this.destroyed)
+          this.handleUpdate();
       },
-      onToolApplied: (event) => this.onToolApplied(event, isCurrent),
-      onBeforeRequest: () => this.beforeRequest(getCore()),
-      onToolResults: (results, idx) => {
-        let suspend: SuspendReason | undefined;
-        const consult = (supervisors: readonly ThreadSupervisor[]) => {
-          for (const supervisor of supervisors) {
-            if (!isCurrent()) break;
-            try {
-              const asked = supervisor.onToolResults?.(results, idx);
-              suspend ??= asked;
-            } catch (error) {
-              this.context.logger.error(
-                `onToolResults hook threw: ${error instanceof Error ? error.message : String(error)}`,
-              );
-            }
-          }
-        };
-        consult(this.context.chatSupervisors ?? []);
-        if (isCurrent()) {
-          for (const [id, result] of results) {
-            if (result.status !== "ok") continue;
-            const completed = this.resultArchive.get(id);
-            if (completed?.request.toolName === "yield_to_parent") {
-              suspend ??= {
-                kind: "yield",
-                value: completed.request.input as YieldValue,
-              };
-              break;
-            }
-          }
-          consult(this.contextSupervisors);
-        }
-        return suspend;
+      // Lazy: the core is still being constructed when this is handed to it.
+      get supervisor() {
+        return thread.chainFor(getCore());
       },
     };
   }
 
-  private onToolApplied(
-    event: Parameters<OnToolAppliedHook>[0],
-    isCurrent: () => boolean,
-  ): void {
-    for (const supervisor of this.orderedSupervisors) {
-      if (!isCurrent()) return;
-      try {
-        supervisor.onToolApplied?.(event);
-      } catch (error) {
-        this.context.logger.error(
-          `onToolApplied hook threw: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-  }
-
-  private async beforeRequest(
+  private orderedSupervisors(
     core: ThreadCore,
-  ): Promise<BeforeRequestDecision> {
-    const manager = core.manager;
-    const isCurrent = this.turnGuard(core);
-    const injections: AgentInput[] = [];
-    let suspend: SuspendReason | undefined;
-    let tokenCount: number | undefined;
-    let counted = false;
-    const consult = async (supervisors: readonly ThreadSupervisor[]) => {
-      for (const supervisor of supervisors) {
-        if (!isCurrent()) break;
-        if (!supervisor.onBeforeRequest) continue;
-        if (supervisor.requestPreflightTokenCount && !counted && !suspend) {
-          counted = true;
-          try {
-            tokenCount = await manager.countTokens?.();
-          } catch (error) {
-            this.context.logger.warn(
-              `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-          if (!isCurrent()) break;
-        }
-        const action = await supervisor.onBeforeRequest({
-          inputTokenCount: tokenCount,
-          outputTokenCount: manager.log.messages.reduce(
-            (total, message) => total + (message.usage?.outputTokens ?? 0),
-            0,
-          ),
-          nativeMessageIdx: manager.getPendingUserMessageIdx(),
-          ...(suspend === undefined
-            ? { status: "pending" as const }
-            : { status: "suspended" as const, reason: suspend }),
-        });
-        if (!isCurrent()) break;
-        if (action.type === "suspend") suspend ??= action.reason;
-        else if (action.type === "inject") {
-          for (const block of action.content) {
-            injections.push(
-              block.type === "text"
-                ? { ...block, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }
-                : block,
-            );
-          }
-        }
-      }
-    };
-    await consult(this.context.chatSupervisors ?? []);
-    if (isCurrent()) {
-      core.preflightTokenCount = tokenCount;
-      await consult(this.contextSupervisors);
-    }
-    return suspend === undefined
-      ? { type: "proceed", injections }
-      : { type: "suspend", reason: suspend, injections };
-  }
-
-  private onEndTurn(context: EndTurnContext): EndTurnAction {
-    const texts: string[] = [];
-    let suspend: Extract<EndTurnAction, { type: "suspend" }> | undefined;
-    for (const supervisor of this.orderedSupervisors) {
-      const action = supervisor.onEndTurnWithoutYield?.(context);
-      if (action?.type === "send-message") texts.push(action.text);
-      else if (action?.type === "suspend") suspend ??= action;
-    }
-    if (suspend) return suspend;
-    return texts.length
-      ? { type: "send-message", text: texts.join("\n\n") }
-      : { type: "none" };
-  }
-
-  private get orderedSupervisors(): ReadonlyArray<ThreadSupervisor> {
+  ): ReadonlyArray<ThreadSupervisor> {
     return [
       ...(this.context.chatSupervisors ?? []),
-      ...this.contextSupervisors,
+      this.gate(core),
+      ...this.contextSupervisors(core),
     ];
   }
 
-  private get contextSupervisors(): ReadonlyArray<ThreadSupervisor> {
+  /** Sits between the chat supervisors and the context supervisors, where the
+   * thread's own two ordering facts live: the preflight count the chat
+   * supervisors may have forced is published before any context supervisor
+   * reads it, and a completed yield tool suspends ahead of them. */
+  private gate(core: ThreadCore): ThreadSupervisor {
+    return {
+      onBeforeRequest: (ctx) => {
+        core.preflightTokenCount = ctx.inputTokenCount;
+        return Promise.resolve({ type: "none" });
+      },
+      onToolResults: (results) => {
+        for (const [id, result] of results) {
+          if (result.status !== "ok") continue;
+          const completed = this.resultArchive.get(id);
+          if (completed?.request.toolName === "yield_to_parent") {
+            return {
+              kind: "yield",
+              value: completed.request.input as YieldValue,
+            };
+          }
+        }
+        return undefined;
+      },
+    };
+  }
+
+  private contextSupervisors(
+    core: ThreadCore,
+  ): ReadonlyArray<ThreadSupervisor> {
     return [
-      this.core.editedFilesSupervisor,
-      ...(this.core.gitSupervisor ? [this.core.gitSupervisor] : []),
-      ...(this.core.systemReminders ? [this.core.fileSupervisor] : []),
-      ...(this.core.systemInfoSupervisor
-        ? [this.core.systemInfoSupervisor]
-        : []),
-      ...(this.core.systemReminders ? [this.core.systemReminders] : []),
+      core.editedFilesSupervisor,
+      ...(core.gitSupervisor ? [core.gitSupervisor] : []),
+      ...(core.systemReminders ? [core.fileSupervisor] : []),
+      ...(core.systemInfoSupervisor ? [core.systemInfoSupervisor] : []),
+      ...(core.systemReminders ? [core.systemReminders] : []),
       this.queueFlush,
     ];
   }
@@ -867,13 +800,7 @@ export class Thread {
   private async hasPendingContent(): Promise<boolean> {
     const core = this.core;
     if (!core.isActive) return false;
-    const isCurrent = this.turnGuard();
-    for (const supervisor of this.orderedSupervisors) {
-      const pending = await supervisor.hasPendingContent?.();
-      if (!isCurrent()) return false;
-      if (pending) return true;
-    }
-    return false;
+    return this.chain.hasPendingContent();
   }
   /** Outer hooks may outlive cancellation. Each submission captures its own
    * generation so a late continuation cannot act on the replacement
@@ -930,22 +857,11 @@ export class Thread {
       if (!isCurrentLoop()) return { type: "aborted" };
       const input = [...this.pendingSeed, ...submitted];
       this.pendingSeed = [];
-      const supervisors = this.orderedSupervisors;
+      const chain = this.chainFor(core);
       const notify = (
         hook: "onAgentLoopStart" | "onAgentLoopStop",
         idx: NativeMessageIdx,
-      ) => {
-        for (const supervisor of supervisors) {
-          if (this.core !== core) break;
-          try {
-            supervisor[hook]?.(idx);
-          } catch (error) {
-            this.context.logger.error(
-              `${hook} hook threw: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-        }
-      };
+      ) => chain[hook](idx);
       try {
         notify("onAgentLoopStart", core.manager.getPendingUserMessageIdx());
         return await core.runTurn(input);
@@ -1006,38 +922,31 @@ export class Thread {
     | { type: "settled"; result: SendResult }
     | { type: "resubmit"; messages: AgentInput[] }
   > {
-    const texts: string[] = [];
-    for (const supervisor of this.orderedSupervisors) {
-      if (!supervisor.onYield) continue;
-      const action = await supervisor.onYield(value);
-
-      if (!isCurrent()) return { type: "settled", result: { type: "aborted" } };
-      if (action.type === "accept") {
-        const prefix = action.resultPrefix
-          ? { resultPrefix: action.resultPrefix }
-          : {};
-        this.yieldState = { value, ...prefix, tornDown: true };
-
-        return {
-          type: "settled",
-          result: { type: "yielded", value, ...prefix },
-        };
-      }
-      if (action.type === "reject") {
-        return {
-          type: "resubmit",
-          messages: [
-            {
-              type: "text",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              text: action.message,
-            },
-          ],
-        };
-      }
-      if (action.type === "send-message") texts.push(action.text);
+    const action = await this.chain.onYield(value);
+    if (!isCurrent()) return { type: "settled", result: { type: "aborted" } };
+    if (action.type === "accept") {
+      const prefix = action.resultPrefix
+        ? { resultPrefix: action.resultPrefix }
+        : {};
+      this.yieldState = { value, ...prefix, tornDown: true };
+      return {
+        type: "settled",
+        result: { type: "yielded", value, ...prefix },
+      };
     }
-    if (!texts.length) {
+    if (action.type === "reject") {
+      return {
+        type: "resubmit",
+        messages: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: action.message,
+          },
+        ],
+      };
+    }
+    if (action.type !== "send-message") {
       this.yieldState = {
         value,
         tornDown: false,
@@ -1050,7 +959,7 @@ export class Thread {
         {
           type: "text",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          text: texts.join("\n\n"),
+          text: action.text,
         },
       ],
     };
@@ -1143,7 +1052,7 @@ export class Thread {
     ) {
       return { type: "queues" };
     }
-    const action = this.onEndTurn({
+    const action = this.chain.onEndTurnWithoutYield({
       stopReason,
       inputTokenCount: this.core.preflightTokenCount,
       lastAssistantMessage: this.core.lastAssistantMessage,

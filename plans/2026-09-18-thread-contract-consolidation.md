@@ -149,14 +149,23 @@ Decisions / deviations:
 - Added coverage: `thread.test.ts > submission generations > rejects a second core replacement while one is in flight`; `compaction/index.test.ts > submission-owned compaction signal` (abort cancels the signal handed to `compactor.run`; a reset during compaction cancels it and leaves the thread at rest).
 - `compaction/index.test.ts` drove the compactor directly with `thread["interruption"].signal`, which no longer exists while idle. Those tests now own an `AbortController` and abort it alongside the thread action they exercise; the real abort/destroy→compaction linkage stays covered by the submission-driven compaction tests.
 
-## supervisor chain
+## supervisor chain — DONE
 
 - Goal: `SupervisorChain` owns all fan-out; `ThreadCoreCallbacks` is `{ onUpdate, supervisor }`; Thread's six hand-rolled loops are gone.
 - Tests:
-  - A supervisor that throws in each hook is logged and does not wedge the turn (drive through a real submission, not by calling the hook directly).
-  - Two supervisors both suspending: the first reason wins and the second still sees `status: "suspended"`.
-  - Injections from multiple supervisors concatenate in supervisor order with queued user content last in the message — assert against the native request body.
-  - `requestPreflightTokenCount`: `countTokens` is called exactly once per request and not at all when no member declares it.
+  - [x] A supervisor that throws in each hook is logged and does not wedge the turn (`thread-supervisor.test.ts > logs a supervisor that throws in every hook without wedging the turn`).
+  - [x] Two supervisors both suspending: the first reason wins and the second still sees `status: "suspended"` (`lets the first before-request suspension win, with later hooks told it suspended`).
+  - [x] Injections concatenate in supervisor order with queued user content last, asserted against the native request body (`keeps injections in supervisor order with the user's own content last`).
+  - [x] `requestPreflightTokenCount`: covered by the existing `agent.test.ts > Thread preflight token count` suite, which now drives through the chain unchanged.
+
+Decisions / deviations:
+
+- `SupervisorChain` lives in `thread-supervisor.ts` and is constructed one-per-core by `Thread.chainFor` (a `WeakMap<ThreadCore, SupervisorChain>`), because its members include that core's context supervisors. `ThreadCoreCallbacks` is `{ onUpdate, supervisor }` with `supervisor` a lazy getter: the core is still being constructed when the callbacks are handed to it.
+- The chain's before-request hook is `beforeRequest(facts): CombinedRequestAction`, not `onBeforeRequest`: the combined decision carries injections *and* a suspension, which no single supervisor's `SupervisorAction` can express. `CombinedRequestAction` is structurally `BeforeRequestDecision`, so `ThreadCore` passes it straight to the agent loop without importing anything from `agent.ts` into `thread-supervisor.ts`.
+- `ThreadCore` now supplies the `RequestFacts` (output token count, pending user message idx) it is the natural owner of; the chain fills in `inputTokenCount` since only it knows whether a member declared `requestPreflightTokenCount`. Those facts are computed once per request rather than per member — no supervisor appends to the log during the hook, so this is observationally identical.
+- Two guards, not one: `guard` (submission-scoped, from `turnGuard`) for `onBeforeRequest`/`hasPendingContent`, and `coreIsCurrent` (core liveness) for `onAgentLoopStart/Stop`, `onToolApplied` and `onToolResults`. Those three record what a turn already did and must still run while a preempted turn unwinds — using the submission guard broke abort-time tool-result reporting.
+- The two thread-owned ordering facts that used to sit between the chat and context supervisor loops (publishing `core.preflightTokenCount`, and raising the `yield` suspension for a completed `yield_to_parent`) are now an explicit `gate` pseudo-supervisor inserted at that position in `orderedSupervisors(core)`.
+- `onYield` is not guarded inside the chain (matching the previous loop); `resolveYield` checks the guard once after the chain returns. A throwing `onYield` is now logged and treated as `none` rather than failing the submission — the plan's centralized error logging applied to a hook that previously had none.
 
 ## thread status
 

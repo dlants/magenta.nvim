@@ -1,6 +1,8 @@
 import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
 import type { CompactSuspendReason } from "./compaction/index.ts";
+import type { Logger } from "./logger.ts";
 import type {
+  AgentInput,
   NativeMessageIdx,
   ProviderMessageContent,
   StopReason,
@@ -120,6 +122,200 @@ export interface ThreadSupervisor {
    * worth a request. */
   hasPendingContent?(): Promise<boolean>;
   onToolApplied?: OnToolAppliedHook;
+}
+
+/** What the caller of the chain knows about the request before any supervisor
+ * has been consulted. The input token count is deliberately absent: only the
+ * chain knows whether any member declared that it needs one. */
+export type RequestFacts = Pick<
+  RequestContext,
+  "outputTokenCount" | "nativeMessageIdx"
+>;
+
+/** The chain's combined before-request decision. Injections gathered before a
+ * suspension still travel with it: the runner appends them to the log so they
+ * are in place for whatever resumes the thread. */
+export type CombinedRequestAction = { injections: AgentInput[] } & (
+  | { type: "proceed" }
+  | { type: "suspend"; reason: SuspendReason }
+);
+
+export type SupervisorChainDeps = {
+  logger: Logger;
+  /** Called once at the start of a hook; the guard it returns is checked
+   * between members so a submission that lands mid-fan-out stops the rest. */
+  guard: () => () => boolean;
+  /** Looser liveness for the hooks that record what the turn already did —
+   * loop start/stop, applied tools, tool results. They must still run for a
+   * turn that is unwinding under an abort. */
+  coreIsCurrent: () => boolean;
+  /** Supplied lazily because only a declaring member forces the count. */
+  countTokens: () => Promise<number | undefined>;
+};
+
+/** The single fan-out point from a thread to its supervisors. Owns the
+ * combination rules — first suspend wins, injections concatenate in member
+ * order, end-turn texts join, first accept/reject wins — plus the guarding and
+ * error logging that used to be repeated per hook. */
+export class SupervisorChain implements ThreadSupervisor {
+  constructor(
+    private readonly members: () => readonly ThreadSupervisor[],
+    private readonly deps: SupervisorChainDeps,
+  ) {}
+
+  private logThrow(hook: string, error: unknown): void {
+    this.deps.logger.error(
+      `${hook} hook threw: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  private forEach(
+    hook: string,
+    isCurrent: () => boolean,
+    visit: (supervisor: ThreadSupervisor) => void,
+  ): void {
+    for (const supervisor of this.members()) {
+      if (!isCurrent()) return;
+      try {
+        visit(supervisor);
+      } catch (error) {
+        this.logThrow(hook, error);
+      }
+    }
+  }
+
+  onAgentLoopStart(nativeMessageIdx: NativeMessageIdx): void {
+    this.forEach("onAgentLoopStart", this.deps.coreIsCurrent, (supervisor) =>
+      supervisor.onAgentLoopStart?.(nativeMessageIdx),
+    );
+  }
+
+  onAgentLoopStop(nativeMessageIdx: NativeMessageIdx): void {
+    this.forEach("onAgentLoopStop", this.deps.coreIsCurrent, (supervisor) =>
+      supervisor.onAgentLoopStop?.(nativeMessageIdx),
+    );
+  }
+
+  onToolApplied: OnToolAppliedHook = (event) => {
+    this.forEach("onToolApplied", this.deps.coreIsCurrent, (supervisor) =>
+      supervisor.onToolApplied?.(event),
+    );
+  };
+
+  onToolResults(
+    results: ToolResults,
+    nativeMessageIdx: NativeMessageIdx,
+  ): SuspendReason | undefined {
+    let suspend: SuspendReason | undefined;
+    this.forEach("onToolResults", this.deps.coreIsCurrent, (supervisor) => {
+      suspend ??= supervisor.onToolResults?.(results, nativeMessageIdx);
+    });
+    return suspend;
+  }
+
+  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
+    const texts: string[] = [];
+    let suspend: Extract<EndTurnAction, { type: "suspend" }> | undefined;
+    this.forEach("onEndTurnWithoutYield", this.deps.guard(), (supervisor) => {
+      const action = supervisor.onEndTurnWithoutYield?.(context);
+      if (action?.type === "send-message") texts.push(action.text);
+      else if (action?.type === "suspend") suspend ??= action;
+    });
+    if (suspend) return suspend;
+    return texts.length
+      ? { type: "send-message", text: texts.join("\n\n") }
+      : { type: "none" };
+  }
+
+  /** The first `accept`/`reject` wins outright — later hooks are not consulted,
+   * since the decision is made — and `send-message` texts are joined. */
+  async onYield(value: YieldValue): Promise<YieldAction> {
+    const texts: string[] = [];
+    for (const supervisor of this.members()) {
+      if (!supervisor.onYield) continue;
+      let action: YieldAction;
+      try {
+        action = await supervisor.onYield(value);
+      } catch (error) {
+        this.logThrow("onYield", error);
+        continue;
+      }
+      if (action.type === "accept" || action.type === "reject") return action;
+      if (action.type === "send-message") texts.push(action.text);
+    }
+    return texts.length
+      ? { type: "send-message", text: texts.join("\n\n") }
+      : { type: "none" };
+  }
+
+  async hasPendingContent(): Promise<boolean> {
+    const isCurrent = this.deps.guard();
+    for (const supervisor of this.members()) {
+      if (!supervisor.hasPendingContent) continue;
+      let pending: boolean;
+      try {
+        pending = await supervisor.hasPendingContent();
+      } catch (error) {
+        this.logThrow("hasPendingContent", error);
+        continue;
+      }
+      if (!isCurrent()) return false;
+      if (pending) return true;
+    }
+    return false;
+  }
+
+  /** The token count happens at most once per request, only when a declaring
+   * member is reached and nothing has suspended yet. */
+  async beforeRequest(facts: RequestFacts): Promise<CombinedRequestAction> {
+    const isCurrent = this.deps.guard();
+    const injections: AgentInput[] = [];
+    let suspend: SuspendReason | undefined;
+    let tokenCount: number | undefined;
+    let counted = false;
+    for (const supervisor of this.members()) {
+      if (!isCurrent()) break;
+      if (!supervisor.onBeforeRequest) continue;
+      if (supervisor.requestPreflightTokenCount && !counted && !suspend) {
+        counted = true;
+        try {
+          tokenCount = await this.deps.countTokens();
+        } catch (error) {
+          this.deps.logger.warn(
+            `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        if (!isCurrent()) break;
+      }
+      let action: SupervisorAction;
+      try {
+        action = await supervisor.onBeforeRequest({
+          ...facts,
+          inputTokenCount: tokenCount,
+          ...(suspend === undefined
+            ? { status: "pending" as const }
+            : { status: "suspended" as const, reason: suspend }),
+        });
+      } catch (error) {
+        this.logThrow("onBeforeRequest", error);
+        continue;
+      }
+      if (!isCurrent()) break;
+      if (action.type === "suspend") suspend ??= action.reason;
+      else if (action.type === "inject") {
+        for (const block of action.content) {
+          injections.push(
+            block.type === "text"
+              ? { ...block, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }
+              : block,
+          );
+        }
+      }
+    }
+    return suspend === undefined
+      ? { type: "proceed", injections }
+      : { type: "suspend", reason: suspend, injections };
+  }
 }
 
 export type EditedFile = {
