@@ -10,6 +10,7 @@ import {
 import path from "node:path";
 import type {
   ScriptCatalogEntry,
+  ScriptInvocationId,
   ThreadId,
   ThreadResult,
 } from "@magenta/server";
@@ -41,7 +42,7 @@ import {
   type NvimCwd,
 } from "../utils/files.ts";
 
-export type ScriptInvocationId = string & { __scriptInvocationId: true };
+export type { ScriptInvocationId };
 
 export type Msg =
   | { type: "catalog-updated" }

@@ -164,7 +164,8 @@ export class NvimSessionHost implements SessionHost {
     session: Session,
     signal: AbortSignal,
   ): Promise<PreparedThread> {
-    const { source, options } = request;
+    const { options } = request;
+    const source = request.type === "fork" ? request.source : undefined;
     const {
       threadId,
       profile,

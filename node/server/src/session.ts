@@ -7,7 +7,12 @@ import type {
   DockerSpawnConfig,
   ThreadManager,
 } from "./capabilities/thread-manager.ts";
-import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
+import type {
+  ScriptInvocationId,
+  SubagentConfig,
+  ThreadId,
+  ThreadType,
+} from "./chat-types.ts";
 import type { ThreadCompactor } from "./compaction/compactor.ts";
 import { Emitter } from "./emitter.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -51,7 +56,7 @@ export type SessionCreateOptions = {
   environmentConfig?: EnvironmentConfig;
   dockerSpawnConfig?: DockerSpawnConfig | undefined;
   yieldSchema?: JSONSchemaType;
-  scriptInvocationId?: string;
+  scriptInvocationId?: ScriptInvocationId;
   scriptName?: string;
   label?: string;
   autoCompactThreshold?: number;
@@ -62,9 +67,10 @@ export type SessionCreateOptions = {
  * index of a source thread this session owns. */
 export type ThreadPreparation = {
   options: SessionCreateOptions & { threadId: ThreadId };
-  source?: Thread;
-  nativeMessageIdx?: NativeMessageIdx;
-};
+} & (
+  | { type: "fresh" }
+  | { type: "fork"; source: Thread; nativeMessageIdx: NativeMessageIdx }
+);
 
 export type PreparedThread = {
   context: PreparedThreadContext;
@@ -95,7 +101,7 @@ export interface SessionHost {
 export type SessionThread = {
   id: ThreadId;
   parentThreadId: ThreadId | undefined;
-  scriptInvocationId?: string;
+  scriptInvocationId?: ScriptInvocationId;
   lastActivityTime: number;
   /** Retained so child profile/environment derivation and forking read session
    * state rather than a view wrapper. */
@@ -191,6 +197,7 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
   createThread(options: SessionCreateOptions): Promise<ThreadId> {
     return this.track(
       this.create({
+        type: "fresh",
         options: {
           ...options,
           threadId: options.threadId ?? (uuidv7() as ThreadId),
@@ -230,13 +237,13 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
    * and the yield schema its result must satisfy. */
   spawnScriptThread(opts: {
     threadId?: ThreadId;
-    scriptInvocationId: string;
+    scriptInvocationId: ScriptInvocationId;
     scriptName: string;
     prompt: string;
     yieldSchema: JSONSchemaType;
     profile?: ProviderProfile;
-    cwd?: string;
-    contextFiles?: string[];
+    cwd?: NvimCwd;
+    contextFiles?: UnresolvedFilePath[];
     systemReminder?: string;
     autoCompactThreshold?: number;
     autoCompactPrompt?: string;
@@ -248,11 +255,9 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
       threadType: "subagent",
       environmentConfig: {
         type: "local",
-        ...(opts.cwd ? { cwd: opts.cwd as NvimCwd } : {}),
+        ...(opts.cwd ? { cwd: opts.cwd } : {}),
       },
-      ...(opts.contextFiles
-        ? { contextFiles: opts.contextFiles as UnresolvedFilePath[] }
-        : {}),
+      ...(opts.contextFiles ? { contextFiles: opts.contextFiles } : {}),
       ...(opts.systemReminder
         ? { subagentConfig: { systemReminder: opts.systemReminder } }
         : {}),
@@ -306,7 +311,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
   }
 
   private async create(request: ThreadPreparation): Promise<ThreadId> {
-    const { options, source } = request;
+    const { options } = request;
     const id = options.threadId;
     if (this.disposed) throw new Error("Session disposed");
     if (this.results.has(id)) throw new Error(`Thread ${id} already exists`);
@@ -412,7 +417,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       }
       if (!current()) throw new Error("Thread creation cancelled");
 
-      if (source) {
+      if (request.type === "fork") {
         thread.prependToNextTurn([
           {
             type: "text",
@@ -441,7 +446,11 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       try {
         // A thread that never made it into the registry (or whose record was
         // deleted while we were finishing) must not be left running.
-        if (thread && this.records.get(id)?.state !== "initialized") {
+        if (
+          thread &&
+          !thread.isDestroyed &&
+          this.records.get(id)?.state !== "initialized"
+        ) {
           await thread.destroy();
         }
       } finally {
@@ -463,12 +472,13 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     request: ThreadPreparation,
     prepared: PreparedThread,
   ): ThreadInitialization {
-    const { options, source, nativeMessageIdx } = request;
-    if (source) {
-      if (nativeMessageIdx === undefined) {
-        throw new Error("A fork requires the index it is frozen at");
-      }
-      return { type: "fork", sourceThread: source, nativeMessageIdx };
+    const { options } = request;
+    if (request.type === "fork") {
+      return {
+        type: "fork",
+        sourceThread: request.source,
+        nativeMessageIdx: request.nativeMessageIdx,
+      };
     }
     const archive = {
       ...(options.scriptName ? { scriptName: options.scriptName } : {}),
@@ -532,6 +542,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     const index = nativeMessageIdx ?? source.thread.nativeMessageIdx;
     return this.track(
       this.create({
+        type: "fork",
         options: { ...options, threadId: uuidv7() as ThreadId },
         source: source.thread,
         nativeMessageIdx: index,
@@ -564,7 +575,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
           cwd: opts.dockerSpawnConfig.workspacePath,
         }
       : opts.cwd
-        ? { type: "local", cwd: opts.cwd as NvimCwd }
+        ? { type: "local", cwd: opts.cwd }
         : (parent.options.environmentConfig ?? { type: "local" });
     const { prompt: _prompt, parentThreadId: _parentThreadId, ...rest } = opts;
     return this.createThread({

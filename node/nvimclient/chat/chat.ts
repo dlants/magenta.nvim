@@ -27,7 +27,7 @@ import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { d, type VDOMNode, withBindings, withError } from "../tea/view.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type { HomeDir, NvimCwd } from "../utils/files.ts";
+import type { HomeDir, NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
 import { shortenPath } from "../utils/files.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
 import type { CommandRegistry } from "./commands/registry.ts";
@@ -209,7 +209,7 @@ export class Chat implements ThreadManager {
       parentThreadId: record.parentThreadId,
       ...(record.scriptInvocationId
         ? {
-            scriptInvocationId: record.scriptInvocationId as ScriptInvocationId,
+            scriptInvocationId: record.scriptInvocationId,
           }
         : {}),
       depth: record.parentThreadId
@@ -619,10 +619,17 @@ export class Chat implements ThreadManager {
     autoCompactThreshold?: number;
     autoCompactPrompt?: string;
   }): Promise<ThreadId> {
-    const { getSandboxRoot, ...rest } = opts;
+    const { getSandboxRoot, cwd, contextFiles, ...rest } = opts;
     const threadId = uuidv7() as ThreadId;
     this.host.registerSandboxRoot(threadId, getSandboxRoot);
-    return this.session.spawnScriptThread({ ...rest, threadId });
+    return this.session.spawnScriptThread({
+      ...rest,
+      threadId,
+      ...(cwd ? { cwd: cwd as NvimCwd } : {}),
+      ...(contextFiles
+        ? { contextFiles: contextFiles as UnresolvedFilePath[] }
+        : {}),
+    });
   }
 
   generateScriptTitle(

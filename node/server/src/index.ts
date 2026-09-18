@@ -57,6 +57,7 @@ export {
   isThreadId,
   type MessageIdx,
   type Role,
+  type ScriptInvocationId,
   type SubagentConfig,
   type ThreadId,
   type ThreadType,

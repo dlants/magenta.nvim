@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { ThreadId } from "./chat-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import { type PreparedThread, Session, type SessionHost } from "./session.ts";
-import { pendingMessage } from "./submission/index.ts";
+import { pendingMessage, renderPending } from "./submission/index.ts";
 import {
   awaitNextStream,
   createAgentWithMock,
@@ -289,7 +289,7 @@ it("uses the prepared environment when checking whether a fork is local", async 
 it("freezes a fork at the requested index even if the source advances", async () => {
   const gate = new Defer<PreparedThread>();
   const { session, prepared, mockClient } = fixture(async (request) =>
-    request.source ? gate.promise : prepared,
+    request.type === "fork" ? gate.promise : prepared,
   );
   prepared.context = {
     ...prepared.context,
@@ -350,6 +350,80 @@ it("freezes a fork at the requested index even if the source advances", async ()
   });
 });
 
+it("aborts the subtree but returns only the requested thread's unsent input", async () => {
+  const { session } = fixture();
+  const root = await session.createRootThread();
+  const child = await session.spawnThread({
+    parentThreadId: root,
+    prompt: "child work",
+    threadType: "subagent",
+  });
+  const grandchild = await session.spawnThread({
+    parentThreadId: child,
+    prompt: "grandchild work",
+    threadType: "subagent",
+  });
+  const threadOf = (id: ThreadId) => {
+    const record = session.getThread(id);
+    if (record?.state !== "initialized") throw new Error("expected thread");
+    return record.thread;
+  };
+  void threadOf(root)
+    .submit({ type: "raw", message: pendingMessage("root work") })
+    .catch(() => {});
+  // Queued behind the busy turn on both ends of the subtree.
+  void threadOf(root)
+    .submit({ type: "raw", message: pendingMessage("root leftover") }, "next")
+    .catch(() => {});
+  void threadOf(grandchild)
+    .submit({ type: "raw", message: pendingMessage("deep leftover") }, "next")
+    .catch(() => {});
+  const { unsent } = await session.abortThread(root);
+  expect(unsent.map((queued) => renderPending(queued.message))).toEqual([
+    "root leftover",
+  ]);
+  for (const id of [root, child, grandchild]) {
+    expect(threadOf(id).isBusy).toBe(false);
+  }
+  // A descendant's leftover input is discarded, not handed to the caller.
+  expect(
+    (await threadOf(grandchild).abort()).unsent.map((queued) =>
+      renderPending(queued.message),
+    ),
+  ).toEqual([]);
+  await expect(session.abortThread("unknown" as ThreadId)).resolves.toEqual({
+    unsent: [],
+  });
+});
+it("destroys and releases a thread whose record is deleted after assembly", async () => {
+  const { context, prepared } = fixture();
+  const release = vi.fn(async () => {});
+  const session = new Session({
+    prepareThread: async () => ({ ...prepared, release }),
+    getActiveProfile: () => context.profile,
+  });
+  sessions.push(session);
+  let destroy: ReturnType<typeof vi.spyOn> | undefined;
+  session.on("changed", (id) => {
+    const record = session.getThread(id);
+    if (record?.state !== "initialized" || destroy) return;
+    destroy = vi.spyOn(record.thread, "destroy");
+    session.deleteThread(id);
+  });
+  await expect(session.createRootThread()).rejects.toThrow("cancelled");
+  await session.dispose();
+  expect(destroy).toHaveBeenCalledTimes(1);
+  expect(release).toHaveBeenCalledTimes(1);
+});
+it("refuses to reuse a thread id that is already registered", async () => {
+  const { session, context } = fixture();
+  const id = uniqueThreadId("session-duplicate");
+  await session.createThread({ threadId: id, ...rootOptions(context.profile) });
+  await expect(
+    session.createThread({ threadId: id, ...rootOptions(context.profile) }),
+  ).rejects.toThrow("already exists");
+  expect(session.listThreads().map((record) => record.id)).toEqual([id]);
+});
 it("keeps two sessions' registries independent", async () => {
   const a = fixture();
   const b = fixture();

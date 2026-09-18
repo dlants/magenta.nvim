@@ -12,6 +12,8 @@ export function isThreadId(value: unknown): value is ThreadId {
   return typeof value === "string" && UUIDV7_PATTERN.test(value);
 }
 
+export type ScriptInvocationId = string & { __scriptInvocationId: true };
+
 export type MessageIdx = number & { __messageIdx: true };
 
 export type ThreadType = "subagent" | "compact" | "root" | "docker_root";

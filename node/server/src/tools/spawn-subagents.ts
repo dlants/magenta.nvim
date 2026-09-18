@@ -453,7 +453,7 @@ export function execute(
       const subagentConfig = resolveSubagentConfig(entry, context.agents);
 
       const resolvedCwd = entry.directory
-        ? resolve(context.cwd, entry.directory)
+        ? (resolve(context.cwd, entry.directory) as NvimCwd)
         : undefined;
 
       const threadId = await context.threadManager.spawnThread({
