@@ -1,20 +1,16 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import type { AgentContext, BeforeRequestDecision } from "./agent.ts";
-
 import type { AgentsMap } from "./agents/agents.ts";
 import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
-import type { FileIO } from "./capabilities/file-io.ts";
-import type { GitClient, GitState } from "./capabilities/git-client.ts";
+import type { GitState } from "./capabilities/git-client.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
-import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
+import type { ThreadId, ThreadType } from "./chat-types.ts";
 import { type Compactor, summaryText } from "./compaction/index.ts";
 import type { ThreadLoopState } from "./loop-state.ts";
-import type { ProviderProfile } from "./provider-options.ts";
 import type {
   AgentInput,
   NativeMessageIdx,
-  Provider,
   ProviderMessage,
   ProviderToolSpec,
   StopReason,
@@ -39,9 +35,7 @@ import {
   buildClonedFiles,
   type FileSupervisor,
   type Files,
-  type FileUpdates,
 } from "./supervisors/file-supervisor.ts";
-import type { GitContextUpdate } from "./supervisors/git-supervisor.ts";
 import type {
   AgentRequestContext,
   OnUpdate,
@@ -53,11 +47,12 @@ import type {
   YieldValue,
 } from "./thread-api.ts";
 import {
+  type ContextDelivery,
   ThreadCore,
   type ThreadCoreCallbacks,
-  type ThreadCoreInitialization,
+  type ThreadCoreContext,
+  type ThreadCoreSeed,
 } from "./thread-core.ts";
-
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type {
   EndTurnAction,
@@ -68,12 +63,17 @@ import type {
   ThreadSupervisor,
 } from "./thread-supervisor.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
-import type { ClientToolCreator } from "./tools/create-tool.ts";
+import type {
+  ClientToolCreator,
+  ThreadToolCreator,
+} from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
+import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
-import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
+import type { NvimCwd } from "./utils/files.ts";
+export type { ContextDelivery, ThreadCoreContext };
 export type ContextFileAccess = Readonly<
   Pick<
     FileSupervisor,
@@ -85,11 +85,6 @@ export type ContextFileAccess = Readonly<
   >
 >;
 
-export interface ThreadContextDelivery {
-  initialFiles?: Files;
-  pollIntervalMs?: number;
-  initialGitState?: GitState | undefined;
-}
 export type YieldState = {
   value: YieldValue;
   resultPrefix?: string;
@@ -99,29 +94,26 @@ export type EnvironmentConfig =
   | { type: "local"; cwd?: NvimCwd }
   | { type: "docker"; container: string; cwd: string };
 
-interface ThreadContextBase extends AgentContext {
+interface ThreadContextBase
+  extends AgentContext,
+    Omit<
+      ThreadCoreContext,
+      "threadType" | "logger" | "threadToolCreator" | "toolSpecs"
+    > {
+  clientToolCreator: ClientToolCreator;
+  mcpToolManager: MCPToolManagerImpl;
+  availableCapabilities: Set<ToolCapability>;
+  getAgents: () => AgentsMap;
+  yieldSchema?: JSONSchemaType;
+  getScriptRunner?: () => ScriptRunner | undefined;
+  subagentDockerfile?: string;
+  initialFiles?: Files;
+  initialGitState?: GitState;
   readonly resolve: ResolveSubmission;
   readonly chatSupervisors?: readonly ThreadSupervisor[];
   compactor?: Compactor;
-  profile: ProviderProfile;
-  subagentConfig?: SubagentConfig;
-  provider: Provider;
-  yieldSchema?: JSONSchemaType;
-  cwd: NvimCwd;
-  homeDir: HomeDir;
-  systemPrompt: SystemPrompt;
-  systemInfo: SystemInfo;
-  mcpToolManager: MCPToolManagerImpl;
   threadManager: ThreadManager;
-  getScriptRunner?: () => ScriptRunner | undefined;
-  fileIO: FileIO;
-  gitClient: GitClient;
-  clientToolCreator: ClientToolCreator;
-  availableCapabilities: Set<ToolCapability>;
   environmentConfig: EnvironmentConfig;
-  subagentDockerfile?: string;
-  getAgents: () => AgentsMap;
-  contextDelivery?: ThreadContextDelivery;
 }
 
 type ReminderBearingThreadType = Exclude<ThreadType, "compact">;
@@ -156,11 +148,6 @@ type FlushedQueue =
 export type ThreadCallbacks = {
   readonly onUpdate: OnUpdate;
   readonly onSubmission?: (messages: readonly AgentInput[]) => void;
-  /** A context supervisor committed a delivery into the request going out.
-   * Fixed for the thread lifetime; retired cores cannot publish deliveries. */
-  readonly onFilesSent?: (updates: FileUpdates) => void;
-  readonly onGitSent?: (update: GitContextUpdate) => void;
-  readonly onFileAdded?: (path: AbsFilePath) => void;
 };
 /** Stable identity, submission queues, yield contract and archive across
  * replaceable conversation generations. */
@@ -180,6 +167,13 @@ export class Thread {
   }
   get contextFiles(): ContextFileAccess {
     return this.core.fileSupervisor;
+  }
+  /** The structured context injected into the message at this index, for
+   * views that render history. */
+  getContextDelivery(
+    nativeMessageIdx: NativeMessageIdx,
+  ): ContextDelivery | undefined {
+    return this.core.getContextDelivery(nativeMessageIdx);
   }
   private core: ThreadCore;
   private interruption = new AbortController();
@@ -234,12 +228,11 @@ export class Thread {
       },
     );
     this.core = fork
-      ? this.createCore({
-          type: "fork",
+      ? this.createForkedCore({
           source: fork.source.core,
           nativeMessageIdx: fork.nativeMessageIdx,
         })
-      : this.createCore();
+      : this.createFreshCore();
   }
 
   /** The thread's own contribution to a request: the queued user content. It
@@ -255,15 +248,6 @@ export class Thread {
     return {
       onUpdate: () => {
         if (isCurrent()) this.handleUpdate();
-      },
-      onFilesSent: (updates) => {
-        if (isCurrent()) this.callbacks.onFilesSent?.(updates);
-      },
-      onGitSent: (update) => {
-        if (isCurrent()) this.callbacks.onGitSent?.(update);
-      },
-      onFileAdded: (path) => {
-        if (isCurrent()) this.callbacks.onFileAdded?.(path);
       },
       onToolApplied: (event) => this.onToolApplied(event, isCurrent),
       onBeforeRequest: () => this.beforeRequest(getCore()),
@@ -412,15 +396,60 @@ export class Thread {
     ];
   }
 
-  private createCore(
-    opts: ThreadCoreInitialization = { type: "fresh" },
-  ): ThreadCore {
-    const core = new ThreadCore(
+  private buildToolSpecs(): ProviderToolSpec[] {
+    const context = this.context;
+    return getToolSpecs(
+      context.threadType,
+      context.mcpToolManager,
+      context.availableCapabilities,
+      context.getAgents(),
+      context.subagentConfig,
+      context.yieldSchema,
+      context.getScriptRunner?.()?.getScriptCatalog(),
+      context.subagentDockerfile,
+    );
+  }
+  private freshSeed(): ThreadCoreSeed {
+    const { initialFiles, initialGitState } = this.context;
+    return {
+      ...(initialFiles ? { initialFiles } : {}),
+      ...(initialGitState ? { initialGitState } : {}),
+    };
+  }
+
+  private threadToolCreator: ThreadToolCreator | undefined;
+  private coreContext(): ThreadCoreContext {
+    this.threadToolCreator ??= this.context.clientToolCreator({
+      threadId: this.id,
+    });
+    return {
+      ...this.context,
+      threadToolCreator: this.threadToolCreator,
+      toolSpecs: this.buildToolSpecs(),
+    };
+  }
+
+  private createFreshCore(seed?: ThreadCoreSeed): ThreadCore {
+    const core = ThreadCore.create(
       this.id,
-      this.context,
+      this.coreContext(),
       this.coreCallbacks(() => core),
       this.resultArchive,
-      opts,
+      { ...this.freshSeed(), ...seed },
+    );
+    return core;
+  }
+
+  private createForkedCore(fork: {
+    source: ThreadCore;
+    nativeMessageIdx: NativeMessageIdx;
+  }): ThreadCore {
+    const core = ThreadCore.clone(
+      this.id,
+      this.coreContext(),
+      this.coreCallbacks(() => core),
+      this.resultArchive,
+      fork,
     );
     return core;
   }
@@ -1164,10 +1193,7 @@ export class Thread {
           summary: archive.summary,
           chunkCount: archive.chunkCount,
         });
-      const core = this.createCore({
-        type: "fresh",
-        initialFiles,
-      });
+      const core = this.createFreshCore({ initialFiles });
       this.core = core;
       this.pendingSeed = isCurrent() ? [...seed] : [];
       this.lastSubmissionResult = undefined;

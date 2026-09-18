@@ -264,7 +264,7 @@ export {
   type DiffUpdate,
   type FileDeletedUpdate,
   FileSupervisor,
-  type FileSupervisorEvents,
+  type FileSupervisorCallbacks,
   type Files as ContextFiles,
   type FileUpdate,
   type FileUpdates,
@@ -286,7 +286,6 @@ export {
   type ThreadCallbacks,
   type ThreadCloneContext,
   type ThreadContext,
-  type ThreadContextDelivery,
   threadCloneContext,
   type YieldState,
 } from "./thread.ts";

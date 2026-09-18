@@ -631,6 +631,21 @@ ${contextFilesView(thread.thread.contextFiles, contextViewCtx(thread), {
         c.type === "fork_notification",
     );
 
+  // Context injections are recorded against the native message they landed in.
+  // One native item can surface as several provider messages, so the delivery
+  // renders once, on the first of them.
+  const deliveryOwner = new Map<NativeMessageIdx, number>();
+  messages.forEach((message, messageIdx) => {
+    const nativeIdx = message.content[0]?.nativeMessageIdx;
+    if (nativeIdx === undefined || deliveryOwner.has(nativeIdx)) return;
+    deliveryOwner.set(nativeIdx, messageIdx);
+  });
+  const deliveryAt = (message: ProviderMessage, messageIdx: number) => {
+    const nativeIdx = message.content[0]?.nativeMessageIdx;
+    if (nativeIdx === undefined) return undefined;
+    if (deliveryOwner.get(nativeIdx) !== messageIdx) return undefined;
+    return thread.thread.getContextDelivery(nativeIdx);
+  };
   // Render messages from provider thread
   const messagesView = messages.map((message, messageIdx) => {
     // Skip user messages that only contain tool results (no system_reminder)
@@ -678,13 +693,14 @@ ${contextFilesView(thread.thread.contextFiles, contextViewCtx(thread), {
     const viewState = thread.state.messageViewState[messageIdx];
 
     // Render context updates for user messages
-    const contextUpdateView = viewState?.contextUpdates
+    const delivery = deliveryAt(message, messageIdx);
+    const contextUpdateView = delivery?.files
       ? renderContextUpdate(
-          viewState.contextUpdates,
+          delivery.files,
           thread.thread.contextFiles,
           contextViewCtx(thread),
           {
-            expandedUpdates: viewState.expandedUpdates ?? {},
+            expandedUpdates: viewState?.expandedUpdates ?? {},
             onToggle: (filePath) =>
               dispatch({
                 type: "toggle-expand-update",
@@ -695,7 +711,7 @@ ${contextFilesView(thread.thread.contextFiles, contextViewCtx(thread), {
         )
       : d``;
 
-    const gitUpdateView = renderGitUpdate(viewState?.gitUpdate);
+    const gitUpdateView = renderGitUpdate(delivery?.git);
 
     // Render content blocks. For user messages we render auto-generated meta
     // blocks (system_reminder, system_info) before the user's own text so the

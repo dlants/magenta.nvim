@@ -6,7 +6,6 @@ import type {
   TrackedFileInfo,
 } from "../capabilities/context-tracker.ts";
 import type { FileIO } from "../capabilities/file-io.ts";
-import { Emitter } from "../emitter.ts";
 import type { Logger } from "../logger.ts";
 import type {
   NativeMessageIdx,
@@ -130,19 +129,34 @@ type WorkingFile = Pick<TrackedFile, "relFilePath" | "fileTypeInfo"> & {
   agentView: TrackedFileInfo["agentView"];
 };
 
+/** Files the editor considers implied by one tracked file (nearest config,
+ * parent docs, ...). Supplied with the file services so it outlives any one
+ * conversation generation. */
+export type HierarchyDiscovery = (
+  absFilePath: AbsFilePath,
+) => Promise<DiscoveredContextFile[]>;
+
+export type DiscoveredContextFile = {
+  absFilePath: AbsFilePath;
+  relFilePath: RelFilePath;
+  fileTypeInfo: FileTypeInfo;
+};
+
 export type FileSupervisorDeps = {
   logger: Logger;
   fileIO: FileIO;
   cwd: NvimCwd;
   homeDir: HomeDir;
+  discoverHierarchy?: HierarchyDiscovery;
   pollIntervalMs?: number;
 };
 
-export type FileSupervisorEvents = {
-  /** A context update was just committed into the request going out. */
-  sent: [updates: FileUpdates];
-  fileAdded: [absFilePath: AbsFilePath];
-  pendingUpdatesChanged: [];
+export type FileSupervisorCallbacks = {
+  /** A context update was just committed into the request going out, into the
+   * message at `nativeMessageIdx`. */
+  onSent?: (updates: FileUpdates, nativeMessageIdx: NativeMessageIdx) => void;
+  onFileAdded?: (absFilePath: AbsFilePath) => void;
+  onPendingUpdatesChanged?: () => void;
 };
 
 function cloneAgentView(
@@ -206,10 +220,9 @@ export function buildClonedFiles(sourceFiles: Files): Files {
   return next;
 }
 
-export class FileSupervisor
-  extends Emitter<FileSupervisorEvents>
-  implements ContextTracker, ThreadSupervisor
-{
+export class FileSupervisor implements ContextTracker, ThreadSupervisor {
+  /** Assigned by the owner once it exists; a retired supervisor drops them. */
+  callbacks: FileSupervisorCallbacks = {};
   public files: Files;
   private pendingUpdates: FileUpdates = {};
   private readonly observedStats = new Map<AbsFilePath, FileStat | undefined>();
@@ -255,10 +268,10 @@ export class FileSupervisor
     private fileIO: FileIO,
     private cwd: NvimCwd,
     private homeDir: HomeDir,
+    private discoverHierarchy: HierarchyDiscovery | undefined,
     files: Files,
     pollIntervalMs: number,
   ) {
-    super();
     this.files = files;
     this.pollIntervalMs = pollIntervalMs;
     this.pollTimer = setInterval(() => {
@@ -271,14 +284,16 @@ export class FileSupervisor
     fileIO,
     cwd,
     homeDir,
+    discoverHierarchy,
     initialFiles = {},
     pollIntervalMs = 1000,
   }: FileSupervisorDeps & { initialFiles?: Files }): FileSupervisor {
-    return new FileSupervisor(
+    const supervisor = new FileSupervisor(
       logger,
       fileIO,
       cwd,
       homeDir,
+      discoverHierarchy,
       Object.fromEntries(
         Object.entries(initialFiles).map(([path, file]) => [
           path,
@@ -287,6 +302,12 @@ export class FileSupervisor
       ) as Files,
       pollIntervalMs,
     );
+    // Seeded files never went through `addFileContext`, so their implied
+    // context has to be discovered here.
+    for (const path of Object.keys(supervisor.files) as AbsFilePath[]) {
+      supervisor.runHierarchyDiscovery(path);
+    }
+    return supervisor;
   }
 
   static clone({
@@ -309,6 +330,7 @@ export class FileSupervisor
       deps?.fileIO ?? source.fileIO,
       deps?.cwd ?? source.cwd,
       deps?.homeDir ?? source.homeDir,
+      deps ? deps.discoverHierarchy : source.discoverHierarchy,
       files,
       source.pollIntervalMs,
     );
@@ -321,7 +343,7 @@ export class FileSupervisor
     if (!this.isCurrent(revision) || Object.keys(updates).length === 0)
       return { type: "none" };
     const content = this.contextUpdatesToContent(updates);
-    this.emit("sent", updates);
+    this.callbacks.onSent?.(updates, context.nativeMessageIdx);
     return { type: "inject", content };
   }
 
@@ -348,7 +370,7 @@ export class FileSupervisor
     this.destroyed = true;
     clearInterval(this.pollTimer);
     this.pollTimer = undefined;
-    this.removeAllListeners();
+    this.callbacks = {};
   }
 
   getPendingUpdates(): FileUpdates {
@@ -412,7 +434,7 @@ export class FileSupervisor
     for (const [path, stat] of stats) this.observedStats.set(path, stat);
     if (!pendingUpdatesEqual(this.pendingUpdates, next)) {
       this.pendingUpdates = next;
-      this.emit("pendingUpdatesChanged");
+      this.callbacks.onPendingUpdatesChanged?.();
     } else {
       this.pendingUpdates = next;
     }
@@ -437,7 +459,7 @@ export class FileSupervisor
       relFilePath,
       fileTypeInfo,
     });
-    this.emit("fileAdded", absFilePath);
+    this.noteFileAdded(absFilePath);
     this.scheduleRefreshPendingUpdates();
   }
 
@@ -447,7 +469,7 @@ export class FileSupervisor
     delete this.files[absFilePath];
     delete this.pendingUpdates[absFilePath];
     // The refresh now compares against the pruned map, so it cannot report the removal.
-    this.emit("pendingUpdatesChanged");
+    this.callbacks.onPendingUpdatesChanged?.();
     this.scheduleRefreshPendingUpdates();
   }
 
@@ -473,7 +495,7 @@ export class FileSupervisor
     this.observedStats.delete(absFilePath);
 
     if (isNew) {
-      this.emit("fileAdded", absFilePath);
+      this.noteFileAdded(absFilePath);
     }
     this.scheduleRefreshPendingUpdates();
   }
@@ -506,9 +528,37 @@ export class FileSupervisor
         relFilePath,
         fileTypeInfo,
       });
-      this.emit("fileAdded", absFilePath);
+      this.noteFileAdded(absFilePath);
     }
     this.scheduleRefreshPendingUpdates();
+  }
+
+  private noteFileAdded(absFilePath: AbsFilePath): void {
+    this.callbacks.onFileAdded?.(absFilePath);
+    this.runHierarchyDiscovery(absFilePath);
+  }
+
+  /** Pull the editor's notion of implied context for a newly tracked file.
+   * Terminates because adding an already-tracked file is a no-op. */
+  private runHierarchyDiscovery(absFilePath: AbsFilePath): void {
+    const discover = this.discoverHierarchy;
+    if (!discover || this.destroyed) return;
+    discover(absFilePath)
+      .then((discovered) => {
+        if (this.destroyed) return;
+        for (const file of discovered) {
+          this.addFileContext(
+            file.absFilePath,
+            file.relFilePath,
+            file.fileTypeInfo,
+          );
+        }
+      })
+      .catch((err: Error) => {
+        this.logger.error(
+          `Error discovering hierarchy context for ${absFilePath}: ${err.message}`,
+        );
+      });
   }
 
   private scheduleRefreshPendingUpdates(): void {

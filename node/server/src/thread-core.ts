@@ -5,30 +5,35 @@ import {
   type ToolExecution,
 } from "./agent.ts";
 import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
-import type { ThreadId } from "./chat-types.ts";
+import type { FileIO } from "./capabilities/file-io.ts";
+import type { GitClient, GitState } from "./capabilities/git-client.ts";
+import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
+import type { ProviderProfile } from "./provider-options.ts";
 import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
 import type {
   AgentInput,
   NativeInferenceManager,
   NativeMessageIdx,
   NonEmptyRequestedTools,
+  Provider,
   ProviderMessageContent,
   ProviderToolSpec,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
+import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import {
   FileSupervisor,
   type Files,
   type FileUpdates,
+  type HierarchyDiscovery,
 } from "./supervisors/file-supervisor.ts";
 import {
   type GitContextUpdate,
   GitSupervisor,
 } from "./supervisors/git-supervisor.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
-import type { ThreadContext } from "./thread.ts";
 import type {
   SendResult,
   ToolInvocationState,
@@ -40,23 +45,55 @@ import {
 } from "./thread-supervisor.ts";
 import { executeToolBatch } from "./tool-executor.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
-import type { CreateTool } from "./tools/create-tool.ts";
-import { getToolSpecs } from "./tools/toolManager.ts";
-import type { AbsFilePath } from "./utils/files.ts";
+import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
+import type { HomeDir, NvimCwd } from "./utils/files.ts";
+
+export interface ThreadCoreContext {
+  logger: Logger;
+  threadType: ThreadType;
+  profile: ProviderProfile;
+  provider: Provider;
+  subagentConfig?: SubagentConfig;
+  toolSpecs: ProviderToolSpec[];
+  cwd: NvimCwd;
+  homeDir: HomeDir;
+  systemPrompt: SystemPrompt;
+  systemInfo: SystemInfo;
+  fileIO: FileIO;
+  gitClient: GitClient;
+  discoverHierarchy?: HierarchyDiscovery;
+  threadToolCreator: ThreadToolCreator;
+}
+
+/** The structured form of the context injected into one message, retained so
+ * the view can render it from history instead of observing delivery. */
+export type ContextDelivery = {
+  files?: FileUpdates;
+  git?: GitContextUpdate;
+};
 
 export interface ThreadCoreCallbacks {
   onUpdate: () => void;
   onBeforeRequest: () => Promise<BeforeRequestDecision>;
   onToolResults: ToolResultsHook;
   onToolApplied: OnToolAppliedHook;
-  onFilesSent: (updates: FileUpdates) => void;
-  onGitSent: (update: GitContextUpdate) => void;
-  onFileAdded: (path: AbsFilePath) => void;
 }
 
-export type ThreadCoreInitialization =
-  | { type: "fresh"; initialFiles?: Files }
-  | { type: "fork"; source: ThreadCore; nativeMessageIdx: NativeMessageIdx };
+export type ThreadCoreSeed = {
+  initialFiles?: Files;
+  initialGitState?: GitState;
+};
+
+interface ThreadCoreState {
+  manager: NativeInferenceManager;
+  fileSupervisor: FileSupervisor;
+  gitSupervisor: GitSupervisor | undefined;
+  systemInfoSupervisor: SystemInfoSupervisor | undefined;
+  systemReminders: SystemReminderSupervisor | undefined;
+  editedFilesSupervisor: EditedFilesSupervisor;
+  edlRegisters: EdlRegisters;
+  contextDeliveries: Map<NativeMessageIdx, ContextDelivery>;
+}
 
 export class ThreadCore {
   preflightTokenCount: number | undefined;
@@ -64,39 +101,146 @@ export class ThreadCore {
 
   readonly manager: NativeInferenceManager;
   readonly toolSpecs: ProviderToolSpec[];
-  fileSupervisor!: FileSupervisor;
-  gitSupervisor: GitSupervisor | undefined;
-  systemInfoSupervisor: SystemInfoSupervisor | undefined;
-  systemReminders: SystemReminderSupervisor | undefined;
-  editedFilesSupervisor!: EditedFilesSupervisor;
-  edlRegisters: EdlRegisters = { registers: new Map(), nextSavedId: 0 };
-  private readonly context: {
-    logger: Logger;
-    createTool: CreateTool;
-  };
+  readonly fileSupervisor: FileSupervisor;
+  readonly gitSupervisor: GitSupervisor | undefined;
+  readonly systemInfoSupervisor: SystemInfoSupervisor | undefined;
+  readonly systemReminders: SystemReminderSupervisor | undefined;
+  readonly editedFilesSupervisor: EditedFilesSupervisor;
+  readonly edlRegisters: EdlRegisters;
+  private readonly contextDeliveries: Map<NativeMessageIdx, ContextDelivery>;
+  private readonly createTool: CreateTool;
 
-  constructor(
+  static create(
+    id: ThreadId,
+    context: ThreadCoreContext,
+    callbacks: ThreadCoreCallbacks,
+    completedTools: Map<ToolRequestId, CompletedToolInfo>,
+    seed: ThreadCoreSeed = {},
+  ): ThreadCore {
+    const manager = context.provider.createInferenceManager({
+      profile: context.profile,
+      systemPrompt: context.systemPrompt,
+      tools: context.toolSpecs,
+      ...(context.subagentConfig?.effort
+        ? { effortOverride: context.subagentConfig.effort }
+        : {}),
+    });
+    const fileSupervisor = FileSupervisor.create({
+      logger: context.logger,
+      fileIO: context.fileIO,
+      cwd: context.cwd,
+      homeDir: context.homeDir,
+      ...(context.discoverHierarchy
+        ? { discoverHierarchy: context.discoverHierarchy }
+        : {}),
+      initialFiles: seed.initialFiles ?? {},
+    });
+    const state: ThreadCoreState = {
+      manager,
+      fileSupervisor,
+      editedFilesSupervisor: EditedFilesSupervisor.create(),
+      gitSupervisor: GitSupervisor.create({
+        gitClient: context.gitClient,
+        initialGitState: seed.initialGitState,
+        logger: context.logger,
+      }),
+      systemInfoSupervisor:
+        context.threadType !== "compact"
+          ? SystemInfoSupervisor.create({
+              systemInfo: context.systemInfo,
+              alreadyInjected: manager.log.messages.length > 0,
+            })
+          : undefined,
+      systemReminders:
+        context.threadType === "compact"
+          ? undefined
+          : SystemReminderSupervisor.create({
+              threadType: context.threadType,
+              subagentConfig: context.subagentConfig,
+              contextTracker: fileSupervisor,
+              getCompletedTools: () => completedTools,
+            }),
+      edlRegisters: { registers: new Map(), nextSavedId: 0 },
+      contextDeliveries: new Map(),
+    };
+    return new ThreadCore(id, context, callbacks, completedTools, state);
+  }
+
+  static clone(
+    id: ThreadId,
+    context: ThreadCoreContext,
+    callbacks: ThreadCoreCallbacks,
+    completedTools: Map<ToolRequestId, CompletedToolInfo>,
+    fork: { source: ThreadCore; nativeMessageIdx: NativeMessageIdx },
+  ): ThreadCore {
+    const source = fork.source;
+    const manager = source.manager.clone();
+    manager.truncateMessages(fork.nativeMessageIdx);
+    const nativeMessageIdx = manager.getNativeMessageIdx();
+    const fileSupervisor = FileSupervisor.clone({
+      source: source.fileSupervisor,
+      history: { type: "truncate", nativeMessageIdx },
+      deps: context,
+    });
+    const state: ThreadCoreState = {
+      manager,
+      fileSupervisor,
+      editedFilesSupervisor: EditedFilesSupervisor.clone({
+        source: source.editedFilesSupervisor,
+        nativeMessageIdx,
+      }),
+      gitSupervisor: source.gitSupervisor
+        ? GitSupervisor.clone({
+            source: source.gitSupervisor,
+            gitClient: context.gitClient,
+            logger: context.logger,
+            nativeMessageIdx,
+          })
+        : undefined,
+      systemInfoSupervisor: source.systemInfoSupervisor
+        ? SystemInfoSupervisor.clone({
+            source: source.systemInfoSupervisor,
+            nativeMessageIdx,
+          })
+        : undefined,
+      systemReminders: source.systemReminders
+        ? SystemReminderSupervisor.clone({
+            source: source.systemReminders,
+            nativeMessageIdx,
+            contextTracker: fileSupervisor,
+            getCompletedTools: () => completedTools,
+          })
+        : undefined,
+      edlRegisters: {
+        registers: new Map(source.edlRegisters.registers),
+        nextSavedId: source.edlRegisters.nextSavedId,
+      },
+      contextDeliveries: new Map(
+        [...source.contextDeliveries].filter(
+          ([idx]) => idx <= nativeMessageIdx,
+        ),
+      ),
+    };
+    return new ThreadCore(id, context, callbacks, completedTools, state);
+  }
+
+  private constructor(
     readonly id: ThreadId,
-    private readonly environment: ThreadContext,
+    private readonly context: ThreadCoreContext,
     private readonly callbacks: ThreadCoreCallbacks,
     private readonly completedTools: Map<ToolRequestId, CompletedToolInfo>,
-    options: ThreadCoreInitialization = { type: "fresh" },
+    state: ThreadCoreState,
   ) {
-    this.toolSpecs = ThreadCore.buildToolSpecs(environment);
-    this.manager =
-      options.type === "fork"
-        ? this.cloneHistory(options.source, options.nativeMessageIdx)
-        : environment.provider.createInferenceManager({
-            profile: environment.profile,
-            systemPrompt: environment.systemPrompt,
-            tools: this.toolSpecs,
-            ...(environment.subagentConfig?.effort
-              ? { effortOverride: environment.subagentConfig.effort }
-              : {}),
-          });
-    if (options.type === "fresh")
-      this.createSupervisors(this.manager, options.initialFiles);
-    const createTool = environment.clientToolCreator({ threadId: id })({
+    this.toolSpecs = context.toolSpecs;
+    this.manager = state.manager;
+    this.fileSupervisor = state.fileSupervisor;
+    this.gitSupervisor = state.gitSupervisor;
+    this.systemInfoSupervisor = state.systemInfoSupervisor;
+    this.systemReminders = state.systemReminders;
+    this.editedFilesSupervisor = state.editedFilesSupervisor;
+    this.edlRegisters = state.edlRegisters;
+    this.contextDeliveries = state.contextDeliveries;
+    this.createTool = context.threadToolCreator({
       contextTracker: this.fileSupervisor,
       edlRegisters: this.edlRegisters,
       onToolApplied: (absFilePath, tool, fileTypeInfo) => {
@@ -110,117 +254,32 @@ export class ThreadCore {
       },
       requestRender: () => this.handleUpdate(),
     });
-    this.context = { logger: environment.logger, createTool };
-    this.fileSupervisor.on("pendingUpdatesChanged", () => this.handleUpdate());
-    this.fileSupervisor.on("sent", (updates) => {
-      if (this.isActive) callbacks.onFilesSent(updates);
-    });
-    this.fileSupervisor.on("fileAdded", (path) => {
-      if (this.isActive) callbacks.onFileAdded(path);
-    });
-    this.gitSupervisor?.on("sent", (update) => {
-      if (this.isActive) callbacks.onGitSent(update);
-    });
-  }
-
-  private static buildToolSpecs(context: ThreadContext): ProviderToolSpec[] {
-    return getToolSpecs(
-      context.threadType,
-      context.mcpToolManager,
-      context.availableCapabilities,
-      context.getAgents(),
-      context.subagentConfig,
-      context.yieldSchema,
-      context.getScriptRunner?.()?.getScriptCatalog(),
-      context.subagentDockerfile,
-    );
-  }
-
-  private createSupervisors(
-    manager: NativeInferenceManager,
-    initialFiles?: Files,
-  ): void {
-    const context = this.environment;
-    const delivery = context.contextDelivery;
-    this.editedFilesSupervisor = EditedFilesSupervisor.create();
-    this.fileSupervisor = FileSupervisor.create({
-      logger: context.logger,
-      fileIO: context.fileIO,
-      cwd: context.cwd,
-      homeDir: context.homeDir,
-      initialFiles: initialFiles ?? delivery?.initialFiles ?? {},
-      ...(delivery?.pollIntervalMs !== undefined
-        ? { pollIntervalMs: delivery.pollIntervalMs }
-        : {}),
-    });
-    this.gitSupervisor = delivery
-      ? GitSupervisor.create({
-          gitClient: context.gitClient,
-          initialGitState: delivery.initialGitState,
-          logger: context.logger,
-        })
-      : undefined;
-    this.systemInfoSupervisor =
-      delivery && context.threadType !== "compact"
-        ? SystemInfoSupervisor.create({
-            systemInfo: context.systemInfo,
-            alreadyInjected: manager.log.messages.length > 0,
-          })
-        : undefined;
-    this.systemReminders =
-      context.threadType === "compact"
-        ? undefined
-        : SystemReminderSupervisor.create({
-            threadType: context.threadType,
-            subagentConfig: context.subagentConfig,
-            contextTracker: this.fileSupervisor,
-            getCompletedTools: () => this.completedTools,
-          });
-  }
-
-  private cloneHistory(
-    source: ThreadCore,
-    nativeMessageIdx: NativeMessageIdx,
-  ): NativeInferenceManager {
-    const manager = source.manager.clone();
-    manager.truncateMessages(nativeMessageIdx);
-    const effectiveIdx = manager.getNativeMessageIdx();
-    this.editedFilesSupervisor = EditedFilesSupervisor.clone({
-      source: source.editedFilesSupervisor,
-      nativeMessageIdx: effectiveIdx,
-    });
-    this.fileSupervisor = FileSupervisor.clone({
-      source: source.fileSupervisor,
-      history: { type: "truncate", nativeMessageIdx: effectiveIdx },
-      deps: this.environment,
-    });
-    this.gitSupervisor = source.gitSupervisor
-      ? GitSupervisor.clone({
-          source: source.gitSupervisor,
-          gitClient: this.environment.gitClient,
-          logger: this.environment.logger,
-          nativeMessageIdx: effectiveIdx,
-        })
-      : undefined;
-    this.systemInfoSupervisor = source.systemInfoSupervisor
-      ? SystemInfoSupervisor.clone({
-          source: source.systemInfoSupervisor,
-          nativeMessageIdx: effectiveIdx,
-        })
-      : undefined;
-    this.systemReminders = source.systemReminders
-      ? SystemReminderSupervisor.clone({
-          source: source.systemReminders,
-          nativeMessageIdx: effectiveIdx,
-          contextTracker: this.fileSupervisor,
-          getCompletedTools: () => this.completedTools,
-        })
-      : undefined;
-    this.edlRegisters = {
-      registers: new Map(source.edlRegisters.registers),
-      nextSavedId: source.edlRegisters.nextSavedId,
+    this.fileSupervisor.callbacks = {
+      onPendingUpdatesChanged: () => this.handleUpdate(),
+      onSent: (files, idx) => this.recordDelivery(idx, { files }),
     };
-    return manager;
+    if (this.gitSupervisor) {
+      this.gitSupervisor.callbacks = {
+        onSent: (git, idx) => this.recordDelivery(idx, { git }),
+      };
+    }
+  }
+
+  private recordDelivery(
+    nativeMessageIdx: NativeMessageIdx,
+    delivery: ContextDelivery,
+  ): void {
+    this.contextDeliveries.set(nativeMessageIdx, {
+      ...this.contextDeliveries.get(nativeMessageIdx),
+      ...delivery,
+    });
+    this.handleUpdate();
+  }
+
+  getContextDelivery(
+    nativeMessageIdx: NativeMessageIdx,
+  ): ContextDelivery | undefined {
+    return this.contextDeliveries.get(nativeMessageIdx);
   }
 
   get isActive(): boolean {
@@ -234,7 +293,7 @@ export class ThreadCore {
     if (this.disposed) return;
     this.disposed = true;
     this.fileSupervisor.destroy();
-    this.gitSupervisor?.removeAllListeners();
+    if (this.gitSupervisor) this.gitSupervisor.callbacks = {};
     await this.abortAgentTurn();
   }
 
@@ -246,7 +305,7 @@ export class ThreadCore {
   ): ToolExecution {
     this.resultMessageIdx = this.manager.getPendingResultMessageIdx(requests);
     const execution = executeToolBatch(requests, {
-      createTool: this.context.createTool,
+      createTool: this.createTool,
       completedTools: this.completedTools,
       publishTools,
       onUpdate: () => this.handleUpdate(),

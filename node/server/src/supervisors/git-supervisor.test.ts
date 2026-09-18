@@ -44,7 +44,7 @@ function setup(current: GitState, initial: GitState | undefined) {
     initialGitState: initial,
     logger: noopLogger,
   });
-  supervisor.on("sent", onSent);
+  supervisor.callbacks = { ...supervisor.callbacks, onSent: onSent };
   return { supervisor, onSent };
 }
 

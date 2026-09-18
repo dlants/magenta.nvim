@@ -1,5 +1,4 @@
 import type {
-  GitContextUpdate,
   GitState,
   ProviderToolResult,
   ScriptSandboxRoot,
@@ -23,7 +22,6 @@ import {
 import * as diff from "diff";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import type { SandboxViolationHandler } from "../capabilities/sandbox-violation-handler.ts";
-import type { FileUpdates } from "../context/context-manager.ts";
 import type { Environment } from "../environment.ts";
 import { displaySnapshotDiff } from "../nvim/displaySnapshotDiff.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
@@ -186,8 +184,6 @@ export type ThreadMsg = {
 
 /** View state for a single message, stored separately from provider thread content */
 export type MessageViewState = {
-  contextUpdates?: FileUpdates;
-  gitUpdate?: GitContextUpdate;
   forkedFrom?: ThreadId;
   expandedUpdates?: { [absFilePath: string]: boolean };
   expandedContent?: { [contentIdx: number]: boolean };
@@ -360,16 +356,6 @@ export class NvimThread {
         }),
       SCROLL_DELAY_MS,
     );
-  }
-
-  /** Attach a tracker's structured record to the message its injection is
-   * about to produce. */
-  recordMessageViewState(patch: MessageViewState): void {
-    const messageCount = this.thread.getProviderMessages().length;
-    this.state.messageViewState[messageCount] = {
-      ...this.state.messageViewState[messageCount],
-      ...patch,
-    };
   }
 
   /** Observe one complete submission for UI completion and error presentation. */

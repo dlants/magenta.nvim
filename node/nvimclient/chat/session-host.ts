@@ -13,7 +13,6 @@ import {
   type ResolvedSubmission,
   type Session,
   type SessionHost,
-  type ThreadContextDelivery,
   type ThreadId,
   type ThreadPreparation,
 } from "@magenta/server";
@@ -39,7 +38,7 @@ import {
 import type { RootMsg } from "../root-msg.ts";
 import type { Sandbox } from "../sandbox-manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
-import type { AbsFilePath, HomeDir, NvimCwd } from "../utils/files.ts";
+import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import type { CommandRegistry } from "./commands/registry.ts";
 import type { NvimThreadContext, SandboxRoot } from "./thread.ts";
 
@@ -287,35 +286,6 @@ export class NvimSessionHost implements SessionHost {
       },
     };
   }
-
-  discoverHierarchy(
-    id: ThreadId,
-    absFilePath: AbsFilePath,
-    session: Session,
-  ): void {
-    void discoverHierarchyContext(absFilePath, {
-      nvim: this.context.nvim,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-      options: this.context.getOptions(),
-    })
-      .then((discovered) => {
-        const record = session.getThread(id);
-        if (record?.state !== "initialized") return;
-        for (const file of discovered) {
-          record.thread.contextFiles.addFileContext(
-            file.absFilePath,
-            file.relFilePath,
-            file.fileTypeInfo,
-          );
-        }
-      })
-      .catch((err: Error) => {
-        this.context.nvim.logger.error(
-          `Error discovering hierarchy context for ${absFilePath}: ${err.message}`,
-        );
-      });
-  }
 }
 
 /** Editor-backed collaborators in server-typed shape. Conversation kind,
@@ -330,10 +300,6 @@ function prepareThreadDependencies(
   const env = context.environment;
   const cwd = env.cwd;
   const homeDir = env.homeDir;
-  const contextDelivery: ThreadContextDelivery = {
-    ...(context.initialFiles ? { initialFiles: context.initialFiles } : {}),
-    initialGitState: context.initialGitState,
-  };
   const getAgents = () =>
     loadAgents({
       cwd,
@@ -349,7 +315,10 @@ function prepareThreadDependencies(
     profile: context.profile,
     cwd,
     homeDir,
-    contextDelivery,
+    ...(context.initialFiles ? { initialFiles: context.initialFiles } : {}),
+    ...(context.initialGitState
+      ? { initialGitState: context.initialGitState }
+      : {}),
     ...(context.subagentConfig
       ? { subagentConfig: context.subagentConfig }
       : {}),
@@ -360,6 +329,13 @@ function prepareThreadDependencies(
     getScriptRunner,
     fileIO: env.fileIO,
     gitClient: env.gitClient,
+    discoverHierarchy: (absFilePath) =>
+      discoverHierarchyContext(absFilePath, {
+        nvim: context.nvim,
+        cwd,
+        homeDir,
+        options: context.options,
+      }),
     clientToolCreator: clientToolCreator({
       logger: context.nvim.logger,
       lspClient: env.lspClient,

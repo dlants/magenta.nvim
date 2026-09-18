@@ -1398,7 +1398,7 @@ describe("system-info preamble", () => {
 
   it("rides the first request only, and the first one after a reset", async () => {
     const { core, mockClient } = createAgentWithMock(
-      { contextDelivery: {} },
+      {},
       uniqueThreadId("system-info-preamble"),
     );
     const first = core.submit({

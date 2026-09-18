@@ -46,7 +46,7 @@ import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
-import { Thread, type ThreadCallbacks, type ThreadContext } from "./thread.ts";
+import { type ContextDelivery, Thread, type ThreadContext } from "./thread.ts";
 import type { SendResult } from "./thread-api.ts";
 import { executeToolBatch } from "./tool-executor.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
@@ -281,10 +281,6 @@ export function createAgentWithMock(
   threadId: ThreadId = "test-thread" as ThreadId,
   resolve?: ResolveSubmission,
   onUpdate?: () => void,
-  callbacks?: Pick<
-    ThreadCallbacks,
-    "onFilesSent" | "onGitSent" | "onFileAdded"
-  >,
 ): {
   core: Thread;
   mockClient: MockAnthropicClient;
@@ -301,10 +297,7 @@ export function createAgentWithMock(
     core: new Thread(
       threadId,
       context,
-      {
-        ...callbacks,
-        onUpdate: onUpdate ?? (() => {}),
-      },
+      { onUpdate: onUpdate ?? (() => {}) },
       {
         baseDir: TEST_ARCHIVE_DIR,
       },
@@ -371,7 +364,7 @@ function buildTestAgent(
     createTool: context.clientToolCreator({
       threadId: "test-agent" as ThreadId,
     })({
-      contextTracker: { files: context.contextDelivery?.initialFiles ?? {} },
+      contextTracker: { files: context.initialFiles ?? {} },
       onToolApplied: () => {},
       edlRegisters,
       requestRender: () => {},
@@ -502,6 +495,11 @@ export function getFileSupervisor(thread: Thread): FileSupervisor {
 }
 
 /** Administrative resets are test fixtures, not part of Thread's parent API. */
+/** The context deliveries the thread's current core has recorded. Retired
+ * cores keep their own, so this observes only the live generation. */
+export function getContextDeliveries(thread: Thread): ContextDelivery[] {
+  return [...thread["core"]["contextDeliveries"].values()];
+}
 export function resetThread(
   thread: Thread,
   options: Parameters<Thread["replaceCore"]>[0],

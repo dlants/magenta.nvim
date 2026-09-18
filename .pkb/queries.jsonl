@@ -69,3 +69,4 @@
 {"timestamp":"2026-09-12T20:59:29Z","query":"inference provider abort signal stream hangs request timeout terminate stream -k 8","commit":"5d43dd9d47d0be0d3be66152582240ac585e8fae"}
 {"timestamp":"2026-09-12T21:00:10Z","query":"AnthropicInferenceManager abort in-flight request retry test finalMessage hangs -k 8","commit":"5d43dd9d47d0be0d3be66152582240ac585e8fae"}
 {"timestamp":"2026-09-12T21:23:55Z","query":"where ThreadCore creates and owns supervisors composeSupervisors supervision","commit":"67693e737033411be114d5e4c13789e1b3856fd8"}
+{"timestamp":"2026-09-18T19:20:49Z","query":"file supervisor context delivery sent event","commit":"9d4feacdadfda9432b06fa9fa907bd2733c767bb"}

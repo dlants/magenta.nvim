@@ -894,9 +894,12 @@ describe("hierarchy context discovery", () => {
         );
 
         const addedEvents: string[] = [];
-        fileSupervisor.on("fileAdded", (absFilePath) => {
-          addedEvents.push(absFilePath);
-        });
+        fileSupervisor.callbacks = {
+          ...fileSupervisor.callbacks,
+          onFileAdded: (absFilePath) => {
+            addedEvents.push(absFilePath);
+          },
+        };
 
         await driver.addContextFiles("a/b/c/leaf.txt");
 

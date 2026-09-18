@@ -1,6 +1,5 @@
 import type { GitClient, GitState } from "../capabilities/git-client.ts";
 import { formatGitHead } from "../capabilities/git-client.ts";
-import { Emitter } from "../emitter.ts";
 import type { Logger } from "../logger.ts";
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
@@ -154,18 +153,20 @@ import { injectText } from "../thread-supervisor.ts";
 /** Contributes the git status update to the request that is about to go out.
  * `GitTracker.getUpdate` commits the agent view as a side effect, which is
  * correct here: an injection is applied unconditionally. */
-export type GitSupervisorEvents = {
-  /** A git update was just committed into the request going out. */
-  sent: [update: GitContextUpdate];
+export type GitSupervisorCallbacks = {
+  /** A git update was just committed into the request going out, into the
+   * message at `nativeMessageIdx`. */
+  onSent?: (
+    update: GitContextUpdate,
+    nativeMessageIdx: NativeMessageIdx,
+  ) => void;
 };
 
-export class GitSupervisor
-  extends Emitter<GitSupervisorEvents>
-  implements ThreadSupervisor
-{
-  private constructor(readonly gitTracker: GitTracker) {
-    super();
-  }
+export class GitSupervisor implements ThreadSupervisor {
+  /** Assigned by the owner once it exists; a retired supervisor drops them. */
+  callbacks: GitSupervisorCallbacks = {};
+
+  private constructor(readonly gitTracker: GitTracker) {}
 
   static create(args: {
     gitClient: GitClient;
@@ -200,7 +201,7 @@ export class GitSupervisor
     if (context.status === "suspended") return { type: "none" };
     const update = await this.gitTracker.getUpdate(context.nativeMessageIdx);
     if (!update) return { type: "none" };
-    this.emit("sent", update);
+    this.callbacks.onSent?.(update, context.nativeMessageIdx);
     return injectText(gitUpdateToText(update));
   }
 

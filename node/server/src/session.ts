@@ -32,11 +32,7 @@ import {
 } from "./thread-assembly.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { Defer } from "./utils/async.ts";
-import type {
-  AbsFilePath,
-  NvimCwd,
-  UnresolvedFilePath,
-} from "./utils/files.ts";
+import type { NvimCwd, UnresolvedFilePath } from "./utils/files.ts";
 
 export type SessionId = string & { __sessionId: true };
 
@@ -90,7 +86,6 @@ export interface SessionHost {
   getProvider?(profile: ProviderProfile): Provider;
   /** Drop approvals that belong to work being abandoned. */
   rejectApprovals?(id: ThreadId): void;
-  discoverHierarchy?(id: ThreadId, path: AbsFilePath, session: Session): void;
   prepareThread(
     request: ThreadPreparation,
     session: Session,
@@ -120,15 +115,6 @@ type SessionEvents = {
   /** Invalidation: the record for this id may have changed in any way. */
   changed: [id: ThreadId];
   removed: [id: ThreadId];
-  filesSent: [
-    id: ThreadId,
-    updates: Parameters<NonNullable<ThreadCallbacks["onFilesSent"]>>[0],
-  ];
-  gitSent: [
-    id: ThreadId,
-    update: Parameters<NonNullable<ThreadCallbacks["onGitSent"]>>[0],
-  ];
-  fileAdded: [id: ThreadId, path: AbsFilePath];
 };
 
 /** The authoritative thread registry: identity, hierarchy, construction
@@ -369,17 +355,6 @@ The title must be a single line (no newlines) and a few words long (ideally arou
           entry.lastActivityTime = Date.now();
           this.emit("changed", id);
         },
-        onFileAdded: (path) => {
-          if (!current()) return;
-          this.host.discoverHierarchy?.(id, path, this);
-          this.emit("fileAdded", id, path);
-        },
-        onFilesSent: (updates) => {
-          if (current()) this.emit("filesSent", id, updates);
-        },
-        onGitSent: (update) => {
-          if (current()) this.emit("gitSent", id, update);
-        },
       };
 
       const assembled = assembleThread({
@@ -418,9 +393,6 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       );
       this.emit("changed", id);
 
-      for (const path of Object.keys(thread.contextFiles.files)) {
-        this.host.discoverHierarchy?.(id, path as AbsFilePath, this);
-      }
       if (options.contextFiles?.length) {
         await thread.contextFiles.addFiles(options.contextFiles);
       }

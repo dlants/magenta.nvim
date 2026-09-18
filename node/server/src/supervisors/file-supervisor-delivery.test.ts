@@ -192,7 +192,7 @@ describe("FileSupervisor unit tests", () => {
     });
 
     const spy = vi.fn();
-    cm.on("fileAdded", spy);
+    cm.callbacks = { ...cm.callbacks, onFileAdded: spy };
 
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
 
@@ -740,7 +740,7 @@ describe("FileSupervisor - refreshPendingUpdates", () => {
     expect(Object.keys(cm.getPendingUpdates()).length).toBe(0);
 
     const spy = vi.fn();
-    cm.on("pendingUpdatesChanged", spy);
+    cm.callbacks = { ...cm.callbacks, onPendingUpdatesChanged: spy };
 
     await fileIO.writeFile(TEST_PATH, "modified");
     statCounter += 100;
@@ -824,7 +824,7 @@ describe("FileSupervisor - background poll", () => {
       );
 
       const spy = vi.fn();
-      cm.on("pendingUpdatesChanged", spy);
+      cm.callbacks = { ...cm.callbacks, onPendingUpdatesChanged: spy };
 
       cm.destroy();
       const baseline = spy.mock.calls.length;
@@ -867,7 +867,7 @@ describe("FileSupervisor - background poll", () => {
       await cm.refreshPendingUpdates();
 
       const spy = vi.fn();
-      cm.on("pendingUpdatesChanged", spy);
+      cm.callbacks = { ...cm.callbacks, onPendingUpdatesChanged: spy };
 
       await fileIO.writeFile(TEST_PATH, "changed");
       statCounter += 100;
@@ -950,7 +950,7 @@ describe("FileSupervisor conversation delivery lifetime", () => {
     const refresh = cm.refreshPendingUpdates();
     cm.destroy();
     const onPending = vi.fn();
-    cm.on("pendingUpdatesChanged", onPending);
+    cm.callbacks = { ...cm.callbacks, onPendingUpdatesChanged: onPending };
     finish(undefined);
     await refresh;
     expect(onPending).not.toHaveBeenCalled();

@@ -1,6 +1,4 @@
 import type {
-  FileUpdates,
-  GitContextUpdate,
   NativeMessageIdx,
   RestResult,
   ScriptRunner,
@@ -199,8 +197,6 @@ export class Chat {
     this.session = session;
     this.session.on("changed", this.syncThread);
     this.session.on("removed", this.removeThreadView);
-    this.session.on("filesSent", this.onFilesSent);
-    this.session.on("gitSent", this.onGitSent);
     for (const record of this.session.listThreads()) {
       this.syncThread(record.id);
     }
@@ -211,8 +207,6 @@ export class Chat {
   dispose(): void {
     this.session.off("changed", this.syncThread);
     this.session.off("removed", this.removeThreadView);
-    this.session.off("filesSent", this.onFilesSent);
-    this.session.off("gitSent", this.onGitSent);
     for (const view of this.threadViews.values()) view.dispose();
     this.threadViews.clear();
   }
@@ -305,16 +299,6 @@ export class Chat {
     if (this.state.activeThreadId === id) {
       this.state = { state: "thread-overview", activeThreadId: undefined };
     }
-  };
-
-  private onFilesSent = (id: ThreadId, updates: FileUpdates): void => {
-    this.threadViews.get(id)?.recordMessageViewState({
-      contextUpdates: updates,
-    });
-  };
-
-  private onGitSent = (id: ThreadId, update: GitContextUpdate): void => {
-    this.threadViews.get(id)?.recordMessageViewState({ gitUpdate: update });
   };
 
   update(msg: RootMsg) {
@@ -1089,10 +1073,6 @@ ${rows}${loadMore}`;
       const messageIdx = Number(idxStr);
       if (messageIdx > idx) continue;
       thread.state.messageViewState[messageIdx] = {
-        ...(viewState.contextUpdates
-          ? { contextUpdates: { ...viewState.contextUpdates } }
-          : {}),
-        ...(viewState.gitUpdate ? { gitUpdate: viewState.gitUpdate } : {}),
         ...(viewState.expandedUpdates
           ? { expandedUpdates: { ...viewState.expandedUpdates } }
           : {}),

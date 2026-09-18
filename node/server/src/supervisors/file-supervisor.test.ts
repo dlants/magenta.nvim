@@ -42,7 +42,7 @@ function setup(files: Record<string, string>) {
     homeDir: "/home" as HomeDir,
     initialFiles: {},
   });
-  supervisor.on("sent", onSent);
+  supervisor.callbacks = { ...supervisor.callbacks, onSent: onSent };
   return { fileIO, onSent, supervisor };
 }
 
@@ -226,7 +226,7 @@ describe("FileSupervisor conversation lifetime", () => {
       source: supervisor,
       history: { type: "reseed" },
     });
-    clone.on("sent", onSent);
+    clone.callbacks = { ...clone.callbacks, onSent: onSent };
     finish("stale");
     expect(await request).toEqual({ type: "none" });
     expect(onSent).not.toHaveBeenCalled();
