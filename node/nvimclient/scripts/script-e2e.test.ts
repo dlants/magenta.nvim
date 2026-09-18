@@ -106,7 +106,7 @@ it("end-to-end: agent invokes run_script, subprocess spawns a thread, yields, an
       });
 
       // 5. The runner completes.
-      await pollUntil(() => inv.status === "done");
+      await pollUntil(() => inv.state.type === "done");
       expect(inv.scriptName).toBe("foo");
       expect(inv.threadIds.length).toBe(1);
       expect(inv.logs).toContain("starting");
@@ -310,7 +310,7 @@ it("bell behavior: pending-approval bells propagate to script+neovim, yields don
         ],
       });
 
-      await pollUntil(() => inv.status === "done");
+      await pollUntil(() => inv.state.type === "done");
 
       // Finishing the script bells the script row and notifies neovim so the
       // user knows the run completed.

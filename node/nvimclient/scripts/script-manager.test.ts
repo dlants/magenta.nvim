@@ -144,7 +144,7 @@ it("invokes a script that spawns a thread and resolves with the structured yield
 
       await pollUntil(() => {
         const inv = scriptManager.invocations.get(id);
-        return inv?.status === "done";
+        return inv?.state.type === "done";
       });
 
       const inv = scriptManager.invocations.get(id);
@@ -197,7 +197,7 @@ it("does not resolve a script's createThread() await on a subagent error", async
       // subagent thread is merely in an error state -- it should keep
       // waiting until the thread actually yields.
       await new Promise((resolve) => setTimeout(resolve, 100));
-      expect(inv.status).toBe("running");
+      expect(inv.state.type).toBe("running");
 
       // A failed thread is parked, with its log already rolled back, so a
       // fresh send is all the recovery it needs.
@@ -231,7 +231,7 @@ it("does not resolve a script's createThread() await on a subagent error", async
         ],
       });
 
-      await pollUntil(() => inv.status === "done");
+      await pollUntil(() => inv.state.type === "done");
       expect(inv.logs.some((l) => l.includes('"ok":true'))).toBe(true);
     },
   );
@@ -352,9 +352,9 @@ it("marks the invocation error when the runner throws", async () => {
       ) as ScriptInvocationId;
 
       await pollUntil(
-        () => scriptManager.invocations.get(id)?.status === "error",
+        () => scriptManager.invocations.get(id)?.state.type === "error",
       );
-      expect(scriptManager.invocations.get(id)?.status).toBe("error");
+      expect(scriptManager.invocations.get(id)?.state.type).toBe("error");
     },
   );
 });
@@ -463,7 +463,7 @@ it("renders running invocations, logs, and spawned threads in the Scripts overvi
       });
 
       await pollUntil(
-        () => scriptManager.invocations.get(id)?.status === "done",
+        () => scriptManager.invocations.get(id)?.state.type === "done",
       );
 
       await driver.magenta.command("threads-overview");
@@ -524,7 +524,7 @@ it("toggles sandbox bypass for the whole invocation from the script root row", a
       });
 
       await pollUntil(
-        () => scriptManager.invocations.get(id)?.status === "done",
+        () => scriptManager.invocations.get(id)?.state.type === "done",
       );
 
       const inv = scriptManager.invocations.get(id);
@@ -582,7 +582,7 @@ it("expands and collapses the script row to show/hide spawned threads", async ()
       });
 
       await pollUntil(
-        () => scriptManager.invocations.get(id)?.status === "done",
+        () => scriptManager.invocations.get(id)?.state.type === "done",
       );
 
       await driver.magenta.command("threads-overview");
@@ -726,7 +726,7 @@ it("lets an in-magenta agent trigger a script via run_script", async () => {
         ],
       });
 
-      await pollUntil(() => inv.status === "done");
+      await pollUntil(() => inv.state.type === "done");
       expect(inv.scriptName).toBe("foo");
     },
   );
@@ -873,7 +873,7 @@ it("keeps the script running after its triggering thread is deleted", async () =
           },
         ],
       });
-      await pollUntil(() => inv.status === "done");
+      await pollUntil(() => inv.state.type === "done");
     },
   );
 });
@@ -906,6 +906,125 @@ it("deleting an invocation mid-creation leaves no orphan script thread", async (
       await pollUntil(
         () => !session.listThreads().some((t) => t.scriptInvocationId === id),
       );
+    },
+  );
+});
+
+it("toggling the invocation sandbox approves a spawned thread's pending permission", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        await setupScript(tmpDir, FOO_SCRIPT);
+      },
+    },
+    async (driver) => {
+      driver.mockSandbox.setState({
+        status: "unsupported",
+        reason: "disabled",
+      });
+      await driver.showSidebar();
+      const scriptManager = driver.magenta.scripts;
+      await pollUntil(() =>
+        scriptManager.getCatalog().some((s) => s.name === "foo"),
+      );
+
+      const id = scriptManager.startScript(
+        "foo",
+        { x: "thing" },
+        { sandboxBypassed: false },
+      );
+
+      const stream =
+        await driver.mockAnthropic.awaitPendingStreamWithText("work on thing");
+      stream.respond({
+        stopReason: "tool_use",
+        text: "running",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "bash-tool" as ToolRequestId,
+              toolName: "bash_command" as ToolName,
+              input: { command: "echo hi" },
+            },
+          },
+        ],
+      });
+
+      await pollUntil(
+        () => (scriptManager.invocations.get(id)?.threadIds.length ?? 0) > 0,
+      );
+      const inv = scriptManager.invocations.get(id);
+      if (!inv) throw new Error("missing invocation");
+      const threadId = inv.threadIds[0];
+      const thread = driver.magenta.chat.threadWrappers[threadId];
+      if (thread?.state !== "initialized")
+        throw new Error("thread not initialized");
+
+      await driver.magenta.command("threads-overview");
+      await driver.assertDisplayBufferContains("foo (running)");
+      await pollUntil(
+        () =>
+          thread.thread.sandboxViolationHandler!.getPendingViolations().size ===
+          1,
+      );
+
+      // Bypassing the invocation must release every pending violation in its
+      // thread subtree, not just future ones.
+      await driver.triggerDisplayBufferKeyOnContent("foo (running)", "t");
+      await pollUntil(
+        () =>
+          thread.thread.sandboxViolationHandler!.getPendingViolations().size ===
+          0,
+      );
+      expect(driver.magenta.chat.isSandboxBypassed(threadId)).toBe(true);
+      await driver.assertDisplayBufferContains("SANDBOX OFF");
+    },
+  );
+});
+
+it("dispose terminates running invocations and rejects new ones", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        await setupScript(tmpDir, LONG_LIVED_SCRIPT);
+      },
+    },
+    async (driver) => {
+      const scriptManager = driver.magenta.scripts;
+      await pollUntil(() =>
+        scriptManager.getCatalog().some((s) => s.name === "foo"),
+      );
+
+      const id = scriptManager.startScript(
+        "foo",
+        {},
+        { sandboxBypassed: false },
+      );
+      await pollUntil(() =>
+        (scriptManager.invocations.get(id)?.logs ?? []).some((l) =>
+          l.startsWith("child "),
+        ),
+      );
+      const childPid = scriptManager.childPid(id);
+
+      await scriptManager.dispose();
+
+      await pollUntil(() => {
+        if (childPid === undefined) return true;
+        try {
+          process.kill(childPid, 0);
+          return false;
+        } catch {
+          return true;
+        }
+      });
+      expect(() =>
+        scriptManager.startScript("foo", {}, { sandboxBypassed: false }),
+      ).toThrow("ScriptManager disposed");
+      // A disposed manager must not repopulate its catalog either.
+      await scriptManager.discover();
+      expect(scriptManager.getCatalog().length).toBe(0);
     },
   );
 });

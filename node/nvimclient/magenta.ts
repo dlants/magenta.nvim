@@ -1138,6 +1138,7 @@ ${lines.join("\n")}
   }
 
   destroy() {
+    this.scriptManager.dispose();
     void this.scripts.dispose();
     // BufferManager's mounted apps will be cleaned up when nvim exits
   }

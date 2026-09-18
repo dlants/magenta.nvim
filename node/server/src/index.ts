@@ -225,7 +225,7 @@ export type {
 export {
   type ScriptInvocation,
   type ScriptInvocationEntry,
-  type ScriptInvocationStatus,
+  type ScriptInvocationState,
   ScriptManager,
   type ScriptSandboxCapability,
   type ScriptSandboxRoot,

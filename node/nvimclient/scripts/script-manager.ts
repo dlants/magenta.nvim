@@ -39,6 +39,9 @@ export type ScriptMsg = {
 export class ScriptController {
   private expandedInvocations = new Set<ScriptInvocationId>();
   private expandedThreads = new Set<ThreadId>();
+  /** The threads an invocation owned, so their view state can be dropped with
+   * it: the server record is gone by the time removal is observed. */
+  private invocationThreads = new Map<ScriptInvocationId, ThreadId[]>();
   private myDispatch: Dispatch<Msg>;
 
   constructor(
@@ -56,17 +59,41 @@ export class ScriptController {
       this.context.dispatch({ type: "script-msg", msg });
 
     const { scripts } = context;
-    scripts.on("catalogChanged", () =>
-      this.myDispatch({ type: "catalog-updated" }),
-    );
-    scripts.on("invocationChanged", (id) =>
-      this.myDispatch({ type: "invocation-updated", id }),
-    );
-    scripts.on("invocationRemoved", (id) => {
-      this.expandedInvocations.delete(id);
-      this.myDispatch({ type: "catalog-updated" });
-    });
-    scripts.on("invocationFinished", () => this.notifyFinished());
+    scripts.on("catalogChanged", this.onCatalogChanged);
+    scripts.on("invocationChanged", this.onInvocationChanged);
+    scripts.on("invocationRemoved", this.onInvocationRemoved);
+    scripts.on("invocationFinished", this.onInvocationFinished);
+  }
+
+  private onCatalogChanged = () => this.myDispatch({ type: "catalog-updated" });
+
+  private onInvocationChanged = (id: ScriptInvocationId) => {
+    // Remember the invocation's threads while the record still exists, so their
+    // view state can be dropped when it is removed.
+    const invocation = this.context.scripts.getInvocation(id);
+    if (invocation) {
+      this.invocationThreads.set(id, [...invocation.threadIds]);
+    }
+    this.myDispatch({ type: "invocation-updated", id });
+  };
+
+  private onInvocationRemoved = (id: ScriptInvocationId) => {
+    for (const threadId of this.invocationThreads.get(id) ?? []) {
+      this.expandedThreads.delete(threadId);
+    }
+    this.invocationThreads.delete(id);
+    this.expandedInvocations.delete(id);
+    this.myDispatch({ type: "catalog-updated" });
+  };
+
+  private onInvocationFinished = () => this.notifyFinished();
+
+  /** Drop every subscription; view state dies with the controller. */
+  dispose(): void {
+    this.context.scripts.off("catalogChanged", this.onCatalogChanged);
+    this.context.scripts.off("invocationChanged", this.onInvocationChanged);
+    this.context.scripts.off("invocationRemoved", this.onInvocationRemoved);
+    this.context.scripts.off("invocationFinished", this.onInvocationFinished);
   }
 
   update(msg: RootMsg): void {
@@ -134,7 +161,7 @@ export class ScriptController {
       return d``;
     }
     if (result.status === "ok") {
-      return d`\n  ⮑ yielded: ${result.value}`;
+      return d`\n  ⮑ yielded: ${JSON.stringify(result.value)}`;
     }
     return d`\n  ⮑ error: ${result.error}`;
   }
@@ -152,11 +179,11 @@ export class ScriptController {
     );
     for (const inv of sortedInvocations) {
       const icon =
-        inv.status === "running"
+        inv.state.type === "running"
           ? "⏳"
-          : inv.status === "done"
+          : inv.state.type === "done"
             ? "✅"
-            : inv.status === "aborted"
+            : inv.state.type === "aborted"
               ? "⛔"
               : "❌";
       const sandboxIndicator = inv.sandboxBypassed
@@ -165,7 +192,7 @@ export class ScriptController {
       const isExpanded = this.expandedInvocations.has(inv.id);
       const expandIndicator = isExpanded ? "▼ " : "▶ ";
       const needsAttention =
-        inv.status !== "running" ||
+        inv.state.type !== "running" ||
         inv.entries.some(
           (e) =>
             e.type === "thread" &&
@@ -175,7 +202,7 @@ export class ScriptController {
 
       const invRows: VDOMNode[] = [];
       const headerLine = withBindings(
-        d`\n${icon} ${expandIndicator}${bell}${sandboxIndicator}${inv.title ?? inv.scriptName} (${inv.status})`,
+        d`\n${icon} ${expandIndicator}${bell}${sandboxIndicator}${inv.title ?? inv.scriptName} (${inv.state.type})`,
         {
           dd: () => this.myDispatch({ type: "delete-invocation", id: inv.id }),
           t: () =>

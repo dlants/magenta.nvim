@@ -23,14 +23,19 @@ import type {
   MagentaToScript,
   ScriptMeta,
   ScriptToMagenta,
-  Result as SdkResult,
 } from "./protocol.ts";
 
 const MANIFEST_FILENAME = ".magenta-manifest.json";
 const REGISTRATION_TIMEOUT_MS = 5000;
 const SIGKILL_GRACE_MS = 2000;
 
-export type ScriptInvocationStatus = "running" | "done" | "error" | "aborted";
+/** An invocation's lifecycle state. Terminal failure carries its reason, so an
+ * error state cannot exist without one. */
+export type ScriptInvocationState =
+  | { type: "running" }
+  | { type: "done" }
+  | { type: "error"; error: string }
+  | { type: "aborted" };
 
 export type ScriptInvocationEntry =
   | { type: "log"; message: string }
@@ -44,7 +49,7 @@ export type ScriptInvocation = {
   title?: string;
   file: string;
   parameters: unknown;
-  status: ScriptInvocationStatus;
+  state: ScriptInvocationState;
   logs: string[];
   threadIds: ThreadId[];
   entries: ScriptInvocationEntry[];
@@ -52,13 +57,13 @@ export type ScriptInvocation = {
 };
 
 export type ScriptThreadResult =
-  | { status: "ok"; value: string }
+  | { status: "ok"; value: unknown }
   | { status: "error"; error: string };
 
 /** Bypass state of an invocation, as the rest of the system observes it. */
 export type ScriptSandboxRoot = {
   readonly isSandboxBypassed: boolean;
-  toggle?: () => void;
+  toggle: () => void;
 };
 
 /** Approval routing the script manager cannot own: whether a triggering thread
@@ -120,14 +125,104 @@ function newestSourceMtime(dir: string): number {
   return newest;
 }
 
-/** A thread's outcome as the script SDK sees it. A structured yield is
- * stringified here, at the display/transport edge, rather than by the thread
- * itself. */
+/** A thread's outcome as the script SDK sees it. The yielded value stays
+ * structured; serialization happens in the IPC channel, not here. */
 function toScriptResult(result: ThreadResult): ScriptThreadResult {
   if (result.type === "aborted") {
     return { status: "error", error: result.reason };
   }
-  return { status: "ok", value: JSON.stringify(result.value) };
+  return { status: "ok", value: result.value };
+}
+
+function isPlainObject(value: unknown): value is { [key: string]: unknown } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { type?: unknown }).type !== "function"
+  );
+}
+
+/** A script thread request as the session needs it: validated and branded, so
+ * the call site is not a chain of conditional spreads and casts. */
+type ScriptThreadRequest = {
+  requestId: number;
+  prompt: string;
+  yieldSchema: JSONSchemaType;
+  cwd?: NvimCwd;
+  contextFiles?: UnresolvedFilePath[];
+  systemReminder?: string;
+  autoCompactThreshold?: number;
+  autoCompactPrompt?: string;
+};
+
+function normalizeThreadRequest(
+  msg: Extract<ScriptToMagenta, { type: "create-thread" }>,
+): ScriptThreadRequest {
+  const options = msg.options ?? {};
+  const request: ScriptThreadRequest = {
+    requestId: msg.requestId,
+    prompt: msg.prompt,
+    yieldSchema: msg.yieldSchema as JSONSchemaType,
+  };
+  if (typeof options.cwd === "string") request.cwd = options.cwd as NvimCwd;
+  if (Array.isArray(options.contextFiles)) {
+    request.contextFiles = options.contextFiles.filter(
+      (f): f is string => typeof f === "string",
+    ) as UnresolvedFilePath[];
+  }
+  if (typeof options.systemReminder === "string") {
+    request.systemReminder = options.systemReminder;
+  }
+  if (typeof options.autoCompactThreshold === "number") {
+    request.autoCompactThreshold = options.autoCompactThreshold;
+  }
+  if (typeof options.autoCompactPrompt === "string") {
+    request.autoCompactPrompt = options.autoCompactPrompt;
+  }
+  return request;
+}
+
+/** IPC input arrives from a separate, potentially misbehaving process, so it is
+ * validated at the boundary rather than asserted into the protocol union. */
+export function parseScriptToMagenta(
+  raw: unknown,
+): ScriptToMagenta | undefined {
+  if (!isPlainObject(raw)) return undefined;
+  switch (raw.type) {
+    case "register":
+      if (!Array.isArray(raw.scripts)) return undefined;
+      if (
+        !raw.scripts.every(
+          (s) =>
+            isPlainObject(s) &&
+            typeof s.name === "string" &&
+            typeof s.description === "string" &&
+            isPlainObject(s.parameterSchema),
+        )
+      ) {
+        return undefined;
+      }
+      return { type: "register", scripts: raw.scripts as ScriptMeta[] };
+    case "create-thread":
+      if (typeof raw.requestId !== "number") return undefined;
+      if (typeof raw.prompt !== "string") return undefined;
+      if (!isPlainObject(raw.yieldSchema)) return undefined;
+      if (raw.options !== undefined && !isPlainObject(raw.options)) {
+        return undefined;
+      }
+      return raw as Extract<ScriptToMagenta, { type: "create-thread" }>;
+    case "log":
+      if (typeof raw.message !== "string") return undefined;
+      return { type: "log", message: raw.message };
+    case "done":
+      return { type: "done" };
+    case "error":
+      if (typeof raw.message !== "string") return undefined;
+      return { type: "error", message: raw.message };
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -306,10 +401,10 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
         resolve([]);
       }, REGISTRATION_TIMEOUT_MS);
       child.once("message", (raw) => {
-        const msg = raw as ScriptToMagenta;
+        const msg = parseScriptToMagenta(raw);
         clearTimeout(timeout);
         terminateProcess(child);
-        resolve(msg.type === "register" ? msg.scripts : []);
+        resolve(msg?.type === "register" ? msg.scripts : []);
       });
       child.once("error", () => {
         clearTimeout(timeout);
@@ -357,7 +452,7 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
       scriptName,
       file: entry.file,
       parameters,
-      status: "running",
+      state: { type: "running" },
       logs: [],
       threadIds: [],
       entries: [],
@@ -366,7 +461,14 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
     this.executions.set(id, { child, pendingThreads: new Map() });
 
     child.on("message", (raw) => {
-      this.handleChildMessage(id, raw as ScriptToMagenta);
+      const msg = parseScriptToMagenta(raw);
+      if (!msg) {
+        this.context.logger.warn(
+          `Ignoring malformed message from script ${scriptName}`,
+        );
+        return;
+      }
+      this.handleChildMessage(id, msg);
     });
     child.on("exit", () => this.handleChildExit(id));
 
@@ -392,8 +494,8 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
   abortInvocation(id: ScriptInvocationId): void {
     const invocation = this.invocations.get(id);
     if (!invocation) return;
-    if (invocation.status === "running") {
-      invocation.status = "aborted";
+    if (invocation.state.type === "running") {
+      invocation.state = { type: "aborted" };
     }
     for (const threadId of invocation.threadIds) {
       void this.context.session.abortThread(threadId).catch(() => {});
@@ -474,14 +576,14 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
         return;
 
       case "done":
-        invocation.status = "done";
+        invocation.state = { type: "done" };
         this.emit("invocationChanged", id);
         this.emit("invocationFinished", id);
         this.terminateInvocation(id);
         return;
 
       case "error": {
-        invocation.status = "error";
+        invocation.state = { type: "error", error: msg.message };
         invocation.logs.push(`error: ${msg.message}`);
         invocation.entries.push({
           type: "log",
@@ -501,8 +603,8 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
   ): void {
     const invocation = this.invocations.get(id);
     if (!invocation) return;
-    const requestId = msg.requestId;
-    const options = msg.options;
+    const request = normalizeThreadRequest(msg);
+    const { requestId, ...threadRequest } = request;
     // The bypass state of a script thread belongs to its invocation, so it is
     // published against the reserved id before creation starts.
     const threadId = uuidv7() as ThreadId;
@@ -514,21 +616,7 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
         threadId,
         scriptInvocationId: id,
         scriptName: invocation.scriptName,
-        prompt: msg.prompt,
-        yieldSchema: msg.yieldSchema as JSONSchemaType,
-        ...(options?.cwd ? { cwd: options.cwd as NvimCwd } : {}),
-        ...(options?.contextFiles
-          ? { contextFiles: options.contextFiles as UnresolvedFilePath[] }
-          : {}),
-        ...(options?.systemReminder
-          ? { systemReminder: options.systemReminder }
-          : {}),
-        ...(options?.autoCompactThreshold !== undefined
-          ? { autoCompactThreshold: options.autoCompactThreshold }
-          : {}),
-        ...(options?.autoCompactPrompt !== undefined
-          ? { autoCompactPrompt: options.autoCompactPrompt }
-          : {}),
+        ...threadRequest,
       })
       .then(() => {
         const execution = this.executions.get(id);
@@ -574,27 +662,17 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
     if (!execution.pendingThreads.has(requestId)) return;
     execution.pendingThreads.delete(requestId);
 
-    let sdkResult: SdkResult<unknown>;
-    if (result.status === "ok") {
-      let value: unknown;
-      try {
-        value = JSON.parse(result.value);
-      } catch {
-        value = result.value;
-      }
-      sdkResult = { status: "ok", value };
-    } else {
-      sdkResult = { status: "error", error: result.error };
-    }
-
-    this.send(id, { type: "thread-result", requestId, result: sdkResult });
+    this.send(id, { type: "thread-result", requestId, result });
   }
 
   private handleChildExit(id: ScriptInvocationId): void {
     const invocation = this.invocations.get(id);
     if (!invocation) return;
-    if (invocation.status === "running") {
-      invocation.status = "error";
+    if (invocation.state.type === "running") {
+      invocation.state = {
+        type: "error",
+        error: "script process exited before completing",
+      };
       this.emit("invocationChanged", id);
     }
   }
@@ -620,6 +698,7 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
   dispose(): Promise<void> {
     this.disposed = true;
     this.terminateAll();
+    this.catalog.clear();
     this.invocations.clear();
     this.executions.clear();
     this.threadYields.clear();
