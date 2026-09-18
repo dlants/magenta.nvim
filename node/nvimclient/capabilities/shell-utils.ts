@@ -1,4 +1,5 @@
-import type { spawn } from "node:child_process";
+export { escalateToSigkill, terminateProcess } from "@magenta/server";
+
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { MAGENTA_TEMP_DIR } from "../utils/files.ts";
@@ -81,33 +82,5 @@ export function processStreamData(
       logWriter.write(stream, line);
       onOutput?.(outputLine);
     }
-  }
-}
-
-export function terminateProcess(childProcess: ReturnType<typeof spawn>): void {
-  const pid = childProcess.pid;
-  if (pid) {
-    try {
-      process.kill(-pid, "SIGTERM");
-    } catch {
-      childProcess.kill("SIGTERM");
-    }
-  } else {
-    childProcess.kill("SIGTERM");
-  }
-}
-
-export function escalateToSigkill(
-  childProcess: ReturnType<typeof spawn>,
-): void {
-  const pid = childProcess.pid;
-  if (pid) {
-    try {
-      process.kill(-pid, "SIGKILL");
-    } catch {
-      childProcess.kill("SIGKILL");
-    }
-  } else {
-    childProcess.kill("SIGKILL");
   }
 }

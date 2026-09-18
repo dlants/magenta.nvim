@@ -2,6 +2,7 @@ import type {
   GitContextUpdate,
   GitState,
   ProviderToolResult,
+  ScriptSandboxRoot,
   SubagentConfig,
 } from "@magenta/server";
 import {
@@ -53,10 +54,9 @@ const ANIMATION_TICK_MS = 333;
 /** The view needs the new message to exist before it can scroll to it. */
 const SCROLL_DELAY_MS = 100;
 
-export type SandboxRoot = {
-  readonly isSandboxBypassed: boolean;
-  toggle?: () => void;
-};
+/** Bypass state of a tree's root, owned by whoever owns that root (today: a
+ * script invocation in the session's ScriptManager). */
+export type SandboxRoot = ScriptSandboxRoot;
 
 export type Msg =
   | { type: "set-title"; title: string }

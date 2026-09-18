@@ -994,12 +994,11 @@ it("script-spawned thread honors per-thread autoCompactPrompt override", async (
 
     driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
 
-    const threadId = await driver.magenta.chat.spawnScriptThread({
+    const threadId = await driver.magenta.chat.session.spawnScriptThread({
       scriptInvocationId: "inv-prompt-override" as ScriptInvocationId,
       scriptName: "test-script",
       prompt: "do the work",
       yieldSchema: { type: "object", properties: {} },
-      getSandboxRoot: () => undefined,
       autoCompactThreshold: 160_000,
       autoCompactPrompt: customNextPrompt,
     });
@@ -1054,12 +1053,11 @@ it("script-spawned thread without prompt override falls back to the default temp
 
     driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
 
-    const threadId = await driver.magenta.chat.spawnScriptThread({
+    const threadId = await driver.magenta.chat.session.spawnScriptThread({
       scriptInvocationId: "inv-no-override" as ScriptInvocationId,
       scriptName: "test-script",
       prompt: "do the work",
       yieldSchema: { type: "object", properties: {} },
-      getSandboxRoot: () => undefined,
       autoCompactThreshold: 160_000,
     });
 

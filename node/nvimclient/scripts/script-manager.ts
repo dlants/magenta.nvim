@@ -1,46 +1,19 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import type { Dirent } from "node:fs";
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import path from "node:path";
 import type {
-  ScriptCatalogEntry,
+  ScriptInvocation,
   ScriptInvocationId,
-  ThreadId,
-  ThreadResult,
-} from "@magenta/server";
-import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import { v7 as uuidv7 } from "uuid";
-import type {
-  MagentaToScript,
   ScriptMeta,
-  ScriptToMagenta,
-  Result as SdkResult,
-} from "../../../sdk/protocol.ts";
-import {
-  escalateToSigkill,
-  terminateProcess,
-} from "../capabilities/shell-utils.ts";
+  ScriptManager as ServerScriptManager,
+  ThreadId,
+} from "@magenta/server";
 import type { Chat } from "../chat/chat.ts";
 import { notifyUser } from "../chat/notify.ts";
-import type { SandboxRoot } from "../chat/thread.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { d, type VDOMNode, withBindings, withError } from "../tea/view.ts";
-import {
-  type AbsFilePath,
-  expandTilde,
-  type HomeDir,
-  type NvimCwd,
-} from "../utils/files.ts";
+import type { AbsFilePath, HomeDir, NvimCwd } from "../utils/files.ts";
 
 export type { ScriptInvocationId };
 
@@ -51,117 +24,55 @@ export type Msg =
   | { type: "toggle-thread-yield"; id: ThreadId }
   | { type: "toggle-invocation-sandbox"; id: ScriptInvocationId }
   | { type: "abort-invocation"; id: ScriptInvocationId }
-  | { type: "delete-invocation"; id: ScriptInvocationId }
-  | { type: "set-invocation-title"; id: ScriptInvocationId; title: string };
+  | { type: "delete-invocation"; id: ScriptInvocationId };
 
 export type ScriptMsg = {
   type: "script-msg";
   msg: Msg;
 };
 
-export type ScriptInvocationStatus = "running" | "done" | "error" | "aborted";
-
-export type ScriptInvocationEntry =
-  | { type: "log"; message: string }
-  | { type: "thread"; threadId: ThreadId };
-
-export type ScriptInvocation = {
-  id: ScriptInvocationId;
-  scriptName: string;
-  title?: string;
-  file: string;
-  parameters: unknown;
-  status: ScriptInvocationStatus;
-  logs: string[];
-  threadIds: ThreadId[];
-  entries: ScriptInvocationEntry[];
-  sandboxBypassed: boolean;
-  child: ChildProcess;
-  pendingThreads: Map<number, ThreadId>;
-};
-
-const MANIFEST_FILENAME = ".magenta-manifest.json";
-
 /**
- * Newest mtime among the script directory's own sources. `node_modules` is
- * skipped: it dwarfs the rest of the tree and changes only on installs, which
- * touch `package.json` anyway.
+ * The editor-side view of script execution. Invocations, child processes and
+ * their threads are owned by the session's ScriptManager; this controller only
+ * renders them, tracks expansion, opens files, and notifies the user.
  */
-function newestSourceMtime(dir: string): number {
-  let newest = 0;
-  const walk = (current: string) => {
-    let entries: Dirent[];
-    try {
-      entries = readdirSync(current, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name === "node_modules" || entry.name === MANIFEST_FILENAME) {
-        continue;
-      }
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      try {
-        newest = Math.max(newest, statSync(full).mtimeMs);
-      } catch {
-        // raced with a delete; ignore
-      }
-    }
-  };
-  walk(dir);
-  return newest;
-}
-
-const REGISTRATION_TIMEOUT_MS = 5000;
-const SIGKILL_GRACE_MS = 2000;
-
-type ScriptThreadResult =
-  | { status: "ok"; value: string }
-  | { status: "error"; error: string };
-
-/** A thread's outcome as the script SDK sees it. A structured yield is
- * stringified here, at the display/transport edge, rather than by the thread
- * itself. */
-function toScriptResult(result: ThreadResult): ScriptThreadResult {
-  if (result.type === "aborted") {
-    return { status: "error", error: result.reason };
-  }
-  return {
-    status: "ok",
-    value: JSON.stringify(result.value),
-  };
-}
-
-export class ScriptManager {
-  private catalog: Map<string, { file: string; meta: ScriptMeta }> = new Map();
-  public invocations: Map<ScriptInvocationId, ScriptInvocation> = new Map();
-  private expandedInvocations: Set<ScriptInvocationId> = new Set();
-  private expandedThreads: Set<ThreadId> = new Set();
+export class ScriptController {
+  private expandedInvocations = new Set<ScriptInvocationId>();
+  private expandedThreads = new Set<ThreadId>();
   private myDispatch: Dispatch<Msg>;
 
   constructor(
     private context: {
       dispatch: Dispatch<RootMsg>;
       chat: Chat;
+      scripts: ServerScriptManager;
       nvim: Nvim;
       cwd: NvimCwd;
       homeDir: HomeDir;
-      getScriptsPaths: () => string[];
       getOptions: () => MagentaOptions;
     },
   ) {
     this.myDispatch = (msg) =>
       this.context.dispatch({ type: "script-msg", msg });
+
+    const { scripts } = context;
+    scripts.on("catalogChanged", () =>
+      this.myDispatch({ type: "catalog-updated" }),
+    );
+    scripts.on("invocationChanged", (id) =>
+      this.myDispatch({ type: "invocation-updated", id }),
+    );
+    scripts.on("invocationRemoved", (id) => {
+      this.expandedInvocations.delete(id);
+      this.myDispatch({ type: "catalog-updated" });
+    });
+    scripts.on("invocationFinished", () => this.notifyFinished());
   }
 
   update(msg: RootMsg): void {
-    // Most state is mutated directly as IPC events arrive; script-msg dispatches
-    // exist mainly to trigger a re-render through the central loop. Expand and
-    // sandbox-toggle messages are the exception: they mutate state here.
+    // Server-owned state changes arrive as events; script-msg dispatches exist
+    // mainly to trigger a re-render through the central loop. Expansion is the
+    // exception: it is view state, mutated here.
     if (msg.type !== "script-msg") return;
     switch (msg.msg.type) {
       case "toggle-invocation-expand":
@@ -178,21 +89,15 @@ export class ScriptManager {
           this.expandedThreads.add(msg.msg.id);
         }
         return;
-      case "toggle-invocation-sandbox": {
-        this.toggleInvocationSandbox(msg.msg.id);
+      case "toggle-invocation-sandbox":
+        this.context.scripts.toggleInvocationSandbox(msg.msg.id);
         return;
-      }
       case "abort-invocation":
-        this.abortInvocation(msg.msg.id);
+        this.context.scripts.abortInvocation(msg.msg.id);
         return;
       case "delete-invocation":
-        this.deleteInvocation(msg.msg.id);
+        this.context.scripts.deleteInvocation(msg.msg.id);
         return;
-      case "set-invocation-title": {
-        const inv = this.invocations.get(msg.msg.id);
-        if (inv) inv.title = msg.msg.title;
-        return;
-      }
       case "catalog-updated":
       case "invocation-updated":
         return;
@@ -200,415 +105,11 @@ export class ScriptManager {
   }
 
   getCatalog(): ScriptMeta[] {
-    return [...this.catalog.values()].map((c) => c.meta);
+    return this.context.scripts.getCatalog();
   }
 
-  getScriptCatalog(): ScriptCatalogEntry[] {
-    return [...this.catalog.values()].map((c) => ({
-      ...c.meta,
-      file: c.file,
-    }));
-  }
-
-  private fork(file: string): ChildProcess {
-    return spawn(
-      process.execPath,
-      [
-        "--disable-warning=ExperimentalWarning",
-        "--experimental-transform-types",
-        file,
-      ],
-      {
-        stdio: ["inherit", "inherit", "inherit", "ipc"],
-        detached: true,
-        env: { ...process.env, MAGENTA_SDK_CHILD: "1" },
-      },
-    );
-  }
-
-  /**
-   * Resolve the configured `scriptsPaths` to absolute directories, expanding
-   * `~` and resolving relative entries against the cwd. Later paths take
-   * precedence on name collisions (project scripts override global ones), so we
-   * order earlier entries first and let `discover()` overwrite as it goes.
-   */
-  private resolveScriptsDirs(): string[] {
-    const seen = new Set<string>();
-    const dirs: string[] = [];
-    for (const entry of this.context.getScriptsPaths()) {
-      const expanded = expandTilde(entry, this.context.homeDir);
-      const abs = path.resolve(this.context.cwd, expanded);
-      if (seen.has(abs)) continue;
-      seen.add(abs);
-      dirs.push(abs);
-    }
-    return dirs;
-  }
-
-  async discover(): Promise<void> {
-    // Yield off the synchronous construction stack: discover() is kicked off
-    // from the Magenta constructor, and dispatching `catalog-updated` before
-    // construction finishes would touch not-yet-assigned fields (bufferManager).
-    await Promise.resolve();
-    this.catalog.clear();
-    for (const dir of this.resolveScriptsDirs()) {
-      if (!existsSync(dir)) continue;
-
-      // Each scripts directory holds independent script installations, one per
-      // subdirectory, with a single `index.ts` entry point. That file is
-      // responsible for importing every script module so all `registerScript`
-      // calls run. Other `.ts` files (shared libs, individual script modules)
-      // are never forked directly, which keeps discovery and thread creation
-      // predictable.
-      let entries: { name: string; isDir: boolean }[];
-      try {
-        entries = readdirSync(dir, { withFileTypes: true }).map((e) => ({
-          name: e.name,
-          isDir: e.isDirectory(),
-        }));
-      } catch {
-        continue;
-      }
-
-      for (const entry of entries) {
-        if (!entry.isDir) continue;
-        const indexFile = path.join(dir, entry.name, "index.ts");
-        if (!existsSync(indexFile)) continue;
-
-        const metas = await this.loadRegistration(
-          path.join(dir, entry.name),
-          indexFile,
-        );
-        for (const meta of metas) {
-          this.catalog.set(meta.name, { file: indexFile, meta });
-        }
-      }
-    }
-    this.myDispatch({ type: "catalog-updated" });
-  }
-
-  /**
-   * Forking a script's `index.ts` to capture its `registerScript` calls costs a
-   * full node startup (with TS transform) per script directory, and discovery
-   * runs on every thread creation. Cache the captured metadata in a manifest
-   * next to the script, keyed on the newest mtime of the directory's sources,
-   * so the common case (scripts unchanged) is a handful of stat calls.
-   */
-  private async loadRegistration(
-    scriptDir: string,
-    indexFile: string,
-  ): Promise<ScriptMeta[]> {
-    const manifestFile = path.join(scriptDir, MANIFEST_FILENAME);
-    const mtimeMs = newestSourceMtime(scriptDir);
-
-    try {
-      const cached = JSON.parse(readFileSync(manifestFile, "utf8")) as {
-        mtimeMs: number;
-        scripts: ScriptMeta[];
-      };
-      if (cached.mtimeMs === mtimeMs) return cached.scripts;
-    } catch {
-      // missing or corrupt manifest: fall through and re-capture
-    }
-
-    const scripts = await this.captureRegistration(indexFile);
-    try {
-      writeFileSync(manifestFile, JSON.stringify({ mtimeMs, scripts }));
-    } catch (e) {
-      this.context.nvim.logger.warn(
-        `Failed to write script manifest ${manifestFile}: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-    return scripts;
-  }
-
-  private captureRegistration(file: string): Promise<ScriptMeta[]> {
-    return new Promise((resolve) => {
-      const child = this.fork(file);
-      const timeout = setTimeout(() => {
-        terminateProcess(child);
-        resolve([]);
-      }, REGISTRATION_TIMEOUT_MS);
-      child.once("message", (raw) => {
-        const msg = raw as ScriptToMagenta;
-        clearTimeout(timeout);
-        terminateProcess(child);
-        resolve(msg.type === "register" ? msg.scripts : []);
-      });
-      child.once("error", () => {
-        clearTimeout(timeout);
-        resolve([]);
-      });
-      // A file that never registers a script (e.g. a shared library module
-      // alongside the scripts) exits without sending a message. Resolve
-      // immediately on exit rather than waiting out the registration timeout.
-      child.once("exit", () => {
-        clearTimeout(timeout);
-        resolve([]);
-      });
-    });
-  }
-
-  runScript(
-    scriptName: string,
-    parameters: unknown,
-    opts: { sandboxBypassed: boolean },
-  ): ScriptInvocationId {
-    const entry = this.catalog.get(scriptName);
-    if (!entry) {
-      throw new Error(`unknown script ${scriptName}`);
-    }
-
-    const id = uuidv7() as ScriptInvocationId;
-    const child = this.fork(entry.file);
-    const invocation: ScriptInvocation = {
-      id,
-      scriptName,
-      file: entry.file,
-      parameters,
-      status: "running",
-      logs: [],
-      threadIds: [],
-      entries: [],
-      sandboxBypassed: opts.sandboxBypassed,
-      child,
-      pendingThreads: new Map(),
-    };
-    this.invocations.set(id, invocation);
-
-    child.on("message", (raw) => {
-      this.handleChildMessage(id, raw as ScriptToMagenta);
-    });
-    child.on("exit", () => this.handleChildExit(id));
-
-    this.context.chat
-      .generateScriptTitle(scriptName, entry.meta.description, parameters)
-      .then((title) => {
-        if (title) {
-          this.myDispatch({ type: "set-invocation-title", id, title });
-        }
-      })
-      .catch((e: unknown) => {
-        this.context.nvim.logger.error(
-          `Failed to generate script title: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      });
-
-    this.myDispatch({ type: "invocation-updated", id });
-    return id;
-  }
-
-  private abortInvocation(id: ScriptInvocationId): void {
-    const invocation = this.invocations.get(id);
-    if (!invocation) return;
-    if (invocation.status === "running") {
-      invocation.status = "aborted";
-    }
-    for (const threadId of invocation.threadIds) {
-      this.context.dispatch({
-        type: "thread-msg",
-        id: threadId,
-        msg: { type: "abort" },
-      });
-    }
-    this.terminateInvocation(id);
-    this.myDispatch({ type: "invocation-updated", id });
-  }
-
-  private deleteInvocation(id: ScriptInvocationId): void {
-    const invocation = this.invocations.get(id);
-    if (!invocation) return;
-    this.abortInvocation(id);
-    for (const threadId of invocation.threadIds) {
-      this.context.dispatch({
-        type: "chat-msg",
-        msg: { type: "delete-thread-subtree", id: threadId },
-      });
-    }
-    this.invocations.delete(id);
-    this.expandedInvocations.delete(id);
-    this.myDispatch({ type: "catalog-updated" });
-  }
-
-  private send(invocation: ScriptInvocation, msg: MagentaToScript): void {
-    invocation.child.send(msg);
-  }
-
-  private toggleInvocationSandbox(id: ScriptInvocationId): void {
-    const inv = this.invocations.get(id);
-    if (!inv) return;
-    inv.sandboxBypassed = !inv.sandboxBypassed;
-    if (inv.sandboxBypassed) {
-      for (const entry of inv.entries) {
-        if (entry.type === "thread") {
-          this.context.chat.approveAllPendingInSubtree(entry.threadId);
-        }
-      }
-    }
-  }
-
-  private getSandboxRoot(id: ScriptInvocationId): SandboxRoot | undefined {
-    const invocation = this.invocations.get(id);
-    if (!invocation) return undefined;
-    return {
-      get isSandboxBypassed() {
-        return invocation.sandboxBypassed;
-      },
-      toggle: () => {
-        this.toggleInvocationSandbox(id);
-        this.myDispatch({ type: "invocation-updated", id });
-      },
-    };
-  }
-
-  private handleChildMessage(
-    id: ScriptInvocationId,
-    msg: ScriptToMagenta,
-  ): void {
-    const invocation = this.invocations.get(id);
-    if (!invocation) return;
-
-    switch (msg.type) {
-      case "register":
-        this.send(invocation, {
-          type: "run-script",
-          scriptName: invocation.scriptName,
-          parameters: invocation.parameters,
-        });
-        return;
-
-      case "log":
-        invocation.logs.push(msg.message);
-        invocation.entries.push({ type: "log", message: msg.message });
-        this.myDispatch({ type: "invocation-updated", id });
-        return;
-
-      case "create-thread": {
-        const requestId = msg.requestId;
-        const options = msg.options;
-        this.context.chat
-          .spawnScriptThread({
-            scriptInvocationId: id,
-            scriptName: invocation.scriptName,
-            prompt: msg.prompt,
-            yieldSchema: msg.yieldSchema as JSONSchemaType,
-            getSandboxRoot: () => this.getSandboxRoot(id),
-            ...(options?.cwd ? { cwd: options.cwd } : {}),
-            ...(options?.contextFiles
-              ? { contextFiles: options.contextFiles }
-              : {}),
-            ...(options?.systemReminder
-              ? { systemReminder: options.systemReminder }
-              : {}),
-            ...(options?.autoCompactThreshold !== undefined
-              ? { autoCompactThreshold: options.autoCompactThreshold }
-              : {}),
-            ...(options?.autoCompactPrompt !== undefined
-              ? { autoCompactPrompt: options.autoCompactPrompt }
-              : {}),
-          })
-          .then((threadId) => {
-            invocation.threadIds.push(threadId);
-            invocation.entries.push({ type: "thread", threadId });
-            invocation.pendingThreads.set(requestId, threadId);
-            void this.context.chat
-              .awaitThreadResult(threadId)
-              .then((threadResult) => {
-                const result = toScriptResult(threadResult);
-                this.threadYields.set(threadId, result);
-                this.resolveThread(id, requestId, result);
-              });
-            this.myDispatch({ type: "invocation-updated", id });
-          })
-          .catch((err: unknown) => {
-            this.send(invocation, {
-              type: "thread-result",
-              requestId,
-              result: {
-                status: "error",
-                error: err instanceof Error ? err.message : String(err),
-              },
-            });
-          });
-        return;
-      }
-
-      case "done":
-        invocation.status = "done";
-        this.notifyFinished();
-        this.myDispatch({ type: "invocation-updated", id });
-        this.terminateInvocation(id);
-        return;
-
-      case "error":
-        invocation.status = "error";
-        this.notifyFinished();
-        invocation.logs.push(`error: ${msg.message}`);
-        invocation.entries.push({
-          type: "log",
-          message: `error: ${msg.message}`,
-        });
-        this.myDispatch({ type: "invocation-updated", id });
-        this.terminateInvocation(id);
-        return;
-    }
-  }
-
-  private resolveThread(
-    id: ScriptInvocationId,
-    requestId: number,
-    result: ScriptThreadResult,
-  ): void {
-    const invocation = this.invocations.get(id);
-    if (!invocation) return;
-    if (!invocation.pendingThreads.has(requestId)) return;
-    invocation.pendingThreads.delete(requestId);
-
-    let sdkResult: SdkResult<unknown>;
-    if (result.status === "ok") {
-      let value: unknown;
-      try {
-        value = JSON.parse(result.value);
-      } catch {
-        value = result.value;
-      }
-      sdkResult = { status: "ok", value };
-    } else {
-      sdkResult = { status: "error", error: result.error };
-    }
-
-    this.send(invocation, {
-      type: "thread-result",
-      requestId,
-      result: sdkResult,
-    });
-  }
-
-  private handleChildExit(id: ScriptInvocationId): void {
-    const invocation = this.invocations.get(id);
-    if (!invocation) return;
-    if (invocation.status === "running") {
-      invocation.status = "error";
-      this.myDispatch({ type: "invocation-updated", id });
-    }
-  }
-
-  private terminateInvocation(id: ScriptInvocationId): void {
-    const invocation = this.invocations.get(id);
-    if (!invocation) return;
-    terminateProcess(invocation.child);
-    const child = invocation.child;
-    setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) {
-        escalateToSigkill(child);
-      }
-    }, SIGKILL_GRACE_MS);
-  }
-
-  terminateAll(): void {
-    for (const id of this.invocations.keys()) {
-      this.terminateInvocation(id);
-    }
+  discover(): Promise<void> {
+    return this.context.scripts.discover();
   }
 
   private notifyFinished(): void {
@@ -627,12 +128,8 @@ export class ScriptManager {
     }).catch((e: Error) => this.context.nvim.logger.error(e.message));
   }
 
-  /** A thread's settled outcome, kept for rendering: a promise cannot be read
-   * synchronously by a view. */
-  private threadYields = new Map<ThreadId, ScriptThreadResult>();
-
   private renderThreadYield(threadId: ThreadId): VDOMNode {
-    const result = this.threadYields.get(threadId);
+    const result = this.context.scripts.getThreadYield(threadId);
     if (!result) {
       return d``;
     }
@@ -643,12 +140,14 @@ export class ScriptManager {
   }
 
   view(): VDOMNode {
-    if (this.invocations.size === 0) {
+    const invocations: ScriptInvocation[] =
+      this.context.scripts.listInvocations();
+    if (invocations.length === 0) {
       return d``;
     }
 
     const rows: VDOMNode[] = [];
-    const sortedInvocations = [...this.invocations.values()].sort((a, b) =>
+    const sortedInvocations = [...invocations].sort((a, b) =>
       a.id < b.id ? 1 : a.id > b.id ? -1 : 0,
     );
     for (const inv of sortedInvocations) {

@@ -155,7 +155,7 @@ Move the self-contained IPC declarations into the server package and make `sdk/p
 
 # Stages
 
-> Status: stages 1-2 complete (see progress notes under each stage).
+> Status: stages 1-4 complete (see progress notes under each stage).
 > A previous unscoped attempt at this plan was left uncommitted in the working
 > tree; it is preserved in `git stash` as "wip broad session attempt
 > (pre stage-1)" and stage 1 was implemented fresh from `main`.
@@ -260,6 +260,19 @@ Move the self-contained IPC declarations into the server package and make `sdk/p
 - Goal: Session owns a server ScriptManager, catalog, child-process IPC, logs, titles, lifecycle, and invocation/thread associations. Root script controller retains expansion, rendering, file opening, and notifications only.
 - Keep discovery caching, child launch environment, registration timeouts, IPC protocol, two-step run_script behavior, and termination escalation. Extract script title logic from Chat using injected provider/profile dependencies.
 - Prevent circular construction with the existing late-bound ScriptRunner capability, wired before any thread is created. Preserve discover-before-thread catalog behavior.
+- Progress:
+  - [x] `ScriptManager` (`node/server/src/scripts/script-manager.ts`) is session-owned and authoritative: catalog + manifest cache, child fork/launch environment, registration timeout, IPC handling, logs/entries, invocation lifecycle (`startScript`/`abortInvocation`/`deleteInvocation`/`terminateAll`/`dispose`), titles (through `Session.generateScriptTitle`), thread yields, and the invocation⇄thread association. It implements the existing `ScriptRunner` capability (`discover`/`getScriptCatalog`/`runScript`), so the late-bound `session.scriptRunner` wiring is unchanged and still happens before any thread is created.
+  - [x] Script-thread creation goes straight to `Session.spawnScriptThread` with a reserved thread id, registered as the invocation's sandbox root beforehand. `Chat.spawnScriptThread` and `Chat.generateScriptTitle` are gone; no second script-thread registry exists.
+  - [x] Approval routing is an injected `ScriptSandboxCapability` (`isThreadBypassed` / `registerSandboxRoot` / `approveAllPendingInSubtree`), supplied in `magenta.ts` from the editor-backed `NvimSessionHost`. `run_script` still seeds the invocation from the triggering thread's bypass state, and toggling an invocation approves its pending subtree violations.
+  - [x] The protocol moved to `node/server/src/scripts/protocol.ts`; `sdk/protocol.ts` is a type-only re-export from `@magenta/server` (`Result` is exported as `ScriptResult` from the barrel to avoid colliding with `utils/result.ts`). Process-termination helpers moved to `node/server/src/utils/process.ts`; `capabilities/shell-utils.ts` re-exports them so shell callers are untouched.
+  - [x] `node/nvimclient/scripts/script-manager.ts` now holds only `ScriptController`: expansion state, rendering, opening the script file, and `script-finished` notification. It subscribes to `catalogChanged`/`invocationChanged`/`invocationRemoved`/`invocationFinished` and dispatches re-renders; it owns no invocation state.
+  - [x] Tests: all existing fixture-script integration tests (logs, structured yields, multiple threads, done/error, abort/delete, discovery cache, sandbox bypass inheritance, run_script two-step) pass against the server manager. Two new cases in `node/nvimclient/scripts/script-manager.test.ts`: an invocation outliving deletion of its triggering thread, and deleting an invocation while its script thread is still `pending` in the session (no orphan thread survives).
+- Decisions/deviations:
+  - `Magenta` now exposes both `scripts` (the server manager) and `scriptManager` (the view controller); tests read `driver.magenta.scripts`. Ownership consolidation into a Magenta-owned Session is still stage 5, so the server manager is constructed from `chat.session`/`chat.host`.
+  - Live invocation records stay a public `invocations` map on the server manager (child process + pending IPC requests live in a private `executions` map), because views and tests read invocation state synchronously. `childPid(id)` exists so the termination-escalation test can assert group kills without exposing the process.
+  - `send()` now checks `child.connected`, so a late thread result cannot be written to a terminated child.
+  - Aborting an invocation goes through `Session.abortThread` and deleting goes through `Session.deleteThread` rather than root dispatch, so nothing about starting/aborting script threads requires the editor loop.
+
 - Tests:
   - Run existing real fixture-script integration tests for logs, structured yield results, multiple threads, done/error, abort/delete, and discovery cache invalidation.
   - A triggering thread can finish or be deleted while its script continues.

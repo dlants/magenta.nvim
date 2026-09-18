@@ -54,7 +54,7 @@ it("end-to-end: agent invokes run_script, subprocess spawns a thread, yields, an
     },
     async (driver) => {
       await driver.showSidebar();
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
 
       // 1. Script is detected and registered in the catalog.
       await pollUntil(() =>
@@ -173,7 +173,7 @@ it("bell behavior: pending-approval bells propagate to script+neovim, yields don
         reason: "disabled",
       });
       await driver.showSidebar();
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
 
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "twothreads"),

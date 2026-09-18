@@ -8,6 +8,7 @@ import {
   readArchivedThreadLog,
   readThreadMeta,
   renderThreadLogToMarkdown,
+  ScriptManager,
   type ThreadId,
   threadConversationLogPath,
 } from "@magenta/server";
@@ -53,7 +54,7 @@ import {
 import { DynamicOptionsLoader } from "./options-loader.ts";
 import type { RootMsg, SidebarMsg } from "./root-msg.ts";
 import { initializeSandbox, type Sandbox } from "./sandbox-manager.ts";
-import { ScriptManager } from "./scripts/script-manager.ts";
+import { ScriptController } from "./scripts/script-manager.ts";
 import { Sidebar } from "./sidebar.ts";
 import {
   BINDING_KEYS,
@@ -110,7 +111,10 @@ export class Magenta {
   public sidebar: Sidebar;
   public bufferManager: BufferManager;
   public chat: Chat;
-  public scriptManager: ScriptManager;
+  /** Session-owned script execution. */
+  public scripts: ScriptManager;
+  /** The editor-side view of it. */
+  public scriptManager: ScriptController;
   public dispatch: Dispatch<RootMsg>;
   public commandRegistry: CommandRegistry;
   public optionsLoader: DynamicOptionsLoader;
@@ -256,24 +260,32 @@ export class Magenta {
       },
     });
 
-    this.scriptManager = new ScriptManager({
-      dispatch: this.dispatch,
-      chat: this.chat,
-      nvim: this.nvim,
+    this.scripts = new ScriptManager({
+      session: this.chat.session,
+      logger: this.nvim.logger,
       cwd: this.cwd,
       homeDir: this.homeDir,
       getScriptsPaths: () => this.options.scriptsPaths,
+      sandbox: {
+        isThreadBypassed: (threadId) => this.chat.isSandboxBypassed(threadId),
+        registerSandboxRoot: (threadId, getSandboxRoot) =>
+          this.chat.host.registerSandboxRoot(threadId, getSandboxRoot),
+        approveAllPendingInSubtree: (threadId) =>
+          this.chat.approveAllPendingInSubtree(threadId),
+      },
+    });
+    // Wired before any thread exists, so the run_script tool always has a
+    // catalog to read.
+    this.chat.scriptRunner = this.scripts;
+    this.scriptManager = new ScriptController({
+      dispatch: this.dispatch,
+      chat: this.chat,
+      scripts: this.scripts,
+      nvim: this.nvim,
+      cwd: this.cwd,
+      homeDir: this.homeDir,
       getOptions: () => this.options,
     });
-    this.chat.scriptRunner = {
-      discover: () => this.scriptManager.discover(),
-      getScriptCatalog: () => this.scriptManager.getScriptCatalog(),
-      runScript: ({ scriptName, parameters, triggeringThreadId }) => {
-        this.scriptManager.runScript(scriptName, parameters, {
-          sandboxBypassed: this.chat.isSandboxBypassed(triggeringThreadId),
-        });
-      },
-    };
     this.bufferManager = bufferManager;
     this.activeBuffers = bufferManager.getOverviewBuffers();
 
@@ -1126,7 +1138,7 @@ ${lines.join("\n")}
   }
 
   destroy() {
-    this.scriptManager.terminateAll();
+    void this.scripts.dispose();
     // BufferManager's mounted apps will be cleaned up when nvim exits
   }
 

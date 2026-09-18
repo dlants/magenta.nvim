@@ -110,21 +110,19 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
     async (driver) => {
       await driver.showSidebar();
 
-      const overriddenId = await driver.magenta.chat.spawnScriptThread({
+      const overriddenId = await driver.magenta.chat.session.spawnScriptThread({
         scriptInvocationId: "inv-override" as ScriptInvocationId,
         scriptName: "test-script",
         prompt: "do work",
         yieldSchema: yieldSchema,
-        getSandboxRoot: () => undefined,
         autoCompactThreshold: 100_000,
       });
 
-      const defaultId = await driver.magenta.chat.spawnScriptThread({
+      const defaultId = await driver.magenta.chat.session.spawnScriptThread({
         scriptInvocationId: "inv-default" as ScriptInvocationId,
         scriptName: "test-script",
         prompt: "do work",
         yieldSchema: yieldSchema,
-        getSandboxRoot: () => undefined,
       });
 
       const chat = driver.magenta.chat;

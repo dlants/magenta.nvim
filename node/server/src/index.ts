@@ -214,6 +214,23 @@ export {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
+export type {
+  JSONSchema,
+  MagentaToScript,
+  Result as ScriptResult,
+  ScriptMeta,
+  ScriptToMagenta,
+  ThreadOptions,
+} from "./scripts/protocol.ts";
+export {
+  type ScriptInvocation,
+  type ScriptInvocationEntry,
+  type ScriptInvocationStatus,
+  ScriptManager,
+  type ScriptSandboxCapability,
+  type ScriptSandboxRoot,
+  type ScriptThreadResult,
+} from "./scripts/script-manager.ts";
 export {
   type PreparedThread,
   Session,
@@ -445,6 +462,7 @@ export {
   getPDFPageCount,
   getSummaryAsProviderContent,
 } from "./utils/pdf-pages.ts";
+export { escalateToSigkill, terminateProcess } from "./utils/process.ts";
 export type {
   ExtractSuccess,
   Result,

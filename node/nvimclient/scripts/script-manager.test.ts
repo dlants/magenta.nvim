@@ -63,7 +63,7 @@ it("discovers via index.ts and ignores sibling library files", async () => {
       },
     },
     async (driver) => {
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(
         () => scriptManager.getCatalog().some((s) => s.name === "foo"),
         8000,
@@ -84,7 +84,7 @@ it("discovers scripts from the global ~/.magenta/scripts path", async () => {
       },
     },
     async (driver) => {
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
@@ -100,7 +100,7 @@ it("invokes a script that spawns a thread and resolves with the structured yield
       },
     },
     async (driver) => {
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
 
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
@@ -119,7 +119,7 @@ it("invokes a script that spawns a thread and resolves with the structured yield
         ),
       ).toBe(true);
 
-      const id = scriptManager.runScript(
+      const id = scriptManager.startScript(
         "foo",
         { x: "thing" },
         { sandboxBypassed: false },
@@ -164,13 +164,13 @@ it("does not resolve a script's createThread() await on a subagent error", async
       },
     },
     async (driver) => {
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
 
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
 
-      const id = scriptManager.runScript(
+      const id = scriptManager.startScript(
         "foo",
         { x: "thing" },
         { sandboxBypassed: false },
@@ -271,12 +271,12 @@ it("passes contextFiles and systemReminder through to the spawned thread", async
       },
     },
     async (driver) => {
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "ctx"),
       );
 
-      scriptManager.runScript("ctx", {}, { sandboxBypassed: false });
+      scriptManager.startScript("ctx", {}, { sandboxBypassed: false });
 
       const stream = await driver.mockAnthropic.awaitPendingStream({
         predicate: (s) =>
@@ -340,12 +340,12 @@ it("marks the invocation error when the runner throws", async () => {
       },
     },
     async (driver) => {
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
 
-      const id = scriptManager.runScript(
+      const id = scriptManager.startScript(
         "foo",
         {},
         { sandboxBypassed: false },
@@ -383,12 +383,12 @@ it("group-kills the subprocess tree on terminate", async () => {
       },
     },
     async (driver) => {
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
 
-      const id = scriptManager.runScript(
+      const id = scriptManager.startScript(
         "foo",
         {},
         { sandboxBypassed: false },
@@ -402,7 +402,7 @@ it("group-kills the subprocess tree on terminate", async () => {
 
       const inv = scriptManager.invocations.get(id);
       if (!inv) throw new Error("missing invocation");
-      const childPid = inv.child.pid;
+      const childPid = scriptManager.childPid(id);
       const grandchildPid = Number(
         inv.logs.find((l) => l.startsWith("child "))!.slice("child ".length),
       );
@@ -434,12 +434,12 @@ it("renders running invocations, logs, and spawned threads in the Scripts overvi
     },
     async (driver) => {
       await driver.showSidebar();
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
 
-      const id = scriptManager.runScript(
+      const id = scriptManager.startScript(
         "foo",
         { x: "thing" },
         { sandboxBypassed: false },
@@ -495,12 +495,12 @@ it("toggles sandbox bypass for the whole invocation from the script root row", a
     },
     async (driver) => {
       await driver.showSidebar();
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
 
-      const id = scriptManager.runScript(
+      const id = scriptManager.startScript(
         "foo",
         { x: "thing" },
         { sandboxBypassed: false },
@@ -553,12 +553,12 @@ it("expands and collapses the script row to show/hide spawned threads", async ()
     },
     async (driver) => {
       await driver.showSidebar();
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
 
-      const id = scriptManager.runScript(
+      const id = scriptManager.startScript(
         "foo",
         { x: "thing" },
         { sandboxBypassed: false },
@@ -611,12 +611,12 @@ it("surfaces a spawned thread's pending permission under a collapsed script row 
         reason: "disabled",
       });
       await driver.showSidebar();
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
 
-      const id = scriptManager.runScript(
+      const id = scriptManager.startScript(
         "foo",
         { x: "thing" },
         { sandboxBypassed: false },
@@ -682,7 +682,7 @@ it("lets an in-magenta agent trigger a script via run_script", async () => {
     },
     async (driver) => {
       await driver.showSidebar();
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
@@ -740,7 +740,7 @@ it("returns the script's parameter schema when run_script is called without para
       },
     },
     async (driver) => {
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
@@ -785,7 +785,7 @@ it("seeds the invocation as bypassed when triggered from a sandbox-disabled thre
     },
     async (driver) => {
       await driver.showSidebar();
-      const scriptManager = driver.magenta.scriptManager;
+      const scriptManager = driver.magenta.scripts;
       await pollUntil(() =>
         scriptManager.getCatalog().some((s) => s.name === "foo"),
       );
@@ -816,6 +816,96 @@ it("seeds the invocation as bypassed when triggered from a sandbox-disabled thre
       await pollUntil(() => scriptManager.invocations.size > 0);
       const inv = [...scriptManager.invocations.values()][0];
       expect(inv.sandboxBypassed).toBe(true);
+    },
+  );
+});
+it("keeps the script running after its triggering thread is deleted", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        await setupScript(tmpDir, FOO_SCRIPT);
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+      const scriptManager = driver.magenta.scripts;
+      await pollUntil(() =>
+        scriptManager.getCatalog().some((s) => s.name === "foo"),
+      );
+      await driver.inputMagentaText("please run foo");
+      driver.send();
+      const request = await driver.mockAnthropic.awaitPendingStream();
+      request.respond({
+        stopReason: "tool_use",
+        text: "running the script",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "run-1" as ToolRequestId,
+              toolName: "run_script" as ToolName,
+              input: { scriptName: "foo", parameters: { x: "thing" } },
+            },
+          },
+        ],
+      });
+      await pollUntil(() => scriptManager.invocations.size > 0);
+      const inv = [...scriptManager.invocations.values()][0];
+
+      const triggeringThreadId = driver.magenta.chat.state.activeThreadId;
+      if (!triggeringThreadId) throw new Error("no active thread");
+      driver.magenta.chat.deleteThread(triggeringThreadId);
+
+      // The invocation outlives the thread that triggered it.
+      const stream =
+        await driver.mockAnthropic.awaitPendingStreamWithText("work on thing");
+      stream.respond({
+        stopReason: "tool_use",
+        text: "done",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "yield-1" as ToolRequestId,
+              toolName: "yield_to_parent" as ToolName,
+              input: { ok: true },
+            },
+          },
+        ],
+      });
+      await pollUntil(() => inv.status === "done");
+    },
+  );
+});
+it("deleting an invocation mid-creation leaves no orphan script thread", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        await setupScript(tmpDir, FOO_SCRIPT);
+      },
+    },
+    async (driver) => {
+      const scriptManager = driver.magenta.scripts;
+      const session = driver.magenta.chat.session;
+      await pollUntil(() =>
+        scriptManager.getCatalog().some((s) => s.name === "foo"),
+      );
+      const id = scriptManager.startScript(
+        "foo",
+        { x: "thing" },
+        { sandboxBypassed: false },
+      );
+      // Delete while the session is still preparing the script's thread.
+      await pollUntil(() =>
+        session
+          .listThreads()
+          .some((t) => t.scriptInvocationId === id && t.state === "pending"),
+      );
+      scriptManager.deleteInvocation(id);
+      expect(scriptManager.invocations.get(id)).toBeUndefined();
+      await pollUntil(
+        () => !session.listThreads().some((t) => t.scriptInvocationId === id),
+      );
     },
   );
 });

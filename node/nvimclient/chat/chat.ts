@@ -15,24 +15,22 @@ import {
   Session,
   threadCreatedAt,
 } from "@magenta/server";
-import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import { v7 as uuidv7 } from "uuid";
 import type { Lsp } from "../capabilities/lsp.ts";
 import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
-import type { MagentaOptions, Profile } from "../options.ts";
+import type { MagentaOptions } from "../options.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { Sandbox } from "../sandbox-manager.ts";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { d, type VDOMNode, withBindings, withError } from "../tea/view.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type { HomeDir, NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
+import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import { shortenPath } from "../utils/files.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
 import type { CommandRegistry } from "./commands/registry.ts";
 import { NvimSessionHost } from "./session-host.ts";
-import { NvimThread, type SandboxRoot } from "./thread.ts";
+import { NvimThread } from "./thread.ts";
 import { renderYield, view as threadView } from "./thread-view.ts";
 
 const ARCHIVE_PAGE_SIZE = 50;
@@ -633,46 +631,6 @@ export class Chat implements ThreadManager {
 
   awaitThreadResult(threadId: ThreadId): Promise<ThreadResult> {
     return this.session.awaitThreadResult(threadId);
-  }
-
-  /** The bypass state of a script-owned thread lives with its invocation, so
-   * it is registered against the reserved id before creation starts. */
-  spawnScriptThread(opts: {
-    scriptInvocationId: ScriptInvocationId;
-    scriptName: string;
-    prompt: string;
-    yieldSchema: JSONSchemaType;
-    getSandboxRoot: () => SandboxRoot | undefined;
-    profile?: Profile;
-    cwd?: string;
-    contextFiles?: string[];
-    systemReminder?: string;
-    autoCompactThreshold?: number;
-    autoCompactPrompt?: string;
-  }): Promise<ThreadId> {
-    const { getSandboxRoot, cwd, contextFiles, ...rest } = opts;
-    const threadId = uuidv7() as ThreadId;
-    this.host.registerSandboxRoot(threadId, getSandboxRoot);
-    return this.session.spawnScriptThread({
-      ...rest,
-      threadId,
-      ...(cwd ? { cwd: cwd as NvimCwd } : {}),
-      ...(contextFiles
-        ? { contextFiles: contextFiles as UnresolvedFilePath[] }
-        : {}),
-    });
-  }
-
-  generateScriptTitle(
-    scriptName: string,
-    description: string,
-    parameters: unknown,
-  ): Promise<string | undefined> {
-    return this.session.generateScriptTitle(
-      scriptName,
-      description,
-      parameters,
-    );
   }
 
   private collectSubtreeViolationViews(
