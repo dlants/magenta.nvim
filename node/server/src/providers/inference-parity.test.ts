@@ -313,13 +313,14 @@ describe("preflight token count parity", () => {
         ],
       }),
     ).toEqual({
-      type: "empty",
+      type: "stopped",
+      reason: { kind: "compact", nextPrompt: "wrap up" },
     });
 
     expect(agent.loopState).toMatchObject({
       type: "idle",
       lastResult: {
-        type: "suspended",
+        type: "stopped",
         reason: { kind: "compact", nextPrompt: "wrap up" },
       },
     });

@@ -140,6 +140,17 @@ describe("thread-view renderStatus streaming", () => {
     expect(text).not.toContain("Streaming response");
   });
 
+  it("renders a supervisor's stop with its own message", async () => {
+    const stopped = {
+      type: "stopped" as const,
+      reason: { kind: "stop" as const, message: "token budget exhausted" },
+    };
+    const text = await renderStatusToString(
+      { type: "idle", lastResult: stopped },
+      stopped,
+    );
+    expect(text).toContain("Stopped: token budget exhausted");
+  });
   it("renders an empty submission as a normal stop", async () => {
     const text = await renderStatusToString(
       { type: "idle", lastResult: { type: "empty" } },

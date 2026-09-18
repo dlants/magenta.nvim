@@ -37,12 +37,16 @@ import {
 } from "./supervisors/file-supervisor.ts";
 import type {
   AgentRequestContext,
+  Generation,
+  GenerationId,
   OnUpdate,
   QueuedMessage,
   RestResult,
   SendResult,
   ThreadResult,
   ThreadSendResult,
+  ThreadStatus,
+  YieldState,
   YieldValue,
 } from "./thread-api.ts";
 import {
@@ -74,7 +78,7 @@ import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
 import type { NvimCwd } from "./utils/files.ts";
-export type { ContextDelivery, ThreadCoreContext };
+export type { ContextDelivery, ThreadCoreContext, ThreadStatus, YieldState };
 export type ContextFileAccess = Readonly<
   Pick<
     FileSupervisor,
@@ -86,11 +90,6 @@ export type ContextFileAccess = Readonly<
   >
 >;
 
-export type YieldState = {
-  value: YieldValue;
-  resultPrefix?: string;
-  tornDown: boolean;
-};
 export type EnvironmentConfig =
   | { type: "local"; cwd?: NvimCwd }
   | { type: "docker"; container: string; cwd: string };
@@ -146,17 +145,6 @@ export type ThreadArchiveOptions = {
 type FlushedQueue =
   | { type: "messages"; messages: AgentInput[] }
   | { type: "compact"; nextPrompt: string | undefined };
-/** One live submission's identity. Every staleness check is "am I still the
- * live generation": the generation is cleared when its submission finishes and
- * cancelled by abort, destroy or a preempting submission. */
-type GenerationId = number & { readonly __generation: unique symbol };
-type Generation = {
-  /** Minted only by Thread, so a foreign object cannot pose as a
-   * generation. */
-  readonly id: GenerationId;
-  /** Cancelled by abort/destroy/preemption; passed to the compactor. */
-  readonly controller: AbortController;
-};
 
 export type ThreadCallbacks = {
   readonly onUpdate: OnUpdate;
@@ -459,24 +447,29 @@ export class Thread {
           },
           aborting: generation.controller.signal.aborted || this.core.aborting,
         }
-      : { type: "idle", lastResult: this.lastSubmissionResult };
+      : { type: "idle", lastResult: this.lastResult() };
   }
   /** A render-only view of how the most recent submission ended. Nothing may
    * branch on it for control flow. */
   lastResult(): RestResult | undefined {
-    if (this.yieldState) {
-      const { value, resultPrefix } = this.yieldState;
-      return {
-        type: "yielded",
-        value,
-        ...(resultPrefix ? { resultPrefix } : {}),
-      };
+    const status = this.status;
+    switch (status.type) {
+      case "idle":
+      case "destroyed":
+        return status.lastResult;
+      case "yielded": {
+        const { value, resultPrefix } = status;
+        return {
+          type: "yielded",
+          value,
+          ...(resultPrefix ? { resultPrefix } : {}),
+        };
+      }
+      case "running":
+        return undefined;
+      default:
+        return assertUnreachable(status);
     }
-    const state = this.loopState;
-    if (state.type !== "idle") return undefined;
-    const last = state.lastResult;
-    // A suspension is a handoff, not an outcome anyone renders.
-    return last?.type === "suspended" ? undefined : last;
   }
   private handleUpdate(): void {
     if (this.destroyed) return;
@@ -511,15 +504,13 @@ export class Thread {
   }
   /** Abort the in-flight turn and hand back whatever never went out. The
    * queues are the thread's, so the debris is the thread's to report. */
-  /** Set once the thread's yield has been resolved. `tornDown` means an owner
-   * accepted it and took the thread's world away, so nothing more can be
-   * sent. */
-  private yieldState: YieldState | undefined;
+  /** Set once the thread's yield has been resolved, and only while nothing
+   * newer is running. */
   get yielded(): YieldState | undefined {
-    return this.yieldState;
+    return this.status.type === "yielded" ? this.status : undefined;
   }
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
-    if (this.yieldState && !this.isBusy) return { unsent: [] };
+    if (this.yielded && !this.isBusy) return { unsent: [] };
     const unsent = this.drainQueues();
     this.cancelSubmission();
     await this.core.abortAgentTurn();
@@ -530,10 +521,8 @@ export class Thread {
     return this.resultDefer.promise;
   }
   private resultDefer = new Defer<ThreadResult>();
-  private resultSettled = false;
   private settleResult(result: ThreadResult): void {
-    if (this.resultSettled) return;
-    this.resultSettled = true;
+    if (this.resultDefer.resolved) return;
     this.resultDefer.resolve(result);
   }
   async submit(
@@ -557,7 +546,7 @@ export class Thread {
     force?: true,
   ): Promise<RestResult> {
     this.assertUsable();
-    if (this.yieldState?.tornDown)
+    if (this.yielded?.tornDown)
       throw new Error(
         "This thread's container has been torn down. No further messages can be sent.",
       );
@@ -565,14 +554,26 @@ export class Thread {
     this.cancelSubmission();
     if (wasBusy) this.drainQueues();
     const generation = this.mintGeneration();
-    this.generation = generation;
+    this.status = { type: "running", generation };
     const signal = generation.controller.signal;
     const isCurrent = () => this.isCurrent(generation);
     this.handleUpdate();
-    const finish = (result: RestResult, displayResult: SendResult = result) => {
+    /** Settle the submission, unless something newer already owns the thread.
+     * A `yielded` outcome becomes the yielded status, which also carries
+     * whether an owner tore the thread down. */
+    const finish = (result: RestResult) => {
       if (this.generation === generation) {
-        this.generation = undefined;
-        this.lastSubmissionResult = displayResult;
+        this.status =
+          result.type === "yielded"
+            ? {
+                type: "yielded",
+                value: result.value,
+                ...(result.resultPrefix
+                  ? { resultPrefix: result.resultPrefix }
+                  : {}),
+                tornDown: this.yieldTornDown,
+              }
+            : { type: "idle", lastResult: result };
         if (result.type === "yielded") this.settleResult(result);
         this.handleUpdate();
       }
@@ -606,8 +607,13 @@ export class Thread {
         if (!isCurrent()) return finish({ type: "aborted" });
         const reason = result.reason;
         const compactor = this.context.compactor;
+        // Nobody claimed this suspension: a plain stop, or a compaction with
+        // no compactor to run it. The log is coherent, so it is reported as a
+        // stop with its reason rather than as an empty submission.
+        if (reason.kind === "yield")
+          throw new Error("yield suspension escaped the turn loop");
         if (reason.kind !== "compact" || !compactor)
-          return finish({ type: "empty" }, result);
+          return finish({ type: "stopped", reason });
         const outcome = await compactor.run(
           this.getProviderMessages(),
           reason.nextPrompt,
@@ -806,10 +812,14 @@ export class Thread {
     if (!core.isActive) return false;
     return this.chain.hasPendingContent();
   }
+  /** The single source of truth for where the thread is in its life. */
+  private status: ThreadStatus = { type: "idle" };
   /** Outer hooks may outlive cancellation. Each submission captures its own
    * generation so a late continuation cannot act on the replacement
    * submission. */
-  private generation: Generation | undefined;
+  private get generation(): Generation | undefined {
+    return this.status.type === "running" ? this.status.generation : undefined;
+  }
   private nextGenerationId = 0;
   private mintGeneration(): Generation {
     return {
@@ -817,7 +827,6 @@ export class Thread {
       controller: new AbortController(),
     };
   }
-  private lastSubmissionResult: SendResult | undefined;
   private cancelSubmission(): void {
     const generation = this.generation;
     if (!generation || generation.controller.signal.aborted) return;
@@ -826,9 +835,7 @@ export class Thread {
   }
   private isCurrent(generation: Generation): boolean {
     return (
-      this.generation === generation &&
-      !generation.controller.signal.aborted &&
-      !this.destroyed
+      this.generation === generation && !generation.controller.signal.aborted
     );
   }
   /** The submission guard narrowed to the core the caller is running against:
@@ -919,6 +926,9 @@ export class Thread {
    * stands. The first `accept`/`reject` wins outright — later hooks are not
    * consulted, since the decision is made — and `send-message` texts
    * concatenate. */
+  /** Decided by the yield hooks, consumed when the submission settles: an
+   * accepted yield means an owner took the thread's world away. */
+  private yieldTornDown = false;
   private async resolveYield(
     value: YieldValue,
     isCurrent: () => boolean,
@@ -932,7 +942,7 @@ export class Thread {
       const prefix = action.resultPrefix
         ? { resultPrefix: action.resultPrefix }
         : {};
-      this.yieldState = { value, ...prefix, tornDown: true };
+      this.yieldTornDown = true;
       return {
         type: "settled",
         result: { type: "yielded", value, ...prefix },
@@ -951,10 +961,7 @@ export class Thread {
       };
     }
     if (action.type !== "send-message") {
-      this.yieldState = {
-        value,
-        tornDown: false,
-      };
+      this.yieldTornDown = false;
       return { type: "settled", result: { type: "yielded", value } };
     }
     return {
@@ -1111,7 +1118,7 @@ export class Thread {
     isCurrent: () => boolean,
   ): Promise<ThreadCore> {
     this.assertUsable();
-    if (this.yieldState?.tornDown)
+    if (this.yielded?.tornDown)
       throw new Error(
         "This thread's container has been torn down. Cannot reset.",
       );
@@ -1128,7 +1135,8 @@ export class Thread {
     const core = this.createFreshCore({ initialFiles });
     this.core = core;
     this.pendingSeed = isCurrent() ? [...seed] : [];
-    this.lastSubmissionResult = undefined;
+    // The replaced core's outcome does not describe the new one.
+    if (this.status.type === "idle") this.status = { type: "idle" };
     this.threadLogger.resetCursor();
     this.handleUpdate();
     return core;
@@ -1137,14 +1145,17 @@ export class Thread {
   private assertUsable(): void {
     if (this.destroyed) throw new Error("Thread has been destroyed");
   }
-  private destroyed = false;
+  private get destroyed(): boolean {
+    return this.status.type === "destroyed";
+  }
   get isDestroyed(): boolean {
     return this.destroyed;
   }
   async destroy(): Promise<void> {
     if (this.destroyed) return;
-    this.destroyed = true;
     this.cancelSubmission();
+    const lastResult = this.lastResult();
+    this.status = { type: "destroyed", ...(lastResult ? { lastResult } : {}) };
     await this.core.dispose();
     this.settleResult({
       type: "aborted",

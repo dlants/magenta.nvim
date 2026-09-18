@@ -1,10 +1,4 @@
-import type {
-  NativeMessageIdx,
-  RestResult,
-  ScriptRunner,
-  StopReason,
-  ThreadId,
-} from "@magenta/server";
+import type { NativeMessageIdx, ScriptRunner, ThreadId } from "@magenta/server";
 import {
   type ArchiveEntry,
   deleteArchivedThread,
@@ -148,9 +142,9 @@ export type ChatMsg = {
   msg: Msg;
 };
 
-type StoppedReason =
-  | StopReason
-  | Exclude<RestResult["type"], "completed" | "failed">;
+/** How an idle thread came to rest, as a label: a provider stop reason, the
+ * kind of result it settled on, or a supervisor's own stop message. */
+type StoppedReason = string;
 
 /** The view adapter over a Session: selection, expansion, viewed timestamps,
  * archive navigation and the NvimThread wrappers. The session owns identity,
@@ -1195,6 +1189,15 @@ ${rows}${loadMore}`;
                   return {
                     type: "error" as const,
                     message: lastTurnResult.error.message,
+                  };
+                }
+                if (lastTurnResult?.type === "stopped") {
+                  return {
+                    type: "stopped" as const,
+                    reason:
+                      lastTurnResult.reason.kind === "stop"
+                        ? lastTurnResult.reason.message
+                        : "compaction requested",
                   };
                 }
                 return {

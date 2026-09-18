@@ -47,7 +47,7 @@ import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { type ContextDelivery, Thread, type ThreadContext } from "./thread.ts";
-import type { SendResult } from "./thread-api.ts";
+import type { RestResult, SendResult } from "./thread-api.ts";
 import { executeToolBatch } from "./tool-executor.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
 import { clientToolCreator } from "./tools/create-tool.ts";
@@ -93,6 +93,15 @@ export function flatLoop(owner: {
   return state.type === "running" ? state.activity : { type: "idle" };
 }
 
+/** Thread turns a suspension it cannot claim into a `stopped` result; the bare
+ * harness has no owner to claim one, so it does the same. A `yield` suspension
+ * is Thread's alone and has no rest-shaped form here. */
+function restResult(result: SendResult | undefined): RestResult | undefined {
+  if (result?.type !== "suspended") return result;
+  return result.reason.kind === "yield"
+    ? undefined
+    : { type: "stopped", reason: result.reason };
+}
 /** The bare-agent harness's stand-in for the thread: it owns the loop state
  * the same way, so what a test observes is what production observes. */
 export class TestAgent {
@@ -109,7 +118,7 @@ export class TestAgent {
           activity: this.turn.loopState,
           aborting: this.turn.loopState.aborting,
         }
-      : { type: "idle", lastResult: this.lastResult };
+      : { type: "idle", lastResult: restResult(this.lastResult) };
   }
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
@@ -505,7 +514,8 @@ export function resetThread(
   options: Parameters<Thread["replaceCore"]>[0],
 ) {
   thread["cancelSubmission"]();
-  thread["generation"] = undefined;
+  // Only the live submission is dropped: a settled yield outlives a reset.
+  if (thread["status"].type === "running") thread["status"] = { type: "idle" };
   thread["restoreDetachedBatch"]();
   return thread["replaceCore"](options);
 }

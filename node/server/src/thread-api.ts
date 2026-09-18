@@ -1,10 +1,11 @@
+import type { CompactSuspendReason } from "./compaction/index.ts";
 import type {
   NativeMessageIdx,
   StopReason,
   ToolResults,
 } from "./providers/provider-types.ts";
-
 import type {
+  PlainStopSuspendReason,
   RequestContext,
   SuspendReason,
   YieldAction,
@@ -47,8 +48,18 @@ export type SendResult =
   | { type: "suspended"; reason: SuspendReason };
 
 /** The complete submission outcome, after internal continuations and compaction.
- * Delivered to the submitter rather than broadcast as a lifecycle result. */
-export type RestResult = Exclude<SendResult, { type: "suspended" }>;
+ * Delivered to the submitter rather than broadcast as a lifecycle result.
+ *
+ * A suspension nobody claimed (no compactor for a `compact` reason, or a plain
+ * `stop`) surfaces as `stopped` rather than pretending the submission was
+ * `empty`: the log is coherent and resumable, and the reason is what a view
+ * shows. `yield` never reaches here — it is resolved inside the turn loop. */
+export type RestResult =
+  | Exclude<SendResult, { type: "suspended" }>
+  | {
+      type: "stopped";
+      reason: PlainStopSuspendReason | CompactSuspendReason;
+    };
 export type ThreadSendResult = RestResult | { type: "queued" };
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */
@@ -56,6 +67,42 @@ export type ThreadResult =
   | { type: "yielded"; value: YieldValue; resultPrefix?: string }
   /** destroyed before it ever yielded */
   | { type: "aborted"; reason: string };
+
+/** One live submission's identity. Every staleness check is "am I still the
+ * live generation": the generation is cleared when its submission finishes and
+ * cancelled by abort, destroy or a preempting submission. */
+export type GenerationId = number & { readonly __generation: unique symbol };
+export type Generation = {
+  /** Minted only by Thread, so a foreign object cannot pose as a
+   * generation. */
+  readonly id: GenerationId;
+  /** Cancelled by abort/destroy/preemption; passed to the compactor. */
+  readonly controller: AbortController;
+};
+
+/** Where the thread is in its life. The single source of truth behind
+ * `isBusy`, `loopState`, `lastResult()`, `yielded` and `isDestroyed`.
+ *
+ * `yielded` is a status rather than a sticky flag: a thread whose yield was
+ * not accepted may be sent to again, and while that submission runs the thread
+ * is `running`, not `yielded`. */
+export type ThreadStatus =
+  | { type: "idle"; lastResult?: RestResult }
+  | { type: "running"; generation: Generation }
+  | {
+      type: "yielded";
+      value: YieldValue;
+      resultPrefix?: string;
+      /** An owner accepted the yield and took the thread's world away, so
+       * nothing more can be sent. */
+      tornDown: boolean;
+    }
+  /** Terminal. The last result is kept because a destroyed thread's history
+   * can still be rendered. */
+  | { type: "destroyed"; lastResult?: RestResult };
+
+/** The accepted/settled yield, as views render it. */
+export type YieldState = Extract<ThreadStatus, { type: "yielded" }>;
 
 /** What the agent tells its owner about the request it is about to issue. */
 export type AgentRequestContext = RequestContext;

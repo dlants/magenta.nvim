@@ -365,7 +365,8 @@ describe("Thread.submit result", () => {
     });
     // Stand the thread up in the terminal state a torn-down subagent reaches,
     // without driving a whole yield + teardown.
-    (core as unknown as { yieldState: YieldState }).yieldState = {
+    (core as unknown as { status: YieldState }).status = {
+      type: "yielded",
       value: { result: "done" },
       tornDown: true,
     };
@@ -532,7 +533,8 @@ describe("Thread turn loop", () => {
     second.streamText("done");
     second.finishResponse("end_turn");
     expect(await sent).toEqual({
-      type: "empty",
+      type: "stopped",
+      reason: { kind: "stop", message: "halt" },
     });
     await core.destroy();
     await cleanupArchive(threadId);
@@ -862,7 +864,14 @@ describe("Thread submissions across a compaction handoff", () => {
       const stream = await mockClient.awaitStream();
       stream.streamText("done");
       stream.finishResponse("end_turn");
-      expect(await result).toEqual({ type: "empty" });
+      expect(await result).toEqual({
+        type: "stopped",
+        reason: { kind: "stop", message: "budget exhausted" },
+      });
+      expect(core.lastResult()).toEqual({
+        type: "stopped",
+        reason: { kind: "stop", message: "budget exhausted" },
+      });
       expect(compactor.calls).toEqual([]);
       // The log is coherent and resumable: a fresh send just continues.
       const next = core.submit({
@@ -4276,7 +4285,8 @@ describe("Thread preflight token count", () => {
         ],
       }),
     ).toEqual({
-      type: "empty",
+      type: "stopped",
+      reason: { kind: "stop", message: "held" },
     });
     // The later hook is still consulted — a stop is a fact it may need to
     // record — but the request it would decide about is never issued.

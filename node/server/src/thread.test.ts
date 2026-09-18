@@ -655,7 +655,8 @@ describe("deferred submissions", () => {
       // content is spent — it cannot be resolved again — so it is held for
       // whatever request this thread issues next.
       expect(await first).toEqual({
-        type: "empty",
+        type: "stopped",
+        reason: { kind: "stop", message: "halt" },
       });
       expect(core.queued.next).toEqual([]);
       expect(userTexts(core)).toContain("queued");
@@ -712,7 +713,8 @@ describe("deferred submissions", () => {
           ],
         }),
       ).toEqual({
-        type: "empty",
+        type: "stopped",
+        reason: { kind: "stop", message: "halt" },
       });
       // A reminder placed in a request that is never issued would be marked
       // sent and silently lost.
@@ -1587,6 +1589,60 @@ describe("empty send gate", () => {
   });
 });
 
+describe("thread status", () => {
+  it("supersedes an unaccepted yield with the submission that follows it", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    void core.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "work",
+        },
+      ],
+    });
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "yield-status" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "done" },
+    );
+    stream.finishResponse("tool_use");
+    await pollUntil(() => {
+      if (core.yielded) return true;
+      throw new Error(`waiting for the yield: ${loopLabel(core.loopState)}`);
+    });
+    // Nobody accepted the yield, so the thread can still be sent to. While
+    // that submission runs the thread is running, not yielded.
+    const next = core.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "more",
+        },
+      ],
+    });
+    const resumed = await awaitNextStream(mockClient, stream);
+    expect(core.loopState.type).toBe("running");
+    expect(core.yielded).toBeUndefined();
+    expect(core.lastResult()).toBeUndefined();
+    resumed.streamText("ok");
+    resumed.finishResponse("end_turn");
+    expect(await next).toEqual({ type: "completed", stopReason: "end_turn" });
+    expect(core.yielded).toBeUndefined();
+    // The lifecycle result is one-shot: it kept the yield it settled on.
+    expect(await core.result).toEqual({
+      type: "yielded",
+      value: { result: "done" },
+    });
+    await core.destroy();
+  });
+});
 describe("replaceable conversation core", () => {
   it("remains usable when reset is interrupted during disposal", async () => {
     const { core, mockClient } = createAgentWithMock();

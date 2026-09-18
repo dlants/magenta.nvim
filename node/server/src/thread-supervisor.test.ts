@@ -129,11 +129,14 @@ describe("Thread supervisor arbitration", () => {
     });
     expect(
       await core.submit({ type: "resolved", messages: userInput("hello") }),
-    ).toEqual({ type: "empty" });
+    ).toEqual({
+      type: "stopped",
+      reason: { kind: "stop", message: "first" },
+    });
     expect(core.loopState).toMatchObject({
       type: "idle",
       lastResult: {
-        type: "suspended",
+        type: "stopped",
         reason: { kind: "stop", message: "first" },
       },
     });
@@ -224,11 +227,14 @@ describe("Thread supervisor arbitration", () => {
       { result: "all done" },
     );
     stream.finishResponse("tool_use");
-    expect(await sent).toEqual({ type: "empty" });
+    expect(await sent).toEqual({
+      type: "stopped",
+      reason: { kind: "stop", message: "chat first" },
+    });
     expect(core.loopState).toMatchObject({
       type: "idle",
       lastResult: {
-        type: "suspended",
+        type: "stopped",
         reason: { kind: "stop", message: "chat first" },
       },
     });
@@ -318,12 +324,13 @@ describe("Thread supervisor arbitration", () => {
     const stream = await mockClient.awaitStream();
     stream.finishResponse("end_turn");
     expect(await turn).toEqual({
-      type: "empty",
+      type: "stopped",
+      reason: { kind: "stop", message: "first" },
     });
     expect(core.loopState).toMatchObject({
       type: "idle",
       lastResult: {
-        type: "suspended",
+        type: "stopped",
         reason: { kind: "stop", message: "first" },
       },
     });

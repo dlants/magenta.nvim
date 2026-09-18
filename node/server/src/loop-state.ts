@@ -1,13 +1,13 @@
 import type { LoopState } from "./agent.ts";
 import type { StreamingBlock } from "./providers/provider-types.ts";
-import type { SendResult } from "./thread-api.ts";
+import type { RestResult } from "./thread-api.ts";
 import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
 
 export type ThreadLoopState =
   /** Nothing in flight. `lastResult` is how the most recent submission ended;
    * it exists only here, so a view can never show a stale result beside a
    * live turn, and is `undefined` only before the first submission. */
-  | { type: "idle"; lastResult: SendResult | undefined }
+  | { type: "idle"; lastResult: RestResult | undefined }
   | {
       type: "running";
       activity: LoopState;

@@ -509,7 +509,8 @@ describe("Thread-owned context delivery", () => {
           ],
         }),
       ).toEqual({
-        type: "empty",
+        type: "stopped",
+        reason: { kind: "stop", message: "halt" },
       });
       expect(f.mockClient.streams).toHaveLength(0);
       expect(f.manager.files[f.file].agentView).toBeUndefined();

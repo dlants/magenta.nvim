@@ -175,13 +175,25 @@ Review follow-ups (stage 2):
 - Added coverage in `thread-supervisor.test.ts`: a throwing `onYield` is skipped and a later `reject` still wins; a lone throwing `onYield` degrades to accept rather than wedging the turn; a chat supervisor's `onToolResults` stop beats the yield gate (the ordering invariant that moved from a hard-coded step into a chain member); a throwing `hasPendingContent` is skipped and a later member's `true` still issues the request.
 - `onEndTurnWithoutYield` being guarded by the submission guard is intentional: a preempting submission should truncate the remaining end-turn nudges, since any suspension or nudge they produce belongs to a turn that is no longer live. Left uncovered by a dedicated test; the abort/preemption suites in `thread.test.ts` pin the surrounding behaviour.
 
-## thread status
+## thread status — DONE
 
 - Goal: one `ThreadStatus` union; `lastSubmissionResult`, `yieldState`, `resultSettled`, `destroyed` removed; `finish()` loses its `displayResult` parameter and unclaimed suspensions surface as `{type:"stopped"}`.
 - Tests:
-  - `lastResult()` after a `MaxTokensSupervisor` stop reports `stopped` with the reason, and the thread-view renders it (update `thread-view.ts` / `chat.ts` call sites).
-  - Yield: `yielded` is set, `result` settles once, a second submission after a torn-down yield throws.
-  - `loopState` transitions idle → running → idle across a compaction, with `lastResult` cleared at replacement as it is today.
+  - [x] `lastResult()` after a supervisor stop reports `stopped` with the reason (`agent.test.ts > treats a suspension nobody claims as a plain stop`), and the view renders it (`thread-view.test.ts > renders a supervisor's stop with its own message`).
+  - [x] Yield: `yielded` is set, `result` settles once and survives a reset and a destroy (`thread.test.ts > keeps an already yielded result across replacement`); a submission after a torn-down yield throws (`agent.test.ts > rejects once the thread's container has been torn down`).
+  - [x] `loopState` transitions idle → running → idle across a compaction, with `lastResult` cleared at replacement (existing compaction-handoff suites; replacement clearing is now implicit, since a running status carries no result).
+  - [x] Added: `thread.test.ts > thread status > supersedes an unaccepted yield with the submission that follows it`.
+
+Decisions / deviations:
+
+- `ThreadStatus`, `YieldState` and `Generation`/`GenerationId` live in `thread-api.ts`; `thread.ts` re-exports `ThreadStatus`/`YieldState` so the server barrel's existing export path is unchanged. `Thread.status` is the only state field; `generation`, `destroyed`, `yielded` and `lastResult()` are getters over it.
+- `yielded` is a status, not a sticky flag: an unaccepted yield is superseded by the next submission and does not come back when that submission rests. `tornDown` is decided by the yield hooks while the submission is still running, so it is carried on a small private `yieldTornDown` flag and folded into the status when the submission settles — setting the status at hook time would make the running submission stale relative to itself.
+- `destroyed` keeps `lastResult` (a destroyed thread's history is still rendered, and `buffer-manager.test.ts` asserts it), so it is `{ type: "destroyed"; lastResult?: RestResult }` rather than the bare variant in the design above.
+- `isCurrent` no longer tests `destroyed` separately: destruction replaces the status, so the live generation is gone by construction.
+- `RestResult` gained `stopped`, so `ThreadLoopState`'s idle `lastResult` is now `RestResult | undefined` rather than `SendResult | undefined` — a suspension was never renderable anyway. `TestAgent` (the bare-agent harness) applies the same suspension → `stopped` mapping Thread does.
+- A `yield` suspension reaching the submission boundary now throws instead of being silently reported: it is resolved inside the turn loop, and the thrown error is what makes that invariant checkable.
+- View call sites: `thread-view.ts` renders `Stopped: <supervisor message>`, and `chat.ts`'s thread summary reports the same message as its `stopped` reason (`StoppedReason` is now just a label string).
+- `test-helpers.resetThread` clears only a *running* status, so a settled yield survives an administrative reset as it did before.
 
 ## suspension dispatch
 
