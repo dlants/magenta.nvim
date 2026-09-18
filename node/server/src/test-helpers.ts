@@ -504,9 +504,8 @@ export function resetThread(
   thread: Thread,
   options: Parameters<Thread["replaceCore"]>[0],
 ) {
-  thread["interrupt"]();
   thread["cancelSubmission"]();
-  thread["submission"] = undefined;
+  thread["generation"] = undefined;
   thread["restoreDetachedBatch"]();
   return thread["replaceCore"](options);
 }

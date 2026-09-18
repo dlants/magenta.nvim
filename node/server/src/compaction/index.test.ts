@@ -285,6 +285,9 @@ describe("ThreadCompactor cancellation", () => {
       parentThreadId: thread.id,
       threadManager: thread["context"].threadManager,
     });
+    // A submission's compaction is cancelled through the submission's own
+    // signal; driving the compactor directly, the test owns that signal.
+    const cancellation = new AbortController();
     const run = compactor.run(
       [
         {
@@ -299,7 +302,7 @@ describe("ThreadCompactor cancellation", () => {
         },
       ],
       undefined,
-      thread["interruption"].signal,
+      cancellation.signal,
     );
     await spawned.promise;
     if (action === "discard") compactor.discard();
@@ -307,6 +310,7 @@ describe("ThreadCompactor cancellation", () => {
     else if (action === "reset")
       await resetThread(thread, { seed: [], archive: { type: "none" } });
     else await thread.destroy();
+    if (action !== "discard") cancellation.abort();
     const child = "late-child" as ThreadId;
     spawn.resolve(child);
     expect(await run).toEqual({ type: "aborted" });
@@ -353,16 +357,9 @@ it("a late first spawn cannot overwrite a newer compaction", async () => {
     parentThreadId: thread.id,
     threadManager: thread["context"].threadManager,
   });
-  const first = compactor.run(
-    messages,
-    undefined,
-    thread["interruption"].signal,
-  );
-  const second = compactor.run(
-    messages,
-    undefined,
-    thread["interruption"].signal,
-  );
+  const cancellation = new AbortController();
+  const first = compactor.run(messages, undefined, cancellation.signal);
+  const second = compactor.run(messages, undefined, cancellation.signal);
   await Promise.resolve();
   const newer = compactor.current;
   expect(newer?.activeThreadId).toBe(newerChild);
@@ -427,6 +424,7 @@ it.each([
     parentThreadId: thread.id,
     threadManager: thread["context"].threadManager,
   });
+  const cancellation = new AbortController();
   const run = compactor.run(
     [
       {
@@ -441,7 +439,7 @@ it.each([
       },
     ],
     undefined,
-    thread["interruption"].signal,
+    cancellation.signal,
   );
   await waiting.promise;
   expect(thread.isBusy).toBe(false);
@@ -449,6 +447,7 @@ it.each([
   else if (action === "reset")
     await resetThread(thread, { seed: [], archive: { type: "none" } });
   else await thread.destroy();
+  cancellation.abort();
   expect(await run).toEqual({ type: "aborted" });
   expect(deleted).toEqual([child]);
   expect(compactor.current).toBeUndefined();

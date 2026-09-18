@@ -1855,6 +1855,133 @@ describe("replaceable conversation core", () => {
   });
 });
 
+describe("submission generations", () => {
+  it("preempts a submission still resolving its own input", async () => {
+    const entered = new Defer<void>();
+    const gate = new Defer<void>();
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("generation-preempt"),
+      async (message) => {
+        entered.resolve();
+        await gate.promise;
+        return {
+          compact: false,
+          messages: [
+            {
+              type: "text" as const,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: message,
+            },
+          ],
+          reminders: [],
+        };
+      },
+    );
+    const first = core.submit({ type: "raw", message: pendingMessage("slow") });
+    await entered.promise;
+    const second = core.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "replacement",
+        },
+      ],
+    });
+    const stream = await mockClient.awaitStream();
+    gate.resolve();
+    expect(await first).toEqual({ type: "aborted" });
+    expect(mockClient.streams).toHaveLength(1);
+    expect(userTexts(core)).not.toContain("slow");
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    expect(await second).toEqual({ type: "completed", stopReason: "end_turn" });
+    expect(core.lastResult()).toEqual({
+      type: "completed",
+      stopReason: "end_turn",
+    });
+  });
+  it("ignores a before-request hook that outlives its core", async () => {
+    const entered = new Defer<void>();
+    const gate = new Defer<void>();
+    let laterConsulted = 0;
+    const { core, mockClient } = createAgentWithMock({
+      chatSupervisors: [
+        {
+          onBeforeRequest: async () => {
+            if (entered.resolved) return { type: "none" as const };
+            entered.resolve();
+            await gate.promise;
+            return injectText("stale injection");
+          },
+        },
+        {
+          onBeforeRequest: () => {
+            laterConsulted += 1;
+            return Promise.resolve({ type: "none" as const });
+          },
+        },
+      ],
+    });
+    const first = core.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "start",
+        },
+      ],
+    });
+    await entered.promise;
+    const reset = resetThread(core, { seed: [], archive: { type: "none" } });
+    gate.resolve();
+    await reset;
+    expect(await first).toEqual({ type: "aborted" });
+    // The retired core's request never went out, so the supervisors behind the
+    // gated one were never reached.
+    expect(laterConsulted).toBe(0);
+    expect(mockClient.streams).toHaveLength(0);
+    const second = core.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "after reset",
+        },
+      ],
+    });
+    const stream = await mockClient.awaitStream();
+    expect(userTexts(core)).not.toContain("stale injection");
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    expect((await second).type).toBe("completed");
+  });
+  it("settles the lifecycle result when destroy lands mid-turn", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const sent = core.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "start",
+        },
+      ],
+    });
+    await mockClient.awaitStream();
+    await core.destroy();
+    expect(await core.result).toEqual({
+      type: "aborted",
+      reason: "thread destroyed before it yielded",
+    });
+    expect((await sent).type).toBe("aborted");
+    expect(core.isBusy).toBe(false);
+  });
+});
 describe("stale outer submissions", () => {
   it.each([
     "send",

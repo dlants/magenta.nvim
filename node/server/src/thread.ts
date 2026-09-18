@@ -145,6 +145,14 @@ export type ThreadArchiveOptions = {
 type FlushedQueue =
   | { type: "messages"; messages: AgentInput[] }
   | { type: "compact"; nextPrompt: string | undefined };
+/** One live submission's identity. Every staleness check is "am I still the
+ * live generation": the generation is cleared when its submission finishes and
+ * cancelled by abort, destroy or a preempting submission. */
+type Generation = {
+  /** Cancelled by abort/destroy/preemption; passed to the compactor. */
+  readonly controller: AbortController;
+};
+
 export type ThreadCallbacks = {
   readonly onUpdate: OnUpdate;
   readonly onSubmission?: (messages: readonly AgentInput[]) => void;
@@ -176,12 +184,6 @@ export class Thread {
     return this.core.getContextDelivery(nativeMessageIdx);
   }
   private core: ThreadCore;
-  private interruption = new AbortController();
-  private interrupt(): void {
-    const previous = this.interruption;
-    this.interruption = new AbortController();
-    previous.abort();
-  }
 
   get editedFileGroups() {
     return this.core.editedFilesSupervisor.groups;
@@ -306,9 +308,7 @@ export class Thread {
     core: ThreadCore,
   ): Promise<BeforeRequestDecision> {
     const manager = core.manager;
-    const isCurrentLoop = this.currentLoopGuard();
-    const isCurrent = () =>
-      this.core === core && core.isActive && isCurrentLoop();
+    const isCurrent = this.turnGuard(core);
     const injections: AgentInput[] = [];
     let suspend: SuspendReason | undefined;
     let tokenCount: number | undefined;
@@ -508,15 +508,15 @@ export class Thread {
   /** Render state combines the outer submission's lifetime with progress
    * reported by its current agent turn. */
   get loopState(): ThreadLoopState {
-    const submission = this.submission;
-    return submission
+    const generation = this.generation;
+    return generation
       ? {
           type: "running",
           activity: this.core.activity ?? {
             type: "preparing",
-            aborting: submission.signal.aborted,
+            aborting: generation.controller.signal.aborted,
           },
-          aborting: submission.signal.aborted || this.core.aborting,
+          aborting: generation.controller.signal.aborted || this.core.aborting,
         }
       : { type: "idle", lastResult: this.lastSubmissionResult };
   }
@@ -578,7 +578,6 @@ export class Thread {
     return this.yieldState;
   }
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
-    this.interrupt();
     if (this.yieldState && !this.isBusy) return { unsent: [] };
     const unsent = this.drainQueues();
     this.cancelSubmission();
@@ -622,21 +621,16 @@ export class Thread {
         "This thread's container has been torn down. No further messages can be sent.",
       );
     const wasBusy = this.isBusy;
-    this.interrupt();
     this.cancelSubmission();
     if (wasBusy) this.drainQueues();
-    const submission = new AbortController();
-    this.submission = submission;
-    const signal = this.interruption.signal;
-    const isCurrent = () =>
-      this.submission === submission &&
-      !submission.signal.aborted &&
-      !signal.aborted &&
-      !this.destroyed;
+    const generation: Generation = { controller: new AbortController() };
+    this.generation = generation;
+    const signal = generation.controller.signal;
+    const isCurrent = () => this.isCurrent(generation);
     this.handleUpdate();
     const finish = (result: RestResult, displayResult: SendResult = result) => {
-      if (this.submission === submission) {
-        this.submission = undefined;
+      if (this.generation === generation) {
+        this.generation = undefined;
         this.lastSubmissionResult = displayResult;
         if (result.type === "yielded") this.settleResult(result);
         this.handleUpdate();
@@ -648,7 +642,7 @@ export class Thread {
         await this.core.abortAgentTurn();
         if (!isCurrent()) return finish({ type: "aborted" });
       }
-      if (this.resetPromise) await this.resetPromise;
+      if (this.reset) await this.reset;
       if (!isCurrent()) return finish({ type: "aborted" });
       const resolved =
         input.type === "raw"
@@ -753,7 +747,7 @@ export class Thread {
    * request left to carry it) and the entries behind it go back on the
    * queue. */
   private async flushAtStop(delivery: DeferredDelivery): Promise<FlushedQueue> {
-    const isCurrent = this.currentLoopGuard();
+    const isCurrent = this.turnGuard();
     const batch = { delivery, entries: this.mailbox.takeBatch(delivery) };
     this.detachedBatch = batch;
     const messages: AgentInput[] = [];
@@ -795,7 +789,7 @@ export class Thread {
   private async flushMidTurn(
     nativeMessageIdx: NativeMessageIdx,
   ): Promise<AgentInput[]> {
-    const isCurrent = this.currentLoopGuard();
+    const isCurrent = this.turnGuard();
     const batch = {
       delivery: "async" as const,
       entries: this.mailbox.takeBatch("async"),
@@ -826,16 +820,6 @@ export class Thread {
   /** Resolve one entry, activating its reminders. An entry whose resolution
    * throws is dropped with a visible error rather than wedging the turn
    * loop. */
-  private currentLoopGuard(): () => boolean {
-    const core = this.core;
-    const submission = this.submission;
-    return () =>
-      this.core === core &&
-      core.isActive &&
-      submission !== undefined &&
-      this.submission === submission &&
-      !submission.signal.aborted;
-  }
   private async resolveQueued(
     entry: QueueEntry,
     isCurrent: () => boolean,
@@ -879,7 +863,7 @@ export class Thread {
   private async hasPendingContent(): Promise<boolean> {
     const core = this.core;
     if (!core.isActive) return false;
-    const isCurrent = this.currentLoopGuard();
+    const isCurrent = this.turnGuard();
     for (const supervisor of this.orderedSupervisors) {
       const pending = await supervisor.hasPendingContent?.();
       if (!isCurrent()) return false;
@@ -888,13 +872,33 @@ export class Thread {
     return false;
   }
   /** Outer hooks may outlive cancellation. Each submission captures its own
-   * signal so a late continuation cannot act on the replacement submission. */
-  private submission: AbortController | undefined;
+   * generation so a late continuation cannot act on the replacement
+   * submission. */
+  private generation: Generation | undefined;
   private lastSubmissionResult: SendResult | undefined;
   private cancelSubmission(): void {
-    if (!this.submission || this.submission.signal.aborted) return;
-    this.submission.abort();
+    const generation = this.generation;
+    if (!generation || generation.controller.signal.aborted) return;
+    generation.controller.abort();
     this.handleUpdate();
+  }
+  private isCurrent(generation: Generation): boolean {
+    return (
+      this.generation === generation &&
+      !generation.controller.signal.aborted &&
+      !this.destroyed
+    );
+  }
+  /** The submission guard narrowed to the core the caller is running against:
+   * a turn cannot outlive the core it was issued on, even though its
+   * submission can (compaction replaces the core mid-submission). */
+  private turnGuard(core: ThreadCore = this.core): () => boolean {
+    const generation = this.generation;
+    return () =>
+      generation !== undefined &&
+      this.isCurrent(generation) &&
+      this.core === core &&
+      core.isActive;
   }
   private async runLoop(
     messages: AgentInput[],
@@ -1050,7 +1054,7 @@ export class Thread {
      * out, `carry` (always non-empty) has to travel on the suspension. */
     | { type: "flushed"; messages: AgentInput[]; carry: string }
   > {
-    const isCurrent = this.currentLoopGuard();
+    const isCurrent = this.turnGuard();
     const planned = this.plannedContinuation(stopReason);
     if (planned.type === "suspend") {
       return { type: "suspended", reason: planned.reason };
@@ -1149,17 +1153,19 @@ export class Thread {
     }
     return { type: "rest" };
   }
-  private resetPromise: Promise<ThreadCore> | undefined;
+  /** The in-flight core replacement, if any: both the re-entrancy guard and
+   * what a preempting submission waits on. */
+  private reset: Promise<ThreadCore> | undefined;
   private async replaceCore(
     options: Parameters<Thread["resetCore"]>[0],
     isCurrent: () => boolean = () => true,
   ): Promise<ThreadCore> {
     const reset = this.resetCore(options, isCurrent);
-    this.resetPromise = reset;
+    this.reset = reset;
     try {
       return await reset;
     } finally {
-      if (this.resetPromise === reset) this.resetPromise = undefined;
+      if (this.reset === reset) this.reset = undefined;
     }
   }
 
@@ -1180,32 +1186,26 @@ export class Thread {
       throw new Error(
         "This thread's container has been torn down. Cannot reset.",
       );
-    if (this.resetting) throw new Error("Thread reset already in progress");
-    this.resetting = true;
-    try {
-      const initialFiles = buildClonedFiles(this.contextFiles.files);
-      await this.core.dispose();
-      this.assertUsable();
-      // Disposal is irreversible: cancellation prevents the caller's follow-up,
-      // but must not leave this thread pointing at a permanently disposed core.
-      if (isCurrent() && archive.type === "compaction")
-        this.threadLogger.recordCompaction({
-          summary: archive.summary,
-          chunkCount: archive.chunkCount,
-        });
-      const core = this.createFreshCore({ initialFiles });
-      this.core = core;
-      this.pendingSeed = isCurrent() ? [...seed] : [];
-      this.lastSubmissionResult = undefined;
-      this.threadLogger.resetCursor();
-      this.handleUpdate();
-      return core;
-    } finally {
-      this.resetting = false;
-    }
+    if (this.reset) throw new Error("Thread reset already in progress");
+    const initialFiles = buildClonedFiles(this.contextFiles.files);
+    await this.core.dispose();
+    this.assertUsable();
+    // Disposal is irreversible: cancellation prevents the caller's follow-up,
+    // but must not leave this thread pointing at a permanently disposed core.
+    if (isCurrent() && archive.type === "compaction")
+      this.threadLogger.recordCompaction({
+        summary: archive.summary,
+        chunkCount: archive.chunkCount,
+      });
+    const core = this.createFreshCore({ initialFiles });
+    this.core = core;
+    this.pendingSeed = isCurrent() ? [...seed] : [];
+    this.lastSubmissionResult = undefined;
+    this.threadLogger.resetCursor();
+    this.handleUpdate();
+    return core;
   }
 
-  private resetting = false;
   private assertUsable(): void {
     if (this.destroyed) throw new Error("Thread has been destroyed");
   }
@@ -1216,7 +1216,7 @@ export class Thread {
   async destroy(): Promise<void> {
     if (this.destroyed) return;
     this.destroyed = true;
-    this.interrupt();
+    this.cancelSubmission();
     await this.core.dispose();
     this.settleResult({
       type: "aborted",
