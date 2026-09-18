@@ -242,9 +242,17 @@ Move the self-contained IPC declarations into the server package and make `sdk/p
   - [x] `Chat` accepts an optional `{ session, host }` so a view can be attached to an existing Session; the constructor seeds the cache by calling `syncThread` for every existing record and then subscribes to `changed`/`removed`/`filesSent`/`gitSent`. `syncThread` only builds/repaints the NvimThread wrapper and the error-state navigation fallback; `removeThreadView` disposes the wrapper and drops view-local state (expansion, viewed timestamp, buffers).
   - [x] Retained locally: selection/navigation, expansion, viewed timestamps, archive navigation and deletion, error/input presentation, fork markers and copied display context in `handleForkThread`, and buffer cleanup.
   - [x] Tests: `node/nvimclient/chat/chat-view-adapter.test.ts` covers rebuilding a second `Chat` over a live Session (same ids, same server `Thread` instance, title mirrored, no extra thread and no extra `forceToolUse` title request) and a turn completing after `session.removeAllListeners()` (no view observer at all). Existing chat, buffer-manager, archive, fork-keybinding, compaction, script and attention tests pass unchanged.
+- Review follow-ups (stage 3 code review):
+  - [x] `ThreadWrapper` gained a distinct `view-pending` variant, so an initialized session record whose NvimThread has not been built no longer masquerades as server-side `pending`. `getThreadSummary`/`renderSingleThread` treat it like pending for display only.
+  - [x] `threadWrappers` is now `Readonly<{ [id: ThreadId]: ThreadWrapper | undefined }>`, forcing readers to handle a missing id (call sites, all tests, updated to optional chaining).
+  - [x] `scriptInvocationId` is a required `ScriptInvocationId | undefined` field; the conditional spread is gone.
+  - [x] `syncThread` no longer uses `!` on `host.contexts.get(id)`: a missing prepared context returns early with a comment explaining why it cannot happen.
+  - [x] `depth()` carries a visited set, so a malformed parent chain terminates.
+  - [x] `Chat.context` is `readonly` public, so the view-adapter test constructs a rebuilt Chat without bracket access, and it asserts the state variant instead of using `!`.
+  - [x] New tests: root-ancestor bell when a subagent turn lands while the user is in the overview (`chat.test.ts`); `view-pending` projection and a failed construction flipping out of `thread-selected` (`chat-view-adapter.test.ts`); `Session.recordActivity` bumping time + emitting `changed` and no-op on unknown ids (`session.test.ts`).
 - Decisions/deviations:
   - `lastActivityTime` stays server-owned; `Session.recordActivity` is the one mutation the view may request. `lastViewedTime` stays client-side (defaulting to the record's activity time until first observed) since it is a per-view notion.
-  - `threadWrappers` was kept as a public getter rather than replaced with an accessor method, so the existing tests and `magenta.ts` readers did not have to change; it is now a read-only projection.
+  - `threadWrappers` was kept as a public getter rather than replaced with an accessor method; after the review it returns a `Readonly` map whose values may be `undefined`, so absence is type-visible.
   - Chat still constructs its Session/host when none is supplied; consolidating ownership into Magenta is stage 5.
 
 ## 4. Move script orchestration into Session

@@ -1005,7 +1005,7 @@ it("script-spawned thread honors per-thread autoCompactPrompt override", async (
     });
 
     const wrapper = driver.magenta.chat.threadWrappers[threadId];
-    if (wrapper.state !== "initialized")
+    if (wrapper?.state !== "initialized")
       throw new Error("expected initialized thread");
     const thread = wrapper.thread;
 
@@ -1064,7 +1064,7 @@ it("script-spawned thread without prompt override falls back to the default temp
     });
 
     const wrapper = driver.magenta.chat.threadWrappers[threadId];
-    if (wrapper.state !== "initialized")
+    if (wrapper?.state !== "initialized")
       throw new Error("expected initialized thread");
     const thread = wrapper.thread;
 

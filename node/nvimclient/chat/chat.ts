@@ -51,7 +51,13 @@ const ARCHIVE_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
  * here is mutable server state: Chat reads it fresh out of the session. */
 type ThreadWrapper = (
   | {
+      /** The session has not finished constructing this thread. */
       state: "pending";
+    }
+  | {
+      /** The server thread exists but this view has not built its wrapper
+       * yet (the change event that builds it hasn't been observed). */
+      state: "view-pending";
     }
   | {
       state: "initialized";
@@ -63,7 +69,7 @@ type ThreadWrapper = (
     }
 ) & {
   parentThreadId: ThreadId | undefined;
-  scriptInvocationId?: ScriptInvocationId;
+  scriptInvocationId: ScriptInvocationId | undefined;
   depth: number;
   lastActivityTime: number;
   lastViewedTime: number;
@@ -174,7 +180,7 @@ export class Chat implements ThreadManager {
   }
 
   constructor(
-    private context: {
+    readonly context: {
       dispatch: Dispatch<RootMsg>;
       getDisplayWidth: () => number;
       getOptions: () => MagentaOptions;
@@ -214,9 +220,7 @@ export class Chat implements ThreadManager {
     if (!record) return undefined;
     const fields = {
       parentThreadId: record.parentThreadId,
-      ...(record.scriptInvocationId
-        ? { scriptInvocationId: record.scriptInvocationId }
-        : {}),
+      scriptInvocationId: record.scriptInvocationId,
       depth: this.depth(id),
       lastActivityTime: record.lastActivityTime,
       lastViewedTime: this.lastViewedTimes.get(id) ?? record.lastActivityTime,
@@ -228,11 +232,9 @@ export class Chat implements ThreadManager {
         return { ...fields, state: "error", error: record.error };
       case "initialized": {
         const thread = this.threadViews.get(id);
-        // A record can become initialized before we've observed the change
-        // event that builds its wrapper; until then it renders as pending.
         return thread
           ? { ...fields, state: "initialized", thread }
-          : { ...fields, state: "pending" };
+          : { ...fields, state: "view-pending" };
       }
       default:
         return assertUnreachable(record);
@@ -241,7 +243,9 @@ export class Chat implements ThreadManager {
 
   /** All projected records, keyed by thread id. Read-only: mutating the
    * returned objects does not change session state. */
-  get threadWrappers(): { [id: ThreadId]: ThreadWrapper } {
+  get threadWrappers(): Readonly<{
+    [id: ThreadId]: ThreadWrapper | undefined;
+  }> {
     const wrappers: { [id: ThreadId]: ThreadWrapper } = {};
     for (const record of this.session.listThreads()) {
       const wrapper = this.wrapper(record.id);
@@ -252,8 +256,10 @@ export class Chat implements ThreadManager {
 
   private depth(id: ThreadId): number {
     let depth = 0;
+    const seen = new Set<ThreadId>([id]);
     let parent = this.session.getThread(id)?.parentThreadId;
-    while (parent) {
+    while (parent && !seen.has(parent)) {
+      seen.add(parent);
       depth += 1;
       parent = this.session.getThread(parent)?.parentThreadId;
     }
@@ -275,8 +281,12 @@ export class Chat implements ThreadManager {
     if (record.state !== "initialized") return;
     let thread = this.threadViews.get(id);
     if (!thread) {
+      const prepared = this.host.contexts.get(id);
+      // The host records a prepared context before the session registers the
+      // thread, so an initialized record always has one.
+      if (!prepared) return;
       thread = new NvimThread(id, record.thread, record.compactor, {
-        ...this.host.contexts.get(id)!,
+        ...prepared,
         chat: this,
       });
       this.threadViews.set(id, thread);
@@ -1199,6 +1209,7 @@ ${rows}${loadMore}`;
 
     switch (threadWrapper.state) {
       case "pending":
+      case "view-pending":
         return {
           status: { type: "pending" },
         };
@@ -1296,6 +1307,7 @@ ${rows}${loadMore}`;
 
     switch (threadWrapper.state) {
       case "pending":
+      case "view-pending":
         return d`Initializing thread...`;
       case "initialized": {
         const thread = threadWrapper.thread;

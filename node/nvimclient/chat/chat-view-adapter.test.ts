@@ -33,11 +33,13 @@ it("rebuilding the view adapter over an existing session makes no new thread or 
     await driver.assertDisplayBufferContains("The sun is large.");
 
     const chat = driver.magenta.chat;
-    const threadId = chat.state.activeThreadId!;
+    if (chat.state.state !== "thread-selected")
+      throw new Error("expected a selected thread");
+    const threadId = chat.state.activeThreadId;
     const serverThread = chat.getActiveThread().thread;
     const titleRequests = driver.mockAnthropic.forceToolUseRequests.length;
 
-    const rebuilt = new Chat(chat["context"], {
+    const rebuilt = new Chat(chat.context, {
       session: chat.session,
       host: chat.host,
     });
@@ -45,8 +47,8 @@ it("rebuilding the view adapter over an existing session makes no new thread or 
     // The rebuilt view sees the same registry, wrapping the same server Thread.
     expect(Object.keys(rebuilt.threadWrappers)).toEqual([threadId]);
     const wrapper = rebuilt.threadWrappers[threadId];
-    expect(wrapper.state).toBe("initialized");
-    if (wrapper.state !== "initialized") throw new Error("not initialized");
+    expect(wrapper?.state).toBe("initialized");
+    if (wrapper?.state !== "initialized") throw new Error("not initialized");
     expect(wrapper.thread.thread).toBe(serverThread);
     expect(rebuilt.getThreadDisplayName(threadId)).toBe("Solar system");
 
@@ -86,5 +88,38 @@ it("a turn completes with no view listener attached to the session", async () =>
     expect(chat.session.getThread(thread.id as ThreadId)?.state).toBe(
       "initialized",
     );
+  });
+});
+
+it("renders an initialized record whose view has not been built as initializing", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    const chat = driver.magenta.chat;
+    const threadId = chat.getActiveThread().id;
+    // Drop the view-local wrapper while the session record stays initialized:
+    // the same window a change event that has not been observed yet leaves.
+    chat["threadViews"].get(threadId)?.dispose();
+    chat["threadViews"].delete(threadId);
+    expect(chat.threadWrappers[threadId]?.state).toBe("view-pending");
+    expect(chat.getThreadSummary(threadId).status.type).toBe("pending");
+  });
+});
+
+it("a thread that fails to construct takes the view out of thread-selected", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    const chat = driver.magenta.chat;
+    expect(chat.state.state).toBe("thread-selected");
+    chat.host.prepareThread = () =>
+      Promise.reject(new Error("preparation exploded"));
+    await expect(chat.createNewThread()).rejects.toThrow(
+      "preparation exploded",
+    );
+    expect(chat.state.state).toBe("thread-overview");
+    const failedId = chat.session
+      .listThreads()
+      .find((record) => record.state === "error")?.id;
+    if (!failedId) throw new Error("expected an error record");
+    expect(chat.threadWrappers[failedId]?.state).toBe("error");
   });
 });

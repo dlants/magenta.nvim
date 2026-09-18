@@ -424,6 +424,19 @@ it("refuses to reuse a thread id that is already registered", async () => {
   ).rejects.toThrow("already exists");
   expect(session.listThreads().map((record) => record.id)).toEqual([id]);
 });
+it("records observed activity and ignores unknown ids", async () => {
+  const { session } = fixture();
+  const id = await session.createRootThread();
+  const before = session.getThread(id)!.lastActivityTime;
+  const changed: ThreadId[] = [];
+  session.on("changed", (changedId) => changed.push(changedId));
+  session.recordActivity("not-a-thread" as ThreadId);
+  expect(changed).toEqual([]);
+  await new Promise((resolve) => setTimeout(resolve, 2));
+  session.recordActivity(id);
+  expect(session.getThread(id)!.lastActivityTime).toBeGreaterThan(before);
+  expect(changed).toEqual([id]);
+});
 it("keeps two sessions' registries independent", async () => {
   const a = fixture();
   const b = fixture();

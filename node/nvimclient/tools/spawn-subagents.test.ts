@@ -22,8 +22,8 @@ function findChildThread(chat: Chat) {
   }) as ThreadId | undefined;
   expect(childThreadId).toBeDefined();
   const childWrapper = chat.threadWrappers[childThreadId!];
-  expect(childWrapper.state).toBe("initialized");
-  if (childWrapper.state !== "initialized")
+  expect(childWrapper?.state).toBe("initialized");
+  if (childWrapper?.state !== "initialized")
     throw new Error("Expected initialized");
   return childWrapper;
 }

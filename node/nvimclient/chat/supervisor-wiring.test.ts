@@ -71,7 +71,7 @@ it("subagent threads get both SubagentSupervisor and AutoCompactSupervisor", asy
     expect(childThreadId).toBeDefined();
 
     const childWrapper = chat.threadWrappers[childThreadId!];
-    if (childWrapper.state !== "initialized")
+    if (childWrapper?.state !== "initialized")
       throw new Error("Expected initialized child thread");
     const supervisors = childWrapper.thread.thread.chatSupervisors!;
 
@@ -130,7 +130,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
       const chat = driver.magenta.chat;
       const getSupervisor = (id: ThreadId) => {
         const wrapper = chat.threadWrappers[id];
-        if (wrapper.state !== "initialized")
+        if (wrapper?.state !== "initialized")
           throw new Error("expected initialized thread");
         const sup = wrapper.thread.thread.chatSupervisors!.find(
           (s): s is AutoCompactSupervisor => s instanceof AutoCompactSupervisor,
@@ -156,14 +156,14 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
       expect(await ask(fallback, 100_000)).toBe("none");
       expect(await ask(fallback, 300_000)).toBe("suspend");
       const sourceWrapper = chat.threadWrappers[overriddenId];
-      if (sourceWrapper.state !== "initialized")
+      if (sourceWrapper?.state !== "initialized")
         throw new Error("expected source thread");
       await sourceWrapper.thread.abortAndWait();
       const forkId = await chat.handleForkThread({
         sourceThreadId: overriddenId,
       });
       const forkWrapper = chat.threadWrappers[forkId];
-      if (forkWrapper.state !== "initialized")
+      if (forkWrapper?.state !== "initialized")
         throw new Error("expected fork thread");
       expect(forkWrapper.thread.thread.toolSpecs).toEqual(
         sourceWrapper.thread.thread.toolSpecs,

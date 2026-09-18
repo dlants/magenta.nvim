@@ -185,7 +185,7 @@ it("does not resolve a script's createThread() await on a subagent error", async
       await pollUntil(() => inv.threadIds.length > 0);
       const threadId = inv.threadIds[0];
       const threadWrapper = driver.magenta.chat.threadWrappers[threadId];
-      if (threadWrapper.state !== "initialized") {
+      if (threadWrapper?.state !== "initialized") {
         throw new Error("expected thread to be initialized");
       }
 
@@ -656,7 +656,7 @@ it("surfaces a spawned thread's pending permission under a collapsed script row 
       await driver.assertDisplayBufferContains("May I run command");
 
       const thread = driver.magenta.chat.threadWrappers[threadId];
-      if (thread.state !== "initialized")
+      if (thread?.state !== "initialized")
         throw new Error("thread not initialized");
       expect(
         thread.thread.sandboxViolationHandler!.getPendingViolations().size,

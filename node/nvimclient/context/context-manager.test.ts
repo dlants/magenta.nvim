@@ -779,11 +779,11 @@ describe("hierarchy context discovery", () => {
         const chat = driver.magenta.chat;
         const childThreadId = Object.keys(chat.threadWrappers).find(
           (id) =>
-            chat.threadWrappers[id as ThreadId].parentThreadId !== undefined,
+            chat.threadWrappers[id as ThreadId]?.parentThreadId !== undefined,
         ) as ThreadId | undefined;
         expect(childThreadId).toBeDefined();
         const childWrapper = chat.threadWrappers[childThreadId!];
-        if (childWrapper.state !== "initialized") {
+        if (childWrapper?.state !== "initialized") {
           throw new Error("expected subagent thread to be initialized");
         }
 
@@ -853,7 +853,7 @@ describe("hierarchy context discovery", () => {
 
         const forkedWrapper =
           driver.magenta.chat.threadWrappers[forkedThreadId];
-        if (forkedWrapper.state !== "initialized") {
+        if (forkedWrapper?.state !== "initialized") {
           throw new Error("forked thread should be initialized");
         }
 

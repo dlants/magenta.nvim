@@ -140,6 +140,57 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
     });
   });
 
+  it("shows a bell on the root thread when a subagent turn lands while you look elsewhere", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      await driver.inputMagentaText("Use spawn_subagents to do the work.");
+      await driver.send();
+      const parentRequest =
+        await driver.mockAnthropic.awaitPendingStreamWithText(
+          "Use spawn_subagents",
+        );
+      parentRequest.respond({
+        stopReason: "tool_use",
+        text: "Spawning.",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "bell-spawn" as ToolRequestId,
+              toolName: "spawn_subagents" as ToolName,
+              input: { agents: [{ prompt: "Child does the work." }] },
+            },
+          },
+        ],
+      });
+      const childRequest =
+        await driver.mockAnthropic.awaitPendingStreamWithText(
+          "Child does the work",
+        );
+      // Stop looking at the root thread before the subagent finishes.
+      await driver.magenta.command("threads-overview");
+      await driver.awaitChatState({ state: "thread-overview" });
+      childRequest.respond({
+        stopReason: "tool_use",
+        text: "Done.",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "bell-yield" as ToolRequestId,
+              toolName: "yield_to_parent" as ToolName,
+              input: { result: "child result" },
+            },
+          },
+        ],
+      });
+      const resumed = await driver.mockAnthropic.awaitPendingStream();
+      resumed.streamText("All done.");
+      resumed.finishResponse("end_turn");
+      // The activity lands on the root ancestor, so its overview row rings.
+      await driver.assertDisplayBufferContains("🔔");
+    });
+  });
   it("does not show a bell on the thread you were just viewing", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
