@@ -1184,6 +1184,9 @@ export class Thread {
     if (this.destroyed) throw new Error("Thread has been destroyed");
   }
   private destroyed = false;
+  get isDestroyed(): boolean {
+    return this.destroyed;
+  }
   async destroy(): Promise<void> {
     if (this.destroyed) return;
     this.destroyed = true;

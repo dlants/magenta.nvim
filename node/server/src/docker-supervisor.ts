@@ -1,12 +1,13 @@
+import { teardownContainer } from "./container/teardown.ts";
+import type { TeardownResult } from "./container/types.ts";
+import type { YieldValue } from "./thread-api.ts";
 import type {
   EndTurnAction,
   EndTurnContext,
-  TeardownResult,
   ThreadSupervisor,
   YieldAction,
-  YieldValue,
-} from "@magenta/server";
-import { teardownContainer, UnsupervisedSupervisor } from "@magenta/server";
+} from "./thread-supervisor.ts";
+import { UnsupervisedSupervisor } from "./thread-supervisor.ts";
 
 type DockerSupervisorArgs = {
   containerName: string;

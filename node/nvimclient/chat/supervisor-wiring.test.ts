@@ -1,6 +1,7 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import {
   AutoCompactSupervisor,
+  DockerSupervisor,
   MaxTokensSupervisor,
   type NativeMessageIdx,
   SubagentSupervisor,
@@ -14,7 +15,6 @@ import { expect, it } from "vitest";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import { withDriver } from "../test/preamble.ts";
 import { createNvimThread } from "./thread.ts";
-import { DockerSupervisor } from "./thread-supervisor.ts";
 
 it("root/user threads get an AutoCompactSupervisor", async () => {
   await withDriver({}, async (driver) => {

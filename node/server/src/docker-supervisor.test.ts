@@ -1,18 +1,14 @@
-import type { NativeMessageIdx } from "@magenta/server";
 import { describe, expect, it, vi } from "vitest";
+import type { NativeMessageIdx } from "./providers/provider-types.ts";
 
-vi.mock("@magenta/server", async (importOriginal) => {
-  const orig = await importOriginal<typeof import("@magenta/server")>();
-  return {
-    ...orig,
-    teardownContainer: vi.fn().mockResolvedValue({
-      syncedFiles: 5,
-    }),
-  };
-});
+vi.mock("./container/teardown.ts", () => ({
+  teardownContainer: vi.fn().mockResolvedValue({
+    syncedFiles: 5,
+  }),
+}));
 
-import { teardownContainer } from "@magenta/server";
-import { DockerSupervisor } from "./thread-supervisor.ts";
+import { teardownContainer } from "./container/teardown.ts";
+import { DockerSupervisor } from "./docker-supervisor.ts";
 
 describe("DockerSupervisor", () => {
   describe("onEndTurnWithoutYield", () => {

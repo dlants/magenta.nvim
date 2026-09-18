@@ -3,37 +3,33 @@ import type {
   GitState,
   ProviderToolResult,
   SubagentConfig,
-  ThreadSupervisor,
 } from "@magenta/server";
 import {
   type AgentInput,
-  AutoCompactSupervisor,
+  assembleThread,
   type CompactionRunId,
   type ContextFileAccess,
   type ContextFiles,
   clientToolCreator,
   loadAgents,
   loopActiveTools,
-  MaxTokensSupervisor,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
   type PendingMessage,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  type PreparedThreadContext,
   parseCompact,
   type ResolvedSubmission,
   renderPending,
-  SubagentSupervisor,
   type Submission,
-  Thread,
+  type Thread,
   type ThreadCallbacks,
-  ThreadCompactor,
+  type ThreadCompactor,
   type ThreadContextDelivery,
   type ThreadId,
   type ThreadSendResult,
-  ThreadTitle,
   type ThreadType,
   type ToolRequestId,
-  threadCloneContext,
 } from "@magenta/server";
 import * as diff from "diff";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
@@ -62,7 +58,6 @@ import { displayPath } from "../utils/files.ts";
 import type { Chat } from "./chat.ts";
 import type { CommandRegistry } from "./commands/registry.ts";
 import { notifyUser } from "./notify.ts";
-import { DockerSupervisor } from "./thread-supervisor.ts";
 
 /** Trailing-edge coalescing window for Thread updates. Render cadence is a
  * view decision; server notifications are unthrottled. */
@@ -336,43 +331,6 @@ export class NvimThread {
 
   private animationTimer: ReturnType<typeof setTimeout> | undefined;
 
-  private titleRequested = false;
-
-  onSubmission(messages: readonly AgentInput[]): void {
-    if (
-      this.titleRequested ||
-      this.destroyed ||
-      this.thread.title !== undefined ||
-      this.thread.threadType === "compact" ||
-      !messages.length
-    )
-      return;
-    this.titleRequested = true;
-    const text = messages
-      .filter((content) => content.type === "text")
-      .map((content) => content.text)
-      .join("\n");
-    ThreadTitle.generateTitle(
-      getProvider(this.context.nvim, this.context.profile),
-      this.context.profile.fastModel,
-      this.thread.systemPrompt,
-      text,
-    )
-      .then((title) => {
-        if (
-          title !== undefined &&
-          !this.destroyed &&
-          this.thread.title === undefined
-        )
-          this.thread.setTitle(title);
-      })
-      .catch((error: unknown) => {
-        this.context.nvim.logger.error(
-          `Error getting thread title: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
-  }
-
   onThreadUpdate(): void {
     if (this.renderDebounceTimer) return;
     this.renderDebounceTimer = setTimeout(() => {
@@ -498,7 +456,9 @@ export class NvimThread {
 
   private destroyed = false;
 
-  async destroy(): Promise<void> {
+  /** Release view-local resources (render/animation timers). The Thread is
+   * owned by whoever created it and is destroyed explicitly there. */
+  dispose(): void {
     if (this.destroyed) return;
     this.destroyed = true;
 
@@ -511,7 +471,11 @@ export class NvimThread {
       clearTimeout(this.animationTimer);
       this.animationTimer = undefined;
     }
+  }
 
+  /** Dispose the view and destroy the underlying Thread. */
+  async destroy(): Promise<void> {
+    this.dispose();
     await this.thread.destroy();
   }
 
@@ -796,6 +760,10 @@ export class NvimThread {
   }
 }
 
+/** Prepare the editor-dependent dependencies a thread needs, hand them to
+ * server-side assembly, and wrap the resulting handles for the UI. Everything
+ * server-typed (supervisor ordering, compactor wiring, title generation) lives
+ * in `assembleThread`; this adapter only supplies collaborators. */
 export function createNvimThread(
   id: ThreadId,
   initialization:
@@ -814,26 +782,63 @@ export function createNvimThread(
     autoCompactPrompt?: string;
   } = {},
 ): NvimThread {
-  const threadType =
-    initialization.type === "fresh"
-      ? initialization.threadType
-      : initialization.sourceThread.threadType;
+  let wrapper!: NvimThread;
+  let threadRef: Thread | undefined;
+  const callbacks: ThreadCallbacks = {
+    onUpdate: () => wrapper.onThreadUpdate(),
+    onFileAdded: context.onFileAdded,
+    onFilesSent: (updates) =>
+      wrapper.recordMessageViewState({ contextUpdates: updates }),
+    onGitSent: (update) =>
+      wrapper.recordMessageViewState({ gitUpdate: update }),
+  };
+  // Neither construction path invokes callbacks or resolves submissions. These
+  // closures bind to the completed objects before any asynchronous work starts.
+  const { thread, compactor } = assembleThread({
+    id,
+    initialization:
+      initialization.type === "fresh"
+        ? {
+            type: "fresh",
+            threadType: initialization.threadType,
+            ...(context.scriptName
+              ? { archiveOptions: { scriptName: context.scriptName } }
+              : {}),
+          }
+        : initialization,
+    context: prepareThreadContext(
+      systemPrompt,
+      context,
+      () => threadRef as Thread,
+    ),
+    callbacks,
+    policy: {
+      ...policy,
+      autoCompactThreshold:
+        policy.autoCompactThreshold ?? context.options.autoCompactThreshold,
+      autoCompactPrompt:
+        policy.autoCompactPrompt ?? context.options.autoCompactPrompt,
+    },
+  });
+  threadRef = thread;
+  wrapper = new NvimThread(id, thread, compactor, context);
+  return wrapper;
+}
+
+/** The root adapter: editor-backed collaborators in server-typed shape. */
+function prepareThreadContext(
+  systemPrompt: SystemPrompt,
+  context: NvimThreadContext,
+  getThread: () => Thread,
+): PreparedThreadContext {
   const env = context.environment;
   const isDocker = env.environmentConfig.type === "docker";
   const cwd = isDocker ? env.cwd : context.cwd;
   const homeDir = isDocker ? env.homeDir : context.homeDir;
-
   const contextDelivery: ThreadContextDelivery = {
     ...(context.initialFiles ? { initialFiles: context.initialFiles } : {}),
     initialGitState: context.initialGitState,
   };
-  const compactor =
-    threadType === "compact"
-      ? undefined
-      : new ThreadCompactor({
-          parentThreadId: id,
-          threadManager: context.chat,
-        });
   const getAgents = () =>
     loadAgents({
       cwd,
@@ -844,53 +849,11 @@ export function createNvimThread(
   const maxConcurrentSubagents = context.options.maxConcurrentSubagents || 3;
   const maxConcurrentFastSubagents =
     context.options.maxConcurrentFastSubagents || 8;
-
-  const chatSupervisors: ThreadSupervisor[] = [MaxTokensSupervisor.create()];
-  if (policy.docker?.supervised) {
-    chatSupervisors.push(
-      DockerSupervisor.create({
-        containerName: policy.docker.containerName,
-        workspacePath: policy.docker.workspacePath,
-        hostDir: policy.docker.hostDir,
-        ...(policy.onDockerProgress
-          ? { onProgress: policy.onDockerProgress }
-          : {}),
-      }),
-    );
-  } else if (
-    threadType === "subagent" ||
-    threadType === "docker_root" ||
-    threadType === "compact"
-  ) {
-    chatSupervisors.push(SubagentSupervisor.create());
-  }
-  if (threadType !== "compact") {
-    const sourceAutoCompact =
-      initialization.type === "fork"
-        ? initialization.sourceThread.chatSupervisors?.find(
-            (supervisor): supervisor is AutoCompactSupervisor =>
-              supervisor instanceof AutoCompactSupervisor,
-          )
-        : undefined;
-    chatSupervisors.push(
-      sourceAutoCompact
-        ? AutoCompactSupervisor.clone({ source: sourceAutoCompact })
-        : AutoCompactSupervisor.create({
-            threshold:
-              policy.autoCompactThreshold ??
-              context.options.autoCompactThreshold,
-            nextPrompt:
-              policy.autoCompactPrompt ?? context.options.autoCompactPrompt,
-          }),
-    );
-  }
-  const dependencies = {
-    ...(compactor ? { compactor } : {}),
+  return {
     logger: context.nvim.logger,
     profile: context.profile,
     cwd,
     homeDir,
-    threadType,
     contextDelivery,
     ...(context.subagentConfig
       ? { subagentConfig: context.subagentConfig }
@@ -927,43 +890,14 @@ export function createNvimThread(
     ...(context.yieldSchema ? { yieldSchema: context.yieldSchema } : {}),
     getAgents,
     provider: getProvider(context.nvim, context.profile),
-    chatSupervisors,
     resolve: (message: PendingMessage) =>
       resolveSubmission(
         message,
         context,
-        () => thread.contextFiles,
-        compactor !== undefined,
+        () => getThread().contextFiles,
+        getThread().threadType !== "compact",
       ),
   };
-  const callbacks: ThreadCallbacks = {
-    onUpdate: () => wrapper.onThreadUpdate(),
-    onSubmission: (messages) => wrapper.onSubmission(messages),
-    onFileAdded: context.onFileAdded,
-    onFilesSent: (updates) =>
-      wrapper.recordMessageViewState({ contextUpdates: updates }),
-    onGitSent: (update) =>
-      wrapper.recordMessageViewState({ gitUpdate: update }),
-  };
-  // Neither construction path invokes callbacks or resolves submissions. These
-  // closures bind to the completed objects before any asynchronous work starts.
-  const thread: Thread =
-    initialization.type === "fork"
-      ? Thread.clone({
-          sourceThread: initialization.sourceThread,
-          nativeMessageIdx: initialization.nativeMessageIdx,
-          newId: id,
-          context: threadCloneContext(dependencies),
-          callbacks,
-        })
-      : new Thread(
-          id,
-          dependencies,
-          callbacks,
-          context.scriptName ? { scriptName: context.scriptName } : {},
-        );
-  const wrapper = new NvimThread(id, thread, compactor, context);
-  return wrapper;
 }
 
 async function resolveSubmission(

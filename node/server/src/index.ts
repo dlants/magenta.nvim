@@ -89,6 +89,7 @@ export type {
   TeardownResult,
 } from "./container/types.ts";
 export type { Dispatch } from "./dispatch.ts";
+export { DockerSupervisor } from "./docker-supervisor.ts";
 export {
   Executor,
   type InitialDocIndex,
@@ -271,6 +272,13 @@ export type {
   ThreadSendResult,
   YieldValue,
 } from "./thread-api.ts";
+export {
+  type AssembledThread,
+  assembleThread,
+  type PreparedThreadContext,
+  type ThreadInitialization,
+  type ThreadPolicy,
+} from "./thread-assembly.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
   EditedFile,

@@ -2071,3 +2071,20 @@ it("handles malformed tool_use by sending error tool_result and continuing", asy
     );
   });
 });
+
+it("disposing the view leaves the thread and its in-flight request alone", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("hello");
+    await driver.send();
+    const stream = await driver.mockAnthropic.awaitPendingStream();
+    const wrapper = driver.magenta.chat.getActiveThread();
+    wrapper.dispose();
+    expect(wrapper.thread.isDestroyed).toBe(false);
+    expect(stream.aborted).toBe(false);
+    stream.respond({ stopReason: "end_turn", text: "hi", toolRequests: [] });
+    await pollUntil(() => {
+      if (wrapper.thread.isBusy) throw new Error("thread still busy");
+    });
+  });
+});
