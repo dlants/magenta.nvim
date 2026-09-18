@@ -236,6 +236,17 @@ Move the self-contained IPC declarations into the server package and make `sdk/p
   - Rebuilding the view adapter over an existing Session creates no duplicate Thread or title request.
   - Execution and lifecycle outcomes progress with no Chat event listener; reattaching a view reflects current state.
 
+- Progress:
+  - [x] `Chat.threadWrappers` is now a derived getter: it projects `session.listThreads()` (parent, script invocation, activity time, state) plus Chat-local view state (`threadViews` NvimThread cache, `lastViewedTimes`, derived depth). Mutating a returned wrapper changes nothing; internal reads go through a private `wrapper(id)` projection so a single-id read stays O(depth) rather than O(threads).
+  - [x] No server state is mirrored or mutated in Chat anymore: `parentThreadId`/`depth` are walked from session records, and the dispatch-driven activity bumps (`send-message` on the root, `turn-ended`, `permission-pending-change`) call the new `Session.recordActivity(id)` instead of writing into the wrapper.
+  - [x] `Chat` accepts an optional `{ session, host }` so a view can be attached to an existing Session; the constructor seeds the cache by calling `syncThread` for every existing record and then subscribes to `changed`/`removed`/`filesSent`/`gitSent`. `syncThread` only builds/repaints the NvimThread wrapper and the error-state navigation fallback; `removeThreadView` disposes the wrapper and drops view-local state (expansion, viewed timestamp, buffers).
+  - [x] Retained locally: selection/navigation, expansion, viewed timestamps, archive navigation and deletion, error/input presentation, fork markers and copied display context in `handleForkThread`, and buffer cleanup.
+  - [x] Tests: `node/nvimclient/chat/chat-view-adapter.test.ts` covers rebuilding a second `Chat` over a live Session (same ids, same server `Thread` instance, title mirrored, no extra thread and no extra `forceToolUse` title request) and a turn completing after `session.removeAllListeners()` (no view observer at all). Existing chat, buffer-manager, archive, fork-keybinding, compaction, script and attention tests pass unchanged.
+- Decisions/deviations:
+  - `lastActivityTime` stays server-owned; `Session.recordActivity` is the one mutation the view may request. `lastViewedTime` stays client-side (defaulting to the record's activity time until first observed) since it is a per-view notion.
+  - `threadWrappers` was kept as a public getter rather than replaced with an accessor method, so the existing tests and `magenta.ts` readers did not have to change; it is now a read-only projection.
+  - Chat still constructs its Session/host when none is supplied; consolidating ownership into Magenta is stage 5.
+
 ## 4. Move script orchestration into Session
 
 - Goal: Session owns a server ScriptManager, catalog, child-process IPC, logs, titles, lifecycle, and invocation/thread associations. Root script controller retains expansion, rendering, file opening, and notifications only.

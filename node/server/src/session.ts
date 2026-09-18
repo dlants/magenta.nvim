@@ -173,6 +173,15 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     return id;
   }
 
+  /** Note activity a view observed (a submission, a finished turn, a pending
+   * approval). Activity time is session state; observers do not mutate it. */
+  recordActivity(id: ThreadId): void {
+    const record = this.records.get(id);
+    if (!record) return;
+    record.lastActivityTime = Date.now();
+    this.emit("changed", id);
+  }
+
   buildChildrenMap(): Map<ThreadId, ThreadId[]> {
     const map = new Map<ThreadId, ThreadId[]>();
     for (const record of this.records.values()) {

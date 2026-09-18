@@ -46,6 +46,9 @@ const ARCHIVE_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
+/** A read-only projection of a session record plus the view-local state Chat
+ * owns (the NvimThread wrapper, viewed timestamps and derived depth). Nothing
+ * here is mutable server state: Chat reads it fresh out of the session. */
 type ThreadWrapper = (
   | {
       state: "pending";
@@ -154,11 +157,13 @@ type StoppedReason =
  * hierarchy, construction and lifecycle; lifecycle methods here delegate. */
 export class Chat implements ThreadManager {
   state: ChatState;
-  /** View cache over the session's records, keyed by thread id. */
-  public threadWrappers: { [id: ThreadId]: ThreadWrapper };
   readonly session: Session;
   readonly host: NvimSessionHost;
-  private expandedThreads: Set<ThreadId>;
+  /** View-local: the NvimThread wrapper per initialized thread. */
+  private threadViews = new Map<ThreadId, NvimThread>();
+  /** View-local: when the user last looked at each thread. */
+  private lastViewedTimes = new Map<ThreadId, number>();
+  private expandedThreads = new Set<ThreadId>();
 
   get scriptRunner(): ScriptRunner | undefined {
     return this.session.scriptRunner;
@@ -183,79 +188,106 @@ export class Chat implements ThreadManager {
       /** Expands `@file:`, `@diff`, ... when a submission is delivered. */
       commandRegistry: CommandRegistry;
     },
+    /** Attach to an existing session instead of owning a fresh one. The view
+     * cache is then seeded from the records that already exist. */
+    existing?: { session: Session; host: NvimSessionHost },
   ) {
-    this.threadWrappers = {};
-    this.expandedThreads = new Set();
     this.state = {
       state: "thread-overview",
       activeThreadId: undefined,
     };
 
-    this.host = new NvimSessionHost(this.context);
-    this.session = new Session(this.host);
+    this.host = existing?.host ?? new NvimSessionHost(this.context);
+    this.session = existing?.session ?? new Session(this.host);
     this.session.on("changed", this.syncThread);
     this.session.on("removed", this.removeThreadView);
     this.session.on("filesSent", this.onFilesSent);
     this.session.on("gitSent", this.onGitSent);
+    for (const record of this.session.listThreads()) {
+      this.syncThread(record.id);
+    }
   }
 
-  /** Mirror one session record into the view cache, creating the NvimThread
-   * wrapper the first time a thread is ready. */
-  private syncThread = (id: ThreadId): void => {
+  /** Project one session record into the shape the views read. */
+  private wrapper(id: ThreadId): ThreadWrapper | undefined {
     const record = this.session.getThread(id);
-    if (!record) return;
-    const previous = this.threadWrappers[id];
+    if (!record) return undefined;
     const fields = {
       parentThreadId: record.parentThreadId,
       ...(record.scriptInvocationId
-        ? {
-            scriptInvocationId: record.scriptInvocationId,
-          }
+        ? { scriptInvocationId: record.scriptInvocationId }
         : {}),
-      depth: record.parentThreadId
-        ? (this.threadWrappers[record.parentThreadId]?.depth ?? 0) + 1
-        : 0,
-      lastActivityTime: Math.max(
-        record.lastActivityTime,
-        previous?.lastActivityTime ?? 0,
-      ),
-      lastViewedTime: previous?.lastViewedTime ?? Date.now(),
+      depth: this.depth(id),
+      lastActivityTime: record.lastActivityTime,
+      lastViewedTime: this.lastViewedTimes.get(id) ?? record.lastActivityTime,
     };
     switch (record.state) {
       case "pending":
-        this.threadWrappers[id] = { ...fields, state: "pending" };
-        return;
+        return { ...fields, state: "pending" };
       case "error":
-        this.threadWrappers[id] = {
-          ...fields,
-          state: "error",
-          error: record.error,
-        };
-        if (this.state.state === "thread-selected") {
-          this.state = { state: "thread-overview", activeThreadId: id };
-        }
-        return;
+        return { ...fields, state: "error", error: record.error };
       case "initialized": {
-        const thread =
-          previous?.state === "initialized"
-            ? previous.thread
-            : new NvimThread(id, record.thread, record.compactor, {
-                ...this.host.contexts.get(id)!,
-                chat: this,
-              });
-        this.threadWrappers[id] = { ...fields, state: "initialized", thread };
-        thread.onThreadUpdate();
-        return;
+        const thread = this.threadViews.get(id);
+        // A record can become initialized before we've observed the change
+        // event that builds its wrapper; until then it renders as pending.
+        return thread
+          ? { ...fields, state: "initialized", thread }
+          : { ...fields, state: "pending" };
       }
       default:
-        assertUnreachable(record);
+        return assertUnreachable(record);
     }
+  }
+
+  /** All projected records, keyed by thread id. Read-only: mutating the
+   * returned objects does not change session state. */
+  get threadWrappers(): { [id: ThreadId]: ThreadWrapper } {
+    const wrappers: { [id: ThreadId]: ThreadWrapper } = {};
+    for (const record of this.session.listThreads()) {
+      const wrapper = this.wrapper(record.id);
+      if (wrapper) wrappers[record.id] = wrapper;
+    }
+    return wrappers;
+  }
+
+  private depth(id: ThreadId): number {
+    let depth = 0;
+    let parent = this.session.getThread(id)?.parentThreadId;
+    while (parent) {
+      depth += 1;
+      parent = this.session.getThread(parent)?.parentThreadId;
+    }
+    return depth;
+  }
+
+  /** Build the NvimThread wrapper the first time a thread is ready. Server
+   * record state is read through `wrapper`, not copied here. */
+  private syncThread = (id: ThreadId): void => {
+    const record = this.session.getThread(id);
+    if (!record) return;
+    if (!this.lastViewedTimes.has(id)) {
+      this.lastViewedTimes.set(id, Date.now());
+    }
+    if (record.state === "error" && this.state.state === "thread-selected") {
+      this.state = { state: "thread-overview", activeThreadId: id };
+      return;
+    }
+    if (record.state !== "initialized") return;
+    let thread = this.threadViews.get(id);
+    if (!thread) {
+      thread = new NvimThread(id, record.thread, record.compactor, {
+        ...this.host.contexts.get(id)!,
+        chat: this,
+      });
+      this.threadViews.set(id, thread);
+    }
+    thread.onThreadUpdate();
   };
 
   private removeThreadView = (id: ThreadId): void => {
-    const wrapper = this.threadWrappers[id];
-    if (wrapper?.state === "initialized") wrapper.thread.dispose();
-    delete this.threadWrappers[id];
+    this.threadViews.get(id)?.dispose();
+    this.threadViews.delete(id);
+    this.lastViewedTimes.delete(id);
     this.expandedThreads.delete(id);
     this.context.removeThreadBuffers?.([id]);
     if (this.state.activeThreadId === id) {
@@ -264,17 +296,13 @@ export class Chat implements ThreadManager {
   };
 
   private onFilesSent = (id: ThreadId, updates: FileUpdates): void => {
-    const wrapper = this.threadWrappers[id];
-    if (wrapper?.state === "initialized") {
-      wrapper.thread.recordMessageViewState({ contextUpdates: updates });
-    }
+    this.threadViews.get(id)?.recordMessageViewState({
+      contextUpdates: updates,
+    });
   };
 
   private onGitSent = (id: ThreadId, update: GitContextUpdate): void => {
-    const wrapper = this.threadWrappers[id];
-    if (wrapper?.state === "initialized") {
-      wrapper.thread.recordMessageViewState({ gitUpdate: update });
-    }
+    this.threadViews.get(id)?.recordMessageViewState({ gitUpdate: update });
   };
 
   update(msg: RootMsg) {
@@ -283,24 +311,19 @@ export class Chat implements ThreadManager {
       return;
     }
 
-    if (msg.type === "thread-msg" && msg.id in this.threadWrappers) {
-      const threadState = this.threadWrappers[msg.id];
-      if (threadState.state === "initialized") {
-        const thread = threadState.thread;
-        thread.update(msg);
-
-        if (msg.msg.type === "send-message") {
-          const rootId = this.getRootAncestorId(msg.id);
-          this.threadWrappers[rootId].lastActivityTime = Date.now();
-        }
-
-        if (msg.msg.type === "turn-ended") {
-          this.threadWrappers[msg.id].lastActivityTime = Date.now();
-        }
-
-        if (msg.msg.type === "permission-pending-change") {
-          this.threadWrappers[msg.id].lastActivityTime = Date.now();
-        }
+    if (msg.type === "thread-msg") {
+      const thread = this.threadViews.get(msg.id);
+      if (!thread) return;
+      thread.update(msg);
+      // Activity is session state; the view only reports what it observed.
+      if (msg.msg.type === "send-message") {
+        this.session.recordActivity(this.getRootAncestorId(msg.id));
+      }
+      if (
+        msg.msg.type === "turn-ended" ||
+        msg.msg.type === "permission-pending-change"
+      ) {
+        this.session.recordActivity(msg.id);
       }
     }
   }
@@ -308,21 +331,17 @@ export class Chat implements ThreadManager {
   /** Record that we've stopped viewing the currently-selected thread, so that
    * any activity from this point on counts as unviewed. */
   private markActiveThreadViewed() {
-    if (
-      this.state.state === "thread-selected" &&
-      this.state.activeThreadId in this.threadWrappers
-    ) {
-      this.threadWrappers[this.state.activeThreadId].lastViewedTime =
-        Date.now();
+    if (this.state.state === "thread-selected" && this.state.activeThreadId) {
+      this.lastViewedTimes.set(this.state.activeThreadId, Date.now());
     }
   }
 
   private myUpdate(msg: Msg) {
     switch (msg.type) {
       case "set-active-thread":
-        if (msg.id in this.threadWrappers) {
+        if (this.session.getThread(msg.id)) {
           this.markActiveThreadViewed();
-          this.threadWrappers[msg.id].lastViewedTime = Date.now();
+          this.lastViewedTimes.set(msg.id, Date.now());
           this.state = {
             state: "thread-selected",
             activeThreadId: msg.id,
@@ -349,12 +368,14 @@ export class Chat implements ThreadManager {
           this.state.state === "thread-selected" &&
           this.state.activeThreadId
         ) {
-          const threadWrapper = this.threadWrappers[this.state.activeThreadId];
-          if (threadWrapper?.parentThreadId) {
+          const parentThreadId = this.session.getThread(
+            this.state.activeThreadId,
+          )?.parentThreadId;
+          if (parentThreadId) {
             // Navigate to parent thread
             this.state = {
               state: "thread-selected",
-              activeThreadId: threadWrapper.parentThreadId,
+              activeThreadId: parentThreadId,
             };
 
             // Scroll to bottom when navigating to parent
@@ -547,10 +568,10 @@ export class Chat implements ThreadManager {
   getMessages() {
     if (
       this.state.state === "thread-selected" &&
-      this.state.activeThreadId in this.threadWrappers
+      this.session.getThread(this.state.activeThreadId)
     ) {
-      const threadState = this.threadWrappers[this.state.activeThreadId];
-      if (threadState.state === "initialized") {
+      const threadState = this.wrapper(this.state.activeThreadId);
+      if (threadState?.state === "initialized") {
         return [...threadState.thread.thread.getProviderMessages()];
       }
     }
@@ -649,7 +670,7 @@ export class Chat implements ThreadManager {
     childrenMap: Map<ThreadId, ThreadId[]>,
   ): VDOMNode[] {
     const views: VDOMNode[] = [];
-    const wrapper = this.threadWrappers[threadId];
+    const wrapper = this.wrapper(threadId);
     if (
       wrapper?.state === "initialized" &&
       wrapper.thread.sandboxViolationHandler
@@ -669,7 +690,7 @@ export class Chat implements ThreadManager {
   /** A thread wants the user's attention if it has unviewed activity (a
    * completed turn or a pending permission approval) and has not yielded. */
   threadNeedsAttention(threadId: ThreadId): boolean {
-    const wrapper = this.threadWrappers[threadId];
+    const wrapper = this.wrapper(threadId);
     if (wrapper === undefined || wrapper.state !== "initialized") return false;
     const core = wrapper.thread.thread;
     // A yielded thread has finished its work; a streaming thread is actively
@@ -707,7 +728,7 @@ export class Chat implements ThreadManager {
     depth: number,
     views: VDOMNode[],
   ) {
-    if (!this.threadWrappers[threadId]) return;
+    if (!this.session.getThread(threadId)) return;
     views.push(
       this.renderThread(threadId, depth, this.state.activeThreadId, undefined, {
         showTokenCount: true,
@@ -760,7 +781,7 @@ export class Chat implements ThreadManager {
   }
 
   getThreadDisplayName(threadId: ThreadId): string {
-    const threadWrapper = this.threadWrappers[threadId];
+    const threadWrapper = this.wrapper(threadId);
     if (!threadWrapper || threadWrapper.state !== "initialized") {
       return "[Untitled]";
     }
@@ -803,7 +824,7 @@ export class Chat implements ThreadManager {
     const status = this.formatThreadStatus(threadId);
     const marker = threadId === activeThreadId ? "*" : "-";
     const indent = "  ".repeat(depth);
-    const threadWrapper = this.threadWrappers[threadId];
+    const threadWrapper = this.wrapper(threadId);
     const threadType =
       threadWrapper?.state === "initialized"
         ? threadWrapper.thread.thread.threadType
@@ -881,7 +902,8 @@ export class Chat implements ThreadManager {
     activeThreadId: ThreadId | undefined,
     views: VDOMNode[],
   ) {
-    const wrapper = this.threadWrappers[threadId];
+    const wrapper = this.wrapper(threadId);
+    if (!wrapper) return;
     views.push(this.renderThread(threadId, wrapper.depth, activeThreadId));
     const children = childrenMap.get(threadId) || [];
     for (const childId of children) {
@@ -906,7 +928,7 @@ export class Chat implements ThreadManager {
       "<CR>": () => this.myDispatch({ type: "archive-open" }),
     });
 
-    if (Object.keys(this.threadWrappers).length === 0) {
+    if (this.session.listThreads().length === 0) {
       return d`# Threads ${archiveLink}
 
 No threads yet`;
@@ -916,14 +938,14 @@ No threads yet`;
     const threadViews: VDOMNode[] = [];
 
     const rootThreads: { id: ThreadId }[] = [];
-    for (const [idStr, wrapper] of Object.entries(this.threadWrappers)) {
+    for (const record of this.session.listThreads()) {
       // Script-owned threads are rendered nested under their script invocation
       // in the Scripts section, not as top-level threads here.
       if (
-        wrapper.parentThreadId === undefined &&
-        wrapper.scriptInvocationId === undefined
+        record.parentThreadId === undefined &&
+        record.scriptInvocationId === undefined
       ) {
-        rootThreads.push({ id: idStr as ThreadId });
+        rootThreads.push({ id: record.id });
       }
     }
 
@@ -1051,8 +1073,9 @@ ${rows}${loadMore}`;
    * is not a root thread (script threads are parentless subagents). */
   getActiveRootThreadOrUndefined(): NvimThread | undefined {
     if (!this.state.activeThreadId) return undefined;
-    const threadWrapper =
-      this.threadWrappers[this.getRootAncestorId(this.state.activeThreadId)];
+    const threadWrapper = this.wrapper(
+      this.getRootAncestorId(this.state.activeThreadId),
+    );
     if (!(threadWrapper && threadWrapper.state === "initialized")) {
       return undefined;
     }
@@ -1062,7 +1085,7 @@ ${rows}${loadMore}`;
 
   /** The root ancestor of the active thread. */
   getActiveRootThread(): NvimThread {
-    const threadWrapper = this.threadWrappers[this.getActiveRootThreadId()];
+    const threadWrapper = this.wrapper(this.getActiveRootThreadId());
     if (!(threadWrapper && threadWrapper.state === "initialized")) {
       throw new Error(`Root thread not initialized yet...`);
     }
@@ -1074,7 +1097,7 @@ ${rows}${loadMore}`;
     if (!this.state.activeThreadId) {
       throw new Error(`Chat is not initialized yet... no active thread`);
     }
-    const threadWrapper = this.threadWrappers[this.state.activeThreadId];
+    const threadWrapper = this.wrapper(this.state.activeThreadId);
     if (!(threadWrapper && threadWrapper.state === "initialized")) {
       throw new Error(
         `Thread ${this.state.activeThreadId} not initialized yet...`,
@@ -1093,7 +1116,7 @@ ${rows}${loadMore}`;
     sourceThreadId: ThreadId;
     truncateAtMessageIdx?: NativeMessageIdx;
   }): Promise<ThreadId> {
-    const sourceWrapper = this.threadWrappers[sourceThreadId];
+    const sourceWrapper = this.wrapper(sourceThreadId);
     if (!sourceWrapper || sourceWrapper.state !== "initialized") {
       throw new Error(`Thread ${sourceThreadId} not available for forking`);
     }
@@ -1101,7 +1124,7 @@ ${rows}${loadMore}`;
     const idx = truncateAtMessageIdx ?? sourceThread.thread.nativeMessageIdx;
 
     const newThreadId = await this.session.forkThread(sourceThreadId, idx);
-    const wrapper = this.threadWrappers[newThreadId];
+    const wrapper = this.wrapper(newThreadId);
     if (!wrapper || wrapper.state !== "initialized") return newThreadId;
     const thread = wrapper.thread;
 
@@ -1144,7 +1167,7 @@ ${rows}${loadMore}`;
 
   threadHasPendingApprovals(threadId: ThreadId): boolean {
     if (this.getThreadPendingApprovalTools(threadId).length > 0) return true;
-    const wrapper = this.threadWrappers[threadId];
+    const wrapper = this.wrapper(threadId);
     if (!wrapper || wrapper.state !== "initialized") return false;
     return (
       (wrapper.thread.sandboxViolationHandler?.getPendingViolations().size ??
@@ -1167,7 +1190,7 @@ ${rows}${loadMore}`;
       | { type: "yielded"; response: string }
       | { type: "error"; message: string };
   } {
-    const threadWrapper = this.threadWrappers[threadId];
+    const threadWrapper = this.wrapper(threadId);
     if (!threadWrapper) {
       return {
         status: { type: "missing" },
@@ -1265,7 +1288,7 @@ ${rows}${loadMore}`;
   }
 
   renderSingleThread(threadId: ThreadId) {
-    const threadWrapper = this.threadWrappers[threadId];
+    const threadWrapper = this.wrapper(threadId);
 
     if (!threadWrapper) {
       return d`Thread not found`;
