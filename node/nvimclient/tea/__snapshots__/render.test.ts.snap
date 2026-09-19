@@ -239,6 +239,58 @@ third line",
 }
 `;
 
+exports[`tea/render.test.ts > rendering multi-line interpolation 2`] = `
+{
+  "children": [
+    {
+      "content": "1",
+      "endPos": {
+        "col": 1,
+        "row": 0,
+      },
+      "startPos": {
+        "col": 0,
+        "row": 0,
+      },
+      "type": "string",
+    },
+    {
+      "content": "",
+      "endPos": {
+        "col": 1,
+        "row": 0,
+      },
+      "startPos": {
+        "col": 1,
+        "row": 0,
+      },
+      "type": "string",
+    },
+    {
+      "content": "2",
+      "endPos": {
+        "col": 2,
+        "row": 0,
+      },
+      "startPos": {
+        "col": 1,
+        "row": 0,
+      },
+      "type": "string",
+    },
+  ],
+  "endPos": {
+    "col": 2,
+    "row": 0,
+  },
+  "startPos": {
+    "col": 0,
+    "row": 0,
+  },
+  "type": "node",
+}
+`;
+
 exports[`tea/render.test.ts > rendering multi-line template with interpolation 1`] = `
 {
   "children": [

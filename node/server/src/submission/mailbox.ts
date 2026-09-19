@@ -17,16 +17,23 @@ export function submissionEntries(input: SubmissionInput): QueueEntry[] {
     : input.messages.map((input) => ({ type: "resolved", input }));
 }
 
-/** One checked-out queue batch. The entry handed out by `next` is already
- * consumed by the caller; only untouched entries are restorable. */
-export type Batch = {
+/** What to do with a delivery's untouched remainder when the run ends. */
+export type BatchDisposition =
+  | { type: "commit" }
+  | {
+      type: "restore";
+      /** Queue to restore into; the batch's own queue by default. */
+      to?: DeferredDelivery;
+      /** Entries to put ahead of the restored remainder. */
+      ahead?: QueueEntry[];
+    };
+export type BatchRun<T> = (
+  next: () => QueueEntry | undefined,
+) => Promise<{ disposition: BatchDisposition; value: T }>;
+type Checkout = {
   readonly delivery: DeferredDelivery;
-  next(): QueueEntry | undefined;
-  /** Put the untaken remainder back at the head of `to` (its own queue by
-   * default) and end the checkout. */
-  restore(to?: DeferredDelivery): void;
-  /** End the checkout, discarding nothing: the batch was delivered in full. */
-  commit(): void;
+  readonly remaining: QueueEntry[];
+  closed: boolean;
 };
 export class Mailbox {
   private storage: Record<DeferredDelivery, QueueEntry[]> = {
@@ -36,7 +43,7 @@ export class Mailbox {
   /** Content prepended for the next turn: resolved, not queued, and so not
    * part of `queues` or `drain`. A reset replaces it wholesale. */
   private seedEntries: AgentInput[] = [];
-  private checkedOut: Batch | undefined;
+  private checkedOut: Checkout | undefined;
   get queues(): Queues {
     return this.storage;
   }
@@ -57,30 +64,51 @@ export class Mailbox {
   enqueue(delivery: DeferredDelivery, entries: QueueEntry[]): void {
     this.storage[delivery].push(...entries);
   }
-  /** Take a queue in full for delivery. At most one checkout is live: a new
-   * one restores whatever the previous caller abandoned. */
-  checkout(delivery: DeferredDelivery): Batch {
-    this.checkedOut?.restore();
-    const remaining = this.storage[delivery];
-    this.storage[delivery] = [];
-    const batch: Batch = {
+  /** Take a queue in full for the duration of `run`, which sees only a `next`
+   * cursor and says at the end whether the untouched remainder is spent
+   * (`commit`) or goes back on a queue (`restore`). The checkout cannot
+   * outlive the run, so there is no handle to misuse afterwards.
+   *
+   * At most one checkout is live: starting one, draining, or an explicit
+   * `restoreCheckout` ends whatever was in flight, after which its `next`
+   * yields nothing and its disposition is a no-op. */
+  async deliver<T>(delivery: DeferredDelivery, run: BatchRun<T>): Promise<T> {
+    this.restoreCheckout();
+    const checkout: Checkout = {
       delivery,
-      next: () => remaining.shift(),
-      restore: (to = delivery) => {
-        if (this.checkedOut === batch) this.checkedOut = undefined;
-        this.prepend(to, remaining.splice(0));
-      },
-      commit: () => {
-        if (this.checkedOut === batch) this.checkedOut = undefined;
-      },
+      remaining: this.storage[delivery],
+      closed: false,
     };
-    this.checkedOut = batch;
-    return batch;
+    this.storage[delivery] = [];
+    this.checkedOut = checkout;
+    const next = () =>
+      checkout.closed ? undefined : checkout.remaining.shift();
+    let disposition: BatchDisposition = { type: "restore" };
+    try {
+      const outcome = await run(next);
+      disposition = outcome.disposition;
+      return outcome.value;
+    } finally {
+      if (!checkout.closed) {
+        checkout.closed = true;
+        this.checkedOut = undefined;
+        if (disposition.type === "restore") {
+          this.prepend(disposition.to ?? delivery, [
+            ...(disposition.ahead ?? []),
+            ...checkout.remaining.splice(0),
+          ]);
+        }
+      }
+    }
   }
   /** Hand the live checkout's untouched remainder back, if a delivery is still
    * in flight. */
   restoreCheckout(): void {
-    this.checkedOut?.restore();
+    const checkout = this.checkedOut;
+    if (!checkout) return;
+    checkout.closed = true;
+    this.checkedOut = undefined;
+    this.prepend(checkout.delivery, checkout.remaining.splice(0));
   }
   prepend(delivery: DeferredDelivery, entries: QueueEntry[]): void {
     this.storage[delivery].unshift(...entries);
@@ -89,7 +117,7 @@ export class Mailbox {
    * so an in-flight batch's untouched remainder is reported ahead of anything
    * that arrived while it was being resolved. */
   drain(): QueuedMessage[] {
-    this.checkedOut?.restore();
+    this.restoreCheckout();
     return (["async", "next"] as const).flatMap((when) => {
       const entries = this.storage[when];
       this.storage[when] = [];

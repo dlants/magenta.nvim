@@ -9,14 +9,15 @@ const raw = (text: string): QueueEntry => ({
 });
 
 describe("Mailbox", () => {
-  it("checks out a batch and restores leftovers ahead of new arrivals", () => {
+  it("checks out a batch and restores leftovers ahead of new arrivals", async () => {
     const mailbox = new Mailbox();
     mailbox.enqueue("async", [raw("first"), raw("second")]);
-    const batch = mailbox.checkout("async");
-    mailbox.enqueue("async", [raw("later")]);
-    expect(batch.next()).toEqual(raw("first"));
-    expect(mailbox.queues.async).toEqual([raw("later")]);
-    batch.restore();
+    await mailbox.deliver("async", async (next) => {
+      mailbox.enqueue("async", [raw("later")]);
+      expect(next()).toEqual(raw("first"));
+      expect(mailbox.queues.async).toEqual([raw("later")]);
+      return { disposition: { type: "restore" }, value: undefined };
+    });
     mailbox.enqueue("next", [raw("@compact untouched")]);
     expect(mailbox.drain()).toEqual([
       { when: "async", message: raw("second") },
@@ -26,26 +27,37 @@ describe("Mailbox", () => {
     expect(mailbox.queues).toEqual({ async: [], next: [] });
     expect(mailbox.drain()).toEqual([]);
   });
-  it("restores an abandoned checkout when the queues are drained", () => {
+  it("restores an abandoned checkout when the queues are drained", async () => {
     const mailbox = new Mailbox();
     mailbox.enqueue("async", [raw("first"), raw("second")]);
-    const batch = mailbox.checkout("async");
-    expect(batch.next()).toEqual(raw("first"));
-    mailbox.enqueue("async", [raw("later")]);
-    expect(mailbox.drain()).toEqual([
-      { when: "async", message: raw("second") },
-      { when: "async", message: raw("later") },
-    ]);
+    await mailbox.deliver("async", async (next) => {
+      expect(next()).toEqual(raw("first"));
+      mailbox.enqueue("async", [raw("later")]);
+      expect(mailbox.drain()).toEqual([
+        { when: "async", message: raw("second") },
+        { when: "async", message: raw("later") },
+      ]);
+      expect(next()).toBeUndefined();
+      return { disposition: { type: "commit" }, value: undefined };
+    });
+    expect(mailbox.drain()).toEqual([]);
   });
-  it("restores a checkout onto another queue, in order", () => {
+  it("restores a checkout onto another queue, in order", async () => {
     const mailbox = new Mailbox();
     mailbox.enqueue("async", [raw("first"), raw("@compact"), raw("third")]);
     mailbox.enqueue("next", [raw("already queued")]);
-    const batch = mailbox.checkout("async");
-    batch.next();
-    const compact = batch.next();
-    batch.restore("next");
-    mailbox.prepend("next", compact ? [compact] : []);
+    await mailbox.deliver("async", async (next) => {
+      next();
+      const compact = next();
+      return {
+        disposition: {
+          type: "restore",
+          to: "next",
+          ahead: compact ? [compact] : [],
+        },
+        value: undefined,
+      };
+    });
     expect(mailbox.queues.next).toEqual([
       raw("@compact"),
       raw("third"),

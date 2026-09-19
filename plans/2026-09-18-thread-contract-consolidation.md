@@ -242,6 +242,13 @@ Decisions / deviations:
 - `pendingSeed` did **not** become a resolved prepend to the `next` queue. It lives in the mailbox as a separate `seed` lane (`seed`/`appendSeed`/`setSeed`/`takeSeed`). The `next` queue is only delivered at a stop and is reported by `drain`, whereas seed content must ride the *head* of the next turn's input, ahead of the submitted messages, and must not be reported as unsent by `abort`. Putting it on `next` would have changed both, so the consolidation is "all queued content is mailbox-owned" without a behaviour change.
 - `Mailbox.restoreCheckout()` is public because `test-helpers.resetThread` (an administrative reset with no submission to drain the queues) relied on `Thread.restoreDetachedBatch` to hand a still-resolving delivery's untouched entries back.
 
+Review follow-ups (stage 5):
+
+- The `Batch` handle is gone. `Mailbox.deliver(delivery, run)` scopes the checkout to the run, which sees only a `next` cursor and returns `{ disposition, value }`; `commit`/`restore` are no longer callable objects that can outlive the checkout, so post-termination use is not typeable. A checkout ended from outside (a new `deliver`, `drain`, or `restoreCheckout`) marks itself closed: its `next` then yields nothing and its disposition is a no-op, which is what makes a superseded flush unable to consume or restore the replacement's queue.
+- `BatchDisposition.restore` gained `ahead`, so the mid-turn `@compact` handoff is one disposition (`{ type: "restore", to: "next", ahead: [entry] }`) instead of a restore followed by a separate `prepend` — the ordering is now the mailbox's to enforce rather than the caller's to reproduce.
+- A run that throws now restores its remainder (the default disposition) instead of discarding it, which is the safer of the two and matches what an abandoned checkout does.
+- `flush` takes one discriminated `FlushPolicy` (`{ policy: "prompt" } | { policy: "defer"; nativeMessageIdx }`), removing the optional `nativeMessageIdx` and the `?? getPendingUserMessageIdx()` fallback from the body. The two overload declarations stay: they are what gives the `defer` caller the narrow `{ type: "messages" }` return, and a conditional return type would have to be cast at every return inside the run.
+
 ## owner contract
 
 - Goal: `onSubmission` becomes `ThreadSupervisor.onSubmission` with a `TitleSupervisor` built in `assembleThread`; `ThreadCallbacks` is `{ onUpdate }`; the ten core pass-throughs collapse into a republished readonly view.

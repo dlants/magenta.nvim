@@ -151,6 +151,12 @@ type FlushedQueue =
   | { type: "messages"; messages: AgentInput[] }
   | { type: "compact"; nextPrompt: string | undefined };
 
+/** What a `@compact` entry means for this delivery, and — mid-turn, where a
+ * flush rides a request that already exists — the message it rides. */
+type FlushPolicy =
+  | { policy: "prompt" }
+  | { policy: "defer"; nativeMessageIdx: NativeMessageIdx };
+
 /** Flushed content as a single prompt: the only way spent queue content can
  * travel across a suspension that throws the log away. */
 function joinText(messages: ReadonlyArray<AgentInput>): string {
@@ -772,7 +778,7 @@ export class Thread {
    * entry at the moment it is delivered. An entry whose resolution throws is
    * dropped with a visible error rather than wedging the turn loop.
    *
-   * `compactPolicy` says what a `@compact` entry means for this delivery:
+   * `policy` says what a `@compact` entry means for this delivery:
    * - `prompt` (at a stop): it ends the flush and becomes the compaction's
    *   follow-up prompt, with anything resolved ahead of it folded in, since
    *   there is no request left to carry it.
@@ -782,57 +788,64 @@ export class Thread {
    *   picks them up. */
   private flush(
     delivery: DeferredDelivery,
-    compactPolicy: "prompt",
+    policy: { policy: "prompt" },
   ): Promise<FlushedQueue>;
   /** Deferring a compaction cannot produce one, so mid-turn callers get the
    * messages without a branch. */
   private flush(
     delivery: DeferredDelivery,
-    compactPolicy: "defer",
-    nativeMessageIdx: NativeMessageIdx,
+    policy: { policy: "defer"; nativeMessageIdx: NativeMessageIdx },
   ): Promise<{ type: "messages"; messages: AgentInput[] }>;
   private async flush(
     delivery: DeferredDelivery,
-    compactPolicy: "prompt" | "defer",
-    nativeMessageIdx?: NativeMessageIdx,
+    policy: FlushPolicy,
   ): Promise<FlushedQueue> {
     const isCurrent = this.turnGuard();
-    const batch = this.mailbox.checkout(delivery);
-    const messages: AgentInput[] = [];
-    try {
+    return this.mailbox.deliver<FlushedQueue>(delivery, async (next) => {
+      const messages: AgentInput[] = [];
       for (;;) {
-        const entry = batch.next();
+        const entry = next();
         if (entry === undefined) break;
         if (
-          compactPolicy === "defer" &&
+          policy.policy === "defer" &&
           entry.type === "raw" &&
           parseCompact(entry.message).compact
         ) {
-          batch.restore("next");
-          this.mailbox.prepend("next", [entry]);
-          return { type: "messages", messages };
+          return {
+            disposition: { type: "restore", to: "next", ahead: [entry] },
+            value: { type: "messages", messages },
+          };
         }
         const resolved = await this.resolveQueued(
           entry,
           isCurrent,
-          nativeMessageIdx ?? this.core.manager.getPendingUserMessageIdx(),
+          policy.policy === "defer"
+            ? policy.nativeMessageIdx
+            : this.core.manager.getPendingUserMessageIdx(),
         );
-        if (!isCurrent()) return { type: "messages", messages: [] };
+        if (!isCurrent())
+          return {
+            disposition: { type: "commit" },
+            value: { type: "messages", messages: [] },
+          };
         if (!resolved) continue;
         if (resolved.compact) {
-          batch.restore();
           return {
-            type: "compact",
-            nextPrompt:
-              joinText([...messages, ...resolved.messages]) || undefined,
+            disposition: { type: "restore" },
+            value: {
+              type: "compact",
+              nextPrompt:
+                joinText([...messages, ...resolved.messages]) || undefined,
+            },
           };
         }
         messages.push(...resolved.messages);
       }
-      return { type: "messages", messages };
-    } finally {
-      batch.commit();
-    }
+      return {
+        disposition: { type: "commit" },
+        value: { type: "messages", messages },
+      };
+    });
   }
   /** Resolve one entry, activating its reminders. An entry whose resolution
    * throws is dropped with a visible error rather than wedging the turn
@@ -870,8 +883,12 @@ export class Thread {
       return { type: "none" };
     return {
       type: "inject",
-      content: (await this.flush("async", "defer", ctx.nativeMessageIdx))
-        .messages,
+      content: (
+        await this.flush("async", {
+          policy: "defer",
+          nativeMessageIdx: ctx.nativeMessageIdx,
+        })
+      ).messages,
     };
   }
   /** Whether a send with no user content is worth a request: only if a
@@ -1080,7 +1097,7 @@ export class Thread {
     // while this resolution is running lands in the next flush.
     const messages: AgentInput[] = [];
     for (const delivery of ["async", "next"] as const) {
-      const flushed = await this.flush(delivery, "prompt");
+      const flushed = await this.flush(delivery, { policy: "prompt" });
       if (!isCurrent()) return { type: "rest" };
       if (flushed.type === "compact") {
         return {
