@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadType } from "./chat-types.ts";
+import type { Logger } from "./logger.ts";
 import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import type { SystemInfo } from "./providers/system-prompt.ts";
-import { createAgentWithMock, userInput } from "./test-helpers.ts";
+import { createAgentWithMock, noopLogger, userInput } from "./test-helpers.ts";
 import {
   AutoCompactSupervisor,
+  coreLivenessCheck,
   EditedFilesSupervisor,
   type EndTurnContext,
   injectText,
   type RequestContext,
+  SupervisorChain,
   SystemInfoSupervisor,
+  submissionGuard,
+  type ThreadSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
@@ -620,5 +625,55 @@ describe("AutoCompactSupervisor", () => {
         nativeMessageIdx: 0 as NativeMessageIdx,
       }),
     ).toEqual({ type: "none" });
+  });
+});
+describe("SupervisorChain onSubmission", () => {
+  function chain(
+    members: ThreadSupervisor[],
+    args: { live: boolean; errors: string[] },
+  ) {
+    return new SupervisorChain(() => members, {
+      logger: {
+        ...noopLogger,
+        error: (message: string) => args.errors.push(message),
+      } as Logger,
+      guard: () => submissionGuard(() => args.live),
+      coreIsCurrent: coreLivenessCheck(() => true),
+      countTokens: () => Promise.resolve(undefined),
+    });
+  }
+  const messages = [
+    {
+      type: "text" as const,
+      text: "hello",
+      nativeMessageIdx: 0 as NativeMessageIdx,
+    },
+  ];
+  it("consults no member once the submission is stale", () => {
+    const seen: string[] = [];
+    const errors: string[] = [];
+    chain([{ onSubmission: () => seen.push("first") }], {
+      live: false,
+      errors,
+    }).onSubmission(messages);
+    expect(seen).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+  it("logs a throwing member and still reports to the rest", () => {
+    const seen: string[] = [];
+    const errors: string[] = [];
+    chain(
+      [
+        {
+          onSubmission: () => {
+            throw new Error("boom");
+          },
+        },
+        { onSubmission: () => seen.push("second") },
+      ],
+      { live: true, errors },
+    ).onSubmission(messages);
+    expect(seen).toEqual(["second"]);
+    expect(errors).toEqual(["onSubmission hook threw: boom"]);
   });
 });

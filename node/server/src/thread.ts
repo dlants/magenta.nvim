@@ -17,6 +17,7 @@ import type {
   ProviderMessage,
   ProviderToolSpec,
   StopReason,
+  Usage,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
@@ -63,6 +64,7 @@ import {
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import {
   coreLivenessCheck,
+  type EditedFileGroup,
   type PlainStopSuspendReason,
   type RequestAction,
   type RequestContext,
@@ -212,12 +214,12 @@ export interface ThreadCoreView {
   getContextDelivery(
     nativeMessageIdx: NativeMessageIdx,
   ): ContextDelivery | undefined;
-  readonly editedFileGroups: ThreadCore["editedFilesSupervisor"]["groups"];
+  readonly editedFileGroups: EditedFileGroup[];
   readonly toolSpecs: ReadonlyArray<ProviderToolSpec>;
   getLastStopTokenCount(): number;
   readonly activeReminders: ReadonlySet<string>;
   readonly nativeMessageIdx: NativeMessageIdx;
-  readonly latestUsage: ThreadCore["manager"]["log"]["latestUsage"];
+  readonly latestUsage: Usage | undefined;
   getProviderMessages(): ReadonlyArray<ProviderMessage>;
   /** The preflight count of the conversation as it stands. */
   readonly inputTokenCount: number | undefined;
@@ -248,7 +250,7 @@ export class Thread implements ThreadCoreView {
   ): ContextDelivery | undefined {
     return this.core.getContextDelivery(nativeMessageIdx);
   }
-  get editedFileGroups() {
+  get editedFileGroups(): EditedFileGroup[] {
     return this.core.editedFilesSupervisor.groups;
   }
   get toolSpecs(): ReadonlyArray<ProviderToolSpec> {
@@ -263,7 +265,7 @@ export class Thread implements ThreadCoreView {
   get nativeMessageIdx(): NativeMessageIdx {
     return this.core.manager.getNativeMessageIdx();
   }
-  get latestUsage() {
+  get latestUsage(): Usage | undefined {
     return this.core.manager.log.latestUsage;
   }
   getProviderMessages(): ReadonlyArray<ProviderMessage> {

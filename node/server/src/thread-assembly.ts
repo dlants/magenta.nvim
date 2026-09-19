@@ -217,22 +217,21 @@ function buildChatSupervisors(
  * callback; a late response cannot overwrite an explicit label or a destroyed
  * thread. */
 export class TitleSupervisor implements ThreadSupervisor {
-  private requested = false;
-  private thread: Thread | undefined;
-
+  /** The attachment and request facts are one state, so "requested but no
+   * thread" is not representable. Construction invokes no hooks, so the
+   * thread is always attached before the first submission is reported. */
+  private state:
+    | { type: "unattached" }
+    | { type: "pending"; thread: Thread }
+    | { type: "requested" } = { type: "unattached" };
   constructor(private readonly context: PreparedThreadContext) {}
-
-  /** Construction invokes no hooks, so the thread is always attached before
-   * the first submission can be reported. */
   attach(thread: Thread): void {
-    this.thread = thread;
+    this.state = { type: "pending", thread };
   }
-
   onSubmission(messages: readonly AgentInput[]): void {
-    const thread = this.thread;
+    if (this.state.type !== "pending") return;
+    const thread = this.state.thread;
     if (
-      !thread ||
-      this.requested ||
       thread.isDestroyed ||
       thread.title !== undefined ||
       thread.threadType === "compact" ||
@@ -243,7 +242,7 @@ export class TitleSupervisor implements ThreadSupervisor {
       .filter((content) => content.type === "text")
       .map((content) => content.text)
       .join("\n");
-    this.requested = true;
+    this.state = { type: "requested" };
     generateTitle(
       this.context.provider,
       this.context.profile.fastModel,

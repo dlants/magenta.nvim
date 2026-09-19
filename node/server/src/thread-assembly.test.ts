@@ -11,6 +11,7 @@ import {
 import {
   cleanupArchive,
   createAgentWithMock,
+  resetThread,
   TEST_ARCHIVE_DIR,
   uniqueThreadId,
 } from "./test-helpers.ts";
@@ -146,6 +147,31 @@ describe("assembleThread", () => {
     await cleanupArchive(id);
   });
 
+  it("still requests a title after the core was replaced", async () => {
+    const { id, thread, titleDefer, forceToolUse, mockClient } = setup();
+    await resetThread(thread, { seed: [], archive: { type: "none" } });
+    await submitTitleText(thread, mockClient);
+    expect(forceToolUse).toHaveBeenCalledTimes(1);
+    titleDefer.resolve(titleResponse("After compaction"));
+    await titleDefer.promise;
+    await vi.waitFor(() => expect(thread.title).toEqual("After compaction"));
+    await thread.destroy();
+    await cleanupArchive(id);
+  });
+  it("never requests a title for a compact thread", async () => {
+    const { id, thread, forceToolUse, mockClient } = setup({
+      initialization: {
+        type: "fresh",
+        threadType: "compact",
+        archiveOptions: { baseDir: TEST_ARCHIVE_DIR },
+      },
+    });
+    await submitTitleText(thread, mockClient);
+    expect(forceToolUse).not.toHaveBeenCalled();
+    expect(thread.title).toBeUndefined();
+    await thread.destroy();
+    await cleanupArchive(id);
+  });
   it("drops a title that arrives after the thread was destroyed", async () => {
     const { id, thread, titleDefer, mockClient } = setup();
     await submitTitleText(thread, mockClient);
