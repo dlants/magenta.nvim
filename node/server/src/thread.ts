@@ -165,18 +165,21 @@ type SuspensionOutcome =
 
 /** Per-suspension policy: how spent queue content survives it (absent
  * `withCarry` means the content is already in the log), and what the
- * submission does with it. Only the kinds a `LoopResult` can carry are
- * handled; `yield` is resolved inside the turn loop. */
-type SuspensionEntry = {
-  withCarry?(reason: SuspendReason, carry: string): SuspendReason;
-};
-type HandledSuspension<R extends SuspendReason> = SuspensionEntry & {
-  handle(reason: R, generation: Generation): Promise<SuspensionOutcome>;
+ * submission does with it. Only the kinds a `LoopResult` can carry appear in
+ * the table; `yield` is resolved inside the turn loop, so it has no entry. */
+type SuspensionHandler<R extends SuspendReason> = {
+  readonly withCarry?: (reason: R, carry: string) => R;
+  readonly handle: (
+    reason: R,
+    generation: Generation,
+  ) => Promise<SuspensionOutcome>;
 };
 type LoopSuspendReason = Extract<LoopResult, { type: "suspended" }>["reason"];
 type SuspensionTable = {
-  [K in LoopSuspendReason["kind"]]: HandledSuspension<LoopSuspendReason>;
-} & { yield: SuspensionEntry };
+  [K in LoopSuspendReason["kind"]]: SuspensionHandler<
+    Extract<LoopSuspendReason, { kind: K }>
+  >;
+};
 
 export type ThreadCallbacks = {
   readonly onUpdate: OnUpdate;
@@ -634,9 +637,10 @@ export class Thread {
         : await this.runLoop(resolved.messages, isCurrent, force);
       while (result.type === "suspended") {
         if (!isCurrent()) return finish({ type: "aborted" });
-        const outcome = await this.suspensionHandlers[
-          result.reason.kind
-        ].handle(result.reason, generation);
+        const outcome = await this.dispatchSuspension(
+          result.reason,
+          generation,
+        );
         if (outcome.type === "settle") return finish(outcome.result);
         if (!isCurrent()) return finish({ type: "aborted" });
         result = await this.runLoop(outcome.messages, isCurrent);
@@ -676,10 +680,22 @@ export class Thread {
       handle: (reason: CompactSuspendReason, generation: Generation) =>
         this.compactAndContinue(reason, generation),
     },
-    // Resolved inside the turn loop, so it never reaches the submission
-    // boundary; like a stop, its carry is already in the log.
-    yield: {},
   };
+  /** Correlates the reason variant with its entry, so each handler is only
+   * ever called with the reason it declares. */
+  private dispatchSuspension(
+    reason: LoopSuspendReason,
+    generation: Generation,
+  ): Promise<SuspensionOutcome> {
+    switch (reason.kind) {
+      case "stop":
+        return this.suspensionHandlers.stop.handle(reason, generation);
+      case "compact":
+        return this.suspensionHandlers.compact.handle(reason, generation);
+      default:
+        return assertUnreachable(reason);
+    }
+  }
 
   private async compactAndContinue(
     reason: CompactSuspendReason,
@@ -1108,8 +1124,12 @@ export class Thread {
     reason: SuspendReason,
     carry: string,
   ): SuspendReason {
-    const entry = this.suspensionHandlers[reason.kind];
-    return entry.withCarry ? entry.withCarry(reason, carry) : reason;
+    // Only compaction throws the log away; every other suspension leaves the
+    // spent content in the log, so there is nothing to rewrite.
+    const withCarry = this.suspensionHandlers.compact.withCarry;
+    return reason.kind === "compact" && withCarry
+      ? withCarry(reason, carry)
+      : reason;
   }
   /** Decided before anything is resolved or drained, because a stop that ends
    * the turn issues no request and the queues must not run their effects into

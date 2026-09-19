@@ -219,6 +219,12 @@ Decisions / deviations:
 - Typing: the handled entries are typed over the wide `LoopSuspendReason` using method syntax (`handle(...)`, `withCarry(...)`), so parameter bivariance lets the `compact` entry declare its narrow reason type while `this.suspensionHandlers[reason.kind].handle(...)` stays cast-free at the dispatch site. The `yield` entry has no `handle` at all — `LoopResult` cannot carry it — so the invariant "a yield suspension never escapes the turn loop" stays a type-level fact.
 - The compaction body moved out of `startSubmission` into `compactAndContinue(reason, generation)`, which derives its guard and the compactor signal from the generation instead of closing over `startSubmission` locals. `startSubmission` shrank to: dispatch, settle-or-continue, re-enter `runLoop`.
 - The "no compactor to run it" case is now the `compact` handler's own first branch rather than a condition on the loop's stop check, so `stop` and `compact` both settle through `{ type: "stopped", reason }` from their own entries.
+
+Review follow-ups (stage 4):
+
+- The table is now correlated: `SuspensionTable` maps each `LoopSuspendReason["kind"]` to `SuspensionHandler<Extract<..., { kind: K }>>`, and `withCarry`/`handle` are property-syntax (contravariant) signatures, so the compact entry is *proved* to only see compact reasons. Dispatch goes through `dispatchSuspension`, a `switch` on `reason.kind` with `assertUnreachable`, which correlates key and reason with no casts; `carryOntoSuspension` likewise names the `compact` entry directly instead of indexing with an un-narrowed kind.
+- The `yield: {}` entry is gone. Only handled kinds are in the table, so a forgotten handler is a missing-property error rather than an empty object; `yield`'s "carry is already in the log" is expressed by `carryOntoSuspension` only rewriting `compact`.
+- Added `compaction/index.test.ts > comes to rest when a compact suspension has no compactor to run it` (compact children are constructed without a compactor, so this is a production path).
 ## mailbox batches
 
 - Goal: `detachedBatch`/`restoreDetachedBatch` move into `Mailbox.checkout`; `flushAtStop` and `flushMidTurn` become one `flush`; `pendingSeed` becomes a resolved prepend to `next` and `prependToNextTurn`/`pendingTurnContent` are implemented over the mailbox.

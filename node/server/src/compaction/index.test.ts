@@ -895,6 +895,36 @@ describe("submission-owned compaction signal", () => {
     expect(thread.isBusy).toBe(false);
     await thread.destroy();
   });
+  it("comes to rest when a compact suspension has no compactor to run it", async () => {
+    let compact = true;
+    const { core: thread } = createAgentWithMock(
+      {
+        chatSupervisors: [
+          {
+            onBeforeRequest: async () => {
+              if (!compact) return { type: "none" };
+              compact = false;
+              return {
+                type: "suspend",
+                reason: { kind: "compact", nextPrompt: undefined },
+              };
+            },
+          },
+        ],
+      },
+      uniqueThreadId("compaction-missing-compactor"),
+    );
+    const sent = thread.submit({
+      type: "resolved",
+      messages: [text("history")],
+    });
+    expect(await sent).toEqual({
+      type: "stopped",
+      reason: { kind: "compact", nextPrompt: undefined },
+    });
+    expect(thread.isBusy).toBe(false);
+    await thread.destroy();
+  });
   it("settles the submission as failed when compaction errors", async () => {
     const { thread, sent, entered, outcome } =
       startCompactingThread("compaction-error");
