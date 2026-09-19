@@ -895,4 +895,16 @@ describe("submission-owned compaction signal", () => {
     expect(thread.isBusy).toBe(false);
     await thread.destroy();
   });
+  it("settles the submission as failed when compaction errors", async () => {
+    const { thread, sent, entered, outcome } =
+      startCompactingThread("compaction-error");
+    await entered.promise;
+    outcome.resolve({ type: "error", message: "summarizer exploded" });
+    expect(await sent).toMatchObject({
+      type: "failed",
+      error: new Error("Compaction failed: summarizer exploded"),
+    });
+    expect(thread.isBusy).toBe(false);
+    await thread.destroy();
+  });
 });

@@ -159,6 +159,25 @@ type LoopResult =
       type: "suspended";
       reason: PlainStopSuspendReason | CompactSuspendReason;
     };
+type SuspensionOutcome =
+  | { type: "continue"; messages: AgentInput[] }
+  | { type: "settle"; result: RestResult };
+
+/** Per-suspension policy: how spent queue content survives it (absent
+ * `withCarry` means the content is already in the log), and what the
+ * submission does with it. Only the kinds a `LoopResult` can carry are
+ * handled; `yield` is resolved inside the turn loop. */
+type SuspensionEntry = {
+  withCarry?(reason: SuspendReason, carry: string): SuspendReason;
+};
+type HandledSuspension<R extends SuspendReason> = SuspensionEntry & {
+  handle(reason: R, generation: Generation): Promise<SuspensionOutcome>;
+};
+type LoopSuspendReason = Extract<LoopResult, { type: "suspended" }>["reason"];
+type SuspensionTable = {
+  [K in LoopSuspendReason["kind"]]: HandledSuspension<LoopSuspendReason>;
+} & { yield: SuspensionEntry };
+
 export type ThreadCallbacks = {
   readonly onUpdate: OnUpdate;
   readonly onSubmission?: (messages: readonly AgentInput[]) => void;
@@ -568,7 +587,6 @@ export class Thread {
     if (wasBusy) this.drainQueues();
     const generation = this.mintGeneration();
     this.status = { type: "running", generation };
-    const signal = generation.controller.signal;
     const isCurrent = () => this.isCurrent(generation);
     this.handleUpdate();
     /** Settle the submission, unless something newer already owns the
@@ -616,55 +634,12 @@ export class Thread {
         : await this.runLoop(resolved.messages, isCurrent, force);
       while (result.type === "suspended") {
         if (!isCurrent()) return finish({ type: "aborted" });
-        const reason = result.reason;
-        const compactor = this.context.compactor;
-        // Nobody claimed this suspension: a plain stop, or a compaction with
-        // no compactor to run it. The log is coherent, so it is reported as a
-        // stop with its reason rather than as an empty submission.
-        if (reason.kind !== "compact" || !compactor)
-          return finish({ type: "stopped", reason });
-        const outcome = await compactor.run(
-          this.getProviderMessages(),
-          reason.nextPrompt,
-          signal,
-        );
-        if (!isCurrent() || outcome.type === "aborted")
-          return finish({ type: "aborted" });
-        if (outcome.type === "error")
-          return finish({
-            type: "failed",
-            error: new Error(`Compaction failed: ${outcome.message}`),
-          });
-        await this.replaceCore(
-          {
-            seed: [
-              {
-                type: "text",
-                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-                text: summaryText(outcome.summary),
-              },
-            ],
-            archive: {
-              type: "compaction",
-              summary: outcome.summary,
-              chunkCount: outcome.chunkCount,
-            },
-          },
-          isCurrent,
-        );
+        const outcome = await this.suspensionHandlers[
+          result.reason.kind
+        ].handle(result.reason, generation);
+        if (outcome.type === "settle") return finish(outcome.result);
         if (!isCurrent()) return finish({ type: "aborted" });
-        result = await this.runLoop(
-          [
-            {
-              type: "text",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              text:
-                reason.nextPrompt?.trim() ||
-                "Please continue from where you left off.",
-            },
-          ],
-          isCurrent,
-        );
+        result = await this.runLoop(outcome.messages, isCurrent);
       }
       return finish(isCurrent() ? result : { type: "aborted" });
     } catch (error) {
@@ -675,6 +650,91 @@ export class Thread {
       });
       throw error;
     }
+  }
+  /** What the owner of a suspension does with it: pick the submission back up
+   * with these messages, or settle it. */
+  private readonly suspensionHandlers: SuspensionTable = {
+    // The log is coherent and nobody claimed the stop, so it is reported with
+    // its reason rather than as an empty submission. Spent queue content is
+    // already in the log: the runner appends a suspended request's input.
+    stop: {
+      handle: (reason) =>
+        Promise.resolve({
+          type: "settle",
+          result: { type: "stopped", reason },
+        }),
+    },
+    // The log is about to be thrown away, so spent queue content travels on
+    // the handoff and is delivered by the post-compaction request.
+    compact: {
+      withCarry: (reason: CompactSuspendReason, carry: string) => ({
+        ...reason,
+        nextPrompt: reason.nextPrompt
+          ? `${reason.nextPrompt}\n\n${carry}`
+          : carry,
+      }),
+      handle: (reason: CompactSuspendReason, generation: Generation) =>
+        this.compactAndContinue(reason, generation),
+    },
+    // Resolved inside the turn loop, so it never reaches the submission
+    // boundary; like a stop, its carry is already in the log.
+    yield: {},
+  };
+
+  private async compactAndContinue(
+    reason: CompactSuspendReason,
+    generation: Generation,
+  ): Promise<SuspensionOutcome> {
+    const isCurrent = () => this.isCurrent(generation);
+    const compactor = this.context.compactor;
+    // A compaction with nobody to run it comes to rest like a plain stop.
+    if (!compactor)
+      return { type: "settle", result: { type: "stopped", reason } };
+    const outcome = await compactor.run(
+      this.getProviderMessages(),
+      reason.nextPrompt,
+      generation.controller.signal,
+    );
+    if (!isCurrent() || outcome.type === "aborted")
+      return { type: "settle", result: { type: "aborted" } };
+    if (outcome.type === "error")
+      return {
+        type: "settle",
+        result: {
+          type: "failed",
+          error: new Error(`Compaction failed: ${outcome.message}`),
+        },
+      };
+    await this.replaceCore(
+      {
+        seed: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: summaryText(outcome.summary),
+          },
+        ],
+        archive: {
+          type: "compaction",
+          summary: outcome.summary,
+          chunkCount: outcome.chunkCount,
+        },
+      },
+      isCurrent,
+    );
+    if (!isCurrent()) return { type: "settle", result: { type: "aborted" } };
+    return {
+      type: "continue",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text:
+            reason.nextPrompt?.trim() ||
+            "Please continue from where you left off.",
+        },
+      ],
+    };
   }
   private readonly mailbox = new Mailbox();
   // The entry being resolved is already consumed; only untouched batch entries
@@ -1044,25 +1104,12 @@ export class Thread {
   }
   /** Spent queue content — resolved, so not resolvable again — has to survive
    * the suspension of the request it was flushed for. */
-  private carryOntoSuspension(reason: SuspendReason, carry: string) {
-    switch (reason.kind) {
-      case "compact":
-        // The log is about to be thrown away, so the content travels on the
-        // handoff and is delivered by the post-compaction request.
-        return {
-          ...reason,
-          nextPrompt: reason.nextPrompt
-            ? `${reason.nextPrompt}\n\n${carry}`
-            : carry,
-        };
-      case "stop":
-      case "yield":
-        // The runner appends a suspended request's input to the log anyway, so
-        // the content is already in place for whatever resumes the thread.
-        return reason;
-      default:
-        return assertUnreachable(reason);
-    }
+  private carryOntoSuspension(
+    reason: SuspendReason,
+    carry: string,
+  ): SuspendReason {
+    const entry = this.suspensionHandlers[reason.kind];
+    return entry.withCarry ? entry.withCarry(reason, carry) : reason;
   }
   /** Decided before anything is resolved or drained, because a stop that ends
    * the turn issues no request and the queues must not run their effects into

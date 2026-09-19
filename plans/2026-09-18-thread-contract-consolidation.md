@@ -204,15 +204,21 @@ Review follow-ups (stage 3):
 - `test-helpers.markTornDownYield` replaces the double cast in `agent.test.ts`: a typed white-box helper that stands a thread up in the torn-down yield state.
 - Not done: the `compaction requested` arm of the thread summary (a compact suspension with no compactor) is still uncovered; there is no compact-child fixture that comes to rest that way, and standing one up is out of proportion to a label.
 
-## suspension dispatch
+## suspension dispatch — DONE
 
 - Goal: `startSubmission`'s `while (suspended)` block becomes a handler table; `carryOntoSuspension` folds into the table's carry policy.
 - Tests:
-  - Auto-compaction at rest still compacts and continues with the configured prompt.
-  - Queue content flushed for a request that then suspends on `compact` appears exactly once, in the post-compaction request.
-  - The same content suspending on `stop` is in the log and is not re-sent on `retry()`.
-  - Compaction failure and abort mid-compaction settle `failed` / `aborted`.
+  - [x] Auto-compaction at rest still compacts and continues with the configured prompt (`agent.test.ts > compacts from a plain send, exactly once, when already over threshold`).
+  - [x] Queue content flushed for a request that then suspends on `compact` appears exactly once, in the post-compaction request (`thread.test.ts > carries a queue flushed for a suspended request onto the handoff`).
+  - [x] The same content suspending on `stop` is in the log and is not re-sent on `retry()` (`thread.test.ts > keeps a queue flushed for a stop-suspended request for the next request`).
+  - [x] Compaction abort settles `aborted` (`compaction/index.test.ts > submission-owned compaction signal`); compaction failure settles `failed` (added: `settles the submission as failed when compaction errors`).
 
+Decisions / deviations:
+
+- The table is a private instance field `suspensionHandlers: SuspensionTable` in `thread.ts`, keyed by `SuspendReason["kind"]`. Carry policy is expressed as an optional `withCarry(reason, carry)` rather than a `carry: "prompt" | "in-log"` tag: "in-log" is exactly "no rewriting", so the tag would be a second encoding of the same fact. Only `compact` declares one.
+- Typing: the handled entries are typed over the wide `LoopSuspendReason` using method syntax (`handle(...)`, `withCarry(...)`), so parameter bivariance lets the `compact` entry declare its narrow reason type while `this.suspensionHandlers[reason.kind].handle(...)` stays cast-free at the dispatch site. The `yield` entry has no `handle` at all — `LoopResult` cannot carry it — so the invariant "a yield suspension never escapes the turn loop" stays a type-level fact.
+- The compaction body moved out of `startSubmission` into `compactAndContinue(reason, generation)`, which derives its guard and the compactor signal from the generation instead of closing over `startSubmission` locals. `startSubmission` shrank to: dispatch, settle-or-continue, re-enter `runLoop`.
+- The "no compactor to run it" case is now the `compact` handler's own first branch rather than a condition on the loop's stop check, so `stop` and `compact` both settle through `{ type: "stopped", reason }` from their own entries.
 ## mailbox batches
 
 - Goal: `detachedBatch`/`restoreDetachedBatch` move into `Mailbox.checkout`; `flushAtStop` and `flushMidTurn` become one `flush`; `pendingSeed` becomes a resolved prepend to `next` and `prependToNextTurn`/`pendingTurnContent` are implemented over the mailbox.
