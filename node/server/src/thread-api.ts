@@ -87,19 +87,16 @@ export type Generation = {
  * not accepted may be sent to again, and while that submission runs the thread
  * is `running`, not `yielded`. */
 export type ThreadStatus =
-  | { type: "idle"; lastResult?: RestResult }
+  | { type: "idle"; lastResult: RestResult | undefined }
   | { type: "running"; generation: Generation }
   | {
       type: "yielded";
       value: YieldValue;
       resultPrefix?: string;
-      /** An owner accepted the yield and took the thread's world away, so
-       * nothing more can be sent. */
-      tornDown: boolean;
     }
   /** Terminal. The last result is kept because a destroyed thread's history
    * can still be rendered. */
-  | { type: "destroyed"; lastResult?: RestResult };
+  | { type: "destroyed"; lastResult: RestResult | undefined };
 
 /** The accepted/settled yield, as views render it. */
 export type YieldState = Extract<ThreadStatus, { type: "yielded" }>;

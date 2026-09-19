@@ -1,4 +1,10 @@
-import type { NativeMessageIdx, ScriptRunner, ThreadId } from "@magenta/server";
+import type {
+  NativeMessageIdx,
+  RestResult,
+  ScriptRunner,
+  StopReason,
+  ThreadId,
+} from "@magenta/server";
 import {
   type ArchiveEntry,
   deleteArchivedThread,
@@ -144,7 +150,15 @@ export type ChatMsg = {
 
 /** How an idle thread came to rest, as a label: a provider stop reason, the
  * kind of result it settled on, or a supervisor's own stop message. */
-type StoppedReason = string;
+function stoppedLabel(reason: StoppedReason): string {
+  if (typeof reason === "string") return reason;
+  return reason.kind === "supervisor" ? reason.message : "compaction requested";
+}
+type StoppedReason =
+  | StopReason
+  | Exclude<RestResult["type"], "completed" | "failed" | "stopped">
+  | { kind: "supervisor"; message: string }
+  | { kind: "compaction-requested" };
 
 /** The view adapter over a Session: selection, expansion, viewed timestamps,
  * archive navigation and the NvimThread wrappers. The session owns identity,
@@ -690,7 +704,7 @@ export class Chat {
         return `⏳ ${summary.status.activity}`;
 
       case "stopped":
-        return `⏹️ stopped (${summary.status.reason})`;
+        return `⏹️ stopped (${stoppedLabel(summary.status.reason)})`;
 
       case "yielded":
         return "✅ yielded";
@@ -1196,8 +1210,11 @@ ${rows}${loadMore}`;
                     type: "stopped" as const,
                     reason:
                       lastTurnResult.reason.kind === "stop"
-                        ? lastTurnResult.reason.message
-                        : "compaction requested",
+                        ? {
+                            kind: "supervisor" as const,
+                            message: lastTurnResult.reason.message,
+                          }
+                        : { kind: "compaction-requested" as const },
                   };
                 }
                 return {

@@ -5,7 +5,11 @@ import type { GitState } from "./capabilities/git-client.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
-import { type Compactor, summaryText } from "./compaction/index.ts";
+import {
+  type Compactor,
+  type CompactSuspendReason,
+  summaryText,
+} from "./compaction/index.ts";
 import type { ThreadLoopState } from "./loop-state.ts";
 import type {
   AgentInput,
@@ -59,6 +63,7 @@ import {
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import {
   coreLivenessCheck,
+  type PlainStopSuspendReason,
   type RequestAction,
   type RequestContext,
   type SubmissionGuard,
@@ -146,6 +151,14 @@ type FlushedQueue =
   | { type: "messages"; messages: AgentInput[] }
   | { type: "compact"; nextPrompt: string | undefined };
 
+/** What the turn loop can hand back. A `yield` suspension is resolved inside
+ * the loop, so the owner's suspension handling never has to consider it. */
+type LoopResult =
+  | Exclude<SendResult, { type: "suspended" }>
+  | {
+      type: "suspended";
+      reason: PlainStopSuspendReason | CompactSuspendReason;
+    };
 export type ThreadCallbacks = {
   readonly onUpdate: OnUpdate;
   readonly onSubmission?: (messages: readonly AgentInput[]) => void;
@@ -546,7 +559,7 @@ export class Thread {
     force?: true,
   ): Promise<RestResult> {
     this.assertUsable();
-    if (this.yielded?.tornDown)
+    if (this.tornDown)
       throw new Error(
         "This thread's container has been torn down. No further messages can be sent.",
       );
@@ -558,9 +571,8 @@ export class Thread {
     const signal = generation.controller.signal;
     const isCurrent = () => this.isCurrent(generation);
     this.handleUpdate();
-    /** Settle the submission, unless something newer already owns the thread.
-     * A `yielded` outcome becomes the yielded status, which also carries
-     * whether an owner tore the thread down. */
+    /** Settle the submission, unless something newer already owns the
+     * thread. A `yielded` outcome becomes the yielded status. */
     const finish = (result: RestResult) => {
       if (this.generation === generation) {
         this.status =
@@ -571,7 +583,6 @@ export class Thread {
                 ...(result.resultPrefix
                   ? { resultPrefix: result.resultPrefix }
                   : {}),
-                tornDown: this.yieldTornDown,
               }
             : { type: "idle", lastResult: result };
         if (result.type === "yielded") this.settleResult(result);
@@ -597,7 +608,7 @@ export class Thread {
           this.core.manager.getPendingUserMessageIdx(),
         );
       this.callbacks.onSubmission?.(resolved.messages);
-      let result: SendResult = resolved.compact
+      let result: LoopResult = resolved.compact
         ? {
             type: "suspended",
             reason: { kind: "compact", nextPrompt: compactPrompt(resolved) },
@@ -610,8 +621,6 @@ export class Thread {
         // Nobody claimed this suspension: a plain stop, or a compaction with
         // no compactor to run it. The log is coherent, so it is reported as a
         // stop with its reason rather than as an empty submission.
-        if (reason.kind === "yield")
-          throw new Error("yield suspension escaped the turn loop");
         if (reason.kind !== "compact" || !compactor)
           return finish({ type: "stopped", reason });
         const outcome = await compactor.run(
@@ -813,7 +822,7 @@ export class Thread {
     return this.chain.hasPendingContent();
   }
   /** The single source of truth for where the thread is in its life. */
-  private status: ThreadStatus = { type: "idle" };
+  private status: ThreadStatus = { type: "idle", lastResult: undefined };
   /** Outer hooks may outlive cancellation. Each submission captures its own
    * generation so a late continuation cannot act on the replacement
    * submission. */
@@ -855,7 +864,7 @@ export class Thread {
     messages: AgentInput[],
     isCurrentLoop: () => boolean,
     force?: true,
-  ): Promise<SendResult> {
+  ): Promise<LoopResult> {
     const core = this.core;
     if (!messages.length && !this.pendingSeed.length && !force) {
       const pending = await this.hasPendingContent();
@@ -883,13 +892,13 @@ export class Thread {
     let result = await runTurn(messages);
     for (;;) {
       if (!isCurrentLoop()) return { type: "aborted" };
-      // A successful yield tool raises this suspension internally; it must
-      // never escape as an unclaimed stop at the submission boundary.
-      if (result.type === "suspended" && result.reason.kind === "yield") {
-        const resolved = await this.resolveYield(
-          result.reason.value,
-          isCurrentLoop,
-        );
+      // Every suspension funnels through here, so a yield raised by the yield
+      // tool is resolved inside the loop and the returned type is narrowed to
+      // the suspensions an owner can be handed.
+      if (result.type === "suspended") {
+        const reason = result.reason;
+        if (reason.kind !== "yield") return { type: "suspended", reason };
+        const resolved = await this.resolveYield(reason.value, isCurrentLoop);
         if (!isCurrentLoop()) return { type: "aborted" };
         if (resolved.type === "settled") return resolved.result;
         result = await runTurn(resolved.messages);
@@ -903,16 +912,20 @@ export class Thread {
         case "rest":
           return result;
         case "suspended":
-          return { type: "suspended", reason: next.reason };
+          // Back to the loop head, so a supervisor that suspends with a yield
+          // is resolved here rather than escaping to the owner.
+          result = { type: "suspended", reason: next.reason };
+          continue;
         case "messages":
         case "flushed": {
           const continued = await runTurn(next.messages);
           if (!isCurrentLoop()) return { type: "aborted" };
           if (continued.type === "suspended" && next.type === "flushed") {
-            return {
+            result = {
               type: "suspended",
               reason: this.carryOntoSuspension(continued.reason, next.carry),
             };
+            continue;
           }
           result = continued;
           continue;
@@ -926,14 +939,21 @@ export class Thread {
    * stands. The first `accept`/`reject` wins outright — later hooks are not
    * consulted, since the decision is made — and `send-message` texts
    * concatenate. */
-  /** Decided by the yield hooks, consumed when the submission settles: an
-   * accepted yield means an owner took the thread's world away. */
-  private yieldTornDown = false;
+  /** Terminal and irreversible, and deliberately not part of `status`: an
+   * accepted yield means an owner took the thread's world away, which
+   * outlives any submission that is preempted or aborted before it settles.
+   * Written only by the yield hooks, and the single source of truth for the
+   * "nothing more can be sent" guards. */
+  private tornDownState = false;
+  /** Whether an owner accepted this thread's yield and tore it down. */
+  get tornDown(): boolean {
+    return this.tornDownState;
+  }
   private async resolveYield(
     value: YieldValue,
     isCurrent: () => boolean,
   ): Promise<
-    | { type: "settled"; result: SendResult }
+    | { type: "settled"; result: LoopResult }
     | { type: "resubmit"; messages: AgentInput[] }
   > {
     const action = await this.chain.onYield(value);
@@ -942,7 +962,7 @@ export class Thread {
       const prefix = action.resultPrefix
         ? { resultPrefix: action.resultPrefix }
         : {};
-      this.yieldTornDown = true;
+      this.tornDownState = true;
       return {
         type: "settled",
         result: { type: "yielded", value, ...prefix },
@@ -961,7 +981,6 @@ export class Thread {
       };
     }
     if (action.type !== "send-message") {
-      this.yieldTornDown = false;
       return { type: "settled", result: { type: "yielded", value } };
     }
     return {
@@ -1118,7 +1137,7 @@ export class Thread {
     isCurrent: () => boolean,
   ): Promise<ThreadCore> {
     this.assertUsable();
-    if (this.yielded?.tornDown)
+    if (this.tornDown)
       throw new Error(
         "This thread's container has been torn down. Cannot reset.",
       );
@@ -1136,7 +1155,8 @@ export class Thread {
     this.core = core;
     this.pendingSeed = isCurrent() ? [...seed] : [];
     // The replaced core's outcome does not describe the new one.
-    if (this.status.type === "idle") this.status = { type: "idle" };
+    if (this.status.type === "idle")
+      this.status = { type: "idle", lastResult: undefined };
     this.threadLogger.resetCursor();
     this.handleUpdate();
     return core;
@@ -1155,7 +1175,7 @@ export class Thread {
     if (this.destroyed) return;
     this.cancelSubmission();
     const lastResult = this.lastResult();
-    this.status = { type: "destroyed", ...(lastResult ? { lastResult } : {}) };
+    this.status = { type: "destroyed", lastResult };
     await this.core.dispose();
     this.settleResult({
       type: "aborted",

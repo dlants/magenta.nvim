@@ -30,13 +30,14 @@ import {
   createTestAgent,
   defaultAnthropicOptions,
   flatLoop,
+  markTornDownYield,
   resetThread,
   TEST_ARCHIVE_DIR,
   toolExecution,
   uniqueThreadId,
   userInput,
 } from "./test-helpers.ts";
-import type { ThreadContext, YieldState } from "./thread.ts";
+import type { ThreadContext } from "./thread.ts";
 import { Thread, threadCloneContext } from "./thread.ts";
 import type { SendResult, ThreadSendResult } from "./thread-api.ts";
 import {
@@ -363,13 +364,7 @@ describe("Thread.submit result", () => {
     const { core } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    // Stand the thread up in the terminal state a torn-down subagent reaches,
-    // without driving a whole yield + teardown.
-    (core as unknown as { status: YieldState }).status = {
-      type: "yielded",
-      value: { result: "done" },
-      tornDown: true,
-    };
+    markTornDownYield(core, { result: "done" });
     await expect(
       core.submit({
         type: "resolved",

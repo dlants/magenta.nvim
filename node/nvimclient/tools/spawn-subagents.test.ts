@@ -408,7 +408,7 @@ describe("yield behavior", () => {
       expect(mode.resultPrefix).toContain("magenta/worker-test123");
       expect(mode.value).toEqual({ result: "Completed all changes" });
 
-      expect(mode.tornDown).toBe(true);
+      expect(childWrapper.thread.thread.tornDown).toBe(true);
     });
   });
 });

@@ -195,6 +195,15 @@ Decisions / deviations:
 - View call sites: `thread-view.ts` renders `Stopped: <supervisor message>`, and `chat.ts`'s thread summary reports the same message as its `stopped` reason (`StoppedReason` is now just a label string).
 - `test-helpers.resetThread` clears only a *running* status, so a settled yield survives an administrative reset as it did before.
 
+Review follow-ups (stage 3):
+
+- Teardown is no longer a status field. `ThreadStatus.yielded` dropped `tornDown`; the thread carries `tornDownState` (public getter `tornDown`), documented as terminal and irreversible, written once by the accepting yield hook and read by the "nothing more can be sent" guards. That closes the race the review found: a submission preempted between the accept hook and `finish` can no longer lose the guard, and no stale flag can be stamped onto a later yield. Covered by `thread.test.ts > thread status > keeps the teardown guard when the accepting submission never settles`.
+- The turn loop now returns a narrowed `LoopResult` (`thread.ts`) whose suspensions are only `PlainStopSuspendReason | CompactSuspendReason`. All suspensions — including the ones produced by continuations and carry handoffs — funnel back through the loop head, where a `yield` reason is resolved and the rest are returned from a control-flow-narrowed branch. The runtime `throw new Error("yield suspension escaped the turn loop")` is gone; the invariant is now a type.
+- `ThreadStatus.idle`/`destroyed` use required-but-`undefined` `lastResult`, matching `ThreadLoopState.idle`.
+- `chat.ts`'s `StoppedReason` is a union again (`StopReason | Exclude<RestResult["type"], …> | { kind: "supervisor"; message } | { kind: "compaction-requested" }`), with a `stoppedLabel` helper doing the rendering, so a new `RestResult` variant breaks the build here.
+- `test-helpers.markTornDownYield` replaces the double cast in `agent.test.ts`: a typed white-box helper that stands a thread up in the torn-down yield state.
+- Not done: the `compaction requested` arm of the thread summary (a compact suspension with no compactor) is still uncovered; there is no compact-child fixture that comes to rest that way, and standing one up is out of proportion to a label.
+
 ## suspension dispatch
 
 - Goal: `startSubmission`'s `while (suspended)` block becomes a handler table; `carryOntoSuspension` folds into the table's carry policy.

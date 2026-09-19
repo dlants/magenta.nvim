@@ -1642,6 +1642,44 @@ describe("thread status", () => {
     });
     await core.destroy();
   });
+  it("keeps the teardown guard when the accepting submission never settles", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+      chatSupervisors: [
+        { onYield: () => Promise.resolve({ type: "accept" as const }) },
+      ],
+    });
+    void core.submit({
+      type: "resolved",
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "work",
+        },
+      ],
+    });
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "yield-teardown" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "done" },
+    );
+    stream.finishResponse("tool_use");
+    await pollUntil(() => {
+      if (core.tornDown) return true;
+      throw new Error(`waiting for the teardown: ${loopLabel(core.loopState)}`);
+    });
+    // Teardown is terminal and lives outside `status`: a submission preempted
+    // or aborted between the accept hook and the settle cannot resurrect the
+    // thread. Standing in for that race by clearing the status directly.
+    core["status"] = { type: "idle", lastResult: undefined };
+    expect(core.yielded).toBeUndefined();
+    await expect(
+      core.submit({ type: "resolved", messages: [] }),
+    ).rejects.toThrow("torn down");
+    await core.destroy();
+  });
 });
 describe("replaceable conversation core", () => {
   it("remains usable when reset is interrupted during disposal", async () => {

@@ -47,7 +47,7 @@ import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { type ContextDelivery, Thread, type ThreadContext } from "./thread.ts";
-import type { RestResult, SendResult } from "./thread-api.ts";
+import type { RestResult, SendResult, YieldValue } from "./thread-api.ts";
 import { executeToolBatch } from "./tool-executor.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
 import { clientToolCreator } from "./tools/create-tool.ts";
@@ -509,13 +509,20 @@ export function getFileSupervisor(thread: Thread): FileSupervisor {
 export function getContextDeliveries(thread: Thread): ContextDelivery[] {
   return [...thread["core"]["contextDeliveries"].values()];
 }
+/** Stand a thread up in the terminal state an accepted, torn-down yield
+ * leaves behind, without driving a whole yield + teardown. */
+export function markTornDownYield(thread: Thread, value: YieldValue): void {
+  thread["status"] = { type: "yielded", value };
+  thread["tornDownState"] = true;
+}
 export function resetThread(
   thread: Thread,
   options: Parameters<Thread["replaceCore"]>[0],
 ) {
   thread["cancelSubmission"]();
   // Only the live submission is dropped: a settled yield outlives a reset.
-  if (thread["status"].type === "running") thread["status"] = { type: "idle" };
+  if (thread["status"].type === "running")
+    thread["status"] = { type: "idle", lastResult: undefined };
   thread["restoreDetachedBatch"]();
   return thread["replaceCore"](options);
 }
