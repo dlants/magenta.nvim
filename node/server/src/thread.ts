@@ -199,11 +199,32 @@ type SuspensionTable = {
 
 export type ThreadCallbacks = {
   readonly onUpdate: OnUpdate;
-  readonly onSubmission?: (messages: readonly AgentInput[]) => void;
 };
+/** Everything Thread republishes from its replaceable core: the readers views
+ * and tools ask the thread for, rather than reaching for a core that a
+ * compaction may already have retired. Declared once, so a new reader is
+ * added here and nowhere else, and so the delegating block below cannot drift
+ * from what callers are promised. */
+export interface ThreadCoreView {
+  readonly contextFiles: ContextFileAccess;
+  /** The structured context injected into the message at this index, for
+   * views that render history. */
+  getContextDelivery(
+    nativeMessageIdx: NativeMessageIdx,
+  ): ContextDelivery | undefined;
+  readonly editedFileGroups: ThreadCore["editedFilesSupervisor"]["groups"];
+  readonly toolSpecs: ReadonlyArray<ProviderToolSpec>;
+  getLastStopTokenCount(): number;
+  readonly activeReminders: ReadonlySet<string>;
+  readonly nativeMessageIdx: NativeMessageIdx;
+  readonly latestUsage: ThreadCore["manager"]["log"]["latestUsage"];
+  getProviderMessages(): ReadonlyArray<ProviderMessage>;
+  /** The preflight count of the conversation as it stands. */
+  readonly inputTokenCount: number | undefined;
+}
 /** Stable identity, submission queues, yield contract and archive across
  * replaceable conversation generations. */
-export class Thread {
+export class Thread implements ThreadCoreView {
   #title: string | undefined;
   get title(): string | undefined {
     return this.#title;
@@ -217,32 +238,47 @@ export class Thread {
   get systemInfo(): SystemInfo {
     return this.context.systemInfo;
   }
+  /** The republished core view. Every member here is a straight delegation to
+   * the current core, so replacement is invisible to callers. */
   get contextFiles(): ContextFileAccess {
     return this.core.fileSupervisor;
   }
-  /** The structured context injected into the message at this index, for
-   * views that render history. */
   getContextDelivery(
     nativeMessageIdx: NativeMessageIdx,
   ): ContextDelivery | undefined {
     return this.core.getContextDelivery(nativeMessageIdx);
   }
-  private core: ThreadCore;
-  /** One chain per core: its members include that core's context
-   * supervisors. */
-  private readonly chains = new WeakMap<ThreadCore, SupervisorChain>();
-
   get editedFileGroups() {
     return this.core.editedFilesSupervisor.groups;
   }
   get toolSpecs(): ReadonlyArray<ProviderToolSpec> {
     return this.core.toolSpecs;
   }
-  get completedTools(): ReadonlyMap<ToolRequestId, CompletedToolInfo> {
-    return this.resultArchive;
-  }
   getLastStopTokenCount(): number {
     return this.core.getLastStopTokenCount();
+  }
+  get activeReminders(): ReadonlySet<string> {
+    return this.core.systemReminders?.activeReminders ?? new Set();
+  }
+  get nativeMessageIdx(): NativeMessageIdx {
+    return this.core.manager.getNativeMessageIdx();
+  }
+  get latestUsage() {
+    return this.core.manager.log.latestUsage;
+  }
+  getProviderMessages(): ReadonlyArray<ProviderMessage> {
+    return this.core.manager.log.messages;
+  }
+  get inputTokenCount(): number | undefined {
+    return this.core.preflightTokenCount;
+  }
+  private core: ThreadCore;
+  /** One chain per core: its members include that core's context
+   * supervisors. */
+  private readonly chains = new WeakMap<ThreadCore, SupervisorChain>();
+
+  get completedTools(): ReadonlyMap<ToolRequestId, CompletedToolInfo> {
+    return this.resultArchive;
   }
   private threadLogger: ThreadLogger;
 
@@ -461,9 +497,6 @@ export class Thread {
     );
     return cloned;
   }
-  get activeReminders(): ReadonlySet<string> {
-    return this.core.systemReminders?.activeReminders ?? new Set();
-  }
 
   private activateReminder(
     text: string,
@@ -475,12 +508,6 @@ export class Thread {
    * rest, which spans the gaps between turns. */
   get isBusy(): boolean {
     return this.loopState.type !== "idle";
-  }
-  get nativeMessageIdx(): NativeMessageIdx {
-    return this.core.manager.getNativeMessageIdx();
-  }
-  get latestUsage() {
-    return this.core.manager.log.latestUsage;
   }
   get chatSupervisors(): readonly ThreadSupervisor[] {
     return this.context.chatSupervisors ?? [];
@@ -528,12 +555,6 @@ export class Thread {
       this.loopState.type === "running" ? "streaming" : "at-rest",
     );
     this.callbacks.onUpdate();
-  }
-  getProviderMessages(): ReadonlyArray<ProviderMessage> {
-    return this.core.manager.log.messages;
-  }
-  get inputTokenCount(): number | undefined {
-    return this.core.preflightTokenCount;
   }
   /** Resolved content held for the head of the next turn. Reset replaces it;
    * the next turn drains it exactly once. */
@@ -643,7 +664,7 @@ export class Thread {
           text,
           this.core.manager.getPendingUserMessageIdx(),
         );
-      this.callbacks.onSubmission?.(resolved.messages);
+      this.chain.onSubmission(resolved.messages);
       let result: LoopResult = resolved.compact
         ? {
             type: "suspended",

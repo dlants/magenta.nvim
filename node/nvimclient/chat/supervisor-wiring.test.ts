@@ -6,6 +6,7 @@ import {
   type NativeMessageIdx,
   SubagentSupervisor,
   type ThreadId,
+  TitleSupervisor,
   type ToolName,
   type ToolRequestId,
 } from "@magenta/server";
@@ -179,17 +180,27 @@ it.each([
   {
     threadType: "compact" as const,
     supervised: false,
-    expected: [MaxTokensSupervisor, SubagentSupervisor],
+    expected: [MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor],
   },
   {
     threadType: "docker_root" as const,
     supervised: false,
-    expected: [MaxTokensSupervisor, SubagentSupervisor, AutoCompactSupervisor],
+    expected: [
+      MaxTokensSupervisor,
+      SubagentSupervisor,
+      AutoCompactSupervisor,
+      TitleSupervisor,
+    ],
   },
   {
     threadType: "subagent" as const,
     supervised: true,
-    expected: [MaxTokensSupervisor, DockerSupervisor, AutoCompactSupervisor],
+    expected: [
+      MaxTokensSupervisor,
+      DockerSupervisor,
+      AutoCompactSupervisor,
+      TitleSupervisor,
+    ],
   },
 ])("constructs $threadType supervised=$supervised with ordered, stable policies", async ({
   threadType,
@@ -255,6 +266,6 @@ it("forks compact threads without a compactor or auto-compaction policy", async 
     expect(fork.thread["context"].compactor).toBeUndefined();
     expect(
       fork.thread.chatSupervisors!.map((policy) => policy.constructor),
-    ).toEqual([MaxTokensSupervisor, SubagentSupervisor]);
+    ).toEqual([MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor]);
   });
 });

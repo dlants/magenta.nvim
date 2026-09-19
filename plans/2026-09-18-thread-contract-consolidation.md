@@ -249,9 +249,17 @@ Review follow-ups (stage 5):
 - A run that throws now restores its remainder (the default disposition) instead of discarding it, which is the safer of the two and matches what an abandoned checkout does.
 - `flush` takes one discriminated `FlushPolicy` (`{ policy: "prompt" } | { policy: "defer"; nativeMessageIdx }`), removing the optional `nativeMessageIdx` and the `?? getPendingUserMessageIdx()` fallback from the body. The two overload declarations stay: they are what gives the `defer` caller the narrow `{ type: "messages" }` return, and a conditional return type would have to be cast at every return inside the run.
 
-## owner contract
+## owner contract — DONE
 
 - Goal: `onSubmission` becomes `ThreadSupervisor.onSubmission` with a `TitleSupervisor` built in `assembleThread`; `ThreadCallbacks` is `{ onUpdate }`; the ten core pass-throughs collapse into a republished readonly view.
 - Tests:
-  - Title is requested once, from the first text-bearing submission, never for a compact thread, and a late response cannot overwrite an explicit label (port `thread-assembly.test.ts`, which currently pokes `thread.callbacks.onSubmission` directly — it should drive a real submission instead).
-  - A fork inherits the title supervisor without re-requesting a title for content before the fork point.
+  - [x] Title is requested once, from the first text-bearing submission, never for a compact thread, and a late response cannot overwrite an explicit label (`thread-assembly.test.ts`, now driving real submissions through the mock client).
+  - [x] A fork inherits the title supervisor without re-requesting a title for content before the fork point (`inherits kind, compaction settings and title generation on a fork`, which now asserts the fork requests exactly one title, for its own first submission).
+
+Decisions / deviations:
+
+- `TitleSupervisor` (exported from `thread-assembly.ts` and the server barrel) is a chat supervisor appended last in `assembleThread`'s supervisor list, so it survives core replacement and is inherited by a fork the same way the rest are rebuilt. `attach(thread)` is still needed — the supervisor list is built before the thread exists — but construction invokes no hooks, so it cannot be consulted before it is attached. Order is irrelevant: it only implements `onSubmission`. The supervisor-ordering assertions in `thread-assembly.test.ts`, `session.test.ts`, `supervisor-wiring.test.ts` and `fork-thread.test.ts` now include it, which is what pins that it is present on every kind (including `compact`, where the hook self-guards).
+- `SupervisorChain.onSubmission` fans out under the submission guard: the submission is live when Thread reports it, and a preempting submission should truncate the fan-out like every other guarded hook. `ThreadCallbacks` is now `{ onUpdate }` and `Thread` has no owner-facing submission callback at all.
+- `thread-assembly.test.ts` drives `thread.submit` and waits for the first stream rather than poking a callback, then leaves the turn hanging: the title is requested before the first turn runs, so no test needs the turn to finish. A fork's manager is cloned from its source, so the fork's requests go to the *source's* mock client.
+- The ten pass-throughs did **not** become a single `thread.coreView.x` property. The reduction is a declaration, not a rename: `ThreadCoreView` (`thread.ts`) names the republished surface once, `Thread implements ThreadCoreView`, and the delegating getters are now one contiguous documented block instead of being scattered through the class. Renaming ~100 call sites (`thread.contextFiles`, `thread.getProviderMessages()`, …) across views, tools and tests would have been pure churn against an API `context.md` explicitly blesses, and TypeScript cannot generate the delegations without casts, so the getters themselves cannot be deleted. What the interface buys is that a new core reader is declared in one place and cannot drift from what callers are promised.
+- `completedTools` stayed out of the view: it reads the thread-owned `resultArchive`, not the core.

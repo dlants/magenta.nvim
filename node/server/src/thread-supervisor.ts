@@ -97,6 +97,10 @@ export type RequestContext = {
 );
 
 export interface ThreadSupervisor {
+  /** The resolved content of a submission, reported once per submission just
+   * before its first turn. Observational only: nothing the hook returns can
+   * affect the submission. */
+  onSubmission?(messages: readonly AgentInput[]): void;
   onAgentLoopStart?(nativeMessageIdx: NativeMessageIdx): void;
   onAgentLoopStop?(nativeMessageIdx: NativeMessageIdx): void;
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
@@ -164,6 +168,7 @@ export function coreLivenessCheck(check: () => boolean): CoreLivenessCheck {
  * `CombinedRequestAction` that no single supervisor can express, and it is
  * not itself nestable as a member. */
 export interface SupervisorFanOut {
+  onSubmission(messages: readonly AgentInput[]): void;
   onAgentLoopStart(nativeMessageIdx: NativeMessageIdx): void;
   onAgentLoopStop(nativeMessageIdx: NativeMessageIdx): void;
   onToolApplied: OnToolAppliedHook;
@@ -219,6 +224,12 @@ export class SupervisorChain implements SupervisorFanOut {
         this.logThrow(hook, error);
       }
     }
+  }
+
+  onSubmission(messages: readonly AgentInput[]): void {
+    this.forEach("onSubmission", this.deps.guard(), (supervisor) =>
+      supervisor.onSubmission?.(messages),
+    );
   }
 
   onAgentLoopStart(nativeMessageIdx: NativeMessageIdx): void {

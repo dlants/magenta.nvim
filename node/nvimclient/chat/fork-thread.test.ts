@@ -6,7 +6,11 @@ import type {
   ToolName,
   ToolRequestId,
 } from "@magenta/server";
-import { AutoCompactSupervisor, MaxTokensSupervisor } from "@magenta/server";
+import {
+  AutoCompactSupervisor,
+  MaxTokensSupervisor,
+  TitleSupervisor,
+} from "@magenta/server";
 import { expect, it, vi } from "vitest";
 import { getcwd } from "../nvim/nvim.ts";
 import { withDriver } from "../test/preamble.ts";
@@ -492,7 +496,7 @@ it("fresh and forked threads resolve their first command with equivalent executi
     );
     expect(
       fork.thread.chatSupervisors!.map((policy) => policy.constructor),
-    ).toEqual([MaxTokensSupervisor, AutoCompactSupervisor]);
+    ).toEqual([MaxTokensSupervisor, AutoCompactSupervisor, TitleSupervisor]);
     expect(fork.thread["context"].resolve).not.toBe(
       source.thread["context"].resolve,
     );

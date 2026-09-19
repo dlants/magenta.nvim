@@ -9,7 +9,10 @@ import {
   TEST_ARCHIVE_DIR,
   uniqueThreadId,
 } from "./test-helpers.ts";
-import type { PreparedThreadContext } from "./thread-assembly.ts";
+import {
+  type PreparedThreadContext,
+  TitleSupervisor,
+} from "./thread-assembly.ts";
 import {
   AutoCompactSupervisor,
   MaxTokensSupervisor,
@@ -62,7 +65,7 @@ it("owns construction and fork policies with no view attached", async () => {
   if (record?.state !== "initialized") throw new Error("expected initialized");
   expect(
     record.thread.chatSupervisors.map((policy) => policy.constructor),
-  ).toEqual([MaxTokensSupervisor, AutoCompactSupervisor]);
+  ).toEqual([MaxTokensSupervisor, AutoCompactSupervisor, TitleSupervisor]);
   // biome-ignore lint/complexity/useLiteralKeys: verify the injected execution boundary
   expect(record.thread["context"].threadManager).toBe(session);
   const forkId = await session.forkThread(id);
@@ -73,7 +76,7 @@ it("owns construction and fork policies with no view attached", async () => {
   expect(fork.parentThreadId).toBeUndefined();
   expect(
     fork.thread.chatSupervisors.map((policy) => policy.constructor),
-  ).toEqual([MaxTokensSupervisor, AutoCompactSupervisor]);
+  ).toEqual([MaxTokensSupervisor, AutoCompactSupervisor, TitleSupervisor]);
 });
 
 it("derives a child's profile and environment from the parent record", async () => {
@@ -210,7 +213,7 @@ it("compact children get no compactor and no auto-compaction policy", async () =
   expect(fork.compactor).toBeUndefined();
   expect(
     fork.thread.chatSupervisors.map((policy) => policy.constructor),
-  ).toEqual([MaxTokensSupervisor, SubagentSupervisor]);
+  ).toEqual([MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor]);
 });
 
 it("runs bootstrap input and settles a yield with no dispatch involved", async () => {

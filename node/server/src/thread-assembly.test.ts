@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ThreadId } from "./chat-types.ts";
 import { DockerSupervisor } from "./docker-supervisor.ts";
+import type { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
 import {
   type NativeMessageIdx,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -13,11 +14,13 @@ import {
   TEST_ARCHIVE_DIR,
   uniqueThreadId,
 } from "./test-helpers.ts";
+import type { Thread } from "./thread.ts";
 import {
   assembleThread,
   type ChatThreadPolicy,
   type PreparedThreadContext,
   type ThreadInitialization,
+  TitleSupervisor,
 } from "./thread-assembly.ts";
 import {
   AutoCompactSupervisor,
@@ -33,6 +36,17 @@ const titleText = [
     nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   },
 ];
+
+/** Drive a real submission far enough that the thread has reported it, then
+ * leave the turn hanging: the title is requested before the first turn runs,
+ * so nothing here needs the turn to finish. */
+async function submitTitleText(
+  thread: Thread,
+  mockClient: MockAnthropicClient,
+) {
+  void thread.submit({ type: "resolved", messages: titleText });
+  await mockClient.awaitStream();
+}
 
 function titleResponse(title: string): ProviderToolUseResponse {
   return {
@@ -80,7 +94,7 @@ function setup(args?: {
   id?: ThreadId;
 }) {
   const id = args?.id ?? uniqueThreadId("assembly");
-  const { context } = createAgentWithMock(undefined, id);
+  const { context, mockClient } = createAgentWithMock(undefined, id);
   const forceToolUse = vi.fn();
   const {
     threadType: _threadType,
@@ -107,13 +121,13 @@ function setup(args?: {
     context: prepared,
     callbacks: { onUpdate: () => {} },
   });
-  return { id, ...assembled, titleDefer, forceToolUse };
+  return { id, ...assembled, titleDefer, forceToolUse, mockClient };
 }
 
 describe("assembleThread", () => {
   it("generates a title from the first submission with no view attached", async () => {
-    const { id, thread, titleDefer } = setup();
-    thread.callbacks.onSubmission?.(titleText);
+    const { id, thread, titleDefer, mockClient } = setup();
+    await submitTitleText(thread, mockClient);
     titleDefer.resolve(titleResponse("Make the thing"));
     await titleDefer.promise;
     await vi.waitFor(() => expect(thread.title).toEqual("Make the thing"));
@@ -122,10 +136,10 @@ describe("assembleThread", () => {
   });
 
   it("requests a title only once, and never for a labelled thread", async () => {
-    const { id, thread, forceToolUse } = setup();
+    const { id, thread, forceToolUse, mockClient } = setup();
     thread.setTitle("label");
-    thread.callbacks.onSubmission?.(titleText);
-    thread.callbacks.onSubmission?.(titleText);
+    await submitTitleText(thread, mockClient);
+    await submitTitleText(thread, mockClient);
     expect(forceToolUse).not.toHaveBeenCalled();
     expect(thread.title).toEqual("label");
     await thread.destroy();
@@ -133,8 +147,8 @@ describe("assembleThread", () => {
   });
 
   it("drops a title that arrives after the thread was destroyed", async () => {
-    const { id, thread, titleDefer } = setup();
-    thread.callbacks.onSubmission?.(titleText);
+    const { id, thread, titleDefer, mockClient } = setup();
+    await submitTitleText(thread, mockClient);
     await thread.destroy();
     titleDefer.resolve(titleResponse("too late"));
     await titleDefer.promise;
@@ -148,6 +162,7 @@ describe("assembleThread", () => {
     expect(root.thread.chatSupervisors.map((s) => s.constructor)).toEqual([
       MaxTokensSupervisor,
       AutoCompactSupervisor,
+      TitleSupervisor,
     ]);
     expect(root.compactor).toBeDefined();
 
@@ -163,6 +178,7 @@ describe("assembleThread", () => {
       MaxTokensSupervisor,
       SubagentSupervisor,
       AutoCompactSupervisor,
+      TitleSupervisor,
     ]);
 
     const dockerRoot = setup({
@@ -174,7 +190,12 @@ describe("assembleThread", () => {
       },
     });
     expect(dockerRoot.thread.chatSupervisors.map((s) => s.constructor)).toEqual(
-      [MaxTokensSupervisor, SubagentSupervisor, AutoCompactSupervisor],
+      [
+        MaxTokensSupervisor,
+        SubagentSupervisor,
+        AutoCompactSupervisor,
+        TitleSupervisor,
+      ],
     );
 
     const compact = setup({
@@ -187,6 +208,7 @@ describe("assembleThread", () => {
     expect(compact.thread.chatSupervisors.map((s) => s.constructor)).toEqual([
       MaxTokensSupervisor,
       SubagentSupervisor,
+      TitleSupervisor,
     ]);
     expect(compact.compactor).toBeUndefined();
 
@@ -205,6 +227,7 @@ describe("assembleThread", () => {
       MaxTokensSupervisor,
       DockerSupervisor,
       AutoCompactSupervisor,
+      TitleSupervisor,
     ]);
 
     for (const { id, thread } of [
@@ -257,6 +280,7 @@ describe("assembleThread", () => {
       MaxTokensSupervisor,
       SubagentSupervisor,
       AutoCompactSupervisor,
+      TitleSupervisor,
     ]);
     const supervisor = AutoCompactSupervisor.find(fork.thread.chatSupervisors);
     expect(supervisor && autoCompactSettings(supervisor)).toEqual({
@@ -264,7 +288,10 @@ describe("assembleThread", () => {
       nextPrompt: "resume",
     });
 
-    fork.thread.callbacks.onSubmission?.(titleText);
+    // The fork's manager is cloned from the source, so its requests go to the
+    // source's mock client.
+    await submitTitleText(fork.thread, source.mockClient);
+    expect(fork.forceToolUse).toHaveBeenCalledTimes(1);
     fork.titleDefer.resolve(titleResponse("Forked work"));
     await fork.titleDefer.promise;
     await vi.waitFor(() => expect(fork.thread.title).toEqual("Forked work"));

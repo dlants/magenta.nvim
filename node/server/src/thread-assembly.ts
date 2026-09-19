@@ -99,18 +99,11 @@ export function assembleThread(args: {
       ? initialization.policy.docker
       : undefined;
 
-  const titles = createTitleScheduler(context);
-  const wrappedCallbacks: ThreadCallbacks = {
-    ...callbacks,
-    onSubmission: (messages) => {
-      titles.onSubmission(messages);
-      callbacks.onSubmission?.(messages);
-    },
-  };
+  const titles = new TitleSupervisor(context);
 
   const base = {
     ...context,
-    chatSupervisors: buildChatSupervisors(conversation, docker),
+    chatSupervisors: [...buildChatSupervisors(conversation, docker), titles],
   };
 
   const build = (dependencies: ThreadContext): Thread => {
@@ -121,12 +114,12 @@ export function assembleThread(args: {
             nativeMessageIdx: initialization.nativeMessageIdx,
             newId: id,
             context: threadCloneContext(dependencies),
-            callbacks: wrappedCallbacks,
+            callbacks,
           })
         : new Thread(
             id,
             dependencies,
-            wrappedCallbacks,
+            callbacks,
             initialization.archiveOptions ?? {},
           );
     // Construction invokes no callbacks and resolves no submissions, so the
@@ -219,53 +212,56 @@ function buildChatSupervisors(
   return supervisors;
 }
 
-/** Request a title once, from the first submission that carries text. A late
- * response cannot overwrite an explicit label or a destroyed thread. */
-function createTitleScheduler(context: PreparedThreadContext): {
-  attach: (thread: Thread) => void;
-  onSubmission: (messages: readonly AgentInput[]) => void;
-} {
-  let requested = false;
-  let thread: Thread | undefined;
-  return {
-    attach: (attached) => {
-      thread = attached;
-    },
-    onSubmission: (messages) => {
-      if (
-        !thread ||
-        requested ||
-        thread.isDestroyed ||
-        thread.title !== undefined ||
-        thread.threadType === "compact" ||
-        !messages.length
-      )
-        return;
-      const target = thread;
-      requested = true;
-      const text = messages
-        .filter((content) => content.type === "text")
-        .map((content) => content.text)
-        .join("\n");
-      generateTitle(
-        context.provider,
-        context.profile.fastModel,
-        target.systemPrompt,
-        text,
-      )
-        .then((title) => {
-          if (
-            title !== undefined &&
-            !target.isDestroyed &&
-            target.title === undefined
-          )
-            target.setTitle(title);
-        })
-        .catch((error: unknown) => {
-          context.logger.error(
-            `Error getting thread title: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        });
-    },
-  };
+/** Requests a title once, from the first submission that carries text. It is
+ * a chat supervisor so it survives core replacement and needs no owner-facing
+ * callback; a late response cannot overwrite an explicit label or a destroyed
+ * thread. */
+export class TitleSupervisor implements ThreadSupervisor {
+  private requested = false;
+  private thread: Thread | undefined;
+
+  constructor(private readonly context: PreparedThreadContext) {}
+
+  /** Construction invokes no hooks, so the thread is always attached before
+   * the first submission can be reported. */
+  attach(thread: Thread): void {
+    this.thread = thread;
+  }
+
+  onSubmission(messages: readonly AgentInput[]): void {
+    const thread = this.thread;
+    if (
+      !thread ||
+      this.requested ||
+      thread.isDestroyed ||
+      thread.title !== undefined ||
+      thread.threadType === "compact" ||
+      !messages.length
+    )
+      return;
+    const text = messages
+      .filter((content) => content.type === "text")
+      .map((content) => content.text)
+      .join("\n");
+    this.requested = true;
+    generateTitle(
+      this.context.provider,
+      this.context.profile.fastModel,
+      thread.systemPrompt,
+      text,
+    )
+      .then((title) => {
+        if (
+          title !== undefined &&
+          !thread.isDestroyed &&
+          thread.title === undefined
+        )
+          thread.setTitle(title);
+      })
+      .catch((error: unknown) => {
+        this.context.logger.error(
+          `Error getting thread title: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  }
 }
