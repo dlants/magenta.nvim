@@ -9,14 +9,14 @@ const raw = (text: string): QueueEntry => ({
 });
 
 describe("Mailbox", () => {
-  it("detaches a synchronous batch and prepends leftovers ahead of new arrivals", () => {
+  it("checks out a batch and restores leftovers ahead of new arrivals", () => {
     const mailbox = new Mailbox();
     mailbox.enqueue("async", [raw("first"), raw("second")]);
-    const batch = mailbox.takeBatch("async");
+    const batch = mailbox.checkout("async");
     mailbox.enqueue("async", [raw("later")]);
-    expect(batch).toEqual([raw("first"), raw("second")]);
+    expect(batch.next()).toEqual(raw("first"));
     expect(mailbox.queues.async).toEqual([raw("later")]);
-    mailbox.prepend("async", batch.slice(1));
+    batch.restore();
     mailbox.enqueue("next", [raw("@compact untouched")]);
     expect(mailbox.drain()).toEqual([
       { when: "async", message: raw("second") },
@@ -25,6 +25,46 @@ describe("Mailbox", () => {
     ]);
     expect(mailbox.queues).toEqual({ async: [], next: [] });
     expect(mailbox.drain()).toEqual([]);
+  });
+  it("restores an abandoned checkout when the queues are drained", () => {
+    const mailbox = new Mailbox();
+    mailbox.enqueue("async", [raw("first"), raw("second")]);
+    const batch = mailbox.checkout("async");
+    expect(batch.next()).toEqual(raw("first"));
+    mailbox.enqueue("async", [raw("later")]);
+    expect(mailbox.drain()).toEqual([
+      { when: "async", message: raw("second") },
+      { when: "async", message: raw("later") },
+    ]);
+  });
+  it("restores a checkout onto another queue, in order", () => {
+    const mailbox = new Mailbox();
+    mailbox.enqueue("async", [raw("first"), raw("@compact"), raw("third")]);
+    mailbox.enqueue("next", [raw("already queued")]);
+    const batch = mailbox.checkout("async");
+    batch.next();
+    const compact = batch.next();
+    batch.restore("next");
+    mailbox.prepend("next", compact ? [compact] : []);
+    expect(mailbox.queues.next).toEqual([
+      raw("@compact"),
+      raw("third"),
+      raw("already queued"),
+    ]);
+    expect(mailbox.queues.async).toEqual([]);
+  });
+  it("keeps seed content out of the queues", () => {
+    const mailbox = new Mailbox();
+    const input = {
+      type: "text" as const,
+      text: "seeded",
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    };
+    mailbox.appendSeed([input]);
+    expect(mailbox.drain()).toEqual([]);
+    expect(mailbox.seed).toEqual([input]);
+    expect(mailbox.takeSeed()).toEqual([input]);
+    expect(mailbox.seed).toEqual([]);
   });
 
   it("normalizes raw and resolved inputs without interpreting their content", () => {

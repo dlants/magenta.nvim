@@ -151,6 +151,16 @@ type FlushedQueue =
   | { type: "messages"; messages: AgentInput[] }
   | { type: "compact"; nextPrompt: string | undefined };
 
+/** Flushed content as a single prompt: the only way spent queue content can
+ * travel across a suspension that throws the log away. */
+function joinText(messages: ReadonlyArray<AgentInput>): string {
+  return messages
+    .filter((m) => m.type === "text")
+    .map((m) => m.text)
+    .join("\n")
+    .trim();
+}
+
 /** What the turn loop can hand back. A `yield` suspension is resolved inside
  * the loop, so the owner's suspension handling never has to consider it. */
 type LoopResult =
@@ -519,14 +529,13 @@ export class Thread {
   get inputTokenCount(): number | undefined {
     return this.core.preflightTokenCount;
   }
-  /** Reset replaces this content; the next turn drains it exactly once. */
-  private pendingSeed: AgentInput[] = [];
-
+  /** Resolved content held for the head of the next turn. Reset replaces it;
+   * the next turn drains it exactly once. */
   get pendingTurnContent(): ReadonlyArray<AgentInput> {
-    return this.pendingSeed;
+    return this.mailbox.seed;
   }
   prependToNextTurn(messages: AgentInput[]): void {
-    this.pendingSeed = [...this.pendingSeed, ...messages];
+    this.mailbox.appendSeed(messages);
   }
   async awaitArchiveFlush(): Promise<void> {
     await this.threadLogger.flushed();
@@ -753,100 +762,76 @@ export class Thread {
     };
   }
   private readonly mailbox = new Mailbox();
-  // The entry being resolved is already consumed; only untouched batch entries
-  // belong in abort's report, ahead of arrivals made during resolution.
-  private detachedBatch:
-    | { delivery: DeferredDelivery; entries: QueueEntry[] }
-    | undefined;
   get queued(): Queues {
     return this.mailbox.queues;
   }
-  private restoreDetachedBatch(): void {
-    const batch = this.detachedBatch;
-    this.detachedBatch = undefined;
-    if (batch) this.mailbox.prepend(batch.delivery, batch.entries.splice(0));
-  }
   private drainQueues(): QueuedMessage[] {
-    this.restoreDetachedBatch();
     return this.mailbox.drain();
   }
-  /** Drain one queue at a stop, resolving each entry at the moment it is
-   * delivered. An entry whose resolution throws is dropped with a visible
-   * error rather than wedging the turn loop.
+  /** Drain one queue into the message that is about to go out, resolving each
+   * entry at the moment it is delivered. An entry whose resolution throws is
+   * dropped with a visible error rather than wedging the turn loop.
    *
-   * A `@compact` entry ends the flush: it becomes the compaction's follow-up
-   * prompt (with anything resolved ahead of it folded in, since there is no
-   * request left to carry it) and the entries behind it go back on the
-   * queue. */
-  private async flushAtStop(delivery: DeferredDelivery): Promise<FlushedQueue> {
+   * `compactPolicy` says what a `@compact` entry means for this delivery:
+   * - `prompt` (at a stop): it ends the flush and becomes the compaction's
+   *   follow-up prompt, with anything resolved ahead of it folded in, since
+   *   there is no request left to carry it.
+   * - `defer` (mid-turn): there is no place to hand the transcript over from,
+   *   so it is detected before resolution and genuinely not delivered — it and
+   *   everything behind it move to the `next` queue, where the following stop
+   *   picks them up. */
+  private flush(
+    delivery: DeferredDelivery,
+    compactPolicy: "prompt",
+  ): Promise<FlushedQueue>;
+  /** Deferring a compaction cannot produce one, so mid-turn callers get the
+   * messages without a branch. */
+  private flush(
+    delivery: DeferredDelivery,
+    compactPolicy: "defer",
+    nativeMessageIdx: NativeMessageIdx,
+  ): Promise<{ type: "messages"; messages: AgentInput[] }>;
+  private async flush(
+    delivery: DeferredDelivery,
+    compactPolicy: "prompt" | "defer",
+    nativeMessageIdx?: NativeMessageIdx,
+  ): Promise<FlushedQueue> {
     const isCurrent = this.turnGuard();
-    const batch = { delivery, entries: this.mailbox.takeBatch(delivery) };
-    this.detachedBatch = batch;
+    const batch = this.mailbox.checkout(delivery);
     const messages: AgentInput[] = [];
     try {
-      while (batch.entries.length) {
-        const entry = batch.entries.shift();
+      for (;;) {
+        const entry = batch.next();
         if (entry === undefined) break;
+        if (
+          compactPolicy === "defer" &&
+          entry.type === "raw" &&
+          parseCompact(entry.message).compact
+        ) {
+          batch.restore("next");
+          this.mailbox.prepend("next", [entry]);
+          return { type: "messages", messages };
+        }
         const resolved = await this.resolveQueued(
           entry,
           isCurrent,
-          this.core.manager.getPendingUserMessageIdx(),
+          nativeMessageIdx ?? this.core.manager.getPendingUserMessageIdx(),
         );
         if (!isCurrent()) return { type: "messages", messages: [] };
         if (!resolved) continue;
         if (resolved.compact) {
-          this.mailbox.prepend(delivery, batch.entries.splice(0));
+          batch.restore();
           return {
             type: "compact",
             nextPrompt:
-              [...messages, ...resolved.messages]
-                .filter((m) => m.type === "text")
-                .map((m) => m.text)
-                .join("\n")
-                .trim() || undefined,
+              joinText([...messages, ...resolved.messages]) || undefined,
           };
         }
         messages.push(...resolved.messages);
       }
       return { type: "messages", messages };
     } finally {
-      if (this.detachedBatch === batch) this.detachedBatch = undefined;
-    }
-  }
-  /** Drain the async queue into the request that is about to carry the tool
-   * results. A `@compact` cannot ride such a request — there is no place to
-   * hand the transcript over from — so it is detected before resolution and
-   * genuinely not delivered: it and everything behind it move to the `next`
-   * queue, where the following stop picks them up. */
-  private async flushMidTurn(
-    nativeMessageIdx: NativeMessageIdx,
-  ): Promise<AgentInput[]> {
-    const isCurrent = this.turnGuard();
-    const batch = {
-      delivery: "async" as const,
-      entries: this.mailbox.takeBatch("async"),
-    };
-    this.detachedBatch = batch;
-    const messages: AgentInput[] = [];
-    try {
-      while (batch.entries.length) {
-        const entry = batch.entries.shift();
-        if (entry === undefined) break;
-        if (entry.type === "raw" && parseCompact(entry.message).compact) {
-          this.mailbox.prepend("next", [entry, ...batch.entries.splice(0)]);
-          return messages;
-        }
-        const resolved = await this.resolveQueued(
-          entry,
-          isCurrent,
-          nativeMessageIdx,
-        );
-        if (!isCurrent()) return [];
-        if (resolved) messages.push(...resolved.messages);
-      }
-      return messages;
-    } finally {
-      if (this.detachedBatch === batch) this.detachedBatch = undefined;
+      batch.commit();
     }
   }
   /** Resolve one entry, activating its reminders. An entry whose resolution
@@ -885,7 +870,8 @@ export class Thread {
       return { type: "none" };
     return {
       type: "inject",
-      content: await this.flushMidTurn(ctx.nativeMessageIdx),
+      content: (await this.flush("async", "defer", ctx.nativeMessageIdx))
+        .messages,
     };
   }
   /** Whether a send with no user content is worth a request: only if a
@@ -942,7 +928,7 @@ export class Thread {
     force?: true,
   ): Promise<LoopResult> {
     const core = this.core;
-    if (!messages.length && !this.pendingSeed.length && !force) {
+    if (!messages.length && !this.mailbox.seed.length && !force) {
       const pending = await this.hasPendingContent();
       // Probing takes time, and a send that arrived while it ran owns the
       // loop now: this one is over before it touched the agent.
@@ -951,8 +937,7 @@ export class Thread {
     }
     const runTurn = async (submitted: AgentInput[]): Promise<SendResult> => {
       if (!isCurrentLoop()) return { type: "aborted" };
-      const input = [...this.pendingSeed, ...submitted];
-      this.pendingSeed = [];
+      const input = [...this.mailbox.takeSeed(), ...submitted];
       const chain = this.chainFor(core);
       const notify = (
         hook: "onAgentLoopStart" | "onAgentLoopStop",
@@ -1095,7 +1080,7 @@ export class Thread {
     // while this resolution is running lands in the next flush.
     const messages: AgentInput[] = [];
     for (const delivery of ["async", "next"] as const) {
-      const flushed = await this.flushAtStop(delivery);
+      const flushed = await this.flush(delivery, "prompt");
       if (!isCurrent()) return { type: "rest" };
       if (flushed.type === "compact") {
         return {
@@ -1109,11 +1094,7 @@ export class Thread {
     // Resolved queue content is spent: if the request it was flushed for is
     // suspended, it has to travel on the handoff rather than be resolved a
     // second time, so it is handed back for that.
-    const carry = messages
-      .filter((m) => m.type === "text")
-      .map((m) => m.text)
-      .join("\n")
-      .trim();
+    const carry = joinText(messages);
     return carry
       ? { type: "flushed", messages, carry }
       : { type: "messages", messages };
@@ -1220,7 +1201,7 @@ export class Thread {
       });
     const core = this.createFreshCore({ initialFiles });
     this.core = core;
-    this.pendingSeed = isCurrent() ? [...seed] : [];
+    this.mailbox.setSeed(isCurrent() ? seed : []);
     // The replaced core's outcome does not describe the new one.
     if (this.status.type === "idle")
       this.status = { type: "idle", lastResult: undefined };

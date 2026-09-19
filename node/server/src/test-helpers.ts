@@ -523,6 +523,7 @@ export function resetThread(
   // Only the live submission is dropped: a settled yield outlives a reset.
   if (thread["status"].type === "running")
     thread["status"] = { type: "idle", lastResult: undefined };
-  thread["restoreDetachedBatch"]();
+  // A delivery still resolving loses its claim on the untouched entries.
+  thread["mailbox"].restoreCheckout();
   return thread["replaceCore"](options);
 }

@@ -225,14 +225,22 @@ Review follow-ups (stage 4):
 - The table is now correlated: `SuspensionTable` maps each `LoopSuspendReason["kind"]` to `SuspensionHandler<Extract<..., { kind: K }>>`, and `withCarry`/`handle` are property-syntax (contravariant) signatures, so the compact entry is *proved* to only see compact reasons. Dispatch goes through `dispatchSuspension`, a `switch` on `reason.kind` with `assertUnreachable`, which correlates key and reason with no casts; `carryOntoSuspension` likewise names the `compact` entry directly instead of indexing with an un-narrowed kind.
 - The `yield: {}` entry is gone. Only handled kinds are in the table, so a forgotten handler is a missing-property error rather than an empty object; `yield`'s "carry is already in the log" is expressed by `carryOntoSuspension` only rewriting `compact`.
 - Added `compaction/index.test.ts > comes to rest when a compact suspension has no compactor to run it` (compact children are constructed without a compactor, so this is a production path).
-## mailbox batches
+## mailbox batches — DONE
 
-- Goal: `detachedBatch`/`restoreDetachedBatch` move into `Mailbox.checkout`; `flushAtStop` and `flushMidTurn` become one `flush`; `pendingSeed` becomes a resolved prepend to `next` and `prependToNextTurn`/`pendingTurnContent` are implemented over the mailbox.
+- Goal: `detachedBatch`/`restoreDetachedBatch` move into `Mailbox.checkout`; `flushAtStop` and `flushMidTurn` become one `flush`; `pendingSeed` becomes mailbox-owned and `prependToNextTurn`/`pendingTurnContent` are implemented over it.
 - Tests:
-  - `abort()` mid-resolution reports the untouched remainder of the batch ahead of messages enqueued during resolution (existing test).
-  - `@compact` mid-turn moves itself and everything behind it to `next`, in order.
-  - An entry whose resolution throws is dropped and logged; the rest of the batch still delivers.
-  - Session's fork notification still lands at the head of the fork's first turn (`fork-keybinding.test.ts`).
+  - [x] `abort()` mid-resolution reports the untouched remainder of the batch ahead of messages enqueued during resolution (existing `detached delivery batches` suite, plus `mailbox.test.ts > restores an abandoned checkout when the queues are drained`).
+  - [x] `@compact` mid-turn moves itself and everything behind it to `next`, in order (`thread.test.ts > defers an @async @compact past the request it cannot ride on` for the behaviour; `mailbox.test.ts > restores a checkout onto another queue, in order` for the ordering).
+  - [x] An entry whose resolution throws is dropped and logged; the rest of the batch still delivers (existing `deferred submissions > drops an entry whose resolution throws, and stays usable`).
+  - [x] Session's fork notification still lands at the head of the fork's first turn (`fork-keybinding.test.ts`).
+
+Decisions / deviations:
+
+- `Mailbox.checkout(delivery)` returns a `Batch` with `next`/`restore(to?)`/`commit`. At most one checkout is live: a new `checkout` and `drain` both restore an abandoned one first, which is what makes `abort` report an in-flight batch's untouched remainder ahead of later arrivals without Thread holding the batch itself. `takeBatch` is gone.
+- The mid-turn `@compact` handoff is `batch.restore("next")` followed by `mailbox.prepend("next", [entry])`, so the deferred entry ends up ahead of the remainder it was taken with, which in turn precedes anything already on `next` — the same order the single `prepend([entry, ...rest])` produced.
+- One `flush(delivery, compactPolicy, nativeMessageIdx?)` replaces both flushes, with `compactPolicy: "prompt" | "defer"` naming the only real difference (at a stop a `@compact` resolves into the compaction prompt; mid-turn it is detected pre-resolution and deferred). Overload signatures give the `defer` caller the `messages` shape directly, so `queueFlushAction` has no impossible `compact` branch to handle. The repeated "join the text of these inputs" step is now a module-level `joinText`.
+- `pendingSeed` did **not** become a resolved prepend to the `next` queue. It lives in the mailbox as a separate `seed` lane (`seed`/`appendSeed`/`setSeed`/`takeSeed`). The `next` queue is only delivered at a stop and is reported by `drain`, whereas seed content must ride the *head* of the next turn's input, ahead of the submitted messages, and must not be reported as unsent by `abort`. Putting it on `next` would have changed both, so the consolidation is "all queued content is mailbox-owned" without a behaviour change.
+- `Mailbox.restoreCheckout()` is public because `test-helpers.resetThread` (an administrative reset with no submission to drain the queues) relied on `Thread.restoreDetachedBatch` to hand a still-resolving delivery's untouched entries back.
 
 ## owner contract
 
