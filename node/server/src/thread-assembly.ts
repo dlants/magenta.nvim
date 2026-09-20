@@ -10,10 +10,10 @@ import {
   Thread,
   type ThreadArchiveOptions,
   type ThreadCallbacks,
-  type ThreadCloneContext,
   type ThreadContext,
-  threadCloneContext,
+  type ThreadContextBase,
 } from "./thread.ts";
+import { archiveThread, type ThreadLogger } from "./thread-logger.ts";
 import {
   AutoCompactSupervisor,
   MaxTokensSupervisor,
@@ -38,7 +38,7 @@ export type ChatThreadPolicy = {
 /** The dependencies a host prepares. Conversation kind, chat supervisors and
  * the compactor are assembly's job, not the host's. */
 export type PreparedThreadContext = Omit<
-  ThreadCloneContext,
+  ThreadContextBase,
   "chatSupervisors" | "compactor"
 >;
 
@@ -68,8 +68,18 @@ export type ThreadInitialization =
  * key present as `undefined` so callers can destructure either variant, while
  * the invalid combinations stay unrepresentable. */
 export type AssembledThread =
-  | { threadType: "compact"; thread: Thread; compactor?: undefined }
-  | { threadType: ChatThreadType; thread: Thread; compactor: ThreadCompactor };
+  | {
+      threadType: "compact";
+      thread: Thread;
+      archive: ThreadLogger;
+      compactor?: undefined;
+    }
+  | {
+      threadType: ChatThreadType;
+      thread: Thread;
+      archive: ThreadLogger;
+      compactor: ThreadCompactor;
+    };
 
 /** The fresh/fork distinction resolved down to what construction needs: which
  * conversation kind, and where its auto-compaction settings come from. */
@@ -106,32 +116,40 @@ export function assembleThread(args: {
     chatSupervisors: [...buildChatSupervisors(conversation, docker), titles],
   };
 
-  const build = (dependencies: ThreadContext): Thread => {
-    const thread =
-      initialization.type === "fork"
-        ? Thread.clone({
-            sourceThread: initialization.sourceThread,
-            nativeMessageIdx: initialization.nativeMessageIdx,
-            newId: id,
-            context: threadCloneContext(dependencies),
-            callbacks,
-          })
-        : new Thread(
-            id,
-            dependencies,
-            callbacks,
-            initialization.archiveOptions ?? {},
-          );
-    // Construction invokes no callbacks and resolves no submissions, so the
-    // scheduler is attached before it can be consulted.
-    titles.attach(thread);
-    return thread;
-  };
+  const build = (
+    dependencies: ThreadContext,
+  ): { thread: Thread; archive: ThreadLogger } =>
+    archiveThread({
+      logger: context.logger,
+      callbacks,
+      ...(context.cwd !== undefined ? { cwd: context.cwd } : {}),
+      build: (threadCallbacks) => {
+        const thread =
+          initialization.type === "fork"
+            ? Thread.clone({
+                sourceThread: initialization.sourceThread,
+                nativeMessageIdx: initialization.nativeMessageIdx,
+                newId: id,
+                context: dependencies,
+                callbacks: threadCallbacks,
+              })
+            : new Thread(
+                id,
+                dependencies,
+                threadCallbacks,
+                initialization.archiveOptions ?? {},
+              );
+        // Construction invokes no callbacks and resolves no submissions, so
+        // the scheduler is attached before it can be consulted.
+        titles.attach(thread);
+        return thread;
+      },
+    });
 
   if (conversation.threadType === "compact") {
     return {
       threadType: "compact",
-      thread: build({ ...base, threadType: "compact" }),
+      ...build({ ...base, threadType: "compact" }),
     };
   }
 
@@ -142,7 +160,7 @@ export function assembleThread(args: {
   return {
     threadType: conversation.threadType,
     compactor,
-    thread: build({
+    ...build({
       ...base,
       threadType: conversation.threadType,
       compactor,

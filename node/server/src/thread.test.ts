@@ -20,12 +20,13 @@ import {
 import {
   awaitNextStream,
   cleanupArchive,
+  cloneThread,
   createAgentWithMock,
   resetThread,
   uniqueThreadId,
   userTexts,
 } from "./test-helpers.ts";
-import { Thread, type ThreadContext, threadCloneContext } from "./thread.ts";
+import type { Thread, ThreadContext } from "./thread.ts";
 import type { QueuedMessage } from "./thread-api.ts";
 import { injectText } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
@@ -258,18 +259,18 @@ describe("deferred submissions", () => {
     expect(core.activeReminders.has("remember the file")).toBe(true);
 
     const deliveredAt = core["core"].manager.getNativeMessageIdx();
-    const before = await Thread.clone({
+    const before = await cloneThread({
       sourceThread: core,
       newId: uniqueThreadId("deferred-reminder-before"),
       nativeMessageIdx: (deliveredAt - 1) as NativeMessageIdx,
-      context: threadCloneContext(core["context"]),
+      context: core["context"],
       callbacks: core.callbacks,
     });
-    const through = await Thread.clone({
+    const through = await cloneThread({
       sourceThread: core,
       newId: uniqueThreadId("deferred-reminder-through"),
       nativeMessageIdx: deliveredAt,
-      context: threadCloneContext(core["context"]),
+      context: core["context"],
       callbacks: core.callbacks,
     });
     expect(before.activeReminders.has("remember the file")).toBe(false);
@@ -1881,12 +1882,12 @@ describe("replaceable conversation core", () => {
     await sent;
     const original = core.completedTools.get(id);
     expect(original).toBeDefined();
-    const fork = await Thread.clone({
+    const fork = await cloneThread({
       sourceThread: core,
       newId: uniqueThreadId("fork-result-archive"),
       nativeMessageIdx:
         core.getProviderMessages()[0].content[0].nativeMessageIdx,
-      context: threadCloneContext(core["context"]),
+      context: core["context"],
       callbacks: core.callbacks,
     });
     expect(fork.completedTools).toBe(core.completedTools);

@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import type { ThreadId, ToolName, ToolRequestId } from "@magenta/server";
-import { threadConversationLogPath } from "@magenta/server";
+import { flushArchive, threadConversationLogPath } from "@magenta/server";
 import { v7 as uuidv7 } from "uuid";
 import { expect, it } from "vitest";
 import { withDriver } from "./test/preamble.ts";
@@ -359,7 +359,7 @@ it.each([
           : undefined;
     expect(thread.title).toBe(expectedTitle);
     expect(thread.lastResult()?.type).toBe("completed");
-    await thread.awaitArchiveFlush();
+    await flushArchive(thread);
     const entries = (
       await fs.readFile(threadConversationLogPath(thread.id), "utf8")
     )

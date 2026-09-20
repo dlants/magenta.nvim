@@ -48,6 +48,7 @@ import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { type ContextDelivery, Thread, type ThreadContext } from "./thread.ts";
 import type { CoreLoopResult, RestResult, YieldValue } from "./thread-api.ts";
+import { archiveThread } from "./thread-logger.ts";
 import { executeToolBatch } from "./tool-executor.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
 import { clientToolCreator } from "./tools/create-tool.ts";
@@ -287,6 +288,16 @@ function baseTestContext(
   return { ...context, clientToolCreator: clientToolCreator(clientTools) };
 }
 
+/** Fork a thread with an archive attached, the way assembly does in
+ * production. */
+export function cloneThread(args: Parameters<typeof Thread.clone>[0]): Thread {
+  return archiveThread({
+    logger: args.context.logger,
+    callbacks: args.callbacks,
+    build: (callbacks) => Thread.clone({ ...args, callbacks }),
+  }).thread;
+}
+
 export function createAgentWithMock(
   overrides?: TestContextOverrides,
   threadId: ThreadId = "test-thread" as ThreadId,
@@ -305,14 +316,14 @@ export function createAgentWithMock(
   });
 
   return {
-    core: new Thread(
-      threadId,
-      context,
-      { onUpdate: onUpdate ?? (() => {}) },
-      {
-        baseDir: TEST_ARCHIVE_DIR,
-      },
-    ),
+    core: archiveThread({
+      logger: context.logger,
+      callbacks: { onUpdate: onUpdate ?? (() => {}) },
+      build: (callbacks) =>
+        new Thread(threadId, context, callbacks, {
+          baseDir: TEST_ARCHIVE_DIR,
+        }),
+    }).thread,
     mockClient,
     context,
   };

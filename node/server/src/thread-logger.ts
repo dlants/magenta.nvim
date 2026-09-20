@@ -3,6 +3,7 @@ import * as path from "node:path";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderMessage } from "./providers/provider-types.ts";
+import type { Thread, ThreadCallbacks } from "./thread.ts";
 import { threadConversationLogPath, threadMetaPath } from "./utils/files.ts";
 
 export type ForkProvenance = {
@@ -242,4 +243,65 @@ export class ThreadLogger {
       this.draining = false;
     }
   }
+}
+/** Threads do not own their archive: the owner that builds a thread attaches
+ * one through the thread's callbacks. The registry exists so a holder of a
+ * thread (a test, a view) can reach its archive without the thread carrying
+ * a reference to it. */
+const archives = new WeakMap<Thread, ThreadLogger>();
+
+export function threadArchive(thread: Thread): ThreadLogger | undefined {
+  return archives.get(thread);
+}
+
+/** Resolves once everything the thread's archive has enqueued is on disk.
+ * For tests. */
+export async function flushArchive(thread: Thread): Promise<void> {
+  await archives.get(thread)?.flushed();
+}
+
+/** Build a thread with an archive attached to its callbacks. The archive is
+ * constructed after the thread because it reads the thread's own identity and
+ * archive options; that is safe because construction invokes no callbacks. */
+export function archiveThread<T extends Thread>(args: {
+  logger: Logger;
+  callbacks: ThreadCallbacks;
+  cwd?: string;
+  build: (callbacks: ThreadCallbacks) => T;
+}): { thread: T; archive: ThreadLogger } {
+  const { logger, callbacks, cwd, build } = args;
+  let archive: ThreadLogger | undefined;
+  const thread = build({
+    ...callbacks,
+    onUpdate: () => {
+      archive?.record(
+        thread.loopState.type === "running" ? "streaming" : "at-rest",
+      );
+      callbacks.onUpdate();
+    },
+    onTitle: (title) => {
+      archive?.recordTitle(title);
+      callbacks.onTitle?.(title);
+    },
+    onCoreReplaced: (compaction) => {
+      if (compaction) archive?.recordCompaction(compaction);
+      archive?.resetCursor();
+      callbacks.onCoreReplaced?.(compaction);
+    },
+  });
+  const { baseDir, scriptName, forkedFrom } = thread.archiveOptions;
+  archive = new ThreadLogger(
+    thread.id,
+    thread.threadType,
+    () => thread.getProviderMessages(),
+    logger,
+    {
+      ...(baseDir !== undefined ? { baseDir } : {}),
+      ...(scriptName !== undefined ? { scriptName } : {}),
+      ...(forkedFrom ? { forkedFrom } : {}),
+      ...(cwd !== undefined ? { cwd } : {}),
+    },
+  );
+  archives.set(thread, archive);
+  return { thread, archive };
 }

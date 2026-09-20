@@ -284,9 +284,8 @@ export {
   type ReminderThreadContext,
   Thread,
   type ThreadCallbacks,
-  type ThreadCloneContext,
   type ThreadContext,
-  threadCloneContext,
+  type ThreadContextBase,
   type YieldState,
 } from "./thread.ts";
 export type {
@@ -306,6 +305,7 @@ export {
   TitleSupervisor,
 } from "./thread-assembly.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
+export { flushArchive, threadArchive } from "./thread-logger.ts";
 export type {
   EditedFile,
   EditedFileGroup,

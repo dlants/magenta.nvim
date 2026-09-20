@@ -9,6 +9,7 @@ import type { ProviderProfile } from "../provider-options.ts";
 import { resolveAsText } from "../submission/index.ts";
 import type { ThreadContext } from "../thread.ts";
 import { Thread } from "../thread.ts";
+import { archiveThread } from "../thread-logger.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import type { ClientToolContext } from "../tools/create-tool.ts";
 import { clientToolCreator } from "../tools/create-tool.ts";
@@ -108,14 +109,14 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
     provider,
   };
   return {
-    core: new Thread(
-      "openai-thread" as ThreadId,
-      context,
-      { onUpdate: () => {} },
-      {
-        baseDir: path.join(os.tmpdir(), "magenta-test-archive"),
-      },
-    ),
+    core: archiveThread({
+      logger: context.logger,
+      callbacks: { onUpdate: () => {} },
+      build: (callbacks) =>
+        new Thread("openai-thread" as ThreadId, context, callbacks, {
+          baseDir: path.join(os.tmpdir(), "magenta-test-archive"),
+        }),
+    }).thread,
     client,
   };
 }

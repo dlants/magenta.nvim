@@ -15,13 +15,15 @@ import { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import {
   awaitNextStream,
   cleanupArchive,
+  cloneThread,
   createAgentWithMock,
   getContextDeliveries,
   resetThread,
   type TestContextOverrides,
   uniqueThreadId,
 } from "./test-helpers.ts";
-import { Thread, threadCloneContext } from "./thread.ts";
+import type { Thread } from "./thread.ts";
+import { flushArchive } from "./thread-logger.ts";
 import {
   type AbsFilePath,
   FileCategory,
@@ -110,7 +112,7 @@ async function fixture(overrides: TestContextOverrides = {}) {
     },
     async cleanup() {
       await thread.destroy();
-      await thread.awaitArchiveFlush();
+      await flushArchive(thread);
       await cleanupArchive(thread.id);
       await fs.rm(cwd, { recursive: true, force: true });
       vi.restoreAllMocks();
@@ -150,12 +152,12 @@ describe("Thread-owned context delivery", () => {
       await f.request();
       const fileIO = new InMemoryFileIO({ [f.file]: "destination content" });
       const gitClient = { getState: vi.fn(async () => undefined) };
-      fork = await Thread.clone({
+      fork = await cloneThread({
         sourceThread: f.thread,
         newId: uniqueThreadId("destination"),
         nativeMessageIdx: f.thread["core"].manager.getNativeMessageIdx(),
         context: {
-          ...threadCloneContext(f.thread["context"]),
+          ...f.thread["context"],
           fileIO,
           gitClient,
         },
@@ -170,7 +172,7 @@ describe("Thread-owned context delivery", () => {
     } finally {
       if (fork) {
         await fork.destroy();
-        await fork.awaitArchiveFlush();
+        await flushArchive(fork);
         await cleanupArchive(fork.id);
       }
       await f.cleanup();
@@ -202,7 +204,7 @@ describe("Thread-owned context delivery", () => {
     } finally {
       for (const thread of [first, other]) {
         await thread.destroy();
-        await thread.awaitArchiveFlush();
+        await flushArchive(thread);
         await cleanupArchive(thread.id);
       }
     }
@@ -333,12 +335,12 @@ describe("Thread-owned context delivery", () => {
       });
       await fs.writeFile(f.file, "source-only later content\n");
       await f.request(f.thread, "source-only later request");
-      fork = await Thread.clone({
+      fork = await cloneThread({
         sourceThread: f.thread,
         newId: uniqueThreadId("context-fork"),
         nativeMessageIdx: forkPoint,
         context: {
-          ...threadCloneContext(f.thread["context"]),
+          ...f.thread["context"],
         },
         callbacks: { onUpdate: () => {} },
       });
@@ -365,7 +367,7 @@ describe("Thread-owned context delivery", () => {
     } finally {
       if (fork) {
         await fork.destroy();
-        await fork.awaitArchiveFlush();
+        await flushArchive(fork);
         await cleanupArchive(fork.id);
       }
       await f.cleanup();
@@ -381,11 +383,11 @@ describe("Thread-owned context delivery", () => {
       expect(await f.request(f.thread, "observe changed git")).toContain(
         "replacement-branch",
       );
-      fork = await Thread.clone({
+      fork = await cloneThread({
         sourceThread: f.thread,
         newId: uniqueThreadId("git-rewind"),
         nativeMessageIdx: forkPoint,
-        context: threadCloneContext(f.thread["context"]),
+        context: f.thread["context"],
         callbacks: { onUpdate: () => {} },
       });
       expect(await f.request(fork, "continue before git update")).toContain(
@@ -394,7 +396,7 @@ describe("Thread-owned context delivery", () => {
     } finally {
       if (fork) {
         await fork.destroy();
-        await fork.awaitArchiveFlush();
+        await flushArchive(fork);
         await cleanupArchive(fork.id);
       }
       await f.cleanup();
@@ -406,22 +408,22 @@ describe("Thread-owned context delivery", () => {
     const forks: Thread[] = [];
     try {
       await f.request();
-      const head = Thread.clone({
+      const head = cloneThread({
         sourceThread: f.thread,
         newId: uniqueThreadId("system-info-head"),
         nativeMessageIdx: f.thread["core"].manager.getNativeMessageIdx(),
-        context: threadCloneContext(f.thread["context"]),
+        context: f.thread["context"],
         callbacks: { onUpdate: () => {} },
       });
       forks.push(head);
       const headText = await f.request(head, "continue at head");
       expect(headText.match(/<system-info>/g)).toHaveLength(1);
 
-      const before = Thread.clone({
+      const before = cloneThread({
         sourceThread: f.thread,
         newId: uniqueThreadId("system-info-before"),
         nativeMessageIdx: -1 as NativeMessageIdx,
-        context: threadCloneContext(f.thread["context"]),
+        context: f.thread["context"],
         callbacks: { onUpdate: () => {} },
       });
       forks.push(before);
@@ -430,7 +432,7 @@ describe("Thread-owned context delivery", () => {
     } finally {
       for (const fork of forks) {
         await fork.destroy();
-        await fork.awaitArchiveFlush();
+        await flushArchive(fork);
         await cleanupArchive(fork.id);
       }
       await f.cleanup();
@@ -457,11 +459,11 @@ describe("Thread-owned context delivery", () => {
       expect(sourceText.match(/Remember the skills/g)).toHaveLength(1);
       const forkPoint = f.thread["core"].manager.getNativeMessageIdx();
 
-      fork = await Thread.clone({
+      fork = await cloneThread({
         sourceThread: f.thread,
         newId: uniqueThreadId("reminder-head"),
         nativeMessageIdx: forkPoint,
-        context: threadCloneContext(f.thread["context"]),
+        context: f.thread["context"],
         callbacks: { onUpdate: () => {} },
       });
       expect(fork.activeReminders).toEqual(new Set(["retain this reminder"]));
@@ -470,7 +472,7 @@ describe("Thread-owned context delivery", () => {
     } finally {
       if (fork) {
         await fork.destroy();
-        await fork.awaitArchiveFlush();
+        await flushArchive(fork);
         await cleanupArchive(fork.id);
       }
       await f.cleanup();
@@ -566,12 +568,12 @@ describe("Thread-owned context delivery", () => {
         });
         await awaitNextStream(f.mockClient, f.mockClient.streams.at(-1));
       }
-      fork = await Thread.clone({
+      fork = await cloneThread({
         sourceThread: f.thread,
         newId: uniqueThreadId("tip-fork"),
         nativeMessageIdx: f.thread["core"].manager.getNativeMessageIdx(),
         context: {
-          ...threadCloneContext(f.thread["context"]),
+          ...f.thread["context"],
         },
         callbacks: { onUpdate: () => {} },
       });
@@ -597,7 +599,7 @@ describe("Thread-owned context delivery", () => {
     } finally {
       if (fork) {
         await fork.destroy();
-        await fork.awaitArchiveFlush();
+        await flushArchive(fork);
         await cleanupArchive(fork.id);
       }
       await f.cleanup();

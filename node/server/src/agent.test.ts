@@ -26,6 +26,7 @@ import { pendingMessage } from "./submission/index.ts";
 import {
   awaitNextStream,
   cleanupArchive,
+  cloneThread,
   createAgentWithMock,
   createTestAgent,
   defaultAnthropicOptions,
@@ -37,9 +38,9 @@ import {
   uniqueThreadId,
   userInput,
 } from "./test-helpers.ts";
-import type { ThreadContext } from "./thread.ts";
-import { Thread, threadCloneContext } from "./thread.ts";
+import type { Thread, ThreadContext } from "./thread.ts";
 import type { RestResult } from "./thread-api.ts";
+import { flushArchive } from "./thread-logger.ts";
 import {
   AutoCompactSupervisor,
   injectText,
@@ -643,7 +644,7 @@ describe("Thread submissions across a compaction handoff", () => {
       });
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -690,7 +691,7 @@ describe("Thread submissions across a compaction handoff", () => {
       });
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -773,7 +774,7 @@ describe("Thread submissions across a compaction handoff", () => {
       });
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -805,7 +806,7 @@ describe("Thread submissions across a compaction handoff", () => {
       expect(await result).toMatchObject({ type: "failed" });
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -875,7 +876,7 @@ describe("Thread submissions across a compaction handoff", () => {
       expect(await next).toEqual({ type: "completed", stopReason: "end_turn" });
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -956,7 +957,7 @@ describe("Thread.reset", () => {
       next.finishResponse("end_turn");
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -979,7 +980,7 @@ describe("Thread.reset", () => {
       stream.streamText("old reply");
       stream.finishResponse("end_turn");
       await sent;
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
 
       await resetThread(core, { seed: [], archive: { type: "none" } });
 
@@ -1005,7 +1006,7 @@ describe("Thread.reset", () => {
       next.finishResponse("end_turn");
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -2867,11 +2868,11 @@ describe("Thread.editedFileGroups", () => {
       const nativeMessageIdx = midLoop
         ? midpoint
         : parent["core"].manager.getNativeMessageIdx();
-      child = await Thread.clone({
+      child = await cloneThread({
         sourceThread: parent,
         newId: childId,
         nativeMessageIdx,
-        context: threadCloneContext(context),
+        context: context,
         callbacks: { onUpdate: () => {} },
       });
       expect(child.editedFileGroups).toEqual([
@@ -3662,7 +3663,7 @@ describe("Agent conversation archive", () => {
         if (flatLoop(core).type !== "idle") throw new Error("waiting");
         return true;
       });
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
 
       const entries = await readArchive(threadId);
       expect(entries[0].type).toBe("thread_start");
@@ -3674,7 +3675,7 @@ describe("Agent conversation archive", () => {
       expect(serialized).toContain("/tmp/a.txt");
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -3709,7 +3710,7 @@ describe("Agent conversation archive", () => {
         return mockClient.streams[1];
       });
       nextStream.streamText("streaming-reply");
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
 
       const midSerialized = JSON.stringify(
         (await readArchive(threadId)).filter((e) => e.type === "message"),
@@ -3722,7 +3723,7 @@ describe("Agent conversation archive", () => {
         if (flatLoop(core).type !== "idle") throw new Error("waiting");
         return true;
       });
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
 
       const finalSerialized = JSON.stringify(
         (await readArchive(threadId)).filter((e) => e.type === "message"),
@@ -3731,7 +3732,7 @@ describe("Agent conversation archive", () => {
       expect(finalSerialized).toContain("streaming-reply");
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -3774,7 +3775,7 @@ describe("Agent conversation archive", () => {
         if (flatLoop(core).type !== "idle") throw new Error("waiting");
         return true;
       });
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
 
       core["context"].compactor = {
         run: () =>
@@ -3801,7 +3802,7 @@ describe("Agent conversation archive", () => {
         if (flatLoop(core).type !== "idle") throw new Error("waiting");
         return true;
       });
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
 
       const entries = await readArchive(threadId);
       const types = entries.map((e) => e.type);
@@ -3815,7 +3816,7 @@ describe("Agent conversation archive", () => {
       expect(compaction.chunkCount).toBe(2);
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -3851,11 +3852,11 @@ describe("Agent conversation archive", () => {
       });
 
       const nativeMessageIdx = parent["core"].manager.getNativeMessageIdx();
-      child = await Thread.clone({
+      child = await cloneThread({
         sourceThread: parent,
         newId: childId,
         nativeMessageIdx,
-        context: threadCloneContext(context),
+        context: context,
         callbacks: { onUpdate: () => {} },
       });
 
@@ -3881,8 +3882,8 @@ describe("Agent conversation archive", () => {
         if (flatLoop(child!).type !== "idle") throw new Error("waiting");
         return true;
       });
-      await child.awaitArchiveFlush();
-      await parent.awaitArchiveFlush();
+      await flushArchive(child);
+      await flushArchive(parent);
 
       const childEntries = await readArchive(childId);
       expect(childEntries[0].type).toBe("thread_start");
@@ -3939,11 +3940,11 @@ describe("Agent thread state", () => {
       parent["core"].edlRegisters.nextSavedId = 3;
 
       const nativeMessageIdx = parent["core"].manager.getNativeMessageIdx();
-      child = await Thread.clone({
+      child = await cloneThread({
         sourceThread: parent,
         newId: childId,
         nativeMessageIdx,
-        context: threadCloneContext(context),
+        context: context,
         callbacks: { onUpdate: () => {} },
       });
 
@@ -4035,7 +4036,7 @@ describe("Thread survives the compaction agent swap", () => {
       expect(core.completedTools.has("req-1" as ToolRequestId)).toBe(true);
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -4059,7 +4060,7 @@ describe("Thread survives the compaction agent swap", () => {
       expect(updates).toBe(1);
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });
@@ -4119,7 +4120,7 @@ describe("Thread survives the compaction agent swap", () => {
       });
     } finally {
       await core.destroy();
-      await core.awaitArchiveFlush();
+      await flushArchive(core);
       await cleanupArchive(threadId);
     }
   });

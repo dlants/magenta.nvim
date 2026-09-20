@@ -58,7 +58,7 @@ import {
   type ThreadCoreContext,
   type ThreadCoreSeed,
 } from "./thread-core.ts";
-import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
+import type { ForkProvenance } from "./thread-logger.ts";
 import {
   coreLivenessCheck,
   type EditedFileGroup,
@@ -97,7 +97,7 @@ export type EnvironmentConfig =
   | { type: "local"; cwd?: NvimCwd }
   | { type: "docker"; container: string; cwd: string };
 
-interface ThreadContextBase
+export interface ThreadContextBase
   extends AgentContext,
     Omit<
       ThreadCoreContext,
@@ -129,14 +129,6 @@ export type ReminderThreadContext = ThreadContextBase & {
 };
 export type ThreadContext = CompactThreadContext | ReminderThreadContext;
 
-/** Clone callers replace environment collaborators, but conversation kind is
- * inherited from the source so supervisor presence cannot diverge from it. */
-export type ThreadCloneContext = ThreadContextBase & { threadType?: never };
-
-export function threadCloneContext(context: ThreadContext): ThreadCloneContext {
-  const { threadType: _threadType, ...cloneContext } = context;
-  return cloneContext;
-}
 export type ThreadArchiveOptions = {
   forkedFrom?: ForkProvenance;
   baseDir?: string;
@@ -173,26 +165,17 @@ type SuspensionOutcome =
   | { type: "continue"; messages: AgentInput[] }
   | { type: "settle"; result: RestResult };
 
-/** Per-suspension policy: how spent queue content survives it (absent
- * `withCarry` means the content is already in the log), and what the
- * submission does with it. Only the kinds a `LoopResult` can carry appear in
- * the table; `yield` is resolved inside the turn loop, so it has no entry. */
-type SuspensionHandler<R extends SuspendReason> = {
-  readonly withCarry?: (reason: R, carry: string) => R;
-  readonly handle: (
-    reason: R,
-    submission: ActiveSubmission,
-  ) => Promise<SuspensionOutcome>;
-};
-type LoopSuspendReason = Extract<LoopResult, { type: "suspended" }>["reason"];
-type SuspensionTable = {
-  [K in LoopSuspendReason["kind"]]: SuspensionHandler<
-    Extract<LoopSuspendReason, { kind: K }>
-  >;
-};
-
 export type ThreadCallbacks = {
   readonly onUpdate: OnUpdate;
+  /** A title was set, by an owner or by title generation. */
+  readonly onTitle?: (title: string) => void;
+  /** The conversation generation was replaced. `compaction` describes the
+   * compaction that caused it, when one did and the submission was still
+   * current. */
+  readonly onCoreReplaced?: (compaction?: {
+    summary?: string;
+    chunkCount: number;
+  }) => void;
 };
 /** Everything Thread republishes from its replaceable core: the readers views
  * and tools ask the thread for, rather than reaching for a core that a
@@ -274,13 +257,11 @@ export class Thread implements ThreadCoreView {
   get completedTools(): ReadonlyMap<ToolRequestId, CompletedToolInfo> {
     return this.resultArchive;
   }
-  private threadLogger: ThreadLogger;
-
   constructor(
     public id: ThreadId,
     private readonly context: ThreadContext,
     public readonly callbacks: ThreadCallbacks,
-    private archiveOptions: ThreadArchiveOptions = {},
+    public readonly archiveOptions: ThreadArchiveOptions = {},
     fork?: { source: Thread; nativeMessageIdx: NativeMessageIdx },
     // Tool request IDs identify immutable results, shared across resets and forks.
     private readonly resultArchive = new Map<
@@ -288,24 +269,6 @@ export class Thread implements ThreadCoreView {
       CompletedToolInfo
     >(),
   ) {
-    this.threadLogger = new ThreadLogger(
-      id,
-      context.threadType,
-      () => this.getProviderMessages(),
-      context.logger,
-      {
-        ...(archiveOptions.baseDir !== undefined
-          ? { baseDir: archiveOptions.baseDir }
-          : {}),
-        ...(archiveOptions.scriptName !== undefined
-          ? { scriptName: archiveOptions.scriptName }
-          : {}),
-        cwd: context.cwd,
-        ...(archiveOptions.forkedFrom
-          ? { forkedFrom: archiveOptions.forkedFrom }
-          : {}),
-      },
-    );
     this.core = fork
       ? this.createForkedCore({
           source: fork.source.core,
@@ -467,7 +430,7 @@ export class Thread implements ThreadCoreView {
     sourceThread: Thread;
     newId: ThreadId;
     nativeMessageIdx: NativeMessageIdx;
-    context: ThreadCloneContext;
+    context: ThreadContext;
     callbacks: ThreadCallbacks;
   }): Thread {
     const { sourceThread, newId, nativeMessageIdx, context, callbacks } = args;
@@ -545,9 +508,6 @@ export class Thread implements ThreadCoreView {
   }
   private handleUpdate(): void {
     if (this.destroyed) return;
-    this.threadLogger.record(
-      this.loopState.type === "running" ? "streaming" : "at-rest",
-    );
     this.callbacks.onUpdate();
   }
   /** Resolved content held for the head of the next turn. Reset replaces it;
@@ -558,13 +518,10 @@ export class Thread implements ThreadCoreView {
   prependToNextTurn(messages: AgentInput[]): void {
     this.mailbox.appendSeed(messages);
   }
-  async awaitArchiveFlush(): Promise<void> {
-    await this.threadLogger.flushed();
-  }
   setTitle(title: string): void {
     this.assertUsable();
     this.#title = title;
-    this.threadLogger.recordTitle(title);
+    this.callbacks.onTitle?.(title);
     this.handleUpdate();
   }
   /** Abort the in-flight turn and hand back whatever never went out. The
@@ -613,11 +570,7 @@ export class Thread implements ThreadCoreView {
     input: SubmissionInput,
     force?: true,
   ): Promise<RestResult> {
-    this.assertUsable();
-    if (this.tornDown)
-      throw new Error(
-        "This thread's container has been torn down. No further messages can be sent.",
-      );
+    this.assertAcceptsWork("No further messages can be sent.");
     // Issued before the first await, so a caller that preempts can observe the
     // request having landed synchronously.
     if (this.isBusy) {
@@ -636,7 +589,7 @@ export class Thread implements ThreadCoreView {
     }
     const submission = new ActiveSubmission(() => this.core.abortAgentTurn());
     this.status = { type: "running", submission };
-    const isCurrent = () => !submission.signal.aborted && !this.destroyed;
+    const isCurrent = this.currency(submission);
     this.handleUpdate();
     /** Settle the submission. A `yielded` outcome becomes the yielded
      * status. */
@@ -684,10 +637,10 @@ export class Thread implements ThreadCoreView {
         : await this.runLoop(resolved.messages, submission, force);
       while (result.type === "suspended") {
         if (!isCurrent()) return finish({ type: "aborted" });
-        const outcome = await this.dispatchSuspension(
-          result.reason,
-          submission,
-        );
+        const reason = result.reason;
+        if (reason.kind === "suspend")
+          return finish({ type: "suspended", reason });
+        const outcome = await this.compactAndContinue(reason, submission);
         if (outcome.type === "settle") return finish(outcome.result);
         if (!isCurrent()) return finish({ type: "aborted" });
         result = await this.runLoop(outcome.messages, submission);
@@ -704,51 +657,12 @@ export class Thread implements ThreadCoreView {
       submission.settle();
     }
   }
-  private readonly suspensionHandlers: SuspensionTable = {
-    // The log is coherent and nobody claimed the stop, so it is reported with
-    // its reason rather than as an empty submission. Spent queue content is
-    // already in the log: the runner appends a suspended request's input.
-    suspend: {
-      handle: (reason) =>
-        Promise.resolve({
-          type: "settle",
-          result: { type: "suspended", reason },
-        }),
-    },
-    // The log is about to be thrown away, so spent queue content travels on
-    // the handoff and is delivered by the post-compaction request.
-    compact: {
-      withCarry: (reason: CompactSuspendReason, carry: string) => ({
-        ...reason,
-        nextPrompt: reason.nextPrompt
-          ? `${reason.nextPrompt}\n\n${carry}`
-          : carry,
-      }),
-      handle: (reason: CompactSuspendReason, submission: ActiveSubmission) =>
-        this.compactAndContinue(reason, submission),
-    },
-  };
-  /** Correlates the reason variant with its entry, so each handler is only
-   * ever called with the reason it declares. */
-  private dispatchSuspension(
-    reason: LoopSuspendReason,
-    submission: ActiveSubmission,
-  ): Promise<SuspensionOutcome> {
-    switch (reason.kind) {
-      case "suspend":
-        return this.suspensionHandlers.suspend.handle(reason, submission);
-      case "compact":
-        return this.suspensionHandlers.compact.handle(reason, submission);
-      default:
-        return assertUnreachable(reason);
-    }
-  }
 
   private async compactAndContinue(
     reason: CompactSuspendReason,
     submission: ActiveSubmission,
   ): Promise<SuspensionOutcome> {
-    const isCurrent = () => !submission.signal.aborted && !this.destroyed;
+    const isCurrent = this.currency(submission);
     const compactor = this.context.compactor;
     // A compaction with nobody to run it comes to rest like a plain stop.
     if (!compactor)
@@ -811,24 +725,10 @@ export class Thread implements ThreadCoreView {
   private drainQueues(): QueuedMessage[] {
     return this.mailbox.drain();
   }
-  /** Drain one queue into the message that is about to go out, resolving each
-   * entry at the moment it is delivered. An entry whose resolution throws is
-   * dropped with a visible error rather than wedging the turn loop.
-   *
-   * `policy` says what a `@compact` entry means for this delivery:
-   * - `prompt` (at a stop): it ends the flush and becomes the compaction's
-   *   follow-up prompt, with anything resolved ahead of it folded in, since
-   *   there is no request left to carry it.
-   * - `defer` (mid-turn): there is no place to hand the transcript over from,
-   *   so it is detected before resolution and genuinely not delivered — it and
-   *   everything behind it move to the `next` queue, where the following stop
-   *   picks them up. */
   private flush(
     delivery: DeferredDelivery,
     policy: { policy: "prompt" },
   ): Promise<FlushedQueue>;
-  /** Deferring a compaction cannot produce one, so mid-turn callers get the
-   * messages without a branch. */
   private flush(
     delivery: DeferredDelivery,
     policy: { policy: "defer"; nativeMessageIdx: NativeMessageIdx },
@@ -884,9 +784,6 @@ export class Thread implements ThreadCoreView {
       };
     });
   }
-  /** Resolve one entry, activating its reminders. An entry whose resolution
-   * throws is dropped with a visible error rather than wedging the turn
-   * loop. */
   private async resolveQueued(
     entry: QueueEntry,
     isCurrent: () => boolean,
@@ -911,11 +808,6 @@ export class Thread implements ThreadCoreView {
       return undefined;
     }
   }
-  /** Whatever is in the async queue rides the next request, whichever request
-   * that is: flushing takes the entries off the queue, so a later flush finds
-   * nothing and there is no double delivery to guard against. A suspension
-   * leaves the queues intact and unresolved: their commands must run against
-   * the world as it is when they are finally delivered. */
   private async queueFlushAction(
     ctx: AgentRequestContext,
   ): Promise<RequestAction> {
@@ -931,18 +823,12 @@ export class Thread implements ThreadCoreView {
       ).messages,
     };
   }
-  /** Whether a send with no user content is worth a request: only if a
-   * supervisor has something to deliver. Standing content — the system
-   * reminder, the system-info preamble — does not count, and the probe must
-   * not consume anything, since the request may never be issued. */
   private async hasPendingContent(): Promise<boolean> {
     const core = this.core;
     if (!core.isActive) return false;
     return this.chain.hasPendingContent();
   }
-  /** The single source of truth for where the thread is in its life. */
   private status: ThreadStatus = { type: "idle", lastResult: undefined };
-  /** The submission that currently owns the thread, if any. */
   private get inFlight(): ActiveSubmission | undefined {
     return this.status.type === "running" ? this.status.submission : undefined;
   }
@@ -956,17 +842,12 @@ export class Thread implements ThreadCoreView {
    * claimant that is waiting for the thread to go quiet can tell that it was
    * overtaken while it waited. */
   private claims = 0;
-  /** The submission guard narrowed to the core the caller is running against:
-   * a turn cannot outlive the core it was issued on, even though its
-   * submission can (compaction replaces the core mid-submission). */
   private turnGuard(core: ThreadCore = this.core): SubmissionGuard {
     const submission = this.inFlight;
     // With no live submission (a turn driven directly against the core) there
     // is nothing to go stale relative to, so the guard is core liveness
     // alone rather than a permanently false check.
-    const live = submission
-      ? () => !submission.signal.aborted && !this.destroyed
-      : () => !this.destroyed;
+    const live = this.currency(submission);
     return submissionGuard(() => live() && this.core === core && core.isActive);
   }
   private async runLoop(
@@ -975,7 +856,7 @@ export class Thread implements ThreadCoreView {
     force?: true,
   ): Promise<LoopResult> {
     const signal = submission.signal;
-    const isCurrentLoop = () => !signal.aborted && !this.destroyed;
+    const isCurrentLoop = this.currency(submission);
     const core = this.core;
     if (!messages.length && !this.mailbox.seed.length && !force) {
       const pending = await untilAborted(this.hasPendingContent(), signal);
@@ -1074,7 +955,7 @@ export class Thread implements ThreadCoreView {
       this.chain.onYield(value),
       submission.signal,
     );
-    if (!action || submission.signal.aborted || this.destroyed)
+    if (!action || !this.currency(submission)())
       return { type: "settled", result: { type: "aborted" } };
     if (action.type === "accept") {
       const prefix = action.resultPrefix
@@ -1163,10 +1044,16 @@ export class Thread implements ThreadCoreView {
     carry: string,
   ): SuspendReason {
     // Only compaction throws the log away; every other suspension leaves the
-    // spent content in the log, so there is nothing to rewrite.
-    const withCarry = this.suspensionHandlers.compact.withCarry;
-    return reason.kind === "compact" && withCarry
-      ? withCarry(reason, carry)
+    // spent content in the log, so there is nothing to rewrite. A compaction
+    // is about to discard the log, so the content travels on the handoff and
+    // is delivered by the post-compaction request.
+    return reason.kind === "compact"
+      ? {
+          ...reason,
+          nextPrompt: reason.nextPrompt
+            ? `${reason.nextPrompt}\n\n${carry}`
+            : carry,
+        }
       : reason;
   }
   /** Decided before anything is resolved or drained, because a stop that ends
@@ -1229,28 +1116,23 @@ export class Thread implements ThreadCoreView {
     // overwrite the in-flight reset with its own rejected promise.
     if (this.reset) throw new Error("Thread reset already in progress");
     const reset = (async () => {
-      this.assertUsable();
-      if (this.tornDown)
-        throw new Error(
-          "This thread's container has been torn down. Cannot reset.",
-        );
+      this.assertAcceptsWork("Cannot reset.");
       const initialFiles = buildClonedFiles(this.contextFiles.files);
       await this.core.dispose();
       this.assertUsable();
       // Disposal is irreversible: cancellation prevents the caller's follow-up,
       // but must not leave this thread pointing at a permanently disposed core.
-      if (isCurrent() && archive.type === "compaction")
-        this.threadLogger.recordCompaction({
-          summary: archive.summary,
-          chunkCount: archive.chunkCount,
-        });
       const core = this.createFreshCore({ initialFiles });
       this.core = core;
       this.mailbox.setSeed(isCurrent() ? seed : []);
       // The replaced core's outcome does not describe the new one.
       if (this.status.type === "idle")
         this.status = { type: "idle", lastResult: undefined };
-      this.threadLogger.resetCursor();
+      this.callbacks.onCoreReplaced?.(
+        isCurrent() && archive.type === "compaction"
+          ? { summary: archive.summary, chunkCount: archive.chunkCount }
+          : undefined,
+      );
       this.handleUpdate();
       return core;
     })();
@@ -1262,8 +1144,22 @@ export class Thread implements ThreadCoreView {
     }
   }
 
+  /** "This submission still speaks for the thread": not aborted, and the
+   * thread still alive. Every phase of a submission asks the same question,
+   * so it is asked in one place. */
+  private currency(submission?: ActiveSubmission): () => boolean {
+    return () => !this.destroyed && !submission?.signal.aborted;
+  }
   private assertUsable(): void {
     if (this.destroyed) throw new Error("Thread has been destroyed");
+  }
+  /** The two terminal conditions together: destroyed, or torn down by an
+   * owner that accepted the yield. Anything that would drive the thread
+   * forward asks for this rather than for either half. */
+  private assertAcceptsWork(detail: string): void {
+    this.assertUsable();
+    if (this.tornDownState)
+      throw new Error(`This thread's container has been torn down. ${detail}`);
   }
   private get destroyed(): boolean {
     return this.status.type === "destroyed";
