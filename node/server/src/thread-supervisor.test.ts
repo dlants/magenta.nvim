@@ -116,7 +116,7 @@ describe("Thread supervisor arbitration", () => {
           onBeforeRequest: () =>
             Promise.resolve({
               type: "suspend",
-              reason: { kind: "stop", message: "first" },
+              reason: { kind: "suspend", message: "first" },
             }),
         },
         {
@@ -126,7 +126,7 @@ describe("Thread supervisor arbitration", () => {
             );
             return Promise.resolve({
               type: "suspend",
-              reason: { kind: "stop", message: "second" },
+              reason: { kind: "suspend", message: "second" },
             });
           },
         },
@@ -135,17 +135,17 @@ describe("Thread supervisor arbitration", () => {
     expect(
       await core.submit({ type: "resolved", messages: userInput("hello") }),
     ).toEqual({
-      type: "stopped",
-      reason: { kind: "stop", message: "first" },
+      type: "suspended",
+      reason: { kind: "suspend", message: "first" },
     });
     expect(core.loopState).toMatchObject({
       type: "idle",
       lastResult: {
-        type: "stopped",
-        reason: { kind: "stop", message: "first" },
+        type: "suspended",
+        reason: { kind: "suspend", message: "first" },
       },
     });
-    expect(observed).toEqual(["stop"]);
+    expect(observed).toEqual(["suspend"]);
     expect(mockClient.streams).toHaveLength(0);
   });
   it("lets a rejecting yield gate win over one whose hook throws", async () => {
@@ -217,7 +217,7 @@ describe("Thread supervisor arbitration", () => {
       threadType: "subagent" as ThreadType,
       chatSupervisors: [
         {
-          onToolResults: () => ({ kind: "stop", message: "chat first" }),
+          onToolResults: () => ({ kind: "suspend", message: "chat first" }),
         },
       ],
     });
@@ -233,14 +233,14 @@ describe("Thread supervisor arbitration", () => {
     );
     stream.finishResponse("tool_use");
     expect(await sent).toEqual({
-      type: "stopped",
-      reason: { kind: "stop", message: "chat first" },
+      type: "suspended",
+      reason: { kind: "suspend", message: "chat first" },
     });
     expect(core.loopState).toMatchObject({
       type: "idle",
       lastResult: {
-        type: "stopped",
-        reason: { kind: "stop", message: "chat first" },
+        type: "suspended",
+        reason: { kind: "suspend", message: "chat first" },
       },
     });
     expect(mockClient.streams).toHaveLength(1);
@@ -306,7 +306,7 @@ describe("Thread supervisor arbitration", () => {
         {
           onEndTurnWithoutYield: () => ({
             type: "suspend",
-            reason: { kind: "stop", message: "first" },
+            reason: { kind: "suspend", message: "first" },
           }),
         },
         {
@@ -314,7 +314,7 @@ describe("Thread supervisor arbitration", () => {
             observed.push("last");
             return {
               type: "suspend",
-              reason: { kind: "stop", message: "second" },
+              reason: { kind: "suspend", message: "second" },
             };
           },
         },
@@ -329,14 +329,14 @@ describe("Thread supervisor arbitration", () => {
     const stream = await mockClient.awaitStream();
     stream.finishResponse("end_turn");
     expect(await turn).toEqual({
-      type: "stopped",
-      reason: { kind: "stop", message: "first" },
+      type: "suspended",
+      reason: { kind: "suspend", message: "first" },
     });
     expect(core.loopState).toMatchObject({
       type: "idle",
       lastResult: {
-        type: "stopped",
-        reason: { kind: "stop", message: "first" },
+        type: "suspended",
+        reason: { kind: "suspend", message: "first" },
       },
     });
     expect(observed).toEqual(["last"]);

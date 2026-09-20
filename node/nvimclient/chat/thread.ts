@@ -11,12 +11,12 @@ import {
   loopActiveTools,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
+  type RestResult,
   renderPending,
   type Submission,
   type Thread,
   type ThreadCompactor,
   type ThreadId,
-  type ThreadSendResult,
   type ToolRequestId,
 } from "@magenta/server";
 import * as diff from "diff";
@@ -359,7 +359,7 @@ export class NvimThread {
   }
 
   /** Observe one complete submission for UI completion and error presentation. */
-  private observeSubmission(start: () => Promise<ThreadSendResult>): void {
+  private observeSubmission(start: () => Promise<RestResult>): void {
     start().then(
       (result) => this.handleSendResult(result),
       (e: Error) => this.context.nvim.logger.error(e),
@@ -370,8 +370,7 @@ export class NvimThread {
     this.submission = { type: "in-flight", text };
   }
 
-  private handleSendResult(result: ThreadSendResult): void {
-    if (result.type === "queued") return;
+  private handleSendResult(result: RestResult): void {
     this.myDispatch({ type: "turn-ended" });
     if (result.type === "completed" || result.type === "failed") {
       notifyUser(
@@ -479,15 +478,18 @@ export class NvimThread {
 
       case "submit-message": {
         const { delivery, message } = msg.submission;
-        if (delivery === "now") {
-          this.rejectPendingSandboxApprovals();
-          // A deferred submission is not the one in flight, so it must not
-          // displace the text a failure would restore.
-          this.beginSubmission(message);
-        }
         this.scrollAfterMessageCount = this.thread.getProviderMessages().length;
+        // A deferred submission with nothing in flight has no request to ride,
+        // so it goes out now; otherwise it is queued and the submission that
+        // carries it reports for it.
+        if (delivery !== "now" && this.thread.isBusy) {
+          this.thread.enqueue({ type: "raw", message }, delivery);
+          return;
+        }
+        this.rejectPendingSandboxApprovals();
+        this.beginSubmission(message);
         this.observeSubmission(() =>
-          this.thread.submit({ type: "raw", message }, delivery),
+          this.thread.submit({ type: "raw", message }),
         );
         return;
       }

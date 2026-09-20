@@ -23,7 +23,6 @@ import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import {
   compactPrompt,
-  type Delivery,
   parseCompact,
   type ResolveSubmission,
   type SubmissionInput,
@@ -40,19 +39,17 @@ import {
   type FileSupervisor,
   type Files,
 } from "./supervisors/file-supervisor.ts";
-import type {
-  AgentRequestContext,
-  Generation,
-  GenerationId,
-  OnUpdate,
-  QueuedMessage,
-  RestResult,
-  SendResult,
-  ThreadResult,
-  ThreadSendResult,
-  ThreadStatus,
-  YieldState,
-  YieldValue,
+import {
+  ActiveSubmission,
+  type AgentRequestContext,
+  type CoreLoopResult,
+  type OnUpdate,
+  type QueuedMessage,
+  type RestResult,
+  type ThreadResult,
+  type ThreadStatus,
+  type YieldState,
+  type YieldValue,
 } from "./thread-api.ts";
 import {
   type ContextDelivery,
@@ -65,7 +62,6 @@ import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import {
   coreLivenessCheck,
   type EditedFileGroup,
-  type PlainStopSuspendReason,
   type RequestAction,
   type RequestContext,
   type SubmissionGuard,
@@ -83,7 +79,7 @@ import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.t
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
-import { Defer } from "./utils/async.ts";
+import { Defer, untilAborted } from "./utils/async.ts";
 import type { NvimCwd } from "./utils/files.ts";
 export type { ContextDelivery, ThreadCoreContext, ThreadStatus, YieldState };
 export type ContextFileAccess = Readonly<
@@ -169,14 +165,10 @@ function joinText(messages: ReadonlyArray<AgentInput>): string {
     .trim();
 }
 
-/** What the turn loop can hand back. A `yield` suspension is resolved inside
- * the loop, so the owner's suspension handling never has to consider it. */
-type LoopResult =
-  | Exclude<SendResult, { type: "suspended" }>
-  | {
-      type: "suspended";
-      reason: PlainStopSuspendReason | CompactSuspendReason;
-    };
+/** What the turn loop can hand back: a `yield` suspension is resolved inside
+ * the loop, so the owner's suspension handling never has to consider it —
+ * which makes it exactly the submission outcome. */
+type LoopResult = RestResult;
 type SuspensionOutcome =
   | { type: "continue"; messages: AgentInput[] }
   | { type: "settle"; result: RestResult };
@@ -189,7 +181,7 @@ type SuspensionHandler<R extends SuspendReason> = {
   readonly withCarry?: (reason: R, carry: string) => R;
   readonly handle: (
     reason: R,
-    generation: Generation,
+    submission: ActiveSubmission,
   ) => Promise<SuspensionOutcome>;
 };
 type LoopSuspendReason = Extract<LoopResult, { type: "suspended" }>["reason"];
@@ -329,7 +321,7 @@ export class Thread implements ThreadCoreView {
     onBeforeRequest: (ctx: RequestContext) => this.queueFlushAction(ctx),
   };
 
-  private chainFor(core: ThreadCore): SupervisorChain {
+  private supervisorsFor(core: ThreadCore): SupervisorChain {
     let chain = this.chains.get(core);
     if (!chain) {
       chain = new SupervisorChain(() => this.orderedSupervisors(core), {
@@ -347,7 +339,7 @@ export class Thread implements ThreadCoreView {
   }
 
   private get chain(): SupervisorChain {
-    return this.chainFor(this.core);
+    return this.supervisorsFor(this.core);
   }
 
   private coreCallbacks(getCore: () => ThreadCore): ThreadCoreCallbacks {
@@ -360,7 +352,7 @@ export class Thread implements ThreadCoreView {
       },
       // Lazy: the core is still being constructed when this is handed to it.
       get supervisor() {
-        return thread.chainFor(getCore());
+        return thread.supervisorsFor(getCore());
       },
     };
   }
@@ -517,15 +509,15 @@ export class Thread implements ThreadCoreView {
   /** Render state combines the outer submission's lifetime with progress
    * reported by its current agent turn. */
   get loopState(): ThreadLoopState {
-    const generation = this.generation;
-    return generation
+    const submission = this.inFlight;
+    return submission
       ? {
           type: "running",
           activity: this.core.activity ?? {
             type: "preparing",
-            aborting: generation.controller.signal.aborted,
+            aborting: submission.signal.aborted,
           },
-          aborting: generation.controller.signal.aborted || this.core.aborting,
+          aborting: submission.signal.aborted || this.core.aborting,
         }
       : { type: "idle", lastResult: this.lastResult() };
   }
@@ -585,8 +577,9 @@ export class Thread implements ThreadCoreView {
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
     if (this.yielded && !this.isBusy) return { unsent: [] };
     const unsent = this.drainQueues();
-    this.cancelSubmission();
-    await this.core.abortAgentTurn();
+    // A submission waiting to take over is part of what is being aborted.
+    this.claims++;
+    await this.inFlight?.abort();
     if (unsent.length) this.handleUpdate();
     return { unsent };
   }
@@ -598,16 +591,18 @@ export class Thread implements ThreadCoreView {
     if (this.resultDefer.resolved) return;
     this.resultDefer.resolve(result);
   }
-  async submit(
-    input: SubmissionInput,
-    delivery: Delivery = "now",
-  ): Promise<ThreadSendResult> {
+
+  /** Preempt whatever is running and submit now. Settles with how this submission ended. */
+  async submit(input: SubmissionInput): Promise<RestResult> {
     this.assertUsable();
-    if (delivery !== "now" && this.isBusy) {
-      this.mailbox.enqueue(delivery, submissionEntries(input));
-      return { type: "queued" };
-    }
     return this.startSubmission(input);
+  }
+
+  /** Hand the input to a queue, to ride a later request. Nothing is reported
+   * back: the submission that eventually carries it owns its outcome. */
+  enqueue(input: SubmissionInput, delivery: DeferredDelivery): void {
+    this.assertUsable();
+    this.mailbox.enqueue(delivery, submissionEntries(input));
   }
 
   retry(): Promise<RestResult> {
@@ -623,17 +618,32 @@ export class Thread implements ThreadCoreView {
       throw new Error(
         "This thread's container has been torn down. No further messages can be sent.",
       );
-    const wasBusy = this.isBusy;
-    this.cancelSubmission();
-    if (wasBusy) this.drainQueues();
-    const generation = this.mintGeneration();
-    this.status = { type: "running", generation };
-    const isCurrent = () => this.isCurrent(generation);
+    // Issued before the first await, so a caller that preempts can observe the
+    // request having landed synchronously.
+    if (this.isBusy) {
+      this.cancelSubmission();
+      this.drainQueues();
+    }
+    // Taking over an idle thread must stay synchronous: the caller's next
+    // statement expects the submission to be installed.
+    const claim = ++this.claims;
+    if (this.inFlight) {
+      await this.inFlight?.abort();
+      // A claim that waited can be overtaken, by a newer submission or by an
+      // abort; it never runs.
+      if (claim !== this.claims) return { type: "aborted" };
+      this.assertUsable();
+    }
+    const submission = new ActiveSubmission(() => this.core.abortAgentTurn());
+    this.status = { type: "running", submission };
+    const isCurrent = () => !submission.signal.aborted && !this.destroyed;
     this.handleUpdate();
-    /** Settle the submission, unless something newer already owns the
-     * thread. A `yielded` outcome becomes the yielded status. */
+    /** Settle the submission. A `yielded` outcome becomes the yielded
+     * status. */
     const finish = (result: RestResult) => {
-      if (this.generation === generation) {
+      // Only a destroy can have displaced this submission, and a destroyed
+      // thread's status is terminal.
+      if (this.inFlight === submission) {
         this.status =
           result.type === "yielded"
             ? {
@@ -650,17 +660,16 @@ export class Thread implements ThreadCoreView {
       return result;
     };
     try {
-      if (wasBusy) {
-        await this.core.abortAgentTurn();
-        if (!isCurrent()) return finish({ type: "aborted" });
-      }
       if (this.reset) await this.reset;
       if (!isCurrent()) return finish({ type: "aborted" });
       const resolved =
         input.type === "raw"
-          ? await this.context.resolve(input.message)
+          ? await untilAborted(
+              this.context.resolve(input.message),
+              submission.signal,
+            )
           : { messages: input.messages, reminders: [], compact: false };
-      if (!isCurrent()) return finish({ type: "aborted" });
+      if (!resolved || !isCurrent()) return finish({ type: "aborted" });
       for (const text of resolved.reminders)
         this.activateReminder(
           text,
@@ -672,16 +681,16 @@ export class Thread implements ThreadCoreView {
             type: "suspended",
             reason: { kind: "compact", nextPrompt: compactPrompt(resolved) },
           }
-        : await this.runLoop(resolved.messages, isCurrent, force);
+        : await this.runLoop(resolved.messages, submission, force);
       while (result.type === "suspended") {
         if (!isCurrent()) return finish({ type: "aborted" });
         const outcome = await this.dispatchSuspension(
           result.reason,
-          generation,
+          submission,
         );
         if (outcome.type === "settle") return finish(outcome.result);
         if (!isCurrent()) return finish({ type: "aborted" });
-        result = await this.runLoop(outcome.messages, isCurrent);
+        result = await this.runLoop(outcome.messages, submission);
       }
       return finish(isCurrent() ? result : { type: "aborted" });
     } catch (error) {
@@ -691,19 +700,19 @@ export class Thread implements ThreadCoreView {
         error: error instanceof Error ? error : new Error(String(error)),
       });
       throw error;
+    } finally {
+      submission.settle();
     }
   }
-  /** What the owner of a suspension does with it: pick the submission back up
-   * with these messages, or settle it. */
   private readonly suspensionHandlers: SuspensionTable = {
     // The log is coherent and nobody claimed the stop, so it is reported with
     // its reason rather than as an empty submission. Spent queue content is
     // already in the log: the runner appends a suspended request's input.
-    stop: {
+    suspend: {
       handle: (reason) =>
         Promise.resolve({
           type: "settle",
-          result: { type: "stopped", reason },
+          result: { type: "suspended", reason },
         }),
     },
     // The log is about to be thrown away, so spent queue content travels on
@@ -715,21 +724,21 @@ export class Thread implements ThreadCoreView {
           ? `${reason.nextPrompt}\n\n${carry}`
           : carry,
       }),
-      handle: (reason: CompactSuspendReason, generation: Generation) =>
-        this.compactAndContinue(reason, generation),
+      handle: (reason: CompactSuspendReason, submission: ActiveSubmission) =>
+        this.compactAndContinue(reason, submission),
     },
   };
   /** Correlates the reason variant with its entry, so each handler is only
    * ever called with the reason it declares. */
   private dispatchSuspension(
     reason: LoopSuspendReason,
-    generation: Generation,
+    submission: ActiveSubmission,
   ): Promise<SuspensionOutcome> {
     switch (reason.kind) {
-      case "stop":
-        return this.suspensionHandlers.stop.handle(reason, generation);
+      case "suspend":
+        return this.suspensionHandlers.suspend.handle(reason, submission);
       case "compact":
-        return this.suspensionHandlers.compact.handle(reason, generation);
+        return this.suspensionHandlers.compact.handle(reason, submission);
       default:
         return assertUnreachable(reason);
     }
@@ -737,19 +746,24 @@ export class Thread implements ThreadCoreView {
 
   private async compactAndContinue(
     reason: CompactSuspendReason,
-    generation: Generation,
+    submission: ActiveSubmission,
   ): Promise<SuspensionOutcome> {
-    const isCurrent = () => this.isCurrent(generation);
+    const isCurrent = () => !submission.signal.aborted && !this.destroyed;
     const compactor = this.context.compactor;
     // A compaction with nobody to run it comes to rest like a plain stop.
     if (!compactor)
-      return { type: "settle", result: { type: "stopped", reason } };
-    const outcome = await compactor.run(
-      this.getProviderMessages(),
-      reason.nextPrompt,
-      generation.controller.signal,
+      return { type: "settle", result: { type: "suspended", reason } };
+    // The signal is the compactor's cue to stop, but waiting on a run that
+    // ignores it would wedge whoever is waiting for this thread to go quiet.
+    const outcome = await untilAborted(
+      compactor.run(
+        this.getProviderMessages(),
+        reason.nextPrompt,
+        submission.signal,
+      ),
+      submission.signal,
     );
-    if (!isCurrent() || outcome.type === "aborted")
+    if (!outcome || !isCurrent() || outcome.type === "aborted")
       return { type: "settle", result: { type: "aborted" } };
     if (outcome.type === "error")
       return {
@@ -880,9 +894,12 @@ export class Thread implements ThreadCoreView {
   ) {
     if (entry.type === "resolved")
       return { compact: false, messages: [entry.input], reminders: [] };
+    const signal = this.inFlight?.signal;
     try {
-      const resolved = await this.context.resolve(entry.message);
-      if (!isCurrent()) return undefined;
+      const resolved = signal
+        ? await untilAborted(this.context.resolve(entry.message), signal)
+        : await this.context.resolve(entry.message);
+      if (!resolved || !isCurrent()) return undefined;
       for (const text of resolved.reminders) {
         this.activateReminder(text, nativeMessageIdx);
       }
@@ -925,64 +942,58 @@ export class Thread implements ThreadCoreView {
   }
   /** The single source of truth for where the thread is in its life. */
   private status: ThreadStatus = { type: "idle", lastResult: undefined };
-  /** Outer hooks may outlive cancellation. Each submission captures its own
-   * generation so a late continuation cannot act on the replacement
-   * submission. */
-  private get generation(): Generation | undefined {
-    return this.status.type === "running" ? this.status.generation : undefined;
-  }
-  private nextGenerationId = 0;
-  private mintGeneration(): Generation {
-    return {
-      id: this.nextGenerationId++ as GenerationId,
-      controller: new AbortController(),
-    };
+  /** The submission that currently owns the thread, if any. */
+  private get inFlight(): ActiveSubmission | undefined {
+    return this.status.type === "running" ? this.status.submission : undefined;
   }
   private cancelSubmission(): void {
-    const generation = this.generation;
-    if (!generation || generation.controller.signal.aborted) return;
-    generation.controller.abort();
+    const submission = this.inFlight;
+    if (!submission || submission.signal.aborted) return;
+    void submission.abort();
     this.handleUpdate();
   }
-  private isCurrent(generation: Generation): boolean {
-    return (
-      this.generation === generation && !generation.controller.signal.aborted
-    );
-  }
+  /** Counts takeovers. Bumped by every submission and by every abort, so a
+   * claimant that is waiting for the thread to go quiet can tell that it was
+   * overtaken while it waited. */
+  private claims = 0;
   /** The submission guard narrowed to the core the caller is running against:
    * a turn cannot outlive the core it was issued on, even though its
    * submission can (compaction replaces the core mid-submission). */
   private turnGuard(core: ThreadCore = this.core): SubmissionGuard {
-    const generation = this.generation;
+    const submission = this.inFlight;
     // With no live submission (a turn driven directly against the core) there
     // is nothing to go stale relative to, so the guard is core liveness
     // alone rather than a permanently false check.
-    const live = generation
-      ? () => this.isCurrent(generation)
+    const live = submission
+      ? () => !submission.signal.aborted && !this.destroyed
       : () => !this.destroyed;
     return submissionGuard(() => live() && this.core === core && core.isActive);
   }
   private async runLoop(
     messages: AgentInput[],
-    isCurrentLoop: () => boolean,
+    submission: ActiveSubmission,
     force?: true,
   ): Promise<LoopResult> {
+    const signal = submission.signal;
+    const isCurrentLoop = () => !signal.aborted && !this.destroyed;
     const core = this.core;
     if (!messages.length && !this.mailbox.seed.length && !force) {
-      const pending = await this.hasPendingContent();
+      const pending = await untilAborted(this.hasPendingContent(), signal);
       // Probing takes time, and a send that arrived while it ran owns the
       // loop now: this one is over before it touched the agent.
       if (!isCurrentLoop()) return { type: "aborted" };
       if (!pending) return { type: "empty" };
     }
-    const runTurn = async (submitted: AgentInput[]): Promise<SendResult> => {
+    const runTurn = async (
+      submitted: AgentInput[],
+    ): Promise<CoreLoopResult> => {
       if (!isCurrentLoop()) return { type: "aborted" };
       const input = [...this.mailbox.takeSeed(), ...submitted];
-      const chain = this.chainFor(core);
+      const supervisors = this.supervisorsFor(core);
       const notify = (
         hook: "onAgentLoopStart" | "onAgentLoopStop",
         idx: NativeMessageIdx,
-      ) => chain[hook](idx);
+      ) => supervisors[hook](idx);
       try {
         notify("onAgentLoopStart", core.manager.getPendingUserMessageIdx());
         return await core.runTurn(input);
@@ -999,7 +1010,7 @@ export class Thread implements ThreadCoreView {
       if (result.type === "suspended") {
         const reason = result.reason;
         if (reason.kind !== "yield") return { type: "suspended", reason };
-        const resolved = await this.resolveYield(reason.value, isCurrentLoop);
+        const resolved = await this.resolveYield(reason.value, submission);
         if (!isCurrentLoop()) return { type: "aborted" };
         if (resolved.type === "settled") return resolved.result;
         result = await runTurn(resolved.messages);
@@ -1052,13 +1063,19 @@ export class Thread implements ThreadCoreView {
   }
   private async resolveYield(
     value: YieldValue,
-    isCurrent: () => boolean,
+    submission: ActiveSubmission,
   ): Promise<
     | { type: "settled"; result: LoopResult }
     | { type: "resubmit"; messages: AgentInput[] }
   > {
-    const action = await this.chain.onYield(value);
-    if (!isCurrent()) return { type: "settled", result: { type: "aborted" } };
+    // A hook that is still deliberating when the thread is aborted keeps
+    // deliberating; its decision simply has nobody left to apply it.
+    const action = await untilAborted(
+      this.chain.onYield(value),
+      submission.signal,
+    );
+    if (!action || submission.signal.aborted || this.destroyed)
+      return { type: "settled", result: { type: "aborted" } };
     if (action.type === "accept") {
       const prefix = action.resultPrefix
         ? { resultPrefix: action.resultPrefix }
@@ -1197,22 +1214,6 @@ export class Thread implements ThreadCoreView {
    * what a preempting submission waits on. */
   private reset: Promise<ThreadCore> | undefined;
   private async replaceCore(
-    options: Parameters<Thread["resetCore"]>[0],
-    isCurrent: () => boolean = () => true,
-  ): Promise<ThreadCore> {
-    // Synchronous re-entrancy guard: a second caller must not be able to
-    // overwrite the in-flight reset with its own rejected promise.
-    if (this.reset) throw new Error("Thread reset already in progress");
-    const reset = this.resetCore(options, isCurrent);
-    this.reset = reset;
-    try {
-      return await reset;
-    } finally {
-      if (this.reset === reset) this.reset = undefined;
-    }
-  }
-
-  private async resetCore(
     {
       seed,
       archive,
@@ -1222,32 +1223,43 @@ export class Thread implements ThreadCoreView {
         | { type: "compaction"; summary: string; chunkCount: number }
         | { type: "none" };
     },
-    isCurrent: () => boolean,
+    isCurrent: () => boolean = () => true,
   ): Promise<ThreadCore> {
-    this.assertUsable();
-    if (this.tornDown)
-      throw new Error(
-        "This thread's container has been torn down. Cannot reset.",
-      );
-    const initialFiles = buildClonedFiles(this.contextFiles.files);
-    await this.core.dispose();
-    this.assertUsable();
-    // Disposal is irreversible: cancellation prevents the caller's follow-up,
-    // but must not leave this thread pointing at a permanently disposed core.
-    if (isCurrent() && archive.type === "compaction")
-      this.threadLogger.recordCompaction({
-        summary: archive.summary,
-        chunkCount: archive.chunkCount,
-      });
-    const core = this.createFreshCore({ initialFiles });
-    this.core = core;
-    this.mailbox.setSeed(isCurrent() ? seed : []);
-    // The replaced core's outcome does not describe the new one.
-    if (this.status.type === "idle")
-      this.status = { type: "idle", lastResult: undefined };
-    this.threadLogger.resetCursor();
-    this.handleUpdate();
-    return core;
+    // Synchronous re-entrancy guard: a second caller must not be able to
+    // overwrite the in-flight reset with its own rejected promise.
+    if (this.reset) throw new Error("Thread reset already in progress");
+    const reset = (async () => {
+      this.assertUsable();
+      if (this.tornDown)
+        throw new Error(
+          "This thread's container has been torn down. Cannot reset.",
+        );
+      const initialFiles = buildClonedFiles(this.contextFiles.files);
+      await this.core.dispose();
+      this.assertUsable();
+      // Disposal is irreversible: cancellation prevents the caller's follow-up,
+      // but must not leave this thread pointing at a permanently disposed core.
+      if (isCurrent() && archive.type === "compaction")
+        this.threadLogger.recordCompaction({
+          summary: archive.summary,
+          chunkCount: archive.chunkCount,
+        });
+      const core = this.createFreshCore({ initialFiles });
+      this.core = core;
+      this.mailbox.setSeed(isCurrent() ? seed : []);
+      // The replaced core's outcome does not describe the new one.
+      if (this.status.type === "idle")
+        this.status = { type: "idle", lastResult: undefined };
+      this.threadLogger.resetCursor();
+      this.handleUpdate();
+      return core;
+    })();
+    this.reset = reset;
+    try {
+      return await reset;
+    } finally {
+      if (this.reset === reset) this.reset = undefined;
+    }
   }
 
   private assertUsable(): void {
@@ -1261,6 +1273,7 @@ export class Thread implements ThreadCoreView {
   }
   async destroy(): Promise<void> {
     if (this.destroyed) return;
+    this.claims++;
     this.cancelSubmission();
     const lastResult = this.lastResult();
     this.status = { type: "destroyed", lastResult };

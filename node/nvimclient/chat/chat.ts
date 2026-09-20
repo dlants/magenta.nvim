@@ -156,7 +156,7 @@ function stoppedLabel(reason: StoppedReason): string {
 }
 type StoppedReason =
   | StopReason
-  | Exclude<RestResult["type"], "completed" | "failed" | "stopped">
+  | Exclude<RestResult["type"], "completed" | "failed" | "suspended">
   | { kind: "supervisor"; message: string }
   | { kind: "compaction-requested" };
 
@@ -1205,11 +1205,11 @@ ${rows}${loadMore}`;
                     message: lastTurnResult.error.message,
                   };
                 }
-                if (lastTurnResult?.type === "stopped") {
+                if (lastTurnResult?.type === "suspended") {
                   return {
                     type: "stopped" as const,
                     reason:
-                      lastTurnResult.reason.kind === "stop"
+                      lastTurnResult.reason.kind === "suspend"
                         ? {
                             kind: "supervisor" as const,
                             message: lastTurnResult.reason.message,

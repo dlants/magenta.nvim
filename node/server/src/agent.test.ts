@@ -39,7 +39,7 @@ import {
 } from "./test-helpers.ts";
 import type { ThreadContext } from "./thread.ts";
 import { Thread, threadCloneContext } from "./thread.ts";
-import type { SendResult, ThreadSendResult } from "./thread-api.ts";
+import type { RestResult } from "./thread-api.ts";
 import {
   AutoCompactSupervisor,
   injectText,
@@ -391,21 +391,19 @@ describe("Thread.submit result", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    expect(
-      await core.submit(
-        {
-          type: "resolved",
-          messages: [
-            {
-              type: "text",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              text: "and also",
-            },
-          ],
-        },
-        "async",
-      ),
-    ).toEqual({ type: "queued" });
+    core.enqueue(
+      {
+        type: "resolved",
+        messages: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: "and also",
+          },
+        ],
+      },
+      "async",
+    );
     expect(core.queued.async).toHaveLength(1);
     stream.streamText("hi");
     stream.finishResponse("end_turn");
@@ -455,12 +453,10 @@ describe("Thread turn loop", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    expect(
-      await core.submit(
-        { type: "raw", message: pendingMessage("queued follow-up") },
-        "next",
-      ),
-    ).toEqual({ type: "queued" });
+    core.enqueue(
+      { type: "raw", message: pendingMessage("queued follow-up") },
+      "next",
+    );
     stream.streamText("ok");
     stream.finishResponse("end_turn");
     // The agent has settled and is idle; the loop is inside the flush that
@@ -469,14 +465,7 @@ describe("Thread turn loop", () => {
     await entered;
     const streamsBefore = mockClient.streams.length;
     expect(core.isBusy).toBe(true);
-    expect(
-      await core.submit(
-        { type: "raw", message: pendingMessage("racer") },
-        "async",
-      ),
-    ).toEqual({
-      type: "queued",
-    });
+    core.enqueue({ type: "raw", message: pendingMessage("racer") }, "async");
     expect(mockClient.streams.length).toBe(streamsBefore);
     releaseResolve?.();
     // The racer landed on the async queue, so it rides the continuation the
@@ -494,7 +483,7 @@ describe("Thread turn loop", () => {
           {
             onEndTurnWithoutYield: () => ({
               type: "suspend" as const,
-              reason: { kind: "stop" as const, message: "halt" },
+              reason: { kind: "suspend" as const, message: "halt" },
             }),
           },
         ],
@@ -513,12 +502,10 @@ describe("Thread turn loop", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    expect(
-      await core.submit(
-        { type: "raw", message: pendingMessage("queued follow-up") },
-        "next",
-      ),
-    ).toEqual({ type: "queued" });
+    core.enqueue(
+      { type: "raw", message: pendingMessage("queued follow-up") },
+      "next",
+    );
     stream.streamText("ok");
     stream.finishResponse("end_turn");
     // The queue is consulted first: the suspension has to wait for the thread
@@ -528,8 +515,8 @@ describe("Thread turn loop", () => {
     second.streamText("done");
     second.finishResponse("end_turn");
     expect(await sent).toEqual({
-      type: "stopped",
-      reason: { kind: "stop", message: "halt" },
+      type: "suspended",
+      reason: { kind: "suspend", message: "halt" },
     });
     await core.destroy();
     await cleanupArchive(threadId);
@@ -622,7 +609,7 @@ describe("Thread submissions across a compaction handoff", () => {
     try {
       const compactor = stubCompactor();
       const oldAgent = core["core"].manager;
-      let settled: ThreadSendResult | undefined;
+      let settled: RestResult | undefined;
       core["context"].compactor = compactor;
       const result = core.submit({
         type: "resolved",
@@ -742,7 +729,7 @@ describe("Thread submissions across a compaction handoff", () => {
           });
         },
       };
-      let settled: ThreadSendResult | undefined;
+      let settled: RestResult | undefined;
       core["context"].compactor = compactor;
       const result = core.submit({
         type: "resolved",
@@ -835,7 +822,10 @@ describe("Thread submissions across a compaction handoff", () => {
               asked = true;
               return {
                 type: "suspend" as const,
-                reason: { kind: "stop" as const, message: "budget exhausted" },
+                reason: {
+                  kind: "suspend" as const,
+                  message: "budget exhausted",
+                },
               };
             },
           },
@@ -860,12 +850,12 @@ describe("Thread submissions across a compaction handoff", () => {
       stream.streamText("done");
       stream.finishResponse("end_turn");
       expect(await result).toEqual({
-        type: "stopped",
-        reason: { kind: "stop", message: "budget exhausted" },
+        type: "suspended",
+        reason: { kind: "suspend", message: "budget exhausted" },
       });
       expect(core.lastResult()).toEqual({
-        type: "stopped",
-        reason: { kind: "stop", message: "budget exhausted" },
+        type: "suspended",
+        reason: { kind: "suspend", message: "budget exhausted" },
       });
       expect(compactor.calls).toEqual([]);
       // The log is coherent and resumable: a fresh send just continues.
@@ -2365,7 +2355,7 @@ describe("AutoCompactSupervisor integration", () => {
     });
     const stream = await mockClient.awaitStream();
     // A queued async message means the end_turn stop still issues a request.
-    void core.submit(
+    core.enqueue(
       {
         type: "resolved",
         messages: [
@@ -3448,7 +3438,7 @@ describe("Agent failure", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    void core.submit(
+    core.enqueue(
       {
         type: "resolved",
         messages: [
@@ -3461,7 +3451,7 @@ describe("Agent failure", () => {
       },
       "async",
     );
-    void core.submit(
+    core.enqueue(
       {
         type: "resolved",
         messages: [
@@ -3556,7 +3546,7 @@ describe("Agent failure", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    const settled: SendResult[] = [];
+    const settled: RestResult[] = [];
     void core
       .submit({
         type: "resolved",
@@ -3568,7 +3558,7 @@ describe("Agent failure", () => {
           },
         ],
       })
-      .then((r) => settled.push(r as SendResult));
+      .then((r) => settled.push(r as RestResult));
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
@@ -4260,7 +4250,7 @@ describe("Thread preflight token count", () => {
           onBeforeRequest: () =>
             Promise.resolve({
               type: "suspend",
-              reason: { kind: "stop", message: "held" },
+              reason: { kind: "suspend", message: "held" },
             }),
         },
         noteCount(seen, true),
@@ -4280,8 +4270,8 @@ describe("Thread preflight token count", () => {
         ],
       }),
     ).toEqual({
-      type: "stopped",
-      reason: { kind: "stop", message: "held" },
+      type: "suspended",
+      reason: { kind: "suspend", message: "held" },
     });
     // The later hook is still consulted — a stop is a fact it may need to
     // record — but the request it would decide about is never issued.
@@ -4296,7 +4286,7 @@ describe("Agent turn loop", () => {
       onBeforeRequest: () =>
         Promise.resolve({
           type: "suspend",
-          reason: { kind: "stop", message: "held" },
+          reason: { kind: "suspend", message: "held" },
           injections: [],
         }),
     });
@@ -4310,7 +4300,7 @@ describe("Agent turn loop", () => {
       ]).promise,
     ).toEqual({
       type: "suspended",
-      reason: { kind: "stop", message: "held" },
+      reason: { kind: "suspend", message: "held" },
     });
     expect(mockClient.streams).toHaveLength(0);
     // The caller's content still lands, so the next request carries it.

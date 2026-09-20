@@ -36,13 +36,13 @@ export type InjectedContent =
   | { type: "text"; text: string }
   | Extract<ProviderMessageContent, { type: "image" | "document" }>;
 
-/** Why a supervisor asked to stop before a request. Core's turn loop does not
- * act on the reason — it only has to leave the log coherent and resumable —
- * but the set of reasons is closed, so whoever handles the suspension narrows
+/** Why a supervisor asked to suspend before a request. Core's turn loop does
+ * not act on the reason — it only has to leave the log coherent and resumable
+ * — but the set of reasons is closed, so whoever handles the suspension narrows
  * on `kind` rather than casting. */
 export type SuspendReason =
   | CompactSuspendReason
-  | PlainStopSuspendReason
+  | PlainSuspendReason
   | YieldSuspendReason;
 
 /** The model called yield_to_parent and its result is in the log. Produced
@@ -50,8 +50,9 @@ export type SuspendReason =
  * it never escapes to an owner. */
 export type YieldSuspendReason = { kind: "yield"; value: YieldValue };
 
-/** "Stop this submission here"; nothing to hand off, just a reason to show. */
-export type PlainStopSuspendReason = { kind: "stop"; message: string };
+/** "Suspend this submission here"; nothing to hand off, just a reason to
+ * show. */
+export type PlainSuspendReason = { kind: "suspend"; message: string };
 
 /** Action returned from the `onBeforeRequest` hook by a single supervisor.
  *

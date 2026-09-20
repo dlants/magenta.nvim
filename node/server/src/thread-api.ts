@@ -5,12 +5,13 @@ import type {
   ToolResults,
 } from "./providers/provider-types.ts";
 import type {
-  PlainStopSuspendReason,
+  PlainSuspendReason,
   RequestContext,
   SuspendReason,
   YieldAction,
 } from "./thread-supervisor.ts";
 import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
+import { Defer } from "./utils/async.ts";
 
 export type { QueuedMessage } from "./submission/mailbox.ts";
 
@@ -27,40 +28,32 @@ export type ToolInvocationState =
     }
   | { type: "settled" };
 
-/** Internal turn/continuation outcome. Thread consumes suspended handoffs and
- * continuations before settling the public submission promise. */
-export type SendResult =
-  /** The agent came to rest. `stopReason` is how the turn that just finished
-   * ended. */
+/** The core loop alternates agent messages and turn executions, until the
+ * agent finishes or we intervene. `R` is the set of suspensions this caller
+ * can be handed: the core's own loop can hand back a `yield`, while the
+ * thread's loop resolves yields itself and so never surfaces one. */
+export type CoreLoopResult<R extends SuspendReason = SuspendReason> =
   | { type: "completed"; stopReason: StopReason }
   /** The submission settled without ever issuing a request (empty content),
    * so there was never a turn and there is nothing to continue from. */
   | { type: "empty" }
   | { type: "yielded"; value: YieldValue; resultPrefix?: string }
   | { type: "aborted" }
-  /** The runner exhausted its retries. Nothing is discarded: the submission
-   * is still in the log, in a shape the provider will accept, so retrying
-   * re-issues the same request and queued submissions are untouched. */
   | { type: "failed"; error: Error }
-  /** A supervisor stopped the submission before a request was issued. The log
-   * is coherent and resumable; what to do about it is the owner's business,
-   * and the reason is opaque to core's turn loop. */
-  | { type: "suspended"; reason: SuspendReason };
+  /** A supervisor suspended the loop before a request was issued. The log is
+   * coherent and resumable; what to do about it is the owner's business. A
+   * suspension nobody claimed (no compactor for a `compact` reason, or a
+   * plain `suspend`) settles the submission this way rather than pretending
+   * it was `empty`, and the reason is what a view shows. */
+  | { type: "suspended"; reason: R };
 
-/** The complete submission outcome, after internal continuations and compaction.
- * Delivered to the submitter rather than broadcast as a lifecycle result.
- *
- * A suspension nobody claimed (no compactor for a `compact` reason, or a plain
- * `stop`) surfaces as `stopped` rather than pretending the submission was
- * `empty`: the log is coherent and resumable, and the reason is what a view
- * shows. `yield` never reaches here — it is resolved inside the turn loop. */
-export type RestResult =
-  | Exclude<SendResult, { type: "suspended" }>
-  | {
-      type: "stopped";
-      reason: PlainStopSuspendReason | CompactSuspendReason;
-    };
-export type ThreadSendResult = RestResult | { type: "queued" };
+/** The complete submission outcome, after internal continuations and
+ * compaction: the same loop result, minus the yields the thread resolved
+ * itself. Delivered to the submitter rather than broadcast as a lifecycle
+ * result. */
+export type RestResult = CoreLoopResult<
+  PlainSuspendReason | CompactSuspendReason
+>;
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */
 export type ThreadResult =
@@ -68,17 +61,39 @@ export type ThreadResult =
   /** destroyed before it ever yielded */
   | { type: "aborted"; reason: string };
 
-/** One live submission's identity. Every staleness check is "am I still the
- * live generation": the generation is cleared when its submission finishes and
- * cancelled by abort, destroy or a preempting submission. */
-export type GenerationId = number & { readonly __generation: unique symbol };
-export type Generation = {
-  /** Minted only by Thread, so a foreign object cannot pose as a
-   * generation. */
-  readonly id: GenerationId;
-  /** Cancelled by abort/destroy/preemption; passed to the compactor. */
-  readonly controller: AbortController;
-};
+/** The submission that currently owns the thread. There is never more than
+ * one: a submission that wants to take over awaits the incumbent's `abort()`
+ * before installing its own, so no submission body has to ask whether it is
+ * still the live one — only whether it was aborted. */
+export class ActiveSubmission {
+  private readonly controller = new AbortController();
+  private readonly unwound = new Defer<void>();
+  private unwinding: Promise<void> | undefined;
+  /** `stopWork` interrupts whatever the submission is blocked on (the agent
+   * turn), so that awaiting an abort cannot wedge the aborter. */
+  constructor(private readonly stopWork: () => Promise<void>) {}
+  get signal(): AbortSignal {
+    return this.controller.signal;
+  }
+  get aborted(): boolean {
+    return this.controller.signal.aborted;
+  }
+  /** Cancel the submission and wait for its body to fully unwind, however it
+   * ended. Never rejects: a failure belongs to the submitter, not to whoever
+   * is waiting for the thread to go quiet. */
+  abort(): Promise<void> {
+    this.controller.abort();
+    this.unwinding ??= (async () => {
+      await this.stopWork();
+      await this.unwound.promise;
+    })();
+    return this.unwinding;
+  }
+  /** Called by the submission body as it unwinds. */
+  settle(): void {
+    this.unwound.resolve();
+  }
+}
 
 /** Where the thread is in its life. The single source of truth behind
  * `isBusy`, `loopState`, `lastResult()`, `yielded` and `isDestroyed`.
@@ -88,7 +103,7 @@ export type Generation = {
  * is `running`, not `yielded`. */
 export type ThreadStatus =
   | { type: "idle"; lastResult: RestResult | undefined }
-  | { type: "running"; generation: Generation }
+  | { type: "running"; submission: ActiveSubmission }
   | {
       type: "yielded";
       value: YieldValue;

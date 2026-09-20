@@ -1647,6 +1647,33 @@ it("handles @async messages and sends them on end turn", async () => {
   });
 });
 
+it("sends an @async message right away when the thread is at rest", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    // Nothing is in flight, so there is no request for the message to ride:
+    // it is submitted immediately rather than waiting for a later delivery.
+    await driver.inputMagentaText("@async Tell me about TypeScript");
+    await driver.send();
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    const thread = driver.magenta.chat.getActiveThread();
+    expect(thread.thread.queued.async).toHaveLength(0);
+    expect(
+      request.messages.flatMap((m) =>
+        typeof m.content === "string"
+          ? [m.content]
+          : m.content.flatMap((c) => (c.type === "text" ? [c.text] : [])),
+      ),
+    ).toContain("Tell me about TypeScript");
+    request.respond({
+      stopReason: "end_turn",
+      text: "TypeScript is a typed superset of JavaScript.",
+      toolRequests: [],
+    });
+    await driver.assertDisplayBufferContains(
+      "TypeScript is a typed superset of JavaScript.",
+    );
+  });
+});
 it("queues @next messages until the agent next stops", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();

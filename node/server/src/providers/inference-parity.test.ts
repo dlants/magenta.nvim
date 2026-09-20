@@ -9,7 +9,7 @@ import {
   type TestAgent,
   toolExecution,
 } from "../test-helpers.ts";
-import type { SendResult } from "../thread-api.ts";
+import type { CoreLoopResult } from "../thread-api.ts";
 import { AutoCompactSupervisor } from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
@@ -65,7 +65,7 @@ type TurnSnapshot = {
   messages: ProviderMessage[];
   phaseDuringTurn: string;
   phaseAfterTurn: string;
-  turnResult: SendResult;
+  turnResult: CoreLoopResult;
   executorCalls: number;
 };
 
@@ -168,7 +168,7 @@ describe("onBeforeRequest", () => {
       Promise.resolve({ type: "continue" as const, results: new Map() }),
     );
 
-  const held = { kind: "stop" as const, message: "held" };
+  const held = { kind: "suspend" as const, message: "held" };
   /** The gate fires on the opening request too; this one holds the
    * continuation that would carry the tool results. */
   const holdSecond =
@@ -313,14 +313,14 @@ describe("preflight token count parity", () => {
         ],
       }),
     ).toEqual({
-      type: "stopped",
+      type: "suspended",
       reason: { kind: "compact", nextPrompt: "wrap up" },
     });
 
     expect(agent.loopState).toMatchObject({
       type: "idle",
       lastResult: {
-        type: "stopped",
+        type: "suspended",
         reason: { kind: "compact", nextPrompt: "wrap up" },
       },
     });

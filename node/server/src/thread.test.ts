@@ -72,9 +72,7 @@ describe("deferred submissions", () => {
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ];
-    expect(
-      await core.submit({ type: "resolved", messages: inputs }, queue),
-    ).toEqual({ type: "queued" });
+    core.enqueue({ type: "resolved", messages: inputs }, queue);
     first.finishResponse("end_turn");
     const next = await awaitNextStream(mockClient, first);
     expect(resolve).not.toHaveBeenCalled();
@@ -120,12 +118,10 @@ describe("deferred submissions", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    expect(
-      await core.submit(
-        { type: "raw", message: pendingMessage("look at the file") },
-        "next",
-      ),
-    ).toEqual({ type: "queued" });
+    core.enqueue(
+      { type: "raw", message: pendingMessage("look at the file") },
+      "next",
+    );
     // Nothing was resolved at queue time.
     expect(calls).toEqual([]);
     fileContents = "after";
@@ -151,10 +147,7 @@ describe("deferred submissions", () => {
     });
     const stream = await mockClient.awaitStream();
     for (const text of ["one", "two", "three"]) {
-      await core.submit(
-        { type: "raw", message: pendingMessage(text) },
-        "async",
-      );
+      core.enqueue({ type: "raw", message: pendingMessage(text) }, "async");
     }
     expect(core.queued.async).toHaveLength(3);
     stream.streamText("working");
@@ -196,8 +189,8 @@ describe("deferred submissions", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    await core.submit({ type: "raw", message: pendingMessage("bad") }, "next");
-    await core.submit({ type: "raw", message: pendingMessage("good") }, "next");
+    core.enqueue({ type: "raw", message: pendingMessage("bad") }, "next");
+    core.enqueue({ type: "raw", message: pendingMessage("good") }, "next");
     stream.streamText("working");
     stream.finishResponse("end_turn");
     const second = await awaitNextStream(mockClient, stream);
@@ -206,23 +199,27 @@ describe("deferred submissions", () => {
     expect(texts).toContain("good");
     second.finishResponse("end_turn");
     // The thread is not wedged: it still accepts and queues further work.
-    await core.submit(
-      { type: "raw", message: pendingMessage("later") },
-      "next",
-    );
+    core.enqueue({ type: "raw", message: pendingMessage("later") }, "next");
   });
 
-  it("sends a deferred submission immediately when the agent is idle", async () => {
+  it("queues a deferred submission even when the agent is idle", async () => {
     const { core, mockClient } = createAgentWithMock();
-    // Nothing is in flight, so there is no delivery point to wait for.
-    void core.submit(
-      { type: "raw", message: pendingMessage("do it now") },
-      "next",
-    );
+    // Enqueueing never submits: an idle thread simply holds the entry until
+    // something issues a request. Deciding to submit now is the caller's.
+    core.enqueue({ type: "raw", message: pendingMessage("do it now") }, "next");
+    expect(core.queued.next.length).toBe(1);
+    expect(mockClient.streams.length).toBe(0);
+    const sent = core.submit({
+      type: "raw",
+      message: pendingMessage("and this too"),
+    });
     const stream = await mockClient.awaitStream();
+    stream.finishResponse("end_turn");
+    const next = await awaitNextStream(mockClient, stream);
     expect(core.queued.next).toEqual([]);
     expect(userTexts(core)).toContain("do it now");
-    stream.finishResponse("end_turn");
+    next.finishResponse("end_turn");
+    await sent;
   });
 
   it("activates the reminders a queued entry resolves to", async () => {
@@ -253,10 +250,7 @@ describe("deferred submissions", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    await core.submit(
-      { type: "raw", message: pendingMessage("queued") },
-      "next",
-    );
+    core.enqueue({ type: "raw", message: pendingMessage("queued") }, "next");
     expect(core.activeReminders.has("remember the file")).toBe(false);
     stream.streamText("working");
     stream.finishResponse("end_turn");
@@ -340,7 +334,7 @@ describe("deferred submissions", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    await core.submit({ type: "raw", message: pendingMessage("bad") }, "next");
+    core.enqueue({ type: "raw", message: pendingMessage("bad") }, "next");
     const streamsBefore = mockClient.streams.length;
     stream.finishResponse("end_turn");
     // The queue emptied into nothing, so there is no request to issue.
@@ -385,12 +379,10 @@ describe("deferred submissions", () => {
       if (loopLabel(core.loopState) === "running_tools") return true;
       throw new Error(`waiting for tool_use, got ${loopLabel(core.loopState)}`);
     });
-    expect(
-      await core.submit(
-        { type: "raw", message: pendingMessage("also check this") },
-        "async",
-      ),
-    ).toEqual({ type: "queued" });
+    core.enqueue(
+      { type: "raw", message: pendingMessage("also check this") },
+      "async",
+    );
     resolveStat();
 
     const continuation = await awaitNextStream(mockClient, stream);
@@ -450,12 +442,10 @@ describe("deferred submissions", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    expect(
-      await core.submit(
-        { type: "raw", message: pendingMessage("also check this") },
-        "async",
-      ),
-    ).toEqual({ type: "queued" });
+    core.enqueue(
+      { type: "raw", message: pendingMessage("also check this") },
+      "async",
+    );
     stream.streamToolUse(
       "tool-yield-rejected" as ToolRequestId,
       "yield_to_parent" as ToolName,
@@ -525,14 +515,10 @@ describe("deferred submissions", () => {
       if (loopLabel(core.loopState) === "running_tools") return true;
       throw new Error(`waiting for tool_use, got ${loopLabel(core.loopState)}`);
     });
-    expect(
-      await core.submit(
-        { type: "raw", message: pendingMessage("@compact wrap it up") },
-        "async",
-      ),
-    ).toEqual({
-      type: "queued",
-    });
+    core.enqueue(
+      { type: "raw", message: pendingMessage("@compact wrap it up") },
+      "async",
+    );
     resolveStat();
 
     // There is no place to hand the transcript over from mid-turn, so the
@@ -589,7 +575,7 @@ describe("deferred submissions", () => {
     });
     const stream = await mockClient.awaitStream();
     for (const text of ["first", "@compact wrap up", "third"]) {
-      await core.submit({ type: "raw", message: pendingMessage(text) }, "next");
+      core.enqueue({ type: "raw", message: pendingMessage(text) }, "next");
     }
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
     core["context"].compactor = { run: compact };
@@ -622,7 +608,7 @@ describe("deferred submissions", () => {
                 suspend && ++requests > 1
                   ? {
                       type: "suspend" as const,
-                      reason: { kind: "stop" as const, message: "halt" },
+                      reason: { kind: "suspend" as const, message: "halt" },
                     }
                   : { type: "none" as const },
               ),
@@ -646,17 +632,14 @@ describe("deferred submissions", () => {
         ],
       });
       const stream = await mockClient.awaitStream();
-      await core.submit(
-        { type: "raw", message: pendingMessage("queued") },
-        "next",
-      );
+      core.enqueue({ type: "raw", message: pendingMessage("queued") }, "next");
       stream.finishResponse("end_turn");
       // The stop flushed the queue for a request the gate then refused. The
       // content is spent — it cannot be resolved again — so it is held for
       // whatever request this thread issues next.
       expect(await first).toEqual({
-        type: "stopped",
-        reason: { kind: "stop", message: "halt" },
+        type: "suspended",
+        reason: { kind: "suspend", message: "halt" },
       });
       expect(core.queued.next).toEqual([]);
       expect(userTexts(core)).toContain("queued");
@@ -691,7 +674,7 @@ describe("deferred submissions", () => {
                 suspend
                   ? {
                       type: "suspend" as const,
-                      reason: { kind: "stop" as const, message: "halt" },
+                      reason: { kind: "suspend" as const, message: "halt" },
                     }
                   : { type: "none" as const },
               ),
@@ -713,8 +696,8 @@ describe("deferred submissions", () => {
           ],
         }),
       ).toEqual({
-        type: "stopped",
-        reason: { kind: "stop", message: "halt" },
+        type: "suspended",
+        reason: { kind: "suspend", message: "halt" },
       });
       // A reminder placed in a request that is never issued would be marked
       // sent and silently lost.
@@ -806,10 +789,7 @@ describe("deferred submissions", () => {
         ],
       });
       const stream = await mockClient.awaitStream();
-      await core.submit(
-        { type: "raw", message: pendingMessage("queued") },
-        "next",
-      );
+      core.enqueue({ type: "raw", message: pendingMessage("queued") }, "next");
       stream.finishResponse("end_turn");
 
       // The stop flushed the queue for the request the gate then refused to
@@ -847,11 +827,11 @@ describe("Thread.submit while busy", () => {
     });
     const stream = await mockClient.awaitStream();
     stream.streamText("working");
-    await core.submit(
+    core.enqueue(
       { type: "raw", message: pendingMessage("queued async") },
       "async",
     );
-    await core.submit(
+    core.enqueue(
       { type: "raw", message: pendingMessage("queued next") },
       "next",
     );
@@ -1135,7 +1115,7 @@ describe("Thread loop activity", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    await core.submit(
+    core.enqueue(
       { type: "raw", message: pendingMessage("queued follow-up") },
       "next",
     );
@@ -1192,7 +1172,7 @@ describe("Thread.abort between turns", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    await core.submit(
+    core.enqueue(
       { type: "raw", message: pendingMessage("queued follow-up") },
       "next",
     );
@@ -1313,7 +1293,7 @@ describe("Thread.abort returns the unsent queue", () => {
       pendingMessage("queued one"),
       pendingMessage("queued two"),
     ]) {
-      await core.submit({ type: "raw", message: text }, "async");
+      core.enqueue({ type: "raw", message: text }, "async");
     }
     const { unsent } = await core.abort();
     expect(core.queued.async).toEqual([]);
@@ -1357,7 +1337,7 @@ describe("Thread.abort returns the unsent queue", () => {
       pendingMessage("queued user"),
       pendingMessage("queued other"),
     ]) {
-      await core.submit({ type: "raw", message: text }, "async");
+      core.enqueue({ type: "raw", message: text }, "async");
     }
     const { unsent } = await core.abort();
     expect(core.queued.async).toEqual([]);
@@ -1382,7 +1362,7 @@ describe("Thread.abort returns the unsent queue", () => {
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     for (const text of [pendingMessage("queued")]) {
-      await core.submit({ type: "raw", message: text }, "async");
+      core.enqueue({ type: "raw", message: text }, "async");
     }
     const { unsent } = await core.abort();
     expect(queuedText(unsent)).toBe("queued");
@@ -1719,10 +1699,7 @@ describe("replaceable conversation core", () => {
     const probe = new Defer<boolean>();
 
     const sent = core.submit({ type: "resolved", messages: [] });
-    await core.submit(
-      { type: "raw", message: pendingMessage("later") },
-      "next",
-    );
+    core.enqueue({ type: "raw", message: pendingMessage("later") }, "next");
     await resetThread(core, {
       seed: [
         {
@@ -1940,7 +1917,7 @@ describe("replaceable conversation core", () => {
       }),
     ).rejects.toThrow("destroyed");
     await expect(
-      core.submit({ type: "raw", message: pendingMessage("late") }, "next"),
+      core.submit({ type: "raw", message: pendingMessage("late") }),
     ).rejects.toThrow("destroyed");
     await expect(
       resetThread(core, { seed: [], archive: { type: "none" } }),
@@ -1949,7 +1926,7 @@ describe("replaceable conversation core", () => {
   });
 });
 
-describe("submission generations", () => {
+describe("submission ownership", () => {
   it("preempts a submission still resolving its own input", async () => {
     const entered = new Defer<void>();
     const gate = new Defer<void>();
@@ -2173,7 +2150,7 @@ describe("stale outer submissions", () => {
       ],
     });
     const stream = await mockClient.awaitStream();
-    await core.submit(
+    core.enqueue(
       { type: "raw", message: pendingMessage("stale queued message") },
       "next",
     );
@@ -2331,7 +2308,7 @@ describe("detached delivery batches", () => {
     const sent = core.submit(input("start"));
     const first = await mockClient.awaitStream();
     for (const text of ["consumed", "retained"])
-      await core.submit({ type: "raw", message: pendingMessage(text) }, "next");
+      core.enqueue({ type: "raw", message: pendingMessage(text) }, "next");
     first.finishResponse("end_turn");
     await entered.promise;
     await resetThread(core, { seed: [], archive: { type: "none" } });
@@ -2378,16 +2355,10 @@ describe("detached delivery batches", () => {
     });
     const first = await mockClient.awaitStream();
     for (const text of ["consumed", "leftover"])
-      await core.submit(
-        { type: "raw", message: pendingMessage(text) },
-        delivery,
-      );
+      core.enqueue({ type: "raw", message: pendingMessage(text) }, delivery);
     first.finishResponse("end_turn");
     await entered.promise;
-    await core.submit(
-      { type: "raw", message: pendingMessage("arrival") },
-      delivery,
-    );
+    core.enqueue({ type: "raw", message: pendingMessage("arrival") }, delivery);
     const { unsent } = await core.abort();
     expect(unsent).toEqual(
       ["leftover", "arrival"].map((text) => ({
@@ -2441,15 +2412,12 @@ describe("detached delivery batches", () => {
     const firstSend = core.submit(input("start"));
     const first = await mockClient.awaitStream();
     for (const text of ["old", "obsolete leftover"])
-      await core.submit({ type: "raw", message: pendingMessage(text) }, "next");
+      core.enqueue({ type: "raw", message: pendingMessage(text) }, "next");
     first.finishResponse("end_turn");
     await entered.promise;
     const replacementSend = core.submit(input("replacement"));
     const replacement = await awaitNextStream(mockClient, first);
-    await core.submit(
-      { type: "raw", message: pendingMessage("new queue") },
-      "next",
-    );
+    core.enqueue({ type: "raw", message: pendingMessage("new queue") }, "next");
     gate.resolve();
     expect(await firstSend).toEqual({ type: "aborted" });
     expect(core.queued.next).toEqual([
@@ -2497,13 +2465,13 @@ describe("detached delivery batches", () => {
       ],
     });
     const first = await mockClient.awaitStream();
-    await core.submit(
+    core.enqueue(
       { type: "raw", message: pendingMessage("first batch") },
       "next",
     );
     first.finishResponse("end_turn");
     await entered.promise;
-    await core.submit(
+    core.enqueue(
       { type: "raw", message: pendingMessage("later batch") },
       "next",
     );

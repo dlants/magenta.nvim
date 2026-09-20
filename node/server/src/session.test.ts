@@ -375,12 +375,14 @@ it("aborts the subtree but returns only the requested thread's unsent input", as
     .submit({ type: "raw", message: pendingMessage("root work") })
     .catch(() => {});
   // Queued behind the busy turn on both ends of the subtree.
-  void threadOf(root)
-    .submit({ type: "raw", message: pendingMessage("root leftover") }, "next")
-    .catch(() => {});
-  void threadOf(grandchild)
-    .submit({ type: "raw", message: pendingMessage("deep leftover") }, "next")
-    .catch(() => {});
+  threadOf(root).enqueue(
+    { type: "raw", message: pendingMessage("root leftover") },
+    "next",
+  );
+  threadOf(grandchild).enqueue(
+    { type: "raw", message: pendingMessage("deep leftover") },
+    "next",
+  );
   const { unsent } = await session.abortThread(root);
   expect(unsent.map((queued) => renderPending(queued.message))).toEqual([
     "root leftover",

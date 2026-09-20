@@ -446,10 +446,10 @@ describe("Thread-owned context delivery", () => {
     });
     let fork: Thread | undefined;
     try {
-      const submitted = f.thread.submit(
-        { type: "raw", message: pendingMessage("activate reminder") },
-        "now",
-      );
+      const submitted = f.thread.submit({
+        type: "raw",
+        message: pendingMessage("activate reminder"),
+      });
       const reminderStream = await f.mockClient.awaitStream();
       reminderStream.finishResponse("end_turn");
       await submitted;
@@ -487,7 +487,7 @@ describe("Thread-owned context delivery", () => {
               suspend
                 ? {
                     type: "suspend" as const,
-                    reason: { kind: "stop" as const, message: "halt" },
+                    reason: { kind: "suspend" as const, message: "halt" },
                   }
                 : { type: "none" as const },
             ),
@@ -509,8 +509,8 @@ describe("Thread-owned context delivery", () => {
           ],
         }),
       ).toEqual({
-        type: "stopped",
-        reason: { kind: "stop", message: "halt" },
+        type: "suspended",
+        reason: { kind: "suspend", message: "halt" },
       });
       expect(f.mockClient.streams).toHaveLength(0);
       expect(f.manager.files[f.file].agentView).toBeUndefined();

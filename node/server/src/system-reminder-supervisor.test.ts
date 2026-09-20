@@ -60,7 +60,7 @@ function request(
       }
     : {
         status,
-        reason: { kind: "stop", message: "halt" },
+        reason: { kind: "suspend", message: "halt" },
         inputTokenCount: 0,
         outputTokenCount,
         nativeMessageIdx,

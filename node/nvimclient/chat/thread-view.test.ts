@@ -142,8 +142,8 @@ describe("thread-view renderStatus streaming", () => {
 
   it("renders a supervisor's stop with its own message", async () => {
     const stopped = {
-      type: "stopped" as const,
-      reason: { kind: "stop" as const, message: "token budget exhausted" },
+      type: "suspended" as const,
+      reason: { kind: "suspend" as const, message: "token budget exhausted" },
     };
     const text = await renderStatusToString(
       { type: "idle", lastResult: stopped },

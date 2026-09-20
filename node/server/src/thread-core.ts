@@ -33,7 +33,7 @@ import {
   GitSupervisor,
 } from "./supervisors/git-supervisor.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
-import type { SendResult, ToolInvocationState } from "./thread-api.ts";
+import type { CoreLoopResult, ToolInvocationState } from "./thread-api.ts";
 import {
   EditedFilesSupervisor,
   type SupervisorFanOut,
@@ -364,7 +364,7 @@ export class ThreadCore {
     });
   }
 
-  async runTurn(messages: AgentInput[]): Promise<SendResult> {
+  async runTurn(messages: AgentInput[]): Promise<CoreLoopResult> {
     if (!this.isActive) return { type: "aborted" };
     const turn = runAgentLoop(
       {

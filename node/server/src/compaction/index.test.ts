@@ -14,7 +14,7 @@ import { Defer } from "../utils/async.ts";
 import { ThreadCompactor } from "./compactor.ts";
 import type { CompactionOutcome } from "./index.ts";
 
-describe("compaction generation ownership", () => {
+describe("compaction submission ownership", () => {
   it("settles a busy turn before taking the compaction snapshot", async () => {
     const { core: thread, mockClient } = createAgentWithMock({
       resolve: async () => ({
@@ -112,10 +112,21 @@ describe("compaction generation ownership", () => {
     });
     const original = thread["core"];
     const dispose = original.dispose.bind(original);
+    const disposing = new Defer<void>();
+    const released = new Defer<void>();
     original.dispose = async () => {
       await dispose();
-      await thread.abort();
+      disposing.resolve();
+      await released.promise;
     };
+    // The abort lands while the replacement is mid-disposal: it cannot be
+    // issued from inside the disposal itself, which would be the submission
+    // waiting for its own unwind.
+    void disposing.promise.then(async () => {
+      const aborted = thread.abort();
+      released.resolve();
+      await aborted;
+    });
     thread["context"].compactor = {
       run: async () => ({
         type: "complete",
@@ -547,12 +558,10 @@ describe("complete submission ownership", () => {
       type: "running",
       activity: { type: "preparing" },
     });
-    expect(
-      await thread.submit(
-        { type: "raw", message: pendingMessage("deferred raw") },
-        delivery,
-      ),
-    ).toEqual({ type: "queued" });
+    thread.enqueue(
+      { type: "raw", message: pendingMessage("deferred raw") },
+      delivery,
+    );
     const image = {
       type: "image" as const,
       nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -571,15 +580,13 @@ describe("complete submission ownership", () => {
         data: "ZG9jdW1lbnQ=",
       },
     };
-    expect(
-      await thread.submit(
-        {
-          type: "resolved",
-          messages: [text("@compact literal"), image, document],
-        },
-        delivery,
-      ),
-    ).toEqual({ type: "queued" });
+    thread.enqueue(
+      {
+        type: "resolved",
+        messages: [text("@compact literal"), image, document],
+      },
+      delivery,
+    );
     expect(signal.aborted).toBe(false);
     expect(resolutions).toEqual(["@compact"]);
     summary.resolve({
@@ -919,7 +926,7 @@ describe("submission-owned compaction signal", () => {
       messages: [text("history")],
     });
     expect(await sent).toEqual({
-      type: "stopped",
+      type: "suspended",
       reason: { kind: "compact", nextPrompt: undefined },
     });
     expect(thread.isBusy).toBe(false);

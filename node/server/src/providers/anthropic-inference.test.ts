@@ -10,7 +10,7 @@ import {
   type TestAgent,
   toolExecution,
 } from "../test-helpers.ts";
-import type { SendResult } from "../thread-api.ts";
+import type { CoreLoopResult } from "../thread-api.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { delay, pollUntil } from "../utils/async.ts";
 import type { AnthropicInferenceManager } from "./anthropic-inference.ts";
@@ -61,7 +61,7 @@ class AgentUnderTest {
     void this.agent.abortAndWait();
   }
 
-  runTurn(text: string): Promise<SendResult> {
+  runTurn(text: string): Promise<CoreLoopResult> {
     return this.agent.send([
       { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
     ]).promise;

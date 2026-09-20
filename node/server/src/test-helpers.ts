@@ -47,7 +47,7 @@ import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { type ContextDelivery, Thread, type ThreadContext } from "./thread.ts";
-import type { RestResult, SendResult, YieldValue } from "./thread-api.ts";
+import type { CoreLoopResult, RestResult, YieldValue } from "./thread-api.ts";
 import { executeToolBatch } from "./tool-executor.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
 import { clientToolCreator } from "./tools/create-tool.ts";
@@ -93,14 +93,16 @@ export function flatLoop(owner: {
   return state.type === "running" ? state.activity : { type: "idle" };
 }
 
-/** Thread turns a suspension it cannot claim into a `stopped` result; the bare
+/** Thread turns a suspension it cannot claim into a `suspended` result; the bare
  * harness has no owner to claim one, so it does the same. A `yield` suspension
  * is Thread's alone and has no rest-shaped form here. */
-function restResult(result: SendResult | undefined): RestResult | undefined {
+function restResult(
+  result: CoreLoopResult | undefined,
+): RestResult | undefined {
   if (result?.type !== "suspended") return result;
   return result.reason.kind === "yield"
     ? undefined
-    : { type: "stopped", reason: result.reason };
+    : { type: "suspended", reason: result.reason };
 }
 /** The bare-agent harness's stand-in for the thread: it owns the loop state
  * the same way, so what a test observes is what production observes. */
@@ -168,7 +170,7 @@ export class TestAgent {
   }
 
   private turn: AgentTurn | undefined;
-  private lastResult: SendResult | undefined;
+  private lastResult: CoreLoopResult | undefined;
 
   /** What `Thread.abort` does, for the tests that drive an agent without one:
    * mark the loop and wind the turn down through its handle. */
@@ -469,7 +471,10 @@ export const userInput = (text: string): AgentInput[] => [
 ];
 
 /** Drive one turn through the agent's only entry point. */
-export const sendText = (agent: TestAgent, text: string): Promise<SendResult> =>
+export const sendText = (
+  agent: TestAgent,
+  text: string,
+): Promise<CoreLoopResult> =>
   agent.send([
     { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
   ]).promise;

@@ -14,7 +14,7 @@ import type {
   ToolResults,
 } from "./providers/provider-types.ts";
 import type {
-  SendResult,
+  CoreLoopResult,
   ToolInvocationState,
   ToolResultsHook,
 } from "./thread-api.ts";
@@ -62,7 +62,7 @@ export type LoopState = { aborting: boolean } & (
 
 export type AgentTurn = {
   readonly loopState: LoopState;
-  promise: Promise<SendResult>;
+  promise: Promise<CoreLoopResult>;
   abort(): void;
 };
 
@@ -87,7 +87,7 @@ export function runAgentLoop(
     deps.onUpdate?.();
   };
 
-  const runLoop = async (): Promise<SendResult> => {
+  const runLoop = async (): Promise<CoreLoopResult> => {
     let initialInputPending = true;
     while (true) {
       if (loopState.aborting) return { type: "aborted" };
