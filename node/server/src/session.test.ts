@@ -337,7 +337,12 @@ it("freezes a fork at the requested index even if the source advances", async ()
   const forkId = await forkCreation;
   const fork = session.getThread(forkId);
   if (fork?.state !== "initialized") throw new Error("expected fork");
-  expect(fork.thread.getProviderMessages()).toEqual(originalMessages);
+  // The fork opens with the seam notice; everything before it is frozen.
+  const forkMessages = fork.thread.getProviderMessages();
+  expect(forkMessages.slice(0, -1)).toEqual(originalMessages);
+  expect(forkMessages.at(-1)?.content).toEqual([
+    expect.objectContaining({ type: "fork_notification" }),
+  ]);
   expect([...fork.thread.activeReminders]).toEqual(["original reminder"]);
   const policy = AutoCompactSupervisor.find(fork.thread.chatSupervisors)!;
   expect(

@@ -34,7 +34,13 @@ import {
 } from "../utils/files.ts";
 import { getSummaryAsProviderContent } from "../utils/pdf-pages.ts";
 import type { Result } from "../utils/result.ts";
-import { PRE_HISTORY_IDX } from "./history.ts";
+import {
+  formatHistoryIdx,
+  type HistoryIdx,
+  historyIdxAtOrBefore,
+  historyIdxPrecedes,
+  PRE_HISTORY,
+} from "./history.ts";
 
 const CONTEXT_FILE_MAX_CHARACTERS = 80_000;
 const CONTEXT_FILE_SUMMARY_BUDGET = 10_000;
@@ -100,7 +106,7 @@ function pendingUpdatesEqual(a: FileUpdates, b: FileUpdates): boolean {
 export type FileStat = { mtimeMs: number; size: number };
 
 type FileViewEntry = {
-  readonly nativeMessageIdx: NativeMessageIdx;
+  readonly nativeMessageIdx: HistoryIdx;
   readonly agentView: TrackedFileInfo["agentView"];
   readonly lastStat: FileStat | undefined;
 };
@@ -199,7 +205,10 @@ function cloneFile(
       : sourceHistory.filter(
           (entry) =>
             historyClone === undefined ||
-            entry.nativeMessageIdx <= historyClone.nativeMessageIdx,
+            historyIdxAtOrBefore(
+              entry.nativeMessageIdx,
+              historyClone.nativeMessageIdx,
+            ),
         );
   return trackedFile(
     file,
@@ -243,15 +252,18 @@ export class FileSupervisor implements ContextTracker, ThreadSupervisor {
 
   private recordView(
     file: TrackedFile,
-    nativeMessageIdx: NativeMessageIdx,
+    nativeMessageIdx: HistoryIdx,
     agentView: TrackedFileInfo["agentView"],
     lastStat: FileStat | undefined,
   ): void {
     const history = historyOf(file);
     const previousIdx = history.at(-1)?.nativeMessageIdx;
-    if (previousIdx !== undefined && nativeMessageIdx < previousIdx) {
+    if (
+      previousIdx !== undefined &&
+      historyIdxPrecedes(nativeMessageIdx, previousIdx)
+    ) {
       throw new Error(
-        `File view history must be monotonic: ${nativeMessageIdx} < ${previousIdx}`,
+        `File view history must be monotonic: ${formatHistoryIdx(nativeMessageIdx)} < ${formatHistoryIdx(previousIdx)}`,
       );
     }
     history.push({
@@ -478,7 +490,7 @@ export class FileSupervisor implements ContextTracker, ThreadSupervisor {
     absFilePath: AbsFilePath,
     tool: ToolApplied,
     fileTypeInfo: FileTypeInfo,
-    nativeMessageIdx: NativeMessageIdx = PRE_HISTORY_IDX,
+    nativeMessageIdx: HistoryIdx = PRE_HISTORY,
   ): void {
     const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
 
@@ -576,7 +588,7 @@ export class FileSupervisor implements ContextTracker, ThreadSupervisor {
   }
 
   async getContextUpdate(
-    nativeMessageIdx: NativeMessageIdx = PRE_HISTORY_IDX,
+    nativeMessageIdx: HistoryIdx = PRE_HISTORY,
   ): Promise<FileUpdates> {
     const revision = this.revision;
     if (!this.isCurrent(revision) || this.isContextEmpty()) {
@@ -706,7 +718,7 @@ From now on, whenever any of these files are updated by the user, you will get a
   }: {
     absFilePath: AbsFilePath;
     commit: boolean;
-    nativeMessageIdx: NativeMessageIdx;
+    nativeMessageIdx: HistoryIdx;
   }): Promise<FileUpdates[keyof FileUpdates] | undefined> {
     const revision = this.revision;
     const original = this.files[absFilePath];
@@ -1070,7 +1082,7 @@ From now on, whenever any of these files are updated by the user, you will get a
   private updateAgentsViewOfFiles(
     absFilePath: AbsFilePath,
     tool: ToolApplied,
-    nativeMessageIdx: NativeMessageIdx,
+    nativeMessageIdx: HistoryIdx,
   ): void {
     const fileInfo = this.files[absFilePath];
     if (!fileInfo) {

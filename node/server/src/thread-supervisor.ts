@@ -13,7 +13,11 @@ import {
   formatSystemInfo,
   type SystemInfo,
 } from "./providers/system-prompt.ts";
-import { PRE_HISTORY_IDX } from "./supervisors/history.ts";
+import {
+  type HistoryIdx,
+  historyIdxAtOrBefore,
+  PRE_HISTORY,
+} from "./supervisors/history.ts";
 import type { YieldValue } from "./thread-api.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 
@@ -483,7 +487,7 @@ function containsYieldTag(
 export class SystemInfoSupervisor implements ThreadSupervisor {
   private constructor(
     private readonly systemInfo: SystemInfo,
-    private injectedAt: NativeMessageIdx | undefined,
+    private injectedAt: HistoryIdx | undefined,
   ) {}
 
   static create(args: {
@@ -492,7 +496,7 @@ export class SystemInfoSupervisor implements ThreadSupervisor {
   }): SystemInfoSupervisor {
     return new SystemInfoSupervisor(
       args.systemInfo,
-      args.alreadyInjected ? PRE_HISTORY_IDX : undefined,
+      args.alreadyInjected ? PRE_HISTORY : undefined,
     );
   }
 
@@ -503,7 +507,7 @@ export class SystemInfoSupervisor implements ThreadSupervisor {
     return new SystemInfoSupervisor(
       args.source.systemInfo,
       args.source.injectedAt !== undefined &&
-        args.source.injectedAt <= args.nativeMessageIdx
+        historyIdxAtOrBefore(args.source.injectedAt, args.nativeMessageIdx)
         ? args.source.injectedAt
         : undefined,
     );

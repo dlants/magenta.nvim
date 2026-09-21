@@ -149,7 +149,7 @@ describe("assembleThread", () => {
 
   it("still requests a title after the core was replaced", async () => {
     const { id, thread, titleDefer, forceToolUse, mockClient } = setup();
-    await resetThread(thread, { seed: [], archive: { type: "none" } });
+    await resetThread(thread, { archive: { type: "none" } });
     await submitTitleText(thread, mockClient);
     expect(forceToolUse).toHaveBeenCalledTimes(1);
     titleDefer.resolve(titleResponse("After compaction"));

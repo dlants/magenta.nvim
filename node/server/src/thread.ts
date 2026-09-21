@@ -28,7 +28,9 @@ import {
   type SubmissionInput,
 } from "./submission/index.ts";
 import {
+  type BatchRun,
   type DeferredDelivery,
+  type Disposition,
   Mailbox,
   type QueueEntry,
   type Queues,
@@ -56,7 +58,6 @@ import {
   ThreadCore,
   type ThreadCoreCallbacks,
   type ThreadCoreContext,
-  type ThreadCoreSeed,
 } from "./thread-core.ts";
 import type { ForkProvenance } from "./thread-logger.ts";
 import {
@@ -140,12 +141,6 @@ export type ThreadArchiveOptions = {
 type FlushedQueue =
   | { type: "messages"; messages: AgentInput[] }
   | { type: "compact"; nextPrompt: string | undefined };
-
-/** What a `@compact` entry means for this delivery, and — mid-turn, where a
- * flush rides a request that already exists — the message it rides. */
-type FlushPolicy =
-  | { policy: "prompt" }
-  | { policy: "defer"; nativeMessageIdx: NativeMessageIdx };
 
 /** Flushed content as a single prompt: the only way spent queue content can
  * travel across a suspension that throws the log away. */
@@ -239,6 +234,11 @@ export class Thread implements ThreadCoreView {
   }
   get nativeMessageIdx(): NativeMessageIdx {
     return this.core.manager.getNativeMessageIdx();
+  }
+  /** Index of the fork seam notice, when this thread was created by a fork.
+   * Undefined once the core has been replaced by compaction. */
+  get forkSeamIdx(): NativeMessageIdx | undefined {
+    return this.core.forkSeamIdx;
   }
   get latestUsage(): Usage | undefined {
     return this.core.manager.log.latestUsage;
@@ -382,13 +382,6 @@ export class Thread implements ThreadCoreView {
       context.subagentDockerfile,
     );
   }
-  private freshSeed(): ThreadCoreSeed {
-    const { initialFiles, initialGitState } = this.context;
-    return {
-      ...(initialFiles ? { initialFiles } : {}),
-      ...(initialGitState ? { initialGitState } : {}),
-    };
-  }
 
   private threadToolCreator: ThreadToolCreator | undefined;
   private coreContext(): ThreadCoreContext {
@@ -402,13 +395,20 @@ export class Thread implements ThreadCoreView {
     };
   }
 
-  private createFreshCore(seed?: ThreadCoreSeed): ThreadCore {
+  private createFreshCore(
+    initialFiles: Files | undefined = this.context.initialFiles,
+  ): ThreadCore {
     const core = ThreadCore.create(
       this.id,
       this.coreContext(),
       this.coreCallbacks(() => core),
       this.resultArchive,
-      { ...this.freshSeed(), ...seed },
+      {
+        ...(initialFiles ? { initialFiles } : {}),
+        ...(this.context.initialGitState
+          ? { initialGitState: this.context.initialGitState }
+          : {}),
+      },
     );
     return core;
   }
@@ -510,14 +510,6 @@ export class Thread implements ThreadCoreView {
     if (this.destroyed) return;
     this.callbacks.onUpdate();
   }
-  /** Resolved content held for the head of the next turn. Reset replaces it;
-   * the next turn drains it exactly once. */
-  get pendingTurnContent(): ReadonlyArray<AgentInput> {
-    return this.mailbox.seed;
-  }
-  prependToNextTurn(messages: AgentInput[]): void {
-    this.mailbox.appendSeed(messages);
-  }
   setTitle(title: string): void {
     this.assertUsable();
     this.#title = title;
@@ -559,7 +551,17 @@ export class Thread implements ThreadCoreView {
    * back: the submission that eventually carries it owns its outcome. */
   enqueue(input: SubmissionInput, delivery: DeferredDelivery): void {
     this.assertUsable();
-    this.mailbox.enqueue(delivery, submissionEntries(input));
+    const entries = submissionEntries(input);
+    switch (delivery) {
+      case "async":
+        this.mailbox.enqueueAsync(entries);
+        return;
+      case "next":
+        this.mailbox.enqueueNext(entries);
+        return;
+      default:
+        assertUnreachable(delivery);
+    }
   }
 
   retry(): Promise<RestResult> {
@@ -689,13 +691,6 @@ export class Thread implements ThreadCoreView {
       };
     await this.replaceCore(
       {
-        seed: [
-          {
-            type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            text: summaryText(outcome.summary),
-          },
-        ],
         archive: {
           type: "compaction",
           summary: outcome.summary,
@@ -704,7 +699,18 @@ export class Thread implements ThreadCoreView {
       },
       isCurrent,
     );
+    this.opening = [
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: summaryText(outcome.summary),
+      },
+    ];
     if (!isCurrent()) return { type: "settle", result: { type: "aborted" } };
+    // The summary opens the replacement generation, ahead of the prompt that
+    // resumes it. It is held on the thread rather than on this continuation,
+    // which a preempting submission may displace: whichever turn runs first
+    // against the replacement core carries it.
     return {
       type: "continue",
       messages: [
@@ -718,6 +724,10 @@ export class Thread implements ThreadCoreView {
       ],
     };
   }
+  /** Content the next turn against the current core must open with, whatever
+   * submission runs it. A replaced core's summary lives here so that a
+   * preempted continuation cannot drop it. */
+  private opening: AgentInput[] = [];
   private readonly mailbox = new Mailbox();
   get queued(): Queues {
     return this.mailbox.queues;
@@ -725,40 +735,85 @@ export class Thread implements ThreadCoreView {
   private drainQueues(): QueuedMessage[] {
     return this.mailbox.drain();
   }
-  private flush(
-    delivery: DeferredDelivery,
-    policy: { policy: "prompt" },
-  ): Promise<FlushedQueue>;
-  private flush(
-    delivery: DeferredDelivery,
-    policy: { policy: "defer"; nativeMessageIdx: NativeMessageIdx },
-  ): Promise<{ type: "messages"; messages: AgentInput[] }>;
-  private async flush(
-    delivery: DeferredDelivery,
-    policy: FlushPolicy,
-  ): Promise<FlushedQueue> {
+  /** Drain the async queue into a request that already exists, resolving its
+   * entries against the message they will ride. */
+  private async flushAsyncIntoRequest(
+    nativeMessageIdx: NativeMessageIdx,
+  ): Promise<AgentInput[]> {
     const isCurrent = this.turnGuard();
-    return this.mailbox.deliver<FlushedQueue>(delivery, async (next) => {
+    return this.mailbox.deliverAsync<AgentInput[]>(async (next) => {
       const messages: AgentInput[] = [];
       for (;;) {
         const entry = next();
         if (entry === undefined) break;
-        if (
-          policy.policy === "defer" &&
-          entry.type === "raw" &&
-          parseCompact(entry.message).compact
-        ) {
+        // A compaction cannot ride a request that is already out, so it and
+        // everything queued behind it wait for the next turn.
+        if (entry.type === "raw" && parseCompact(entry.message).compact) {
           return {
-            disposition: { type: "restore", to: "next", ahead: [entry] },
-            value: { type: "messages", messages },
+            disposition: { type: "deferToNext", ahead: [entry] },
+            value: messages,
           };
         }
         const resolved = await this.resolveQueued(
           entry,
           isCurrent,
-          policy.policy === "defer"
-            ? policy.nativeMessageIdx
-            : this.core.manager.getPendingUserMessageIdx(),
+          nativeMessageIdx,
+        );
+        if (!isCurrent()) return { disposition: { type: "commit" }, value: [] };
+        if (resolved) messages.push(...resolved.messages);
+      }
+      return { disposition: { type: "commit" }, value: messages };
+    });
+  }
+  /** Drain both queues, in delivery order, for a request that does not exist
+   * yet. A compaction stops the drain: it cannot share a message with the
+   * content around it. */
+  private async flushQueuesForNextTurn(): Promise<FlushedQueue> {
+    const isCurrent = this.turnGuard();
+    const messages: AgentInput[] = [];
+    for (const flush of [
+      () => this.flushAsyncForNextTurn(),
+      () => this.flushNextForNextTurn(),
+    ]) {
+      const flushed = await flush();
+      if (!isCurrent()) break;
+      if (flushed.type === "compact") {
+        // Anything already flushed ahead of the compaction is spent, and the
+        // log it would have ridden is about to be thrown away: it travels as
+        // prompt text, like the compacting flush's own preceding content.
+        const carried = joinText(messages);
+        return {
+          type: "compact",
+          nextPrompt:
+            [carried, flushed.nextPrompt].filter(Boolean).join("\n\n") ||
+            undefined,
+        };
+      }
+      messages.push(...flushed.messages);
+    }
+    return { type: "messages", messages };
+  }
+  private flushAsyncForNextTurn(): Promise<FlushedQueue> {
+    return this.promptFlush((run) => this.mailbox.deliverAsync(run));
+  }
+  private flushNextForNextTurn(): Promise<FlushedQueue> {
+    return this.promptFlush((run) => this.mailbox.deliverNext(run));
+  }
+  private async promptFlush(
+    deliver: (
+      run: BatchRun<FlushedQueue, Disposition>,
+    ) => Promise<FlushedQueue>,
+  ): Promise<FlushedQueue> {
+    const isCurrent = this.turnGuard();
+    return deliver(async (next) => {
+      const messages: AgentInput[] = [];
+      for (;;) {
+        const entry = next();
+        if (entry === undefined) break;
+        const resolved = await this.resolveQueued(
+          entry,
+          isCurrent,
+          this.core.manager.getPendingUserMessageIdx(),
         );
         if (!isCurrent())
           return {
@@ -815,12 +870,7 @@ export class Thread implements ThreadCoreView {
       return { type: "none" };
     return {
       type: "inject",
-      content: (
-        await this.flush("async", {
-          policy: "defer",
-          nativeMessageIdx: ctx.nativeMessageIdx,
-        })
-      ).messages,
+      content: await this.flushAsyncIntoRequest(ctx.nativeMessageIdx),
     };
   }
   private async hasPendingContent(): Promise<boolean> {
@@ -858,7 +908,7 @@ export class Thread implements ThreadCoreView {
     const signal = submission.signal;
     const isCurrentLoop = this.currency(submission);
     const core = this.core;
-    if (!messages.length && !this.mailbox.seed.length && !force) {
+    if (!messages.length && !this.opening.length && !force) {
       const pending = await untilAborted(this.hasPendingContent(), signal);
       // Probing takes time, and a send that arrived while it ran owns the
       // loop now: this one is over before it touched the agent.
@@ -869,7 +919,7 @@ export class Thread implements ThreadCoreView {
       submitted: AgentInput[],
     ): Promise<CoreLoopResult> => {
       if (!isCurrentLoop()) return { type: "aborted" };
-      const input = [...this.mailbox.takeSeed(), ...submitted];
+      const input = [...this.opening.splice(0), ...submitted];
       const supervisors = this.supervisorsFor(core);
       const notify = (
         hook: "onAgentLoopStart" | "onAgentLoopStop",
@@ -1016,18 +1066,15 @@ export class Thread implements ThreadCoreView {
     }
     // Both queues are flushed in full, in insertion order: anything enqueued
     // while this resolution is running lands in the next flush.
-    const messages: AgentInput[] = [];
-    for (const delivery of ["async", "next"] as const) {
-      const flushed = await this.flush(delivery, { policy: "prompt" });
-      if (!isCurrent()) return { type: "rest" };
-      if (flushed.type === "compact") {
-        return {
-          type: "suspended",
-          reason: { kind: "compact", nextPrompt: flushed.nextPrompt },
-        };
-      }
-      messages.push(...flushed.messages);
+    const flushed = await this.flushQueuesForNextTurn();
+    if (!isCurrent()) return { type: "rest" };
+    if (flushed.type === "compact") {
+      return {
+        type: "suspended",
+        reason: { kind: "compact", nextPrompt: flushed.nextPrompt },
+      };
     }
+    const messages = flushed.messages;
     if (!messages.length) return { type: "rest" };
     // Resolved queue content is spent: if the request it was flushed for is
     // suspended, it has to travel on the handoff rather than be resolved a
@@ -1102,10 +1149,8 @@ export class Thread implements ThreadCoreView {
   private reset: Promise<ThreadCore> | undefined;
   private async replaceCore(
     {
-      seed,
       archive,
     }: {
-      seed: AgentInput[];
       archive:
         | { type: "compaction"; summary: string; chunkCount: number }
         | { type: "none" };
@@ -1122,9 +1167,10 @@ export class Thread implements ThreadCoreView {
       this.assertUsable();
       // Disposal is irreversible: cancellation prevents the caller's follow-up,
       // but must not leave this thread pointing at a permanently disposed core.
-      const core = this.createFreshCore({ initialFiles });
+      const core = this.createFreshCore(initialFiles);
       this.core = core;
-      this.mailbox.setSeed(isCurrent() ? seed : []);
+      // The replaced core's opening content does not belong to the new one.
+      this.opening = [];
       // The replaced core's outcome does not describe the new one.
       if (this.status.type === "idle")
         this.status = { type: "idle", lastResult: undefined };

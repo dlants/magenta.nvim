@@ -11,14 +11,14 @@ const raw = (text: string): QueueEntry => ({
 describe("Mailbox", () => {
   it("checks out a batch and restores leftovers ahead of new arrivals", async () => {
     const mailbox = new Mailbox();
-    mailbox.enqueue("async", [raw("first"), raw("second")]);
-    await mailbox.deliver("async", async (next) => {
-      mailbox.enqueue("async", [raw("later")]);
+    mailbox.enqueueAsync([raw("first"), raw("second")]);
+    await mailbox.deliverAsync(async (next) => {
+      mailbox.enqueueAsync([raw("later")]);
       expect(next()).toEqual(raw("first"));
       expect(mailbox.queues.async).toEqual([raw("later")]);
       return { disposition: { type: "restore" }, value: undefined };
     });
-    mailbox.enqueue("next", [raw("@compact untouched")]);
+    mailbox.enqueueNext([raw("@compact untouched")]);
     expect(mailbox.drain()).toEqual([
       { when: "async", message: raw("second") },
       { when: "async", message: raw("later") },
@@ -29,10 +29,10 @@ describe("Mailbox", () => {
   });
   it("restores an abandoned checkout when the queues are drained", async () => {
     const mailbox = new Mailbox();
-    mailbox.enqueue("async", [raw("first"), raw("second")]);
-    await mailbox.deliver("async", async (next) => {
+    mailbox.enqueueAsync([raw("first"), raw("second")]);
+    await mailbox.deliverAsync(async (next) => {
       expect(next()).toEqual(raw("first"));
-      mailbox.enqueue("async", [raw("later")]);
+      mailbox.enqueueAsync([raw("later")]);
       expect(mailbox.drain()).toEqual([
         { when: "async", message: raw("second") },
         { when: "async", message: raw("later") },
@@ -42,19 +42,15 @@ describe("Mailbox", () => {
     });
     expect(mailbox.drain()).toEqual([]);
   });
-  it("restores a checkout onto another queue, in order", async () => {
+  it("moves an async checkout onto the next queue, in order", async () => {
     const mailbox = new Mailbox();
-    mailbox.enqueue("async", [raw("first"), raw("@compact"), raw("third")]);
-    mailbox.enqueue("next", [raw("already queued")]);
-    await mailbox.deliver("async", async (next) => {
+    mailbox.enqueueAsync([raw("first"), raw("@compact"), raw("third")]);
+    mailbox.enqueueNext([raw("already queued")]);
+    await mailbox.deliverAsync(async (next) => {
       next();
       const compact = next();
       return {
-        disposition: {
-          type: "restore",
-          to: "next",
-          ahead: compact ? [compact] : [],
-        },
+        disposition: { type: "deferToNext", ahead: compact ? [compact] : [] },
         value: undefined,
       };
     });
@@ -65,18 +61,30 @@ describe("Mailbox", () => {
     ]);
     expect(mailbox.queues.async).toEqual([]);
   });
-  it("keeps seed content out of the queues", () => {
+
+  it("closes a live checkout when another one opens, restoring its own queue", async () => {
     const mailbox = new Mailbox();
-    const input = {
-      type: "text" as const,
-      text: "seeded",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    };
-    mailbox.appendSeed([input]);
-    expect(mailbox.drain()).toEqual([]);
-    expect(mailbox.seed).toEqual([input]);
-    expect(mailbox.takeSeed()).toEqual([input]);
-    expect(mailbox.seed).toEqual([]);
+    mailbox.enqueueAsync([raw("async first"), raw("async second")]);
+    mailbox.enqueueNext([raw("next first")]);
+    let asyncCursor: (() => QueueEntry | undefined) | undefined;
+    const asyncRun = mailbox.deliverAsync<undefined>(
+      (next) =>
+        new Promise(() => {
+          asyncCursor = next;
+          next();
+        }),
+    );
+    await Promise.resolve();
+    expect(asyncCursor).toBeDefined();
+    await mailbox.deliverNext(async (next) => {
+      expect(next()).toEqual(raw("next first"));
+      return { disposition: { type: "commit" }, value: undefined };
+    });
+    // The abandoned async remainder goes back to the async queue, not to next.
+    expect(mailbox.queues.async).toEqual([raw("async second")]);
+    expect(mailbox.queues.next).toEqual([]);
+    expect(asyncCursor?.()).toBeUndefined();
+    void asyncRun;
   });
 
   it("normalizes raw and resolved inputs without interpreting their content", () => {

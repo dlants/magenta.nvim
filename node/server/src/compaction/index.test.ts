@@ -244,16 +244,7 @@ describe("compaction submission ownership", () => {
     });
     await entered.promise;
     if (action === "reset")
-      await resetThread(thread, {
-        seed: [
-          {
-            type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            text: "newer seed",
-          },
-        ],
-        archive: { type: "none" },
-      });
+      await resetThread(thread, { archive: { type: "none" } });
     else if (action === "abort") await thread.abort();
     else await thread.destroy();
     const replacement = thread["core"];
@@ -319,7 +310,7 @@ describe("ThreadCompactor cancellation", () => {
     if (action === "discard") compactor.discard();
     else if (action === "abort") await thread.abort();
     else if (action === "reset")
-      await resetThread(thread, { seed: [], archive: { type: "none" } });
+      await resetThread(thread, { archive: { type: "none" } });
     else await thread.destroy();
     if (action !== "discard") cancellation.abort();
     const child = "late-child" as ThreadId;
@@ -456,7 +447,7 @@ it.each([
   expect(thread.isBusy).toBe(false);
   if (action === "abort") await thread.abort();
   else if (action === "reset")
-    await resetThread(thread, { seed: [], archive: { type: "none" } });
+    await resetThread(thread, { archive: { type: "none" } });
   else await thread.destroy();
   cancellation.abort();
   expect(await run).toEqual({ type: "aborted" });
@@ -895,7 +886,7 @@ describe("submission-owned compaction signal", () => {
       "compaction-signal-reset",
     );
     await entered.promise;
-    await resetThread(thread, { seed: [], archive: { type: "none" } });
+    await resetThread(thread, { archive: { type: "none" } });
     outcome.resolve({ type: "aborted" });
     expect(signalOf()?.aborted).toBe(true);
     expect(await sent).toEqual({ type: "aborted" });

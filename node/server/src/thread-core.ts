@@ -92,6 +92,7 @@ interface ThreadCoreState {
   editedFilesSupervisor: EditedFilesSupervisor;
   edlRegisters: EdlRegisters;
   contextDeliveries: Map<NativeMessageIdx, ContextDelivery>;
+  forkSeamIdx?: NativeMessageIdx;
 }
 
 export class ThreadCore {
@@ -104,6 +105,8 @@ export class ThreadCore {
   readonly gitSupervisor: GitSupervisor | undefined;
   readonly systemInfoSupervisor: SystemInfoSupervisor | undefined;
   readonly systemReminders: SystemReminderSupervisor | undefined;
+  /** Index of the fork-notification message, on a core created by a fork. */
+  readonly forkSeamIdx: NativeMessageIdx | undefined;
   readonly editedFilesSupervisor: EditedFilesSupervisor;
   readonly edlRegisters: EdlRegisters;
   private readonly contextDeliveries: Map<NativeMessageIdx, ContextDelivery>;
@@ -176,6 +179,15 @@ export class ThreadCore {
     const manager = source.manager.clone();
     manager.truncateMessages(fork.nativeMessageIdx);
     const nativeMessageIdx = manager.getNativeMessageIdx();
+    manager.appendUserMessage([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
+      },
+    ]);
+
+    const forkSeamIdx = manager.getNativeMessageIdx();
     const fileSupervisor = FileSupervisor.clone({
       source: source.fileSupervisor,
       history: { type: "truncate", nativeMessageIdx },
@@ -219,6 +231,7 @@ export class ThreadCore {
           ([idx]) => idx <= nativeMessageIdx,
         ),
       ),
+      forkSeamIdx,
     };
     return new ThreadCore(id, context, callbacks, completedTools, state);
   }
@@ -239,6 +252,7 @@ export class ThreadCore {
     this.editedFilesSupervisor = state.editedFilesSupervisor;
     this.edlRegisters = state.edlRegisters;
     this.contextDeliveries = state.contextDeliveries;
+    this.forkSeamIdx = state.forkSeamIdx;
     this.createTool = context.threadToolCreator({
       contextTracker: this.fileSupervisor,
       edlRegisters: this.edlRegisters,

@@ -883,7 +883,7 @@ describe("Thread submissions across a compaction handoff", () => {
 });
 
 describe("Thread.reset", () => {
-  it("starts a fresh agent from the seed and keeps the thread's durables", async () => {
+  it("starts an empty agent and keeps the thread's durables", async () => {
     const threadId = uniqueThreadId("thread-reset");
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
@@ -921,16 +921,7 @@ describe("Thread.reset", () => {
       );
       const oldAgent = core["core"].manager;
 
-      await resetThread(core, {
-        seed: [
-          {
-            type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            text: "SEED",
-          },
-        ],
-        archive: { type: "none" },
-      });
+      await resetThread(core, { archive: { type: "none" } });
 
       expect(core["core"].manager).not.toBe(oldAgent);
       expect(core.getProviderMessages()).toEqual([]);
@@ -951,7 +942,7 @@ describe("Thread.reset", () => {
       });
       const next = await awaitNextStream(mockClient, stream);
       const body = JSON.stringify(next.messages);
-      expect(body).toContain("SEED");
+      expect(body).toContain("continue");
       expect(body).not.toContain("the old conversation");
       next.streamText("ok");
       next.finishResponse("end_turn");
@@ -982,7 +973,7 @@ describe("Thread.reset", () => {
       await sent;
       await flushArchive(core);
 
-      await resetThread(core, { seed: [], archive: { type: "none" } });
+      await resetThread(core, { archive: { type: "none" } });
 
       expect(core.getProviderMessages()).toEqual([]);
       const entries = await readArchive(threadId);
@@ -4065,7 +4056,7 @@ describe("Thread survives the compaction agent swap", () => {
     }
   });
 
-  it("seeds the replacement agent's prefix with the summary alone", async () => {
+  it("opens the replacement agent with the summary and nothing older", async () => {
     const threadId = uniqueThreadId("compact-prefix");
     const { core, mockClient } = createAgentWithMock(
       {
@@ -4084,15 +4075,6 @@ describe("Thread survives the compaction agent swap", () => {
       threadId,
     );
     try {
-      // Queued on the pre-compaction agent, which the swap discards: the
-      // prefix belongs to the message list being replaced.
-      core.prependToNextTurn([
-        {
-          type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          text: "stale prefix",
-        },
-      ]);
       core["context"].compactor = {
         run: () =>
           Promise.resolve({
@@ -4107,10 +4089,9 @@ describe("Thread survives the compaction agent swap", () => {
         message: pendingMessage("@compact"),
       });
       const contStream = await mockClient.awaitStream();
-      const texts = core.pendingTurnContent
-        .filter((c) => c.type === "text")
-        .map((c) => c.text);
-      expect(texts.some((t) => t.includes("stale prefix"))).toBe(false);
+      const body = JSON.stringify(contStream.messages);
+      expect(body).toContain("SUMMARY TEXT");
+      expect(body).not.toContain("the old conversation");
       contStream.streamText("resumed");
       contStream.finishResponse("end_turn");
       await compactPromise;
@@ -4124,8 +4105,59 @@ describe("Thread survives the compaction agent swap", () => {
       await cleanupArchive(threadId);
     }
   });
-});
 
+  it("still opens with the summary when the continuation is preempted", async () => {
+    const threadId = uniqueThreadId("compact-preempt");
+    const { core, mockClient } = createAgentWithMock(
+      { resolve: compactResolver },
+      threadId,
+    );
+    try {
+      core["context"].compactor = {
+        run: () =>
+          Promise.resolve({
+            type: "complete",
+            summary: "SUMMARY TEXT",
+            chunkCount: 1,
+          }),
+      };
+      const compactPromise = core.submit({
+        type: "raw",
+        message: pendingMessage("@compact"),
+      });
+      const contStream = await mockClient.awaitStream();
+      // The continuation never gets to finish: a new send takes the thread
+      // over, and it is that turn which must carry the summary.
+      const preempt = core.submit({
+        type: "resolved",
+        messages: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: "new direction",
+          },
+        ],
+      });
+      void contStream;
+      await compactPromise;
+      const preemptStream = await pollUntil(() => {
+        const stream = mockClient.streams.at(-1);
+        if (!stream || stream === contStream) throw new Error("waiting");
+        return stream;
+      });
+      const body = JSON.stringify(preemptStream.messages);
+      expect(body).toContain("SUMMARY TEXT");
+      expect(body).toContain("new direction");
+      preemptStream.streamText("ok");
+      preemptStream.finishResponse("end_turn");
+      await preempt;
+    } finally {
+      await core.destroy();
+      await flushArchive(core);
+      await cleanupArchive(threadId);
+    }
+  });
+});
 describe("Thread preflight token count", () => {
   const noteCount = (
     seen: (number | undefined)[],

@@ -5,14 +5,23 @@ import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
 import type { NvimThread } from "./thread.ts";
 
-/** The fork marker is queued for the fork's first turn rather than appended to
- * the cloned history at fork time. */
+/** The fork marker lands in the cloned history at fork time, where it merges
+ * into whatever the user sends next. */
 function expectForkNotificationQueued(thread: NvimThread): void {
-  expect(
-    thread.thread.pendingTurnContent.some(
-      (c) => c.type === "text" && c.text.includes("<fork-notification>"),
-    ),
-  ).toBe(true);
+  expect(JSON.stringify(thread.thread.getProviderMessages())).toContain(
+    "<fork-notification>",
+  );
+}
+
+/** The cloned history without the seam notice the fork opens with. */
+function forkedMessages(thread: NvimThread) {
+  return thread.thread
+    .getProviderMessages()
+    .filter(
+      (m) =>
+        m.content.length > 0 &&
+        !m.content.every((c) => c.type === "fork_notification"),
+    );
 }
 
 it("normal mode F on a previous assistant message creates a fork ending there", async () => {
@@ -54,12 +63,9 @@ it("normal mode F on a previous assistant message creates a fork ending there", 
     const newThread = driver.magenta.chat.getActiveThread();
     expect(newThread.id).not.toBe(originalThreadId);
 
-    // The new thread should have native messages [user, assistant]. The
-    // fork-notification rides along with the fork's first turn.
-    const native = newThread.thread
-      .getProviderMessages()
-      .filter((m) => m.role !== "user" || m.content.length > 0);
-    expect(native).toHaveLength(2);
+    // The new thread should have native messages [user, assistant], plus the
+    // seam notice the fork opens with.
+    expect(forkedMessages(newThread)).toHaveLength(2);
     expectForkNotificationQueued(newThread);
 
     // Input buffer should be empty
@@ -111,8 +117,7 @@ it("normal mode F on a user message keeps that user message", async () => {
     });
 
     const newThread = driver.magenta.chat.getActiveThread();
-    const messages = newThread.thread.getProviderMessages();
-    expect(messages).toHaveLength(3);
+    expect(forkedMessages(newThread)).toHaveLength(3);
     expectForkNotificationQueued(newThread);
   });
 });
@@ -219,7 +224,7 @@ it("F on first user message keeps just that message and resets input", async () 
     });
 
     const newThread = driver.magenta.chat.getActiveThread();
-    const messages = newThread.thread.getProviderMessages();
+    const messages = forkedMessages(newThread);
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe("user");
     expectForkNotificationQueued(newThread);

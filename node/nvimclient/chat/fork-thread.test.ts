@@ -345,6 +345,18 @@ it("fork appends an id-free fork_notification and records forkedFrom", async () 
     expect(forkThread.state.messageViewState[markerIdx]?.forkedFrom).toBe(
       sourceThreadId,
     );
+    // The next user message merges into the seam notice rather than following
+    // it as a second consecutive user message, which some providers reject.
+    expect(
+      messages[markerIdx].content.some(
+        (c) => c.type === "text" && c.text.includes("continue"),
+      ),
+    ).toBe(true);
+    expect(
+      messages.some(
+        (m, i) => i > 0 && m.role === "user" && messages[i - 1].role === "user",
+      ),
+    ).toBe(false);
   });
 });
 

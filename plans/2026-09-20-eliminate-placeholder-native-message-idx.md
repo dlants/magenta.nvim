@@ -74,22 +74,25 @@ export type ProviderMessageContent = /* unchanged union */;
 
 Note that `ProviderToolResult`'s *nested* contents become input-flavored: only the tool_result block itself is located. Grep confirms no consumer reads an index off a nested tool-result content block; if one turns up, it can read the enclosing block's index instead.
 
-Supervisor-local sentinel, replacing the two non-input uses:
+Supervisor-local history index, replacing the two non-input uses. It is a widened
+type rather than a sentinel index, so nothing casts an out-of-domain value into
+`NativeMessageIdx`:
 
 ```ts
-// supervisors/history.ts (or alongside the existing history helpers)
-/** Older than any message this generation can name: a history entry stamped
- * with it survives every truncation, because `entry.idx <= idx` always holds. */
-export const PRE_HISTORY_IDX = -1 as NativeMessageIdx;
+// supervisors/history.ts
+export type HistoryIdx = NativeMessageIdx | { type: "pre-history" };
+export const PRE_HISTORY: HistoryIdx = { type: "pre-history" };
+export function historyIdxAtOrBefore(entry: HistoryIdx, idx: NativeMessageIdx): boolean;
+export function historyIdxPrecedes(entry: HistoryIdx, previous: HistoryIdx): boolean;
 ```
 
-`SystemInfoSupervisor.create` and the two `FileSupervisor` default parameters use it. Their behaviour is unchanged; only the name and the provenance of the constant change.
+`SystemInfoSupervisor.injectedAt`, the `FileSupervisor` history entries and the two defaulted parameters carry `HistoryIdx`. Their behaviour is unchanged; the comparisons become case analysis instead of arithmetic on `-1`.
 
 ## Invariants
 
 - `AgentInput` values never reach a consumer that needs an index: everything they touch (`convertInputToNative`, the OpenAI input-item builder, `forceToolUse`) already discards it today.
 - Every `ProviderMessageContent` in `log.messages` still carries the index the conversion assigned; the fork keybinding (`thread-view.ts`) and the edited-file grouping (`thread-supervisor.ts:405-414`) keep working unchanged.
-- Supervisor histories remain monotonic and truncatable; `PRE_HISTORY_IDX` entries are retained by every truncation, exactly as `-1` is today.
+- Supervisor histories remain monotonic and truncatable; `PRE_HISTORY` entries are retained by every truncation, exactly as `-1` was.
 - Round-tripping stays one-directional: no `ProviderMessageContent` is ever handed back as input. (The one place today that re-injects a display block, `SupervisorChain.beforeRequest` at `thread-supervisor.ts:354-360`, re-stamps the index; with the split it simply strips it, and the excess-property check keeps it honest.)
 - `PLACEHOLDER_NATIVE_MESSAGE_IDX` is gone from the `@magenta/server` barrel (`index.ts`) and from `node/nvimclient/providers/provider-types.ts`.
 
@@ -97,16 +100,54 @@ export const PRE_HISTORY_IDX = -1 as NativeMessageIdx;
 
 ## Relocate the two semantic sentinels — DONE
 
-`PRE_HISTORY_IDX` lives in the new `node/server/src/supervisors/history.ts`.
-`SystemInfoSupervisor.create` and the two `FileSupervisor` defaults use it.
-Full `npx tsc -b`, `npx vitest run` and `npx biome check .` pass.
+The "older than anything nameable" meaning lives in `node/server/src/supervisors/history.ts`,
+but as a *widened type* rather than a fake index (review finding): `HistoryIdx =
+NativeMessageIdx | { type: "pre-history" }`, with `PRE_HISTORY`,
+`historyIdxAtOrBefore`, `historyIdxPrecedes` and `formatHistoryIdx`. `FileViewEntry`,
+`recordView`, `updateAgentsViewOfFiles`, `FileSupervisor.toolApplied` /
+`getContextUpdate` and `SystemInfoSupervisor.injectedAt` carry `HistoryIdx`, so no
+out-of-domain value is ever cast into `NativeMessageIdx`. Truncation and the
+clone filter compare by case, not by arithmetic on `-1`.
 
-- Goal: `PLACEHOLDER_NATIVE_MESSAGE_IDX` is used only for content fields; the "older than anything nameable" meaning lives in its own named constant in the supervisor layer. `SystemInfoSupervisor.create` and the `FileSupervisor.toolApplied` / `getContextUpdate` defaults use `PRE_HISTORY_IDX`.
+The `PLACEHOLDER_NATIVE_MESSAGE_IDX` uses in `thread-core.ts` (fork notification)
+and `thread.ts` (compaction summary) are content fields, and disappear in the
+"Type split in provider-types" stage — not here.
+
+Review follow-ups addressed in this stage:
+
+- `Thread.enqueue` dispatches `DeferredDelivery` with an exhaustive `switch` and an
+  `assertUnreachable` default.
+- `BatchRun<T, D extends AsyncDisposition>`: the redundant `Disposition |` bound is gone.
+- `ThreadCore.create` takes the named `ThreadCoreSeed` again rather than two adjacent
+  trailing optionals.
+- The fork seam index is reported by the server (`ThreadCore.forkSeamIdx`, exposed as
+  `Thread.forkSeamIdx`) instead of being recomputed in `chat.ts` as
+  `getProviderMessages().length - 1`. The nvim side no longer assumes the seam is last
+  and cannot write `messageViewState[-1]`.
+- Content flushed ahead of a compaction found by a later queue is no longer dropped:
+  `flushQueuesForNextTurn` folds it into the compaction's `nextPrompt`, the same way a
+  single flush folds its own preceding content.
+- The compaction summary is held on `Thread.opening` (consumed by the first turn that
+  runs against the replacement core) rather than riding only the one continuation, so a
+  submission that preempts the continuation still opens with the summary. `replaceCore`
+  clears it, and the empty-send gate counts it as content.
+
+- Goal: the sentinel value is gone from the content types' neighbourhood; the "older than
+  anything nameable" meaning is a case of `HistoryIdx` in the supervisor layer.
 - Tests:
-  - Existing: "restores system-info delivery at the clone's effective index" (`thread-core-context.test.ts`) — a fork before and at the head must still inject the preamble exactly once; this is the behaviour `alreadyInjected` encodes.
-  - Existing `file-supervisor-delivery.test.ts` clone/truncate cases exercise the defaulted-index history entries.
-  - No new test: this stage is a rename with no behavioural surface of its own.
-
+  - Existing: "restores system-info delivery at the clone's effective index"
+    (`thread-core-context.test.ts`) and the `file-supervisor-delivery.test.ts` clone/truncate
+    cases cover the widened history index.
+  - New: `mailbox.test.ts` "closes a live checkout when another one opens, restoring its own
+    queue" pins the implicit-close/restore-to-own-queue invariant.
+  - New: `thread.test.ts` "compacts on an @compact that reaches prompt time in the async
+    queue" and "carries async content flushed ahead of a next-queue @compact into its prompt".
+  - New: `agent.test.ts` "still opens with the summary when the continuation is preempted".
+  - New assertions in `fork-thread.test.ts`: the next user message merges into the seam
+    notice, and no two consecutive user messages exist.
+  - Not added: a fork-with-`inputMessages` marker test. With the seam index coming from the
+    server, the marker no longer depends on the log's length at the time Chat computes it,
+    so the scenario the review worried about is no longer representable.
 ## Type split in provider-types
 
 - Goal: input and display flavors are separate types; `AgentInput`, `ToolResultContent`, `ToolResultInput` have no `nativeMessageIdx`. The repo does not compile yet — the point of the stage is the error list.

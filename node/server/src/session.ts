@@ -398,15 +398,6 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       }
       if (!current()) throw new Error("Thread creation cancelled");
 
-      if (request.type === "fork") {
-        thread.prependToNextTurn([
-          {
-            type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            text: "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
-          },
-        ]);
-      }
       if (options.inputMessages) {
         void thread
           .submit({ type: "resolved", messages: options.inputMessages })
