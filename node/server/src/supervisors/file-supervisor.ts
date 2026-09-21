@@ -34,6 +34,7 @@ import {
 } from "../utils/files.ts";
 import { getSummaryAsProviderContent } from "../utils/pdf-pages.ts";
 import type { Result } from "../utils/result.ts";
+import { PRE_HISTORY_IDX } from "./history.ts";
 
 const CONTEXT_FILE_MAX_CHARACTERS = 80_000;
 const CONTEXT_FILE_SUMMARY_BUDGET = 10_000;
@@ -477,7 +478,7 @@ export class FileSupervisor implements ContextTracker, ThreadSupervisor {
     absFilePath: AbsFilePath,
     tool: ToolApplied,
     fileTypeInfo: FileTypeInfo,
-    nativeMessageIdx: NativeMessageIdx = PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    nativeMessageIdx: NativeMessageIdx = PRE_HISTORY_IDX,
   ): void {
     const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
 
@@ -575,7 +576,7 @@ export class FileSupervisor implements ContextTracker, ThreadSupervisor {
   }
 
   async getContextUpdate(
-    nativeMessageIdx: NativeMessageIdx = PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    nativeMessageIdx: NativeMessageIdx = PRE_HISTORY_IDX,
   ): Promise<FileUpdates> {
     const revision = this.revision;
     if (!this.isCurrent(revision) || this.isContextEmpty()) {

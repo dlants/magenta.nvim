@@ -13,6 +13,7 @@ import {
   formatSystemInfo,
   type SystemInfo,
 } from "./providers/system-prompt.ts";
+import { PRE_HISTORY_IDX } from "./supervisors/history.ts";
 import type { YieldValue } from "./thread-api.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 
@@ -491,7 +492,7 @@ export class SystemInfoSupervisor implements ThreadSupervisor {
   }): SystemInfoSupervisor {
     return new SystemInfoSupervisor(
       args.systemInfo,
-      args.alreadyInjected ? PLACEHOLDER_NATIVE_MESSAGE_IDX : undefined,
+      args.alreadyInjected ? PRE_HISTORY_IDX : undefined,
     );
   }
 
