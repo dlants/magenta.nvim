@@ -1,8 +1,5 @@
 import type { LuaExecutor } from "../capabilities/lua-executor.ts";
-import {
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolSpec,
-} from "../providers/provider-types.ts";
+import type { ProviderToolSpec } from "../providers/provider-types.ts";
 import type {
   ExecutedToolResult,
   ExecutingToolInvocation,
@@ -50,7 +47,6 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -63,12 +59,10 @@ export function execute(
             {
               type: "text",
               text: formatResult(value),
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
           structuredResult: { toolName: "nvim_lua" as const },
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } catch (error) {
       if (aborted) {
@@ -79,7 +73,6 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       return {
@@ -89,7 +82,6 @@ export function execute(
           status: "error",
           error: `Error executing Lua: ${error instanceof Error ? error.message : String(error)}`,
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();

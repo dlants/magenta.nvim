@@ -5,7 +5,6 @@ import {
   loadAgents,
   MCPToolManagerImpl,
   type PendingMessage,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type PreparedThread,
   type PreparedThreadContext,
   type ProviderProfile,
@@ -401,7 +400,6 @@ async function resolveSubmission(
   const messages: AgentInput[] = [
     {
       type: "text",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       text: processedText,
     },
   ];

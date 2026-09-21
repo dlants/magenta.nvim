@@ -20,7 +20,6 @@ import type {
   ProviderMessageContent,
   ProviderToolSpec,
 } from "./providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import {
   FileSupervisor,
@@ -182,7 +181,6 @@ export class ThreadCore {
     manager.appendUserMessage([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
       },
     ]);
@@ -408,7 +406,6 @@ export class ThreadCore {
           {
             type: "text",
             text: ABORT_MARKER_TEXT,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ]);
       }

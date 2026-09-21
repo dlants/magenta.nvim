@@ -1,7 +1,7 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import { describe, expect, it } from "vitest";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
+import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import { pendingMessage } from "../submission/index.ts";
 import {
   awaitNextStream,
@@ -11,6 +11,9 @@ import {
 } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { Defer } from "../utils/async.ts";
+
+const idx = 0 as NativeMessageIdx;
+
 import { ThreadCompactor } from "./compactor.ts";
 import type { CompactionOutcome } from "./index.ts";
 
@@ -28,7 +31,6 @@ describe("compaction submission ownership", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "work",
         },
       ],
@@ -103,7 +105,6 @@ describe("compaction submission ownership", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "continue",
           },
         ],
@@ -161,7 +162,6 @@ describe("compaction submission ownership", () => {
           messages: [
             {
               type: "text",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: "continue",
             },
           ],
@@ -220,7 +220,6 @@ describe("compaction submission ownership", () => {
           messages: [
             {
               type: "text",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: "continue",
             },
           ],
@@ -296,9 +295,9 @@ describe("ThreadCompactor cancellation", () => {
           role: "user",
           content: [
             {
+              nativeMessageIdx: idx,
               type: "text",
               text: "history",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
         },
@@ -350,7 +349,7 @@ it("a late first spawn cannot overwrite a newer compaction", async () => {
         {
           type: "text" as const,
           text: "history",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          nativeMessageIdx: idx,
         },
       ],
     },
@@ -407,7 +406,6 @@ it.each([
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "yield",
         },
       ],
@@ -433,9 +431,9 @@ it.each([
         role: "user",
         content: [
           {
+            nativeMessageIdx: idx,
             type: "text",
             text: "history",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -471,7 +469,6 @@ it("an immediate submission supersedes a parked compaction before resolution", a
               messages: [
                 {
                   type: "text",
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                   text: "continue",
                 },
               ],
@@ -510,7 +507,6 @@ it("an immediate submission supersedes a parked compaction before resolution", a
 describe("complete submission ownership", () => {
   const text = (value: string) => ({
     type: "text" as const,
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     text: value,
   });
 
@@ -555,7 +551,6 @@ describe("complete submission ownership", () => {
     );
     const image = {
       type: "image" as const,
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       source: {
         type: "base64" as const,
         media_type: "image/png" as const,
@@ -564,7 +559,6 @@ describe("complete submission ownership", () => {
     };
     const document = {
       type: "document" as const,
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       source: {
         type: "base64" as const,
         media_type: "application/pdf" as const,
@@ -824,7 +818,6 @@ describe("complete submission ownership", () => {
 describe("submission-owned compaction signal", () => {
   const text = (value: string) => ({
     type: "text" as const,
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     text: value,
   });
   const startCompactingThread = (id: string) => {

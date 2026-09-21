@@ -26,7 +26,6 @@ import type {
   StreamingBlock,
   ToolResults,
 } from "./provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 
 /** A thin adapter onto the real `Agent`: these tests are about what the
  * manager puts on the wire, but the loop driving it must be the production
@@ -62,9 +61,7 @@ class AgentUnderTest {
   }
 
   runTurn(text: string): Promise<CoreLoopResult> {
-    return this.agent.send([
-      { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
-    ]).promise;
+    return this.agent.send([{ type: "text", text }]).promise;
   }
 
   /** Non-text input reaches the manager from a hook, not from a submission,
@@ -171,7 +168,6 @@ function okResults(
           {
             type: "text" as const,
             text,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
         structuredResult: { toolName: "unknown" },
@@ -323,7 +319,6 @@ describe("user input", () => {
           media_type: "image/png",
           data: "base64data",
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
     expect(agent.log.messages[0].content[0]).toMatchObject({
@@ -348,7 +343,6 @@ describe("user input", () => {
           data: "pdfdata",
         },
         title: "My Document",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
     expect(agent.log.messages[0].content[0]).toMatchObject({
@@ -520,7 +514,6 @@ describe("hung stream abort", () => {
       {
         type: "text",
         text: "Hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
     const request = manager.sendRequest(() => {});
@@ -1594,12 +1587,10 @@ File context here
         {
           type: "text",
           text: contextUpdateText,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
         {
           type: "text",
           text: "Now here is my question",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
 

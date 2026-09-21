@@ -9,13 +9,12 @@ import {
 import type { ToolName } from "../tool-types.ts";
 import { ABORT_GRACE_PERIOD_MS } from "./inference-shared.ts";
 import type { MockOpenAIClient } from "./mock-openai-client.ts";
-import {
-  type NativeInferenceManager,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolSpec,
-  type RequestedTool,
-  type StreamEvent,
-  type ToolResults,
+import type {
+  NativeInferenceManager,
+  ProviderToolSpec,
+  RequestedTool,
+  StreamEvent,
+  ToolResults,
 } from "./provider-types.ts";
 
 const spec: ProviderToolSpec = {
@@ -250,7 +249,6 @@ describe("OpenAIInferenceManager sendRequest", () => {
       {
         type: "text",
         text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
     const request = manager.sendRequest((update) => updates.push(update));

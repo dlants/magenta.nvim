@@ -1,9 +1,8 @@
 import type { ToolExecution, ToolOutcome } from "./agent.ts";
 import type {
   NonEmptyRequestedTools,
-  ProviderToolResult,
+  ToolResultInput,
 } from "./providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { ToolInvocationState } from "./thread-api.ts";
 import type {
   ActiveToolEntry,
@@ -37,12 +36,12 @@ export function executeToolBatch(
   function recordCompletedTool(
     request: ToolRequest,
     executed: ExecutedToolResult,
-  ): ProviderToolResult {
+  ): ToolResultInput {
     const structuredResult =
       executed.result.status === "ok"
         ? executed.result.structuredResult
         : undefined;
-    const result: ProviderToolResult = {
+    const result: ToolResultInput = {
       ...executed,
       result:
         executed.result.status === "ok"
@@ -59,7 +58,7 @@ export function executeToolBatch(
 
   async function runBatch(): Promise<ToolOutcome> {
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
-    const results = new Map<ToolRequestId, ProviderToolResult["result"]>();
+    const results = new Map<ToolRequestId, ToolResultInput["result"]>();
 
     for (const requested of requests) {
       if (requested.request.status !== "ok") {
@@ -81,7 +80,6 @@ export function executeToolBatch(
             status: "error",
             error: `Tool creation failed: ${(err as Error).message}`,
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         });
         results.set(requested.id, result.result);
         continue;
@@ -110,7 +108,6 @@ export function executeToolBatch(
               status: "error",
               error: `Tool execution failed: ${(err as Error).message}`,
             },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         }
         const wireResult = recordCompletedTool(entry.request, result);

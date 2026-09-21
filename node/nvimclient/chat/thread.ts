@@ -1,8 +1,8 @@
 import type {
   GitState,
-  ProviderToolResult,
   ScriptSandboxRoot,
   SubagentConfig,
+  ToolResultInput,
 } from "@magenta/server";
 import {
   type AgentInput,
@@ -235,7 +235,7 @@ export class NvimThread {
     compactionViewState: {
       [runId: CompactionRunId]: { expanded: boolean };
     };
-    toolResultMap: Map<ToolRequestId, ProviderToolResult>;
+    toolResultMap: Map<ToolRequestId, ToolResultInput>;
     forkedTo: { childThreadId: ThreadId; atMessageIdx: NativeMessageIdx }[];
   };
 
@@ -394,7 +394,7 @@ export class NvimThread {
    * Structured (display-only) data is not carried here — it lives in
    * `thread.completedTools` and is looked up at render time. */
   rebuildToolResultMap(): void {
-    const next = new Map<ToolRequestId, ProviderToolResult>();
+    const next = new Map<ToolRequestId, ToolResultInput>();
     for (const message of this.thread.getProviderMessages()) {
       if (message.role !== "user") continue;
       for (const content of message.content) {

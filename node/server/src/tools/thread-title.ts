@@ -2,7 +2,6 @@ import type {
   Provider,
   ProviderToolSpec,
 } from "../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
   ExecutedToolResult,
   ExecutingToolInvocation,
@@ -28,7 +27,6 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       return {
@@ -40,12 +38,10 @@ export function execute(
             {
               type: "text",
               text: request.input.title,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
           structuredResult: { toolName: "thread_title" as const },
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } catch (error) {
       if (aborted) {
@@ -56,7 +52,6 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       return {
@@ -66,7 +61,6 @@ export function execute(
           status: "error",
           error: `Failed: ${error instanceof Error ? error.message : String(error)}`,
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();
@@ -134,7 +128,6 @@ export async function generateTitle(
 ${userMessage}
 Come up with a succinct thread title for this prompt. It must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).
 `,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ],
     spec,

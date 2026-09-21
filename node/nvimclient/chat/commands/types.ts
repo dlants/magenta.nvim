@@ -1,4 +1,4 @@
-import type { ProviderMessageContent } from "../../providers/provider-types.ts";
+import type { AgentInput } from "../../providers/provider-types.ts";
 
 export interface MessageContext {
   nvim: import("../../nvim/nvim-node/index.ts").Nvim;
@@ -18,7 +18,7 @@ export interface Command {
   execute(
     match: RegExpMatchArray,
     context: MessageContext,
-  ): Promise<ProviderMessageContent[]>;
+  ): Promise<AgentInput[]>;
 }
 
 export interface CommandMatch {

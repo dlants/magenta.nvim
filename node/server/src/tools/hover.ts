@@ -5,10 +5,7 @@ import type {
   LspDefinitionResponse,
   LspRange,
 } from "../capabilities/lsp-client.ts";
-import {
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolSpec,
-} from "../providers/provider-types.ts";
+import type { ProviderToolSpec } from "../providers/provider-types.ts";
 import type {
   ExecutedToolResult,
   ExecutingToolInvocation,
@@ -61,7 +58,6 @@ export function execute(
             status: "error",
             error: `Failed to read file ${absFilePath}: ${e instanceof Error ? e.message : String(e)}`,
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -73,7 +69,6 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       // Find the symbol bounded by non-alphanumeric characters
@@ -89,7 +84,6 @@ export function execute(
               status: "error",
               error: `Context "${request.input.context}" not found in file.`,
             },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         }
 
@@ -109,7 +103,6 @@ export function execute(
               status: "error",
               error: `Symbol "${request.input.symbol}" not found within the provided context.`,
             },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         }
         symbolStart = (contextIndex + match.index) as StringIdx;
@@ -126,7 +119,6 @@ export function execute(
               status: "error",
               error: `Symbol "${request.input.symbol}" not found in file.`,
             },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         }
         symbolStart = match.index as StringIdx;
@@ -175,7 +167,6 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -257,12 +248,10 @@ export function execute(
             {
               type: "text",
               text: content,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
           structuredResult: { toolName: "hover" },
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } catch (error) {
       if (aborted) {
@@ -273,7 +262,6 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       return {
@@ -283,7 +271,6 @@ export function execute(
           status: "error",
           error: `Error requesting hover: ${error instanceof Error ? error.message : String(error)}`,
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();

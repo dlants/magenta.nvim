@@ -4,7 +4,6 @@ import type { ToolName, ToolRequestId } from "@magenta/server";
 import {
   AutoCompactSupervisor,
   compactionRunThreadIds,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ThreadCompactor,
 } from "@magenta/server";
 import { expect, it } from "vitest";
@@ -452,7 +451,6 @@ it("lets the user rescue a chunk thread whose turn failed", async () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "try again",
           },
         ],

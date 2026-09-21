@@ -21,10 +21,7 @@ import {
   sanitizeSchemaForOpenAI,
   supportsWebSearch,
 } from "./openai.ts";
-import {
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolSpec,
-} from "./provider-types.ts";
+import type { ProviderToolSpec } from "./provider-types.ts";
 
 const fixtureDir = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -50,7 +47,7 @@ const tool = (name: string): ProviderToolSpec => ({
 
 function userItem(text: string): OpenAI.Responses.ResponseInputItem {
   return convertInputToNativeItems([
-    { type: "text", text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
+    { type: "text", text },
   ])[0] as OpenAI.Responses.ResponseInputItem;
 }
 

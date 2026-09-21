@@ -1,6 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { ThreadId } from "./chat-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import { type PreparedThread, Session, type SessionHost } from "./session.ts";
 import { pendingMessage, renderPending } from "./submission/index.ts";
 import {
@@ -226,7 +225,6 @@ it("runs bootstrap input and settles a yield with no dispatch involved", async (
       {
         type: "text",
         text: "work",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ],
   });
@@ -303,7 +301,6 @@ it("freezes a fork at the requested index even if the source advances", async ()
         {
           type: "text",
           text: message,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ],
     }),

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import { pendingMessage, renderPending } from "./index.ts";
 import { Mailbox, type QueueEntry, submissionEntries } from "./mailbox.ts";
 
@@ -94,7 +93,6 @@ describe("Mailbox", () => {
     const input = {
       type: "text" as const,
       text: "@compact",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     };
     const entries = submissionEntries({ type: "resolved", messages: [input] });
     expect(entries).toEqual([{ type: "resolved", input }]);

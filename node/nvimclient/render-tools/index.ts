@@ -13,7 +13,7 @@ import type { Chat } from "../chat/chat.ts";
 import type { Msg as ThreadMsg, ToolViewState } from "../chat/thread.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { MagentaOptions } from "../options.ts";
-import type { ProviderToolResult } from "../providers/provider-types.ts";
+import type { ToolResultInput } from "../providers/provider-types.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { d, type VDOMNode } from "../tea/view.ts";
@@ -46,11 +46,11 @@ export type RenderContext = {
   chat: Chat;
 };
 
-function isError(result: ProviderToolResult): boolean {
+function isError(result: ToolResultInput): boolean {
   return result.result.status === "error";
 }
 
-function formatTokenEstimate(result: ProviderToolResult): string {
+function formatTokenEstimate(result: ToolResultInput): string {
   const content =
     result.result.status === "error"
       ? result.result.error

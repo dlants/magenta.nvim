@@ -17,10 +17,9 @@ import {
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import type { Logger } from "../../logger.ts";
 import type {
-  ProviderToolResultContent,
   ProviderToolSpec,
+  ToolResultContent,
 } from "../../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../../providers/provider-types.ts";
 import { assertUnreachable } from "../../utils/assertUnreachable.ts";
 import { MockMCPServer } from "./mock-server.ts";
 import type { MCPServerConfig } from "./options.ts";
@@ -220,7 +219,7 @@ export class MCPClient {
   async callTool(
     toolName: MCPToolName,
     params: MCPToolRequestParams,
-  ): Promise<ProviderToolResultContent[]> {
+  ): Promise<ToolResultContent[]> {
     if (!this.client || !this.isConnected) {
       throw new Error(`MCP client ${this.serverName} is not connected`);
     }
@@ -237,13 +236,12 @@ export class MCPClient {
     );
 
     // biome-ignore lint/suspicious/useIterableCallbackReturn: exhaustive switch handles all cases
-    const content = result.content.map((c): ProviderToolResultContent => {
+    const content = result.content.map((c): ToolResultContent => {
       switch (c.type) {
         case "text":
           return {
             type: "text",
             text: c.text,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         case "image":
           return {
@@ -257,25 +255,21 @@ export class MCPClient {
                 | "image/webp",
               data: c.data,
             },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         case "audio":
           return {
             type: "text",
             text: `[MCP audio content type not supported yet]`,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         case "resource_link":
           return {
             type: "text",
             text: `[MCP resource_link content type not supported yet]`,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         case "resource":
           return {
             type: "text",
             text: `[MCP resource content type not supported yet]`,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         default:
           assertUnreachable(c);

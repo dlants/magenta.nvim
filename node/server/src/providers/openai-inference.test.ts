@@ -18,15 +18,14 @@ import type {
   MockOpenAIClient,
   MockResponseStream,
 } from "./mock-openai-client.ts";
-import {
-  type NativeInferenceManager,
-  type NativeMessageIdx,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderMessage,
-  type ProviderToolResult,
-  type ProviderToolSpec,
-  type RequestedTool,
-  type ToolResults,
+import type {
+  NativeInferenceManager,
+  NativeMessageIdx,
+  ProviderMessage,
+  ProviderToolResult,
+  ProviderToolSpec,
+  RequestedTool,
+  ToolResults,
 } from "./provider-types.ts";
 
 const spec: ProviderToolSpec = {
@@ -42,7 +41,6 @@ function userText(text: string) {
   return {
     type: "text" as const,
     text,
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 }
 
@@ -65,7 +63,6 @@ function imageResult(): ProviderToolResult["result"] {
           media_type: "image/png",
           data: "aW1hZ2U=",
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ],
   };
@@ -119,9 +116,7 @@ async function startTurn(
   text = "hello",
 ): Promise<{ turn: Promise<CoreLoopResult>; stream: MockResponseStream }> {
   const next = client.streams.length;
-  const turn = agent.send([
-    { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
-  ]);
+  const turn = agent.send([{ type: "text", text }]);
   const stream = await client.awaitStreamAt(next);
   return { turn: turn.promise, stream };
 }
@@ -659,7 +654,6 @@ describe("OpenAIInferenceManager invariant guards", () => {
       await agent.send([
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "again",
         },
       ]).promise,
@@ -746,7 +740,6 @@ describe("OpenAIInferenceManager tool result attachments", () => {
       media_type: "image/png" as const,
       data: "aW1n",
     },
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
   const document = {
     type: "document" as const,
@@ -755,7 +748,6 @@ describe("OpenAIInferenceManager tool result attachments", () => {
       media_type: "application/pdf" as const,
       data: "cGRm",
     },
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 
   async function runWithResult(
@@ -948,7 +940,6 @@ describe("OpenAIInferenceManager pending message indices", () => {
     const turn = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]).promise;
@@ -1005,7 +996,6 @@ describe("OpenAIInferenceManager pending message indices", () => {
             type: "tool_result",
             id: request.id,
             result: imageResult(),
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           }),
           abort: () => {},
         }),

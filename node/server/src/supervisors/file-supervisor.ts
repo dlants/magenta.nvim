@@ -8,10 +8,9 @@ import type {
 import type { FileIO } from "../capabilities/file-io.ts";
 import type { Logger } from "../logger.ts";
 import type {
+  AgentInput,
   NativeMessageIdx,
-  ProviderMessageContent,
 } from "../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
   InjectedContent,
   RequestContext,
@@ -49,7 +48,7 @@ export type Patch = string & { __patch: true };
 
 export type WholeFileUpdate = {
   type: "whole-file";
-  content: ProviderMessageContent[];
+  content: AgentInput[];
   pdfPage?: number;
   pdfSummary?: boolean;
 };
@@ -781,7 +780,7 @@ From now on, whenever any of these files are updated by the user, you will get a
     return this.getFileMessageAndUpdateAgentViewOfFile({
       absFilePath,
       commit: false,
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      nativeMessageIdx: PRE_HISTORY,
     });
   }
 
@@ -841,12 +840,10 @@ From now on, whenever any of these files are updated by the user, you will get a
               {
                 type: "text",
                 text: `File \`${relFilePath}\``,
-                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               },
               {
                 type: "text",
                 text: `${notice}\n${summaryText}`,
-                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               },
             ],
           },
@@ -878,12 +875,10 @@ From now on, whenever any of these files are updated by the user, you will get a
               {
                 type: "text",
                 text: `File \`${relFilePath}\``,
-                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               },
               {
                 type: "text",
                 text: currentFileContent,
-                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               },
             ],
           },
@@ -1049,7 +1044,6 @@ From now on, whenever any of these files are updated by the user, you will get a
                           | "image/webp",
                         data: buffer.toString("base64"),
                       },
-                      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                     },
                   ],
                 },

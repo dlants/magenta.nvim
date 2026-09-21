@@ -146,7 +146,6 @@ function convertBlockToProvider(
                 {
                   type: "text",
                   text: block.content,
-                  nativeMessageIdx,
                 },
               ],
             };

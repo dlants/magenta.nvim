@@ -1,8 +1,5 @@
 import type { OutputLine, Shell } from "../capabilities/shell.ts";
-import {
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolSpec,
-} from "../providers/provider-types.ts";
+import type { ProviderToolSpec } from "../providers/provider-types.ts";
 import type {
   ExecutedToolResult,
   ExecutingToolInvocation,
@@ -282,7 +279,6 @@ export function execute(
             status: "error",
             error,
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       stopTickInterval();
@@ -308,7 +304,6 @@ export function execute(
             {
               type: "text",
               text: formattedOutput,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
           structuredResult: {
@@ -332,7 +327,6 @@ export function execute(
             wasAbbreviated,
           },
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     })
     .catch((error: Error): ExecutedToolResult => {
@@ -361,7 +355,6 @@ export function execute(
             status: "error",
             error: errorMsg,
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       stopTickInterval();
@@ -378,7 +371,6 @@ export function execute(
           status: "error",
           error: `Error: ${error.message}${durationStr}`,
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     });
 

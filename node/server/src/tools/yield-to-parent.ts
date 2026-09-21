@@ -1,8 +1,5 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import {
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolSpec,
-} from "../providers/provider-types.ts";
+import type { ProviderToolSpec } from "../providers/provider-types.ts";
 import type {
   ExecutingToolInvocation,
   GenericToolRequest,
@@ -27,11 +24,9 @@ export function execute(request: ToolRequest): ExecutingToolInvocation {
             // The model just wrote the yielded text; echoing it back only
             // spends tokens.
             text: "Yield acknowledged.",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     }),
     abort: () => {},
   };

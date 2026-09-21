@@ -1,6 +1,5 @@
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/server";
 import type { CustomCommand as CustomCommandConfig } from "../../options.ts";
-import type { ProviderMessageContent } from "../../providers/provider-types.ts";
+import type { AgentInput } from "../../providers/provider-types.ts";
 import { bufCommand, buffersCommand } from "./buffers.ts";
 import { compactCommand } from "./compact.ts";
 import { diagCommand, diagnosticsCommand } from "./diagnostics.ts";
@@ -58,12 +57,11 @@ export class CommandRegistry {
           ? `${this.escapeRegExp(config.name)}\\b`
           : `${this.escapeRegExp(config.name)}(?!\\w)`,
       ),
-      execute(): Promise<ProviderMessageContent[]> {
+      execute(): Promise<AgentInput[]> {
         return Promise.resolve([
           {
             type: "text",
             text: config.text,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ]);
       },
@@ -96,10 +94,10 @@ export class CommandRegistry {
     context: MessageContext,
   ): Promise<{
     processedText: string;
-    additionalContent: ProviderMessageContent[];
+    additionalContent: AgentInput[];
     reminders: string[];
   }> {
-    const additionalContent: ProviderMessageContent[] = [];
+    const additionalContent: AgentInput[] = [];
     const reminders = new Set<string>();
     // Delivery prefixes (@compact / @async / @next) are stripped by
     // `parseSubmission` in core before the text ever reaches here.

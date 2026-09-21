@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import { PDFDocument } from "pdf-lib";
-import type { ProviderToolResultContent } from "../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
+import type { ToolResultContent } from "../providers/provider-types.ts";
 import type { AbsFilePath } from "./files.ts";
 import type { Result } from "./result.ts";
 
@@ -74,7 +73,7 @@ export async function getPDFPageCount(
 
 export async function getSummaryAsProviderContent(
   filePath: AbsFilePath,
-): Promise<Result<ProviderToolResultContent[]>> {
+): Promise<Result<ToolResultContent[]>> {
   const pageCountResult = await getPDFPageCount(filePath);
 
   if (pageCountResult.status === "error") {
@@ -90,7 +89,6 @@ export async function getSummaryAsProviderContent(
 Pages: ${pageCountResult.value}
 
 Use get-file tool with a pdfPage parameter to access specific pages.`,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ],
   };

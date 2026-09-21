@@ -6,10 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FsFileIO } from "./capabilities/file-io.ts";
 import type { GitState } from "./capabilities/git-client.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
-import {
-  type NativeMessageIdx,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-} from "./providers/provider-types.ts";
+import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import { pendingMessage, resolveAsText } from "./submission/index.ts";
 import { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import {
@@ -82,7 +79,6 @@ async function fixture(overrides: TestContextOverrides = {}) {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text,
         },
       ],
@@ -238,7 +234,6 @@ describe("Thread-owned context delivery", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "resume",
           },
         ],
@@ -494,7 +489,6 @@ describe("Thread-owned context delivery", () => {
             {
               type: "text",
               text: "start",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
         }),
@@ -515,7 +509,6 @@ describe("Thread-owned context delivery", () => {
           {
             type: "text",
             text: "resume",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       });
@@ -550,7 +543,6 @@ describe("Thread-owned context delivery", () => {
             {
               type: "text",
               text: "in flight",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
         });

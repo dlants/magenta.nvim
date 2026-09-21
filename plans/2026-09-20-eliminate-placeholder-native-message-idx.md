@@ -148,19 +148,41 @@ Review follow-ups addressed in this stage:
   - Not added: a fork-with-`inputMessages` marker test. With the seam index coming from the
     server, the marker no longer depends on the log's length at the time Chat computes it,
     so the scenario the review worried about is no longer representable.
-## Type split in provider-types
+## Type split in provider-types — DONE
 
-- Goal: input and display flavors are separate types; `AgentInput`, `ToolResultContent`, `ToolResultInput` have no `nativeMessageIdx`. The repo does not compile yet — the point of the stage is the error list.
-- Tests: `npx tsc -p node/server/tsconfig.json --noEmit` produces errors only at producer sites (excess property) and none at consumer sites. A consumer error means the display type lost a field it needs, and the split is wrong there.
+Input and display flavors are separate in `provider-types.ts`: `TextContent` /
+`ImageContent` / `DocumentContent` carry no index, `Provider*Content` are those
+intersected with `{ nativeMessageIdx }`. `AgentInput`, `ToolResultContent`,
+`ToolResultValue` and `ToolResultInput` are the input-side names;
+`ProviderToolResult = ToolResultInput & { nativeMessageIdx }`.
+`PLACEHOLDER_NATIVE_MESSAGE_IDX` is deleted.
 
-## Server producers
+Deviations from the plan:
 
-- Goal: `npx tsc -p node/server/tsconfig.json --noEmit` is clean. Touches `tool-executor.ts`, every tool in `tools/`, `utils/pdf-pages.ts`, `thread.ts`, `thread-supervisor.ts` (the re-stamp in `beforeRequest` becomes a strip), `supervisors/*.ts`, `submission/index.ts`, `session.ts`, `thread-core.ts`, `providers/anthropic-inference.ts`.
-- Tests:
-  - `npx vitest run node/server/` — the existing suites are the regression net here; `inference-parity.test.ts` and the anthropic/openai conversion tests confirm the wire format is byte-identical.
-  - Existing `agent.test.ts` "nativeMessageIdx plumbing" cases confirm indices are still assigned correctly in the derived direction — they are the reason this refactor is safe.
+- `ProviderToolResultContent` was renamed to `ToolResultContent` (it was always the
+  input-flavored nested content of a tool result) rather than kept as an alias.
+- `ToolResults` is keyed to `ToolResultValue`, and `tool-types.ts` / `tool-executor.ts`
+  carry `ToolResultInput` (tools produce results before they land). Only conversion
+  mints `ProviderToolResult`.
+- `InjectedContent` is now simply `AgentInput`; the re-stamp in
+  `SupervisorChain.beforeRequest` is gone entirely (the loop is a spread push).
+- `FileSupervisor`'s `WholeFileUpdate.content` is `AgentInput[]`, and the nvim chat
+  commands' `execute` returns `AgentInput[]` instead of `ProviderMessageContent[]`.
+- `GitViewEntry.nativeMessageIdx` was widened to `HistoryIdx` with `PRE_HISTORY` for
+  the initial entry — stage 1 covered file/system-info history but not git's.
+- The renderer/compaction test fixtures that build display `ProviderMessage[]` now use
+  a local `const idx = 0 as NativeMessageIdx` (renderers ignore the value).
+- `AnthropicInferenceManager`'s fork-abort tool_result no longer carries the sentinel:
+  it was a *native* block, so `-1` was being sent on the wire. The
+  `thread-abort.test.ts` snapshot lost that field.
 
-## Nvim client, barrel and constant removal
+Because the stages 3 and 4 work was purely mechanical (deleting the stamped line at
+every producer, plus the type adjustments above), it was completed in the same pass so
+that the tree stays green: `npx tsc -b`, `npx vitest run` (1787 passing) and
+`npx biome check .` are all clean, and `PLACEHOLDER_NATIVE_MESSAGE_IDX` appears nowhere
+outside `dist/`. Stages 3 and 4 below are therefore also done.
+
+## Nvim client, barrel and constant removal — DONE (folded into the stage above)
 
 - Goal: `npx tsc -b` is clean with `PLACEHOLDER_NATIVE_MESSAGE_IDX` deleted from `provider-types.ts`, from the `@magenta/server` barrel, and from `node/nvimclient/providers/provider-types.ts`. Chat commands (`file`, `diff`, `diagnostics`, `buffers`, `quickfix`, `implementplan`, `registry`), `session-host.ts` and `providers/mock.ts` stop stamping it.
 - Tests:

@@ -7,10 +7,9 @@ import {
   loopLabel,
   loopStreamingBlock,
 } from "./loop-state.ts";
-import {
-  type AgentInput,
-  type NativeMessageIdx,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
+import type {
+  AgentInput,
+  NativeMessageIdx,
 } from "./providers/provider-types.ts";
 import {
   parseCompact,
@@ -50,7 +49,6 @@ describe("deferred submissions", () => {
         {
           type: "text",
           text: "start",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ],
     });
@@ -59,18 +57,15 @@ describe("deferred submissions", () => {
       {
         type: "text",
         text: "@compact is literal input",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
       {
         type: "image",
         source: { type: "base64", media_type: "image/png", data: "aW1hZ2U=" },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
       {
         type: "document",
         source: { type: "base64", media_type: "application/pdf", data: "cGRm" },
         title: "attachment",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ];
     core.enqueue({ type: "resolved", messages: inputs }, queue);
@@ -80,7 +75,7 @@ describe("deferred submissions", () => {
     const content = core
       .getProviderMessages()
       .flatMap((message) => message.content);
-    for (const { nativeMessageIdx: _, ...input } of inputs) {
+    for (const input of inputs) {
       expect(content).toContainEqual(expect.objectContaining(input));
     }
     next.finishResponse("end_turn");
@@ -100,7 +95,6 @@ describe("deferred submissions", () => {
           messages: [
             {
               type: "text" as const,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: `${message} [${fileContents}]`,
             },
           ],
@@ -113,7 +107,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -141,7 +134,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -172,7 +164,6 @@ describe("deferred submissions", () => {
               messages: [
                 {
                   type: "text" as const,
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                   text: message,
                 },
               ],
@@ -184,7 +175,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -233,7 +223,6 @@ describe("deferred submissions", () => {
           messages: [
             {
               type: "text" as const,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: message,
             },
           ],
@@ -245,7 +234,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -288,7 +276,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -308,7 +295,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "again",
         },
       ],
@@ -329,7 +315,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -364,7 +349,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -437,7 +421,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -486,7 +469,6 @@ describe("deferred submissions", () => {
             ? [
                 {
                   type: "text" as const,
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                   text: rest,
                 },
               ]
@@ -500,7 +482,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -555,7 +536,6 @@ describe("deferred submissions", () => {
             ? [
                 {
                   type: "text" as const,
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                   text: rest,
                 },
               ]
@@ -569,7 +549,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -608,7 +587,6 @@ describe("deferred submissions", () => {
             ? [
                 {
                   type: "text" as const,
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                   text: rest,
                 },
               ]
@@ -622,7 +600,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -654,7 +631,6 @@ describe("deferred submissions", () => {
             ? [
                 {
                   type: "text" as const,
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                   text: rest,
                 },
               ]
@@ -668,7 +644,6 @@ describe("deferred submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -725,7 +700,6 @@ describe("deferred submissions", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "start",
           },
         ],
@@ -748,7 +722,6 @@ describe("deferred submissions", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "resume",
           },
         ],
@@ -789,7 +762,6 @@ describe("deferred submissions", () => {
           messages: [
             {
               type: "text",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: "start",
             },
           ],
@@ -810,7 +782,6 @@ describe("deferred submissions", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "resume",
           },
         ],
@@ -852,7 +823,6 @@ describe("deferred submissions", () => {
           messages: [
             {
               type: "text" as const,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: message,
             },
           ],
@@ -882,7 +852,6 @@ describe("deferred submissions", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "start",
           },
         ],
@@ -919,7 +888,6 @@ describe("Thread.submit while busy", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -941,7 +909,6 @@ describe("Thread.submit while busy", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "never mind, do this",
         },
       ],
@@ -988,7 +955,6 @@ describe("Thread aborts the tools it owns", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -1090,7 +1056,6 @@ describe("Thread aborts the tools it owns", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "never mind, do this",
         },
       ],
@@ -1135,7 +1100,6 @@ describe("Thread loop activity", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "read the file",
         },
       ],
@@ -1195,7 +1159,6 @@ describe("Thread loop activity", () => {
           messages: [
             {
               type: "text" as const,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: message,
             },
           ],
@@ -1208,7 +1171,6 @@ describe("Thread loop activity", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -1252,7 +1214,6 @@ describe("Thread.abort between turns", () => {
           messages: [
             {
               type: "text" as const,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: message,
             },
           ],
@@ -1265,7 +1226,6 @@ describe("Thread.abort between turns", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -1296,7 +1256,6 @@ describe("Thread.abort between turns", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "fresh submission",
         },
       ],
@@ -1333,7 +1292,6 @@ describe("Thread.abort between turns", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -1381,7 +1339,6 @@ describe("Thread.abort returns the unsent queue", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1406,7 +1363,6 @@ describe("Thread.abort returns the unsent queue", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1425,7 +1381,6 @@ describe("Thread.abort returns the unsent queue", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1453,7 +1408,6 @@ describe("Thread.abort returns the unsent queue", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1487,7 +1441,6 @@ describe("system-info preamble", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "one",
         },
       ],
@@ -1502,7 +1455,6 @@ describe("system-info preamble", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "two",
         },
       ],
@@ -1520,7 +1472,6 @@ describe("system-info preamble", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "three",
         },
       ],
@@ -1575,7 +1526,6 @@ describe("empty send gate", () => {
             ? [
                 {
                   type: "text" as const,
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                   text: message,
                 },
               ]
@@ -1594,7 +1544,6 @@ describe("empty send gate", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "now do it",
         },
       ],
@@ -1618,7 +1567,6 @@ describe("empty send gate", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "go",
         },
       ],
@@ -1656,7 +1604,6 @@ describe("empty send gate", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "go",
         },
       ],
@@ -1678,7 +1625,6 @@ describe("thread status", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "work",
         },
       ],
@@ -1701,7 +1647,6 @@ describe("thread status", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "more",
         },
       ],
@@ -1733,7 +1678,6 @@ describe("thread status", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "work",
         },
       ],
@@ -1774,7 +1718,6 @@ describe("replaceable conversation core", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "later request",
         },
       ],
@@ -1833,7 +1776,6 @@ describe("replaceable conversation core", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "new generation",
         },
       ],
@@ -1871,7 +1813,6 @@ describe("replaceable conversation core", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "work",
         },
       ],
@@ -1904,7 +1845,6 @@ describe("replaceable conversation core", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "work",
         },
       ],
@@ -1947,7 +1887,6 @@ describe("replaceable conversation core", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "work",
         },
       ],
@@ -1993,7 +1932,6 @@ describe("replaceable conversation core", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "late",
           },
         ],
@@ -2024,7 +1962,6 @@ describe("submission ownership", () => {
           messages: [
             {
               type: "text" as const,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: message,
             },
           ],
@@ -2039,7 +1976,6 @@ describe("submission ownership", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "replacement",
         },
       ],
@@ -2084,7 +2020,6 @@ describe("submission ownership", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -2103,7 +2038,6 @@ describe("submission ownership", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "after reset",
         },
       ],
@@ -2139,7 +2073,6 @@ describe("submission ownership", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -2181,7 +2114,6 @@ describe("stale outer submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "replacement",
         },
       ],
@@ -2214,7 +2146,6 @@ describe("stale outer submissions", () => {
           messages: [
             {
               type: "text" as const,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: message,
             },
           ],
@@ -2227,7 +2158,6 @@ describe("stale outer submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -2248,7 +2178,6 @@ describe("stale outer submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "replacement",
         },
       ],
@@ -2302,7 +2231,6 @@ describe("stale outer submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "work",
         },
       ],
@@ -2322,7 +2250,6 @@ describe("stale outer submissions", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "replacement",
         },
       ],
@@ -2371,7 +2298,6 @@ describe("detached delivery batches", () => {
             {
               type: "text" as const,
               text: message,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
           reminders: [],
@@ -2384,7 +2310,6 @@ describe("detached delivery batches", () => {
         {
           type: "text" as const,
           text,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ],
     });
@@ -2432,7 +2357,6 @@ describe("detached delivery batches", () => {
         {
           type: "text",
           text: "start",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ],
     });
@@ -2475,7 +2399,6 @@ describe("detached delivery batches", () => {
             {
               type: "text" as const,
               text: message,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
           reminders: [],
@@ -2488,7 +2411,6 @@ describe("detached delivery batches", () => {
         {
           type: "text" as const,
           text,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ],
     });
@@ -2530,7 +2452,6 @@ describe("detached delivery batches", () => {
             {
               type: "text" as const,
               text: message,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
           reminders: [],
@@ -2543,7 +2464,6 @@ describe("detached delivery batches", () => {
         {
           type: "text",
           text: "start",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ],
     });

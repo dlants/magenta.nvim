@@ -1,6 +1,5 @@
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/server";
 import { $, within } from "zx";
-import type { ProviderMessageContent } from "../../providers/provider-types.ts";
+import type { AgentInput } from "../../providers/provider-types.ts";
 import type { NvimCwd, UnresolvedFilePath } from "../../utils/files.ts";
 import type { Command } from "./types.ts";
 
@@ -41,7 +40,7 @@ async function getStagedDiff(
 export const diffCommand: Command = {
   name: "@diff:",
   pattern: /@diff:(\S+)/g,
-  async execute(match, context): Promise<ProviderMessageContent[]> {
+  async execute(match, context): Promise<AgentInput[]> {
     const filePath = match[1] as UnresolvedFilePath;
     try {
       const diffContent = await getGitDiff(filePath, context.cwd);
@@ -49,7 +48,6 @@ export const diffCommand: Command = {
         {
           type: "text",
           text: `Git diff for \`${filePath}\`:\n\`\`\`diff\n${diffContent}\n\`\`\``,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     } catch (error) {
@@ -60,7 +58,6 @@ export const diffCommand: Command = {
         {
           type: "text",
           text: `Error fetching git diff for \`${filePath}\`: ${error instanceof Error ? error.message : String(error)}`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     }
@@ -70,7 +67,7 @@ export const diffCommand: Command = {
 export const stagedCommand: Command = {
   name: "@staged:",
   pattern: /@staged:(\S+)/g,
-  async execute(match, context): Promise<ProviderMessageContent[]> {
+  async execute(match, context): Promise<AgentInput[]> {
     const filePath = match[1] as UnresolvedFilePath;
     try {
       const stagedContent = await getStagedDiff(filePath, context.cwd);
@@ -78,7 +75,6 @@ export const stagedCommand: Command = {
         {
           type: "text",
           text: `Staged diff for \`${filePath}\`:\n\`\`\`diff\n${stagedContent}\n\`\`\``,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     } catch (error) {
@@ -89,7 +85,6 @@ export const stagedCommand: Command = {
         {
           type: "text",
           text: `Error fetching staged diff for \`${filePath}\`: ${error instanceof Error ? error.message : String(error)}`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     }

@@ -25,7 +25,6 @@ export type {
   ProviderTextContent,
   ProviderThinkingContent,
   ProviderToolResult,
-  ProviderToolResultContent,
   ProviderToolSpec,
   ProviderToolUseContent,
   ProviderToolUseRequest,
@@ -42,10 +41,10 @@ export type {
   ThreadLoopState,
   ToolExecutor,
   ToolOutcome,
+  ToolResultContent,
+  ToolResultInput,
   ToolResults,
+  ToolResultValue,
   Usage,
 } from "@magenta/server";
-export {
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  PROVIDER_NAMES,
-} from "@magenta/server";
+export { PROVIDER_NAMES } from "@magenta/server";

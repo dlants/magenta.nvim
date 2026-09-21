@@ -1,12 +1,11 @@
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/server";
-import type { ProviderMessageContent } from "../../providers/provider-types.ts";
+import type { AgentInput } from "../../providers/provider-types.ts";
 import { getDiagnostics } from "../../utils/diagnostics.ts";
 import type { Command } from "./types.ts";
 
 const createDiagnosticsCommand = (name: string, pattern: RegExp): Command => ({
   name,
   pattern,
-  async execute(_match, context): Promise<ProviderMessageContent[]> {
+  async execute(_match, context): Promise<AgentInput[]> {
     try {
       const diagnostics = await getDiagnostics(
         context.nvim,
@@ -17,7 +16,6 @@ const createDiagnosticsCommand = (name: string, pattern: RegExp): Command => ({
         {
           type: "text",
           text: `Current diagnostics:\n${diagnostics}`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     } catch (error) {
@@ -28,7 +26,6 @@ const createDiagnosticsCommand = (name: string, pattern: RegExp): Command => ({
         {
           type: "text",
           text: `Error fetching diagnostics: ${error instanceof Error ? error.message : String(error)}`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     }

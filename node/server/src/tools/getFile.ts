@@ -5,10 +5,9 @@ import type {
 } from "../capabilities/context-tracker.ts";
 import type { FileIO } from "../capabilities/file-io.ts";
 import type {
-  ProviderToolResultContent,
   ProviderToolSpec,
+  ToolResultContent,
 } from "../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
   ExecutedToolResult,
   ExecutingToolInvocation,
@@ -151,7 +150,7 @@ type ReadOneFileOutcome =
   | { aborted: true }
   | {
       aborted?: false;
-      blocks: ProviderToolResultContent[];
+      blocks: ToolResultContent[];
       structured: PerFileResult;
     };
 
@@ -164,7 +163,6 @@ function errorOutcome(
       {
         type: "text",
         text: message,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ],
     structured: {
@@ -199,7 +197,6 @@ async function readOneFile(
           type: "text",
           text: `This file is already part of the thread context. \
 You already have the most up-to-date information about the contents of this file.`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ],
       structured: {
@@ -249,7 +246,7 @@ You already have the most up-to-date information about the contents of this file
     );
   }
 
-  let result: ProviderToolResultContent[];
+  let result: ToolResultContent[];
   let lineCount = 0;
   let systemReminder: string | undefined;
 
@@ -309,7 +306,6 @@ You already have the most up-to-date information about the contents of this file
       {
         type: "text",
         text: processedResult.text,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ];
     lineCount = processedResult.text.split("\n").length;
@@ -327,7 +323,6 @@ You already have the most up-to-date information about the contents of this file
             {
               type: "text",
               text: `Page ${fileReq.pdfPage} of ${filePath} has already been provided to you in this conversation.`,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
           structured: {
@@ -355,7 +350,6 @@ You already have the most up-to-date information about the contents of this file
             data: Buffer.from(pageResult.value).toString("base64"),
           },
           title: `${filePath} - Page ${fileReq.pdfPage}`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
 
@@ -374,7 +368,6 @@ You already have the most up-to-date information about the contents of this file
             {
               type: "text",
               text: `The summary information for ${filePath} has already been provided to you in this conversation.`,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
           structured: {
@@ -432,7 +425,6 @@ You already have the most up-to-date information about the contents of this file
                 | "image/webp",
               data: base64Data,
             },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ];
         break;
@@ -468,12 +460,11 @@ export function execute(
     type: "tool_result",
     id: request.id,
     result: { status: "error", error: "Request was aborted by the user." },
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 
   const promise = (async (): Promise<ExecutedToolResult> => {
     try {
-      const value: ProviderToolResultContent[] = [];
+      const value: ToolResultContent[] = [];
       const files: PerFileResult[] = [];
 
       for (const fileReq of request.input.files) {
@@ -493,7 +484,6 @@ export function execute(
         value.push({
           type: "text",
           text: `=== ${fileReq.filePath} ===`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         });
         value.push(...outcome.blocks);
         files.push(outcome.structured);
@@ -510,7 +500,6 @@ export function execute(
             files,
           },
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } catch (error) {
       if (aborted) return abortResult;
@@ -521,7 +510,6 @@ export function execute(
           status: "error",
           error: `Failed: ${error instanceof Error ? error.message : String(error)}`,
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();

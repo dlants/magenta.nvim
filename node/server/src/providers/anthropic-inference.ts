@@ -46,11 +46,7 @@ import type {
   ToolResults,
   Usage,
 } from "./provider-types.ts";
-import {
-  isNonEmptyRequestedTools,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  thinkingConfig,
-} from "./provider-types.ts";
+import { isNonEmptyRequestedTools, thinkingConfig } from "./provider-types.ts";
 
 export type AnthropicInferenceOptions = {
   authType: "key" | "max" | "keychain";
@@ -875,7 +871,6 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
           tool_use_id: t.id,
           content: "The thread was forked before the tool could execute.",
           is_error: true,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         })),
       });
     }

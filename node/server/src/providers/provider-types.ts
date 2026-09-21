@@ -64,10 +64,13 @@ export type ProviderWebSearchCitation = {
   url: string;
 };
 
-export type ProviderTextContent = {
+export type TextContent = {
   type: "text";
   text: string;
   citations?: ProviderWebSearchCitation[] | undefined;
+};
+
+export type ProviderTextContent = TextContent & {
   nativeMessageIdx: NativeMessageIdx;
 };
 
@@ -113,17 +116,20 @@ export type ProviderForkNotificationContent = {
   nativeMessageIdx: NativeMessageIdx;
 };
 
-export type ProviderImageContent = {
+export type ImageContent = {
   type: "image";
   source: {
     type: "base64";
     media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
     data: string;
   };
+};
+
+export type ProviderImageContent = ImageContent & {
   nativeMessageIdx: NativeMessageIdx;
 };
 
-export type ProviderDocumentContent = {
+export type DocumentContent = {
   type: "document";
   source: {
     type: "base64";
@@ -131,6 +137,9 @@ export type ProviderDocumentContent = {
     data: string;
   };
   title?: string | undefined;
+};
+
+export type ProviderDocumentContent = DocumentContent & {
   nativeMessageIdx: NativeMessageIdx;
 };
 
@@ -159,20 +168,24 @@ export type ProviderWebSearchToolResult = {
   nativeMessageIdx: NativeMessageIdx;
 };
 
-export type ProviderToolResultContent =
-  | ProviderTextContent
-  | ProviderImageContent
-  | ProviderDocumentContent;
+/** What a tool's ok-result carries. Same three shapes as user input. */
+export type ToolResultContent = TextContent | ImageContent | DocumentContent;
 
-export type ProviderToolResult = {
+export type ToolResultValue =
+  | {
+      status: "ok";
+      value: ToolResultContent[];
+    }
+  | { status: "error"; error: string };
+
+/** What a tool produces. The index is assigned when the result lands. */
+export type ToolResultInput = {
   type: "tool_result";
   id: ToolManager.ToolRequestId;
-  result:
-    | {
-        status: "ok";
-        value: ProviderToolResultContent[];
-      }
-    | { status: "error"; error: string };
+  result: ToolResultValue;
+};
+
+export type ProviderToolResult = ToolResultInput & {
   nativeMessageIdx: NativeMessageIdx;
 };
 
@@ -278,8 +291,6 @@ export type RetryStatus = {
 
 export type NativeMessageIdx = number & { __nativeMessageIdx: true };
 
-export const PLACEHOLDER_NATIVE_MESSAGE_IDX = -1 as NativeMessageIdx;
-
 export type StreamingBlock =
   | { type: "text"; text: string }
   | { type: "thinking"; thinking: string }
@@ -290,10 +301,7 @@ export type StreamingBlock =
       inputJson: string;
     };
 
-export type AgentInput =
-  | ProviderTextContent
-  | ProviderImageContent
-  | ProviderDocumentContent;
+export type AgentInput = TextContent | ImageContent | DocumentContent;
 
 export type RequestedTool = {
   id: ToolManager.ToolRequestId;
@@ -313,7 +321,7 @@ export function isNonEmptyRequestedTools(
 
 export type ToolResults = ReadonlyMap<
   ToolManager.ToolRequestId,
-  ProviderToolResult["result"]
+  ToolResultValue
 >;
 
 export type AgentLog = {

@@ -1,5 +1,4 @@
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/server";
-import type { ProviderMessageContent } from "../../providers/provider-types.ts";
+import type { AgentInput } from "../../providers/provider-types.ts";
 import type { UnresolvedFilePath } from "../../utils/files.ts";
 import {
   AT_FILE_PATTERN,
@@ -13,7 +12,7 @@ import type { Command } from "./types.ts";
 export const fileCommand: Command = {
   name: "@file:",
   pattern: AT_FILE_PATTERN,
-  async execute(match, context): Promise<ProviderMessageContent[]> {
+  async execute(match, context): Promise<AgentInput[]> {
     const filePath = extractFileRefPath(match) as UnresolvedFilePath;
     try {
       const absFilePath = resolveFilePath(
@@ -47,7 +46,6 @@ export const fileCommand: Command = {
         {
           type: "text",
           text: `Error adding file to context for ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     }

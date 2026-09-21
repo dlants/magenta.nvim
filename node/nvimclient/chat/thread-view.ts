@@ -31,9 +31,9 @@ import {
 import type {
   ProviderMessage,
   ProviderMessageContent,
-  ProviderToolResult,
   StopReason,
   ThreadLoopState,
+  ToolResultInput,
   Usage,
 } from "../providers/provider.ts";
 import type { SystemPrompt } from "../providers/system-prompt.ts";
@@ -1236,7 +1236,7 @@ function renderMessageContentBlock(
 export function findToolResult(
   thread: NvimThread,
   toolRequestId: ToolRequestId,
-): ProviderToolResult | undefined {
+): ToolResultInput | undefined {
   return thread.state.toolResultMap.get(toolRequestId);
 }
 

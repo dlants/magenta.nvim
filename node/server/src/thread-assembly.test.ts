@@ -2,11 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { ThreadId } from "./chat-types.ts";
 import { DockerSupervisor } from "./docker-supervisor.ts";
 import type { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
-import {
-  type NativeMessageIdx,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type Provider,
-  type ProviderToolUseResponse,
+import type {
+  NativeMessageIdx,
+  Provider,
+  ProviderToolUseResponse,
 } from "./providers/provider-types.ts";
 import {
   cleanupArchive,
@@ -34,7 +33,6 @@ const titleText = [
   {
     type: "text" as const,
     text: "make the thing",
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   },
 ];
 

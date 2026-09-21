@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type {
-  NativeMessageIdx,
-  NonEmptyRequestedTools,
-} from "./providers/provider-types.ts";
+import type { NonEmptyRequestedTools } from "./providers/provider-types.ts";
 import { executeToolBatch } from "./tool-executor.ts";
 import type {
   CompletedToolInfo,
@@ -32,7 +29,6 @@ describe("executeToolBatch", () => {
     const executed: ExecutedToolResult = {
       type: "tool_result",
       id: request.id,
-      nativeMessageIdx: 0 as NativeMessageIdx,
       result:
         mode === "error"
           ? { status: "error", error: "failed" }
@@ -86,7 +82,6 @@ describe("executeToolBatch", () => {
             type: "tool_result",
             id: "tool-1" as ToolRequestId,
             result: { status: "error", error: "aborted" },
-            nativeMessageIdx: 0 as never,
           });
       }),
       abort,

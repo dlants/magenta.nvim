@@ -317,7 +317,6 @@ Do not acknowledge this reminder or mention it to the user.
       {
         "content": "The thread was forked before the tool could execute.",
         "is_error": true,
-        "nativeMessageIdx": -1,
         "tool_use_id": "bash-tool",
         "type": "tool_result",
       },

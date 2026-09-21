@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { renderThreadLogToMarkdown } from "./archive-renderer.ts";
-import {
-  type NativeMessageIdx,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-} from "./providers/provider-types.ts";
+import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import type { ThreadLogEntry } from "./thread-logger.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 
-const idx: NativeMessageIdx = PLACEHOLDER_NATIVE_MESSAGE_IDX;
+const idx = 0 as NativeMessageIdx;
 const reqId = "req-1" as ToolRequestId;
 
 describe("renderThreadLogToMarkdown", () => {
@@ -56,7 +53,6 @@ describe("renderThreadLogToMarkdown", () => {
                   {
                     type: "text",
                     text: "FULL FILE CONTENTS",
-                    nativeMessageIdx: idx,
                   },
                 ],
               },

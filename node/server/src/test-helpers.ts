@@ -42,7 +42,6 @@ import type {
   ProviderMessage,
   ProviderToolSpec,
 } from "./providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
@@ -139,7 +138,6 @@ export class TestAgent {
             {
               type: "text",
               text: ABORT_MARKER_TEXT,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ]);
         }
@@ -478,17 +476,14 @@ export function createTestOpenAIAgent(
 
 /** One turn's worth of user input. */
 export const userInput = (text: string): AgentInput[] => [
-  { type: "text", text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
+  { type: "text", text },
 ];
 
 /** Drive one turn through the agent's only entry point. */
 export const sendText = (
   agent: TestAgent,
   text: string,
-): Promise<CoreLoopResult> =>
-  agent.send([
-    { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
-  ]).promise;
+): Promise<CoreLoopResult> => agent.send([{ type: "text", text }]).promise;
 
 export async function cleanupArchive(threadId: ThreadId): Promise<void> {
   const dir = path.dirname(

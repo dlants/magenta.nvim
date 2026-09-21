@@ -6,9 +6,9 @@ import type {
   HomeDir,
   MCPToolManager,
   NvimCwd,
-  ProviderToolResultContent,
   ThreadId,
   ToolRequestId,
+  ToolResultContent,
   UnresolvedFilePath,
 } from "@magenta/server";
 import {
@@ -280,7 +280,7 @@ describe("Docker Environment", () => {
         if (result.status === "ok") {
           const text = result.value
             .filter(
-              (c): c is Extract<ProviderToolResultContent, { type: "text" }> =>
+              (c): c is Extract<ToolResultContent, { type: "text" }> =>
                 c.type === "text",
             )
             .map((c) => c.text)

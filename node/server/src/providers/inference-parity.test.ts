@@ -14,17 +14,12 @@ import { AutoCompactSupervisor } from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
 import { ABORT_MARKER_TEXT } from "./inference-shared.ts";
-import {
-  type AgentInput,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderMessage,
-} from "./provider-types.ts";
+import type { AgentInput, ProviderMessage } from "./provider-types.ts";
 
 function text(text: string): AgentInput {
   return {
     type: "text",
     text,
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 }
 
@@ -38,7 +33,6 @@ const input: AgentInput[] = [
   {
     type: "image",
     source: { type: "base64", media_type: "image/png", data: "abc123" },
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   },
 ];
 
@@ -188,7 +182,6 @@ describe("onBeforeRequest", () => {
     const { promise: sendPromise } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "go",
       },
     ]);
@@ -212,7 +205,6 @@ describe("onBeforeRequest", () => {
     const { promise: sendPromise } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "go",
       },
     ]);
@@ -239,7 +231,6 @@ describe("abort parity", () => {
     const { promise: turn } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "go",
       },
     ]);
@@ -307,7 +298,6 @@ describe("preflight token count parity", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "go",
           },
         ],
@@ -342,7 +332,6 @@ describe("preflight token count parity", () => {
     const sendPromise = openaiThread["core"].runTurn([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "go",
       },
     ]);

@@ -8,10 +8,7 @@ import {
   type FileMutationSummary,
   runScript,
 } from "../edl/index.ts";
-import {
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolSpec,
-} from "../providers/provider-types.ts";
+import type { ProviderToolSpec } from "../providers/provider-types.ts";
 import type {
   ExecutedToolResult,
   ExecutingToolInvocation,
@@ -83,7 +80,6 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -138,7 +134,6 @@ export function execute(
               {
                 type: "text",
                 text: result.formatted,
-                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               },
             ],
             structuredResult: {
@@ -147,7 +142,6 @@ export function execute(
               formattedResult: result.formatted,
             },
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       } else {
         return {
@@ -157,7 +151,6 @@ export function execute(
             status: "error",
             error: result.error,
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
     } catch (error) {
@@ -169,7 +162,6 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       const errorMessage = `Failed to execute EDL script: ${error instanceof Error ? error.message : String(error)}`;
@@ -180,7 +172,6 @@ export function execute(
           status: "error",
           error: errorMessage,
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();

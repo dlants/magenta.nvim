@@ -21,7 +21,6 @@ import type {
   Provider,
   ProviderMessage,
 } from "./providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import { pendingMessage } from "./submission/index.ts";
 import {
   awaitNextStream,
@@ -72,7 +71,6 @@ describe("Thread.loopState", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -104,7 +102,6 @@ describe("Thread.loopState", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "find the bug",
         },
       ],
@@ -128,7 +125,6 @@ describe("Thread.loopState", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -160,7 +156,6 @@ describe("Thread.loopState", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -192,7 +187,6 @@ describe("Thread.loopState", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -223,7 +217,6 @@ describe("Thread.submit result", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -242,7 +235,6 @@ describe("Thread.submit result", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -285,7 +277,6 @@ describe("Thread.submit result", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -319,7 +310,6 @@ describe("Thread.submit result", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -336,7 +326,6 @@ describe("Thread.submit result", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "find the bug",
         },
       ],
@@ -372,7 +361,6 @@ describe("Thread.submit result", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "more",
           },
         ],
@@ -386,7 +374,6 @@ describe("Thread.submit result", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -398,7 +385,6 @@ describe("Thread.submit result", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "and also",
           },
         ],
@@ -435,7 +421,6 @@ describe("Thread turn loop", () => {
           messages: [
             {
               type: "text" as const,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: message,
             },
           ],
@@ -448,7 +433,6 @@ describe("Thread turn loop", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -497,7 +481,6 @@ describe("Thread turn loop", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "start",
         },
       ],
@@ -533,7 +516,6 @@ describe("Thread turn loop", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "original message",
         },
       ],
@@ -617,7 +599,6 @@ describe("Thread submissions across a compaction handoff", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "hello",
           },
         ],
@@ -667,7 +648,6 @@ describe("Thread submissions across a compaction handoff", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "hello",
           },
         ],
@@ -737,7 +717,6 @@ describe("Thread submissions across a compaction handoff", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "hello",
           },
         ],
@@ -795,7 +774,6 @@ describe("Thread submissions across a compaction handoff", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "hello",
           },
         ],
@@ -842,7 +820,6 @@ describe("Thread submissions across a compaction handoff", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "hello",
           },
         ],
@@ -865,7 +842,6 @@ describe("Thread submissions across a compaction handoff", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "again",
           },
         ],
@@ -892,7 +868,6 @@ describe("Thread.reset", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "the old conversation",
           },
         ],
@@ -914,7 +889,6 @@ describe("Thread.reset", () => {
             type: "tool_result",
             id: "tr-1" as ToolRequestId,
             result: { status: "ok", value: [] },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
           structuredResult: { toolName: "thread_title" },
         },
@@ -935,7 +909,6 @@ describe("Thread.reset", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "continue",
           },
         ],
@@ -962,7 +935,6 @@ describe("Thread.reset", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "the old conversation",
           },
         ],
@@ -984,7 +956,6 @@ describe("Thread.reset", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "continue",
           },
         ],
@@ -1014,7 +985,6 @@ describe("Agent.handleProviderStopped", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1058,7 +1028,6 @@ describe("Agent.handleProviderStopped", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1090,7 +1059,6 @@ describe("Agent.handleProviderStopped", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1182,7 +1150,6 @@ describe("MaxTokensSupervisor", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1206,7 +1173,6 @@ describe("MaxTokensSupervisor", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1241,7 +1207,6 @@ describe("MaxTokensSupervisor", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1266,7 +1231,6 @@ describe("yield_to_parent as an ordinary tool", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1303,7 +1267,6 @@ describe("yield_to_parent as an ordinary tool", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1349,7 +1312,6 @@ describe("yield_to_parent as an ordinary tool", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1379,7 +1341,6 @@ describe("yield_to_parent as an ordinary tool", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1410,7 +1371,6 @@ describe("Agent.abort on yielded thread", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1452,7 +1412,6 @@ describe("Agent.abort on yielded thread", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1492,7 +1451,6 @@ describe("Agent.abort appends user abort message", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1541,7 +1499,6 @@ describe("Agent.abort appends user abort message", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1606,7 +1563,6 @@ describe("SubagentSupervisor yield tag detection", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1649,7 +1605,6 @@ describe("SubagentSupervisor yield tag detection", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -1687,7 +1642,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1710,7 +1664,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "again",
         },
       ],
@@ -1741,7 +1694,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1778,7 +1730,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "edit a",
         },
       ],
@@ -1816,7 +1767,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "again",
         },
       ],
@@ -1852,7 +1802,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -1869,7 +1818,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "next",
         },
       ],
@@ -1903,7 +1851,6 @@ describe("AutoCompactSupervisor integration", () => {
                     media_type: "image/png" as const,
                     data: "aW1n",
                   },
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                 },
               ],
             });
@@ -1920,7 +1867,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "edit a",
         },
       ],
@@ -1977,7 +1923,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2033,7 +1978,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "edit a",
         },
       ],
@@ -2070,7 +2014,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2087,7 +2030,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "next",
         },
       ],
@@ -2106,7 +2048,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "retry",
         },
       ],
@@ -2135,7 +2076,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2152,7 +2092,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "next",
         },
       ],
@@ -2172,7 +2111,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "retry",
         },
       ],
@@ -2220,7 +2158,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2260,7 +2197,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2297,7 +2233,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2340,7 +2275,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2353,7 +2287,6 @@ describe("AutoCompactSupervisor integration", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "and this",
           },
         ],
@@ -2403,7 +2336,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2461,7 +2393,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2506,7 +2437,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2545,7 +2475,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -2594,7 +2523,6 @@ describe("AutoCompactSupervisor integration", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "again",
         },
       ],
@@ -2636,7 +2564,6 @@ describe("Thread.onToolApplied", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "edit a",
         },
       ],
@@ -2688,7 +2615,6 @@ describe("Thread.onToolApplied", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "edit a",
         },
       ],
@@ -2999,7 +2925,6 @@ describe("structured tool result ownership", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "run a thing",
         },
       ],
@@ -3049,7 +2974,6 @@ describe("Agent bash summary reminder", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "run a thing",
         },
       ],
@@ -3083,7 +3007,6 @@ describe("Agent bash summary reminder", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "run a thing",
         },
       ],
@@ -3141,7 +3064,6 @@ describe("Agent bash summary reminder", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "first",
         },
       ],
@@ -3362,7 +3284,6 @@ describe("Agent failure", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text,
         },
       ],
@@ -3397,7 +3318,6 @@ describe("Agent failure", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "first message",
         },
       ],
@@ -3424,7 +3344,6 @@ describe("Agent failure", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "find the bug",
         },
       ],
@@ -3436,7 +3355,6 @@ describe("Agent failure", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "also check the logs",
           },
         ],
@@ -3449,7 +3367,6 @@ describe("Agent failure", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "and the config",
           },
         ],
@@ -3473,7 +3390,6 @@ describe("Agent failure", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "retry",
         },
       ],
@@ -3512,7 +3428,6 @@ describe("Agent failure", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "flaky task",
           },
         ],
@@ -3545,7 +3460,6 @@ describe("Agent failure", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "flaky task",
           },
         ],
@@ -3570,7 +3484,6 @@ describe("Agent failure", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "read it",
         },
       ],
@@ -3632,7 +3545,6 @@ describe("Agent conversation archive", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "edit a",
           },
         ],
@@ -3682,7 +3594,6 @@ describe("Agent conversation archive", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "edit a",
           },
         ],
@@ -3737,7 +3648,6 @@ describe("Agent conversation archive", () => {
           messages: [
             {
               type: "text",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: "",
             },
           ],
@@ -3753,7 +3663,6 @@ describe("Agent conversation archive", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "first turn",
           },
         ],
@@ -3828,7 +3737,6 @@ describe("Agent conversation archive", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "parent turn",
           },
         ],
@@ -3856,7 +3764,6 @@ describe("Agent conversation archive", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "child turn",
           },
         ],
@@ -3914,7 +3821,6 @@ describe("Agent thread state", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "parent turn",
           },
         ],
@@ -3959,7 +3865,6 @@ describe("Thread survives the compaction agent swap", () => {
     messages: [
       {
         type: "text" as const,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "",
       },
     ],
@@ -4017,7 +3922,6 @@ describe("Thread survives the compaction agent swap", () => {
           type: "tool_result",
           id: "req-1" as ToolRequestId,
           result: { status: "ok", value: [] },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
         structuredResult: { toolName: "thread_title" },
       });
@@ -4065,7 +3969,6 @@ describe("Thread survives the compaction agent swap", () => {
           messages: [
             {
               type: "text",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               text: "",
             },
           ],
@@ -4133,7 +4036,6 @@ describe("Thread survives the compaction agent swap", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "new direction",
           },
         ],
@@ -4182,7 +4084,6 @@ describe("Thread preflight token count", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -4212,7 +4113,6 @@ describe("Thread preflight token count", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -4240,7 +4140,6 @@ describe("Thread preflight token count", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -4257,7 +4156,6 @@ describe("Thread preflight token count", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "again",
         },
       ],
@@ -4297,7 +4195,6 @@ describe("Thread preflight token count", () => {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: "hello",
           },
         ],
@@ -4327,7 +4224,6 @@ describe("Agent turn loop", () => {
       await agent.send([
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ]).promise,
@@ -4345,7 +4241,6 @@ describe("Agent turn loop", () => {
     const { promise: turn } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);
@@ -4372,7 +4267,6 @@ describe("Agent turn loop", () => {
     const { promise: turn } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);
@@ -4420,7 +4314,6 @@ describe("Agent turn loop", () => {
     const { promise: turn } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);
@@ -4449,7 +4342,6 @@ describe("Agent turn loop", () => {
             {
               type: "text",
               text: "injected",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
         }),
@@ -4457,7 +4349,6 @@ describe("Agent turn loop", () => {
     const { promise: turn } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);
@@ -4484,7 +4375,6 @@ describe("Agent turn loop", () => {
     const { promise: turn } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);
@@ -4519,7 +4409,6 @@ describe("Agent turn loop", () => {
     const { promise: turn } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);
@@ -4557,7 +4446,6 @@ describe("Agent turn loop", () => {
     const { promise: turn } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);
@@ -4600,7 +4488,6 @@ describe("Agent turn loop", () => {
     const { promise: turn } = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);
@@ -4629,7 +4516,6 @@ describe("Agent turn loop", () => {
     const turn = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);
@@ -4681,7 +4567,6 @@ describe("nativeMessageIdx plumbing", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -4725,7 +4610,6 @@ describe("nativeMessageIdx plumbing", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -4772,7 +4656,6 @@ describe("nativeMessageIdx plumbing", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],
@@ -4827,7 +4710,6 @@ describe("nativeMessageIdx plumbing", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello",
         },
       ],

@@ -16,11 +16,10 @@ import type {
 import type { ThreadCompactor } from "./compaction/compactor.ts";
 import { Emitter } from "./emitter.ts";
 import type { ProviderProfile } from "./provider-options.ts";
-import {
-  type AgentInput,
-  type NativeMessageIdx,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type Provider,
+import type {
+  AgentInput,
+  NativeMessageIdx,
+  Provider,
 } from "./providers/provider-types.ts";
 import type { EnvironmentConfig, Thread, ThreadCallbacks } from "./thread.ts";
 import type { ThreadResult } from "./thread-api.ts";
@@ -259,7 +258,6 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
       inputMessages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: opts.prompt,
         },
       ],
@@ -282,7 +280,6 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
       input: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: `\
 A script has been invoked. Come up with a succinct title describing this specific invocation.
 
@@ -558,7 +555,6 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       inputMessages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: opts.prompt,
         },
       ],

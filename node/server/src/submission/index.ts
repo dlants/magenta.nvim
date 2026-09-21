@@ -1,5 +1,4 @@
 import type { AgentInput } from "../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type { QueueEntry } from "./mailbox.ts";
 
 /** When a parsed submission is delivered.
@@ -61,7 +60,6 @@ export const resolveAsText: ResolveSubmission = (message) =>
       ? [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: message,
           },
         ]

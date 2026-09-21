@@ -11,7 +11,6 @@ import type { SubagentConfig, ThreadId } from "../chat-types.ts";
 import { provisionContainer } from "../container/provision.ts";
 import type { ContainerConfig } from "../container/types.ts";
 import type { ProviderToolSpec } from "../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type { ThreadResult } from "../thread-api.ts";
 import type {
   ExecutedToolResult,
@@ -631,7 +630,6 @@ export function execute(
             status: "error",
             error: "Sub-agent execution was aborted",
           },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -644,7 +642,6 @@ export function execute(
           status: "error",
           error: e instanceof Error ? e.message : String(e),
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();
@@ -751,7 +748,6 @@ function buildResult(
         {
           type: "text",
           text: resultText,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ],
       structuredResult: {
@@ -759,7 +755,6 @@ function buildResult(
         agents,
       },
     },
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 }
 

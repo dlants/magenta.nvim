@@ -19,7 +19,6 @@ import type {
   StopReason,
   Usage,
 } from "./providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import {
   compactPrompt,
@@ -702,7 +701,6 @@ export class Thread implements ThreadCoreView {
     this.opening = [
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: summaryText(outcome.summary),
       },
     ];
@@ -716,7 +714,6 @@ export class Thread implements ThreadCoreView {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text:
             reason.nextPrompt?.trim() ||
             "Please continue from where you left off.",
@@ -1023,7 +1020,6 @@ export class Thread implements ThreadCoreView {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: action.message,
           },
         ],
@@ -1037,7 +1033,6 @@ export class Thread implements ThreadCoreView {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: action.text,
         },
       ],
@@ -1136,7 +1131,6 @@ export class Thread implements ThreadCoreView {
         messages: [
           {
             type: "text",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             text: action.text,
           },
         ],

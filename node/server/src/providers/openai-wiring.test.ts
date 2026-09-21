@@ -20,7 +20,6 @@ import { CodexAuthError } from "./codex-auth.ts";
 import { MockOpenAIClient, mockResponse } from "./mock-openai-client.ts";
 import { OpenAIProvider, openaiInferenceOptions } from "./openai.ts";
 import { anthropicAuthType, getProvider } from "./provider.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 import type { SystemPrompt } from "./system-prompt.ts";
 
 const noopLogger: Logger = {
@@ -173,7 +172,6 @@ describe("OpenAI provider wiring", () => {
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "do the task",
         },
       ],
@@ -296,7 +294,6 @@ describe("OpenAI provider wiring", () => {
           {
             type: "text",
             text: "hi",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
         spec: {

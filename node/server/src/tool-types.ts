@@ -12,8 +12,8 @@ export type ToolRequest = {
 };
 
 import type {
-  ProviderToolResult,
-  ProviderToolResultContent,
+  ToolResultContent,
+  ToolResultInput,
 } from "./providers/provider-types.ts";
 import type * as BashCommand from "./tools/bashCommand.ts";
 import type * as Edl from "./tools/edl.ts";
@@ -64,7 +64,7 @@ export type ToolStructuredResult =
 
 export type CompletedToolInfo = {
   request: ToolRequest;
-  result: ProviderToolResult;
+  result: ToolResultInput;
   structuredResult: ToolStructuredResult | undefined;
 };
 
@@ -88,11 +88,11 @@ export type ToolMsg = { __toolMsg: true };
 /** What a tool's `execute` resolves to: the wire result plus the structured
  * payload that never goes to the model. The thread's executor archives both
  * halves and strips the structured half before the agent sees it. */
-export type ExecutedToolResult = Omit<ProviderToolResult, "result"> & {
+export type ExecutedToolResult = Omit<ToolResultInput, "result"> & {
   result:
     | {
         status: "ok";
-        value: ProviderToolResultContent[];
+        value: ToolResultContent[];
         structuredResult?: ToolStructuredResult;
       }
     | { status: "error"; error: string };
@@ -100,7 +100,7 @@ export type ExecutedToolResult = Omit<ProviderToolResult, "result"> & {
 
 /** What the agent drives: wire results only. */
 export type ToolInvocation = {
-  promise: Promise<ProviderToolResult>;
+  promise: Promise<ToolResultInput>;
   abort: () => void;
 };
 
@@ -121,5 +121,5 @@ export type ActiveToolEntry = {
   progress: unknown;
   toolName: ToolName;
   request: ToolRequest;
-  result?: ProviderToolResult;
+  result?: ToolResultInput;
 };

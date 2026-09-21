@@ -2,7 +2,6 @@ import type { GitClient, GitState } from "../capabilities/git-client.ts";
 import { formatGitHead } from "../capabilities/git-client.ts";
 import type { Logger } from "../logger.ts";
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 
 export type GitContextUpdate = {
   previous: GitState | undefined;
@@ -26,7 +25,7 @@ function coarseChanged(
 }
 
 type GitViewEntry = {
-  readonly nativeMessageIdx: NativeMessageIdx;
+  readonly nativeMessageIdx: HistoryIdx;
   state: GitState | undefined;
 };
 
@@ -48,7 +47,7 @@ export class GitTracker {
   }): GitTracker {
     return new GitTracker(args.gitClient, args.logger, [
       {
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        nativeMessageIdx: PRE_HISTORY,
         state: cloneState(args.initialState),
       },
     ]);
@@ -64,7 +63,9 @@ export class GitTracker {
       args.gitClient ?? args.source.gitClient,
       args.logger ?? args.source.logger,
       args.source.history
-        .filter((entry) => entry.nativeMessageIdx <= args.nativeMessageIdx)
+        .filter((entry) =>
+          historyIdxAtOrBefore(entry.nativeMessageIdx, args.nativeMessageIdx),
+        )
         .map((entry) => ({
           nativeMessageIdx: entry.nativeMessageIdx,
           state: cloneState(entry.state),
@@ -114,9 +115,12 @@ export class GitTracker {
     }
 
     const previousIdx = this.history.at(-1)?.nativeMessageIdx;
-    if (previousIdx !== undefined && nativeMessageIdx < previousIdx) {
+    if (
+      previousIdx !== undefined &&
+      historyIdxPrecedes(nativeMessageIdx, previousIdx)
+    ) {
       throw new Error(
-        `Git view history must be monotonic: ${nativeMessageIdx} < ${previousIdx}`,
+        `Git view history must be monotonic: ${nativeMessageIdx} < ${formatHistoryIdx(previousIdx)}`,
       );
     }
     this.history.push({ nativeMessageIdx, state: cloneState(current) });
@@ -149,6 +153,13 @@ import type {
   ThreadSupervisor,
 } from "../thread-supervisor.ts";
 import { injectText } from "../thread-supervisor.ts";
+import {
+  formatHistoryIdx,
+  type HistoryIdx,
+  historyIdxAtOrBefore,
+  historyIdxPrecedes,
+  PRE_HISTORY,
+} from "./history.ts";
 
 /** Contributes the git status update to the request that is about to go out.
  * `GitTracker.getUpdate` commits the agent view as a side effect, which is

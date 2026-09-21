@@ -119,9 +119,7 @@ function convertItem(
           id: item.call_id as ToolRequestId,
           result: {
             status: "ok",
-            value: [
-              { type: "text", text: outputText(item.output), nativeMessageIdx },
-            ],
+            value: [{ type: "text", text: outputText(item.output) }],
           },
           nativeMessageIdx,
         },

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolOutcome } from "./agent.ts";
 import { loopLabel, loopStreamingBlock } from "./loop-state.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import { awaitNextStream, createTestAgent } from "./test-helpers.ts";
 import type { ToolInvocationState } from "./thread-api.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
@@ -22,7 +21,6 @@ describe("AgentTurn lifecycle and progress", () => {
     const turn = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "read the file",
       },
     ]);
@@ -100,7 +98,6 @@ describe("AgentTurn lifecycle and progress", () => {
     const first = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "read",
       },
     ]);
@@ -129,7 +126,6 @@ describe("AgentTurn lifecycle and progress", () => {
     const second = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "try again",
       },
     ]);
@@ -156,7 +152,6 @@ describe("AgentTurn lifecycle and progress", () => {
     const turn = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);
@@ -173,7 +168,6 @@ describe("AgentTurn lifecycle and progress", () => {
     const turn = agent.send([
       {
         type: "text",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "hello",
       },
     ]);

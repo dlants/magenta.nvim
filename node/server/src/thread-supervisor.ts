@@ -8,7 +8,6 @@ import type {
   StopReason,
   ToolResults,
 } from "./providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import {
   formatSystemInfo,
   type SystemInfo,
@@ -36,10 +35,8 @@ export type YieldAction =
 
 /** Content an `onBeforeRequest` supervisor interjects into the request that is
  * about to be issued. Not a bare string: file context updates can be images or
- * documents. */
-export type InjectedContent =
-  | { type: "text"; text: string }
-  | Extract<ProviderMessageContent, { type: "image" | "document" }>;
+ * documents. Input-flavored: the native index is assigned when it lands. */
+export type InjectedContent = AgentInput;
 
 /** Why a supervisor asked to suspend before a request. Core's turn loop does
  * not act on the reason — it only has to leave the log coherent and resumable
@@ -357,13 +354,7 @@ export class SupervisorChain implements SupervisorFanOut {
       if (!isCurrent()) break;
       if (action.type === "suspend") suspend ??= action.reason;
       else if (action.type === "inject") {
-        for (const block of action.content) {
-          injections.push(
-            block.type === "text"
-              ? { ...block, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }
-              : block,
-          );
-        }
+        injections.push(...action.content);
       }
     }
     return suspend === undefined

@@ -1,10 +1,5 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: White-box test: the view adapter is rebuilt over an existing session.
-import {
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ThreadId,
-  type ToolName,
-  type ToolRequestId,
-} from "@magenta/server";
+import type { ThreadId, ToolName, ToolRequestId } from "@magenta/server";
 import { expect, it } from "vitest";
 import { withDriver } from "../test/preamble.ts";
 import { Chat } from "./chat.ts";
@@ -74,7 +69,6 @@ it("a turn completes with no view listener attached to the session", async () =>
       messages: [
         {
           type: "text",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           text: "hello with no view",
         },
       ],

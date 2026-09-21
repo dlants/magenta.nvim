@@ -38,7 +38,6 @@ function makeSupervisor(contextFiles: ContextTracker["files"] = {}) {
         type: "tool_result",
         id,
         result: { status: "ok", value: [] },
-        nativeMessageIdx: 0 as NativeMessageIdx,
       },
       structuredResult,
     });

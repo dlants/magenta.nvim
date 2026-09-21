@@ -4,7 +4,6 @@ import type {
 } from "../capabilities/script-runner.ts";
 import type { ThreadId } from "../chat-types.ts";
 import type { ProviderToolSpec } from "../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
   ExecutedToolResult,
   ExecutingToolInvocation,
@@ -112,12 +111,10 @@ export function execute(
             {
               type: "text",
               text: `Parameter schema for "${entry.name}". Call run_script again with this scriptName and a matching \`parameters\` object to run it.\n\n${JSON.stringify(entry.parameterSchema, null, 2)}`,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
           structuredResult: { toolName: "run_script" as const },
         },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
 
@@ -155,12 +152,10 @@ export function execute(
           {
             type: "text",
             text: `Started script "${request.input.scriptName}". It runs independently; check the Scripts section for progress.`,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
         structuredResult: { toolName: "run_script" as const },
       },
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     };
   })();
 
@@ -175,6 +170,5 @@ function errorResult(id: ToolRequest["id"], error: string): ExecutedToolResult {
     type: "tool_result",
     id,
     result: { status: "error", error },
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 }
