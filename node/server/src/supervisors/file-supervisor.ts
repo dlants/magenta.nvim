@@ -489,7 +489,7 @@ export class FileSupervisor implements ContextTracker, ThreadSupervisor {
     absFilePath: AbsFilePath,
     tool: ToolApplied,
     fileTypeInfo: FileTypeInfo,
-    nativeMessageIdx: HistoryIdx = PRE_HISTORY,
+    nativeMessageIdx: HistoryIdx,
   ): void {
     const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
 
@@ -586,9 +586,7 @@ export class FileSupervisor implements ContextTracker, ThreadSupervisor {
     return Object.keys(this.files).length === 0;
   }
 
-  async getContextUpdate(
-    nativeMessageIdx: HistoryIdx = PRE_HISTORY,
-  ): Promise<FileUpdates> {
+  async getContextUpdate(nativeMessageIdx: HistoryIdx): Promise<FileUpdates> {
     const revision = this.revision;
     if (!this.isCurrent(revision) || this.isContextEmpty()) {
       return {};

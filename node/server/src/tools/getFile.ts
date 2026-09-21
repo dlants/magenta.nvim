@@ -147,9 +147,9 @@ type ReadOneFileContext = {
 };
 
 type ReadOneFileOutcome =
-  | { aborted: true }
+  | { type: "aborted" }
   | {
-      aborted?: false;
+      type: "read";
       blocks: ToolResultContent[];
       structured: PerFileResult;
     };
@@ -159,6 +159,7 @@ function errorOutcome(
   message: string,
 ): ReadOneFileOutcome {
   return {
+    type: "read",
     blocks: [
       {
         type: "text",
@@ -192,6 +193,7 @@ async function readOneFile(
     !hasLineParams
   ) {
     return {
+      type: "read",
       blocks: [
         {
           type: "text",
@@ -212,7 +214,7 @@ You already have the most up-to-date information about the contents of this file
     absFilePath,
     context.fileIO,
   );
-  if (isAborted()) return { aborted: true };
+  if (isAborted()) return { type: "aborted" };
 
   if (!fileTypeInfo) {
     return errorOutcome(absFilePath, `File ${filePath} does not exist.`);
@@ -226,7 +228,7 @@ You already have the most up-to-date information about the contents of this file
   }
 
   const statResult = await context.fileIO.stat(absFilePath);
-  if (isAborted()) return { aborted: true };
+  if (isAborted()) return { type: "aborted" };
   const actualSize = statResult?.size ?? 0;
   const maxSize =
     fileTypeInfo.category === FileCategory.TEXT
@@ -252,7 +254,7 @@ You already have the most up-to-date information about the contents of this file
 
   if (fileTypeInfo.category === FileCategory.TEXT) {
     const rawContent = await context.fileIO.readFile(absFilePath);
-    if (isAborted()) return { aborted: true };
+    if (isAborted()) return { type: "aborted" };
 
     if (absFilePath.toLowerCase().endsWith(".md")) {
       systemReminder = extractSystemReminderBlock(rawContent);
@@ -319,6 +321,7 @@ You already have the most up-to-date information about the contents of this file
         agentView.pages.includes(fileReq.pdfPage)
       ) {
         return {
+          type: "read",
           blocks: [
             {
               type: "text",
@@ -335,7 +338,7 @@ You already have the most up-to-date information about the contents of this file
       }
 
       const pageResult = await extractPDFPage(absFilePath, fileReq.pdfPage);
-      if (isAborted()) return { aborted: true };
+      if (isAborted()) return { type: "aborted" };
 
       if (pageResult.status === "error") {
         return errorOutcome(absFilePath, pageResult.error);
@@ -364,6 +367,7 @@ You already have the most up-to-date information about the contents of this file
     } else {
       if (agentView?.type === "pdf" && agentView.summary) {
         return {
+          type: "read",
           blocks: [
             {
               type: "text",
@@ -380,7 +384,7 @@ You already have the most up-to-date information about the contents of this file
       }
 
       const pageCountResult = await getSummaryAsProviderContent(absFilePath);
-      if (isAborted()) return { aborted: true };
+      if (isAborted()) return { type: "aborted" };
 
       if (pageCountResult.status === "error") {
         return errorOutcome(absFilePath, pageCountResult.error);
@@ -396,10 +400,10 @@ You already have the most up-to-date information about the contents of this file
     }
   } else {
     const buffer = await context.fileIO.readBinaryFile(absFilePath);
-    if (isAborted()) return { aborted: true };
+    if (isAborted()) return { type: "aborted" };
 
     const binStatResult = await context.fileIO.stat(absFilePath);
-    if (isAborted()) return { aborted: true };
+    if (isAborted()) return { type: "aborted" };
 
     const mtime = binStatResult?.mtimeMs ?? Date.now();
 
@@ -434,6 +438,7 @@ You already have the most up-to-date information about the contents of this file
   }
 
   return {
+    type: "read",
     blocks: result,
     structured: {
       filePath: absFilePath,
@@ -479,7 +484,7 @@ export function execute(
           isAborted: () => aborted,
         });
 
-        if (outcome.aborted) return abortResult;
+        if (outcome.type === "aborted") return abortResult;
 
         value.push({
           type: "text",

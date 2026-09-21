@@ -12,8 +12,8 @@ export type ToolRequest = {
 };
 
 import type {
-  ToolResultContent,
   ToolResultInput,
+  ToolResultValue,
 } from "./providers/provider-types.ts";
 import type * as BashCommand from "./tools/bashCommand.ts";
 import type * as Edl from "./tools/edl.ts";
@@ -90,12 +90,10 @@ export type ToolMsg = { __toolMsg: true };
  * halves and strips the structured half before the agent sees it. */
 export type ExecutedToolResult = Omit<ToolResultInput, "result"> & {
   result:
-    | {
-        status: "ok";
-        value: ToolResultContent[];
+    | (Extract<ToolResultValue, { status: "ok" }> & {
         structuredResult?: ToolStructuredResult;
-      }
-    | { status: "error"; error: string };
+      })
+    | Extract<ToolResultValue, { status: "error" }>;
 };
 
 /** What the agent drives: wire results only. */

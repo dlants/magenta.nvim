@@ -13,6 +13,7 @@ import {
 } from "../utils/files.ts";
 import type { DiffUpdate, WholeFileUpdate } from "./file-supervisor.ts";
 import { FileSupervisor } from "./file-supervisor.ts";
+import { PRE_HISTORY } from "./history.ts";
 
 vi.mock("../utils/pdf-pages.ts", () => ({
   getSummaryAsProviderContent: vi.fn().mockResolvedValue({
@@ -87,7 +88,7 @@ describe("FileSupervisor unit tests", () => {
       throw new Error("Expected diff");
     expect(update.value.patch).toContain("-delivered content");
     expect(update.value.patch).toContain("+not delivered yet");
-    expect(await clone.getContextUpdate()).toEqual({});
+    expect(await clone.getContextUpdate(PRE_HISTORY)).toEqual({});
   });
 
   it("truncated-history clones reseed delivered files", async () => {
@@ -95,17 +96,19 @@ describe("FileSupervisor unit tests", () => {
       [TEST_PATH]: "delivered content",
     });
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
-    await cm.getContextUpdate();
+    await cm.getContextUpdate(PRE_HISTORY);
     const clone = FileSupervisor.clone({
       source: cm,
       history: { type: "reseed" },
     });
     expect(clone.files[TEST_PATH].agentView).toBeUndefined();
-    expect((await clone.getContextUpdate())[TEST_PATH].update).toMatchObject({
+    expect(
+      (await clone.getContextUpdate(PRE_HISTORY))[TEST_PATH].update,
+    ).toMatchObject({
       status: "ok",
       value: { type: "whole-file" },
     });
-    expect(await cm.getContextUpdate()).toEqual({});
+    expect(await cm.getContextUpdate(PRE_HISTORY)).toEqual({});
   });
 
   it("restores the delivered baseline at the clone index", async () => {
@@ -184,6 +187,7 @@ describe("FileSupervisor unit tests", () => {
       TEST_PATH,
       { type: "get-file", content: "hello world" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
     expect(cm.files[TEST_PATH].agentView).toEqual({
@@ -212,6 +216,7 @@ describe("FileSupervisor unit tests", () => {
       TEST_PATH,
       { type: "get-file", content: "hello world" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
     expect(cm.files[TEST_PATH].agentView).toEqual({
@@ -219,7 +224,7 @@ describe("FileSupervisor unit tests", () => {
       content: "hello world",
     });
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     expect(Object.keys(updates).length).toBe(0);
   });
 
@@ -232,6 +237,7 @@ describe("FileSupervisor unit tests", () => {
       TEST_PATH,
       { type: "edl-edit", content: "edited content", previousContent: "" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
     expect(cm.files[TEST_PATH].agentView).toEqual({
@@ -239,7 +245,7 @@ describe("FileSupervisor unit tests", () => {
       content: "edited content",
     });
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     expect(Object.keys(updates).length).toBe(0);
   });
 
@@ -252,11 +258,12 @@ describe("FileSupervisor unit tests", () => {
       TEST_PATH,
       { type: "get-file", content: "original content" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
     await fileIO.writeFile(TEST_PATH, "formatted content");
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     const update = updates[TEST_PATH];
     expect(update).toBeDefined();
     expect(update.update.status).toBe("ok");
@@ -277,11 +284,12 @@ describe("FileSupervisor unit tests", () => {
       TEST_PATH,
       { type: "edl-edit", content: "const x=1", previousContent: "" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
     await fileIO.writeFile(TEST_PATH, "const x = 1;\n");
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     const update = updates[TEST_PATH];
     expect(update).toBeDefined();
     expect(update.update.status).toBe("ok");
@@ -301,9 +309,10 @@ describe("FileSupervisor unit tests", () => {
       TEST_PATH,
       { type: "get-file", content: "same content" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     expect(Object.keys(updates).length).toBe(0);
   });
 
@@ -315,16 +324,17 @@ describe("FileSupervisor unit tests", () => {
     });
 
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
-    await cm.getContextUpdate();
+    await cm.getContextUpdate(PRE_HISTORY);
 
     await fileIO.writeFile(TEST_PATH, editedContent);
     cm.toolApplied(
       TEST_PATH,
       { type: "edl-edit", content: editedContent, previousContent: "" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     expect(Object.keys(updates).length).toBe(0);
   });
 
@@ -337,11 +347,12 @@ describe("FileSupervisor unit tests", () => {
       TEST_PATH,
       { type: "get-file", content: "some content" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
     fileIO.deleteFile(TEST_PATH);
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     const update = updates[TEST_PATH];
     expect(update).toBeDefined();
     expect(update.update.status).toBe("ok");
@@ -362,7 +373,7 @@ describe("FileSupervisor - full file and diff updates", () => {
 
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
 
-    const firstUpdates = await cm.getContextUpdate();
+    const firstUpdates = await cm.getContextUpdate(PRE_HISTORY);
     expect(firstUpdates[TEST_PATH]).toBeDefined();
 
     const firstUpdate = firstUpdates[TEST_PATH];
@@ -385,7 +396,7 @@ describe("FileSupervisor - full file and diff updates", () => {
       "Moonlight whispers through the trees",
     );
 
-    const secondUpdates = await cm.getContextUpdate();
+    const secondUpdates = await cm.getContextUpdate(PRE_HISTORY);
     expect(Object.keys(secondUpdates).length).toBe(0);
   });
 
@@ -397,13 +408,13 @@ describe("FileSupervisor - full file and diff updates", () => {
     });
 
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
-    await cm.getContextUpdate();
+    await cm.getContextUpdate(PRE_HISTORY);
 
     const updatedContent =
       "Modified content directly on disk\nThis should be detected.";
     await fileIO.writeFile(TEST_PATH, updatedContent);
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     expect(updates[TEST_PATH]).toBeDefined();
 
     const update = updates[TEST_PATH];
@@ -425,12 +436,12 @@ describe("FileSupervisor - full file and diff updates", () => {
 
     expect(cm.files[TEST_PATH]).toBeDefined();
 
-    const firstUpdates = await cm.getContextUpdate();
+    const firstUpdates = await cm.getContextUpdate(PRE_HISTORY);
     expect(firstUpdates[TEST_PATH]).toBeDefined();
 
     fileIO.deleteFile(TEST_PATH);
 
-    const secondUpdates = await cm.getContextUpdate();
+    const secondUpdates = await cm.getContextUpdate(PRE_HISTORY);
 
     expect(cm.files[TEST_PATH]).toBeUndefined();
     expect(secondUpdates[TEST_PATH]).toBeDefined();
@@ -458,7 +469,7 @@ describe("FileSupervisor - binary file handling", () => {
 
     cm.addFileContext(IMAGE_PATH, IMAGE_REL, IMAGE_FILE_TYPE);
 
-    const firstUpdates = await cm.getContextUpdate();
+    const firstUpdates = await cm.getContextUpdate(PRE_HISTORY);
     expect(firstUpdates[IMAGE_PATH]).toBeDefined();
 
     const firstUpdate = firstUpdates[IMAGE_PATH];
@@ -476,7 +487,7 @@ describe("FileSupervisor - binary file handling", () => {
       );
     }
 
-    const secondUpdates = await cm.getContextUpdate();
+    const secondUpdates = await cm.getContextUpdate(PRE_HISTORY);
     expect(Object.keys(secondUpdates).length).toBe(0);
   });
 
@@ -488,7 +499,7 @@ describe("FileSupervisor - binary file handling", () => {
 
     cm.addFileContext(IMAGE_PATH, IMAGE_REL, IMAGE_FILE_TYPE);
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     const content = cm.contextUpdatesToContent(updates);
 
     expect(content.length).toBe(2);
@@ -515,12 +526,12 @@ describe("FileSupervisor - binary file handling", () => {
 
     expect(cm.files[IMAGE_PATH]).toBeDefined();
 
-    const firstUpdates = await cm.getContextUpdate();
+    const firstUpdates = await cm.getContextUpdate(PRE_HISTORY);
     expect(firstUpdates[IMAGE_PATH]).toBeDefined();
 
     fileIO.deleteFile(IMAGE_PATH);
 
-    const secondUpdates = await cm.getContextUpdate();
+    const secondUpdates = await cm.getContextUpdate(PRE_HISTORY);
 
     expect(cm.files[IMAGE_PATH]).toBeUndefined();
     expect(secondUpdates[IMAGE_PATH]).toBeDefined();
@@ -561,7 +572,7 @@ describe("FileSupervisor - large file summarization", () => {
 
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     const update = updates[TEST_PATH];
     expect(update).toBeDefined();
     expect(update.update.status).toBe("ok");
@@ -588,8 +599,8 @@ describe("FileSupervisor - large file summarization", () => {
 
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
 
-    await cm.getContextUpdate();
-    const secondUpdates = await cm.getContextUpdate();
+    await cm.getContextUpdate(PRE_HISTORY);
+    const secondUpdates = await cm.getContextUpdate(PRE_HISTORY);
     expect(Object.keys(secondUpdates).length).toBe(0);
   });
 
@@ -600,11 +611,11 @@ describe("FileSupervisor - large file summarization", () => {
     });
 
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
-    await cm.getContextUpdate();
+    await cm.getContextUpdate(PRE_HISTORY);
 
     await fileIO.writeFile(TEST_PATH, `${largeContent}\nappended line`);
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     expect(updates[TEST_PATH]).toBeUndefined();
     expect(cm.files[TEST_PATH].agentView).toEqual({ type: "summary" });
   });
@@ -616,7 +627,7 @@ describe("FileSupervisor - large file summarization", () => {
 
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     const update = updates[TEST_PATH];
     expect(update.update.status).toBe("ok");
     if (update.update.status !== "ok") throw new Error("Expected ok");
@@ -647,7 +658,7 @@ describe("FileSupervisor - PDF file handling", () => {
 
     cm.addFileContext(PDF_PATH, PDF_REL, PDF_FILE_TYPE);
 
-    const updates = await cm.getContextUpdate();
+    const updates = await cm.getContextUpdate(PRE_HISTORY);
     expect(updates[PDF_PATH]).toBeDefined();
 
     const update = updates[PDF_PATH];
@@ -673,7 +684,7 @@ describe("FileSupervisor - PDF file handling", () => {
     });
 
     // Second call should return no updates (summary already sent)
-    const secondUpdates = await cm.getContextUpdate();
+    const secondUpdates = await cm.getContextUpdate(PRE_HISTORY);
     expect(Object.keys(secondUpdates).length).toBe(0);
   });
 });
@@ -688,6 +699,7 @@ describe("FileSupervisor - peekFileUpdate", () => {
       TEST_PATH,
       { type: "get-file", content: "initial content" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
     expect(cm.files[TEST_PATH].agentView).toEqual({
       type: "text",
@@ -733,6 +745,7 @@ describe("FileSupervisor - refreshPendingUpdates", () => {
       TEST_PATH,
       { type: "get-file", content: "baseline" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
     await new Promise((resolve) => setImmediate(resolve));
@@ -767,6 +780,7 @@ describe("FileSupervisor - refreshPendingUpdates", () => {
       TEST_PATH,
       { type: "get-file", content: "stable" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
     await cm.refreshPendingUpdates();
@@ -785,13 +799,14 @@ describe("FileSupervisor - refreshPendingUpdates", () => {
       TEST_PATH,
       { type: "get-file", content: "orig" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
 
     await fileIO.writeFile(TEST_PATH, "orig and more");
     await cm.refreshPendingUpdates();
     expect(Object.keys(cm.getPendingUpdates()).length).toBe(1);
 
-    await cm.getContextUpdate();
+    await cm.getContextUpdate(PRE_HISTORY);
 
     expect(Object.keys(cm.getPendingUpdates()).length).toBe(0);
   });
@@ -821,6 +836,7 @@ describe("FileSupervisor - background poll", () => {
         TEST_PATH,
         { type: "get-file", content: "content" },
         TEXT_FILE_TYPE,
+        PRE_HISTORY,
       );
 
       const spy = vi.fn();
@@ -861,6 +877,7 @@ describe("FileSupervisor - background poll", () => {
         TEST_PATH,
         { type: "get-file", content: "initial" },
         TEXT_FILE_TYPE,
+        PRE_HISTORY,
       );
 
       await vi.advanceTimersByTimeAsync(0);
@@ -887,7 +904,7 @@ describe("FileSupervisor conversation delivery lifetime", () => {
   it("reseeded clone retains membership but clears delivered state", async () => {
     const { cm } = createTestFileSupervisor({ [TEST_PATH]: "content" });
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
-    await cm.getContextUpdate();
+    await cm.getContextUpdate(PRE_HISTORY);
     expect(cm.files[TEST_PATH].agentView).toBeDefined();
     const clone = FileSupervisor.clone({
       source: cm,
@@ -896,7 +913,9 @@ describe("FileSupervisor conversation delivery lifetime", () => {
     expect(Object.keys(clone.files)).toEqual([TEST_PATH]);
     expect(clone.files[TEST_PATH].agentView).toBeUndefined();
     expect(clone.getPendingUpdates()).toEqual({});
-    expect((await clone.getContextUpdate())[TEST_PATH].update).toMatchObject({
+    expect(
+      (await clone.getContextUpdate(PRE_HISTORY))[TEST_PATH].update,
+    ).toMatchObject({
       status: "ok",
       value: { type: "whole-file" },
     });
@@ -921,7 +940,7 @@ describe("FileSupervisor conversation delivery lifetime", () => {
         finish = resolve;
       });
     });
-    const update = cm.getContextUpdate();
+    const update = cm.getContextUpdate(PRE_HISTORY);
     await reading;
     cm.destroy();
     finish("stale content");
@@ -938,6 +957,7 @@ describe("FileSupervisor conversation delivery lifetime", () => {
       TEST_PATH,
       { type: "get-file", content: "content" },
       TEXT_FILE_TYPE,
+      PRE_HISTORY,
     );
     await cm.refreshPendingUpdates();
     let finish!: (stat: undefined) => void;

@@ -7,7 +7,7 @@ import type { NativeMessageIdx } from "../providers/provider-types.ts";
  */
 export type HistoryIdx = NativeMessageIdx | { type: "pre-history" };
 
-export const PRE_HISTORY: HistoryIdx = { type: "pre-history" };
+export const PRE_HISTORY = { type: "pre-history" } as const;
 
 /** True when the entry is at or before `idx`; pre-history always is. */
 export function historyIdxAtOrBefore(

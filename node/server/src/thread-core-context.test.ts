@@ -9,6 +9,7 @@ import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import { pendingMessage, resolveAsText } from "./submission/index.ts";
 import { FileSupervisor } from "./supervisors/file-supervisor.ts";
+import { PRE_HISTORY } from "./supervisors/history.ts";
 import {
   awaitNextStream,
   cleanupArchive,
@@ -604,7 +605,7 @@ describe("Thread-owned context delivery", () => {
             release = resolve;
           });
         });
-      const pending = f.manager.getContextUpdate();
+      const pending = f.manager.getContextUpdate(PRE_HISTORY);
       await reading;
       await resetThread(f.thread, { archive: { type: "none" } });
       const replacement = f.thread["core"].fileSupervisor;

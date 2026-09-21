@@ -276,6 +276,7 @@ export {
   GitTracker,
   gitUpdateToText,
 } from "./supervisors/git-supervisor.ts";
+export { type HistoryIdx, PRE_HISTORY } from "./supervisors/history.ts";
 export {
   type CompactThreadContext,
   type ContextFileAccess,

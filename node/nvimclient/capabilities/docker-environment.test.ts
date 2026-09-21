@@ -16,6 +16,7 @@ import {
   FileSupervisor,
   GetFile,
   getToolSpecs,
+  PRE_HISTORY,
 } from "@magenta/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDockerEnvironment } from "../environment.ts";
@@ -329,9 +330,10 @@ describe("Docker Environment", () => {
         CONTAINER_FILE,
         { type: "get-file", content: "container content" },
         TEXT_FILE_TYPE,
+        PRE_HISTORY,
       );
 
-      const updates = await cm.getContextUpdate();
+      const updates = await cm.getContextUpdate(PRE_HISTORY);
       expect(Object.keys(updates).length).toBe(0);
     });
 
@@ -346,12 +348,13 @@ describe("Docker Environment", () => {
         CONTAINER_FILE,
         { type: "get-file", content: "original content" },
         TEXT_FILE_TYPE,
+        PRE_HISTORY,
       );
 
       // Modify the file inside the container
       await fileIO.writeFile(CONTAINER_FILE, "modified content");
 
-      const updates = await cm.getContextUpdate();
+      const updates = await cm.getContextUpdate(PRE_HISTORY);
       const update = updates[CONTAINER_FILE];
       expect(update).toBeDefined();
       expect(update.update.status).toBe("ok");
@@ -370,12 +373,13 @@ describe("Docker Environment", () => {
         CONTAINER_FILE,
         { type: "get-file", content: "soon to be deleted" },
         TEXT_FILE_TYPE,
+        PRE_HISTORY,
       );
 
       // Actually delete the file inside the container
       await execFile("docker", ["exec", containerId, "rm", CONTAINER_FILE]);
 
-      const updates = await cm.getContextUpdate();
+      const updates = await cm.getContextUpdate(PRE_HISTORY);
       const update = updates[CONTAINER_FILE];
       expect(update).toBeDefined();
       expect(update.update.status).toBe("ok");

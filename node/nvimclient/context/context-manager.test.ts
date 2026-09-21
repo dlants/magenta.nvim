@@ -10,6 +10,7 @@ import type {
 } from "@magenta/server";
 import {
   type HomeDir,
+  PRE_HISTORY,
   pollUntil,
   resolveFilePath,
   type UnresolvedFilePath,
@@ -42,7 +43,7 @@ it("returns diff when file is edited on disk", async () => {
 
     // Open the file to track the buffer
     await driver.editFile("poem.txt");
-    await fileSupervisor.getContextUpdate();
+    await fileSupervisor.getContextUpdate(PRE_HISTORY);
 
     // Edit the file on disk (disk-first approach means agent reads from disk)
     const filePath = `${cwd}/poem.txt`;
@@ -54,7 +55,7 @@ it("returns diff when file is edited on disk", async () => {
     fs.writeFileSync(filePath, edited);
 
     // Get context updates after the edit
-    const updates = await fileSupervisor.getContextUpdate();
+    const updates = await fileSupervisor.getContextUpdate(PRE_HISTORY);
     const update = updates[absFilePath];
     // Check that it's a diff update
     expect(update).toBeDefined();
@@ -89,14 +90,14 @@ it("returns diff when disk changes even if buffer has unsaved changes", async ()
     await driver.editFile("poem.txt");
 
     // Initial read to establish agentView
-    await fileSupervisor.getContextUpdate();
+    await fileSupervisor.getContextUpdate(PRE_HISTORY);
 
     // Modify the file on disk directly (agent reads from disk)
     const filePath = `${cwd}/poem.txt`;
     fs.writeFileSync(filePath, "Disk edit\n");
 
     // Context update should return a diff (disk-first reads from disk)
-    const updates = await fileSupervisor.getContextUpdate();
+    const updates = await fileSupervisor.getContextUpdate(PRE_HISTORY);
     const update = updates[absFilePath];
     expect(update).toBeDefined();
     expect(update.update.status).toBe("ok");
@@ -303,14 +304,14 @@ it("handles file deletion during buffer tracking", async () => {
     await driver.editFile("temp-tracked.txt");
 
     // Get initial context update to establish buffer tracking
-    const firstUpdates = await fileSupervisor.getContextUpdate();
+    const firstUpdates = await fileSupervisor.getContextUpdate(PRE_HISTORY);
     expect(firstUpdates[tempFilePath]).toBeDefined();
 
     // Delete the file while it's being tracked
     await fs.promises.unlink(tempFilePath);
 
     // Get context updates after deletion
-    const secondUpdates = await fileSupervisor.getContextUpdate();
+    const secondUpdates = await fileSupervisor.getContextUpdate(PRE_HISTORY);
 
     // File should be removed from context and file-deleted update should be returned
     expect(fileSupervisor.files[tempFilePath]).toBeUndefined();
@@ -617,7 +618,7 @@ it("out-of-process file change surfaces in the pending-context view", async () =
     );
 
     await driver.addContextFiles("poem.txt");
-    await fileSupervisor.getContextUpdate();
+    await fileSupervisor.getContextUpdate(PRE_HISTORY);
 
     await fs.promises.writeFile(
       absFilePath,

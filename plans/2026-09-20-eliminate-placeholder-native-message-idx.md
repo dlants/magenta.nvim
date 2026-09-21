@@ -182,6 +182,18 @@ that the tree stays green: `npx tsc -b`, `npx vitest run` (1787 passing) and
 `npx biome check .` are all clean, and `PLACEHOLDER_NATIVE_MESSAGE_IDX` appears nowhere
 outside `dist/`. Stages 3 and 4 below are therefore also done.
 
+### Stage 2 review follow-ups — DONE
+
+- `FileSupervisor.toolApplied` / `getContextUpdate` take a required `HistoryIdx`; callers
+  with no index pass `PRE_HISTORY` explicitly (tests updated mechanically).
+- `PRE_HISTORY` is a `{ type: "pre-history" } as const` literal, so `entry === PRE_HISTORY`
+  narrows; it is re-exported from the `@magenta/server` barrel along with `HistoryIdx`
+  because nvim-side tests now name it.
+- `ReadOneFileOutcome` (`tools/getFile.ts`) is tagged: `{ type: "aborted" } | { type: "read"; ... }`.
+- `tool-executor.ts` uses the named `ToolResultValue` instead of `ToolResultInput["result"]`.
+- `ExecutedToolResult` derives its ok/error shapes from `ToolResultValue` via `Extract`
+  rather than respelling them.
+
 ## Nvim client, barrel and constant removal — DONE (folded into the stage above)
 
 - Goal: `npx tsc -b` is clean with `PLACEHOLDER_NATIVE_MESSAGE_IDX` deleted from `provider-types.ts`, from the `@magenta/server` barrel, and from `node/nvimclient/providers/provider-types.ts`. Chat commands (`file`, `diff`, `diagnostics`, `buffers`, `quickfix`, `implementplan`, `registry`), `session-host.ts` and `providers/mock.ts` stop stamping it.

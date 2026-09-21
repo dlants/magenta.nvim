@@ -2,6 +2,7 @@ import type { ToolExecution, ToolOutcome } from "./agent.ts";
 import type {
   NonEmptyRequestedTools,
   ToolResultInput,
+  ToolResultValue,
 } from "./providers/provider-types.ts";
 import type { ToolInvocationState } from "./thread-api.ts";
 import type {
@@ -58,7 +59,7 @@ export function executeToolBatch(
 
   async function runBatch(): Promise<ToolOutcome> {
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
-    const results = new Map<ToolRequestId, ToolResultInput["result"]>();
+    const results = new Map<ToolRequestId, ToolResultValue>();
 
     for (const requested of requests) {
       if (requested.request.status !== "ok") {
