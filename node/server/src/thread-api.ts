@@ -11,7 +11,7 @@ import type {
   YieldAction,
 } from "./thread-supervisor.ts";
 import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
-import { Defer } from "./utils/async.ts";
+import { Defer, untilAborted } from "./utils/async.ts";
 
 export type { QueuedMessage } from "./submission/mailbox.ts";
 
@@ -61,6 +61,15 @@ export type ThreadResult =
   /** destroyed before it ever yielded */
   | { type: "aborted"; reason: string };
 
+/** Raised out of a submission step when the submission has been aborted. The
+ * submission body does not check for abort at every seam: it lets this
+ * propagate to the one place that turns an abort into a result. */
+export class SubmissionAborted extends Error {
+  constructor() {
+    super("submission aborted");
+    this.name = "SubmissionAborted";
+  }
+}
 /** The submission that currently owns the thread. There is never more than
  * one: a submission that wants to take over awaits the incumbent's `abort()`
  * before installing its own, so no submission body has to ask whether it is
@@ -88,6 +97,25 @@ export class ActiveSubmission {
       await this.unwound.promise;
     })();
     return this.unwinding;
+  }
+  /** Run one interruptible phase of the submission. The signal settles the
+   * phase on abort, and `abort()` waits for the body to unwind, so a resumed
+   * loop never has to ask whether it still speaks for the thread. */
+  async step<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    this.throwIfAborted();
+    const result = await untilAborted(work(this.signal), this.signal);
+    this.throwIfAborted();
+    return result as T;
+  }
+  /** A phase that must unwind on its own terms rather than be raced: the
+   * agent turn is interrupted by `stopWork` and reports its own abort. */
+  async settled<T>(work: () => Promise<T>): Promise<T> {
+    const result = await work();
+    this.throwIfAborted();
+    return result;
+  }
+  throwIfAborted(): void {
+    if (this.aborted) throw new SubmissionAborted();
   }
   /** Called by the submission body as it unwinds. */
   settle(): void {
