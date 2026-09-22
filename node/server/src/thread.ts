@@ -705,10 +705,6 @@ export class Thread implements ThreadCoreView {
       },
     ];
     if (!isCurrent()) return { type: "settle", result: { type: "aborted" } };
-    // The summary opens the replacement generation, ahead of the prompt that
-    // resumes it. It is held on the thread rather than on this continuation,
-    // which a preempting submission may displace: whichever turn runs first
-    // against the replacement core carries it.
     return {
       type: "continue",
       messages: [
@@ -721,9 +717,6 @@ export class Thread implements ThreadCoreView {
       ],
     };
   }
-  /** Content the next turn against the current core must open with, whatever
-   * submission runs it. A replaced core's summary lives here so that a
-   * preempted continuation cannot drop it. */
   private opening: AgentInput[] = [];
   private readonly mailbox = new Mailbox();
   get queued(): Queues {
@@ -956,17 +949,9 @@ export class Thread implements ThreadCoreView {
           // is resolved here rather than escaping to the owner.
           result = { type: "suspended", reason: next.reason };
           continue;
-        case "messages":
-        case "flushed": {
+        case "messages": {
           const continued = await runTurn(next.messages);
           if (!isCurrentLoop()) return { type: "aborted" };
-          if (continued.type === "suspended" && next.type === "flushed") {
-            result = {
-              type: "suspended",
-              reason: this.carryOntoSuspension(continued.reason, next.carry),
-            };
-            continue;
-          }
           result = continued;
           continue;
         }
@@ -1038,17 +1023,13 @@ export class Thread implements ThreadCoreView {
       ],
     };
   }
-  /** What follows this stop, if anything. A stop that issues no request never
-   * reaches the before-request supervisors: the resting case is `onEndTurn`'s,
-   * which is where auto-compaction gets to suspend a thread at rest. */
-  private async continuation(stopReason: StopReason): Promise<
+
+  private async continuation(
+    stopReason: StopReason,
+  ): Promise<
     | { type: "rest" }
     | { type: "suspended"; reason: SuspendReason }
     | { type: "messages"; messages: AgentInput[] }
-    /** Messages drained from a queue. Resolving them ran their effects and
-     * emptied the queue, so if the request they were flushed for never goes
-     * out, `carry` (always non-empty) has to travel on the suspension. */
-    | { type: "flushed"; messages: AgentInput[]; carry: string }
   > {
     const isCurrent = this.turnGuard();
     const planned = this.plannedContinuation(stopReason);
@@ -1071,32 +1052,10 @@ export class Thread implements ThreadCoreView {
     }
     const messages = flushed.messages;
     if (!messages.length) return { type: "rest" };
-    // Resolved queue content is spent: if the request it was flushed for is
-    // suspended, it has to travel on the handoff rather than be resolved a
-    // second time, so it is handed back for that.
-    const carry = joinText(messages);
-    return carry
-      ? { type: "flushed", messages, carry }
-      : { type: "messages", messages };
-  }
-  /** Spent queue content — resolved, so not resolvable again — has to survive
-   * the suspension of the request it was flushed for. */
-  private carryOntoSuspension(
-    reason: SuspendReason,
-    carry: string,
-  ): SuspendReason {
-    // Only compaction throws the log away; every other suspension leaves the
-    // spent content in the log, so there is nothing to rewrite. A compaction
-    // is about to discard the log, so the content travels on the handoff and
-    // is delivered by the post-compaction request.
-    return reason.kind === "compact"
-      ? {
-          ...reason,
-          nextPrompt: reason.nextPrompt
-            ? `${reason.nextPrompt}\n\n${carry}`
-            : carry,
-        }
-      : reason;
+    // Drained content rides the log from here: an auto-compaction that
+    // suspends the request it was appended to still sees it, and the
+    // post-compaction prompt is the plain "continue" contract.
+    return { type: "messages", messages };
   }
   /** Decided before anything is resolved or drained, because a stop that ends
    * the turn issues no request and the queues must not run their effects into

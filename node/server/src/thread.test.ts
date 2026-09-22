@@ -794,7 +794,7 @@ describe("deferred submissions", () => {
       await cleanupArchive(threadId);
     }
   });
-  it("carries a queue flushed for a suspended request onto the handoff", async () => {
+  it("leaves a queue flushed for a suspended request to the compaction it fed", async () => {
     const threadId = uniqueThreadId("deferred-compact");
     const calls: string[] = [];
     let requests = 0;
@@ -833,8 +833,14 @@ describe("deferred submissions", () => {
     try {
       let queueAtHandoff = -1;
       let callsAtHandoff = -1;
+      let compactedTexts: string[] = [];
       const compactor: Compactor = {
-        run: () => {
+        run: (messages) => {
+          compactedTexts = messages.flatMap((m) =>
+            m.role === "user"
+              ? m.content.flatMap((c) => (c.type === "text" ? [c.text] : []))
+              : [],
+          );
           compacted = true;
           queueAtHandoff = core.queued.next.length;
           callsAtHandoff = calls.length;
@@ -861,15 +867,15 @@ describe("deferred submissions", () => {
       stream.finishResponse("end_turn");
 
       // The stop flushed the queue for the request the gate then refused to
-      // issue. Resolution is not repeatable, so rather than being resolved a
-      // second time the content travels on the handoff itself: it becomes the
-      // compaction's follow-up prompt.
+      // issue. The content still went into the log that request appended to,
+      // so the compaction it triggered saw it; nothing re-delivers it
+      // verbatim afterwards, and the follow-up is the plain continue prompt.
       const contStream = await awaitNextStream(mockClient, stream);
       expect(queueAtHandoff).toBe(0);
       expect(callsAtHandoff).toBe(1);
-      // Delivered by the post-compaction request itself, exactly once.
-      expect(userTexts(core)).toContain("queued");
+      expect(compactedTexts).toContain("queued");
       expect(calls).toEqual(["queued"]);
+      expect(userTexts(core)).not.toContain("queued");
       expect(core.queued.next).toEqual([]);
       contStream.streamText("resumed");
       contStream.finishResponse("end_turn");
