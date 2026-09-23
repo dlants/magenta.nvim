@@ -4801,6 +4801,26 @@ describe("tool loop recognises yield", () => {
     expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
   });
 
+  it("yields from a mixed batch after every result is logged", async () => {
+    const { agent, mockClient } = yieldOnce({ status: "ok", value: [] });
+    const { promise: turn } = agent.send([{ type: "text", text: "go" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("o-1" as ToolRequestId, "get_file" as ToolName, {
+      filePath: "a.ts",
+    });
+    stream.streamToolUse(
+      "y-1" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "done" },
+    );
+    stream.finishResponse("tool_use");
+    expect(await turn).toEqual({ type: "yield", value: { result: "done" } });
+    expect(agent.getProviderMessages().slice(-2)).toMatchObject([
+      { content: [{ type: "tool_result", id: "o-1" }] },
+      { content: [{ type: "tool_result", id: "y-1" }] },
+    ]);
+    expect(mockClient.streams.length).toBe(1);
+  });
   it("reports an abort, not a yield, when the batch was aborted", async () => {
     const { agent, mockClient } = yieldOnce(
       { status: "ok", value: [] },

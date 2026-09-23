@@ -72,14 +72,12 @@ After using this tool, the sub-agent thread will be terminated.`,
   },
 };
 
-export function validateInput(input: {
-  [key: string]: unknown;
-}): Result<Input> {
+export function validateInput(input: unknown): Result<Input> {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return { status: "error", error: "expected yield input to be an object" };
   }
   return {
     status: "ok",
-    value: input,
+    value: input as Input,
   };
 }

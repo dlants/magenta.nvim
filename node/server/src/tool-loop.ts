@@ -20,6 +20,7 @@ import type {
   ToolResultsHook,
   YieldValue,
 } from "./thread-api.ts";
+import * as YieldToParent from "./tools/yield-to-parent.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 
 export interface AgentContext {
@@ -267,9 +268,9 @@ function findYield(
   for (const { id, request } of requested) {
     if (request.status !== "ok") continue;
     if (request.value.toolName !== "yield_to_parent") continue;
-    if (results.get(id)?.status === "ok") {
-      return request.value.input as YieldValue;
-    }
+    if (results.get(id)?.status !== "ok") continue;
+    const input = YieldToParent.validateInput(request.value.input);
+    if (input.status === "ok") return input.value;
   }
   return undefined;
 }

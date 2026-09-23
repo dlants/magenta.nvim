@@ -29,11 +29,14 @@ export type LoopStopReason = StopReason | "context_budget";
 /** How one run of the tool loop ended. `yield` is the model's request to hand
  * back (the yield tool's result is already in the log); Thread's turn
  * supervisors decide whether it stands. */
+/** Outcomes shared by the tool loop and the submission that ran it. */
+export type TerminalLoopResult =
+  | { type: "aborted" }
+  | { type: "failed"; error: Error };
 export type ToolLoopResult =
   | { type: "completed"; stopReason: LoopStopReason }
   | { type: "yield"; value: YieldValue }
-  | { type: "aborted" }
-  | { type: "failed"; error: Error };
+  | TerminalLoopResult;
 
 /** The complete submission outcome, after internal continuations and
  * compaction: never `context_budget`. Delivered to the submitter rather than
@@ -44,8 +47,7 @@ export type RestResult =
    * so there was never a turn and there is nothing to continue from. */
   | { type: "empty" }
   | { type: "yielded"; value: YieldValue; resultPrefix?: string }
-  | { type: "aborted" }
-  | { type: "failed"; error: Error };
+  | TerminalLoopResult;
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */
 export type ThreadResult =
