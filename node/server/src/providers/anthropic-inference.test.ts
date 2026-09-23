@@ -9,7 +9,7 @@ import {
   type TestAgent,
   toolExecution,
 } from "../test-helpers.ts";
-import type { CoreLoopResult } from "../thread-api.ts";
+import type { ToolLoopResult } from "../thread-api.ts";
 import type { ToolExecutor } from "../tool-loop.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { delay, pollUntil } from "../utils/async.ts";
@@ -60,7 +60,7 @@ class AgentUnderTest {
     void this.agent.abortAndWait();
   }
 
-  runTurn(text: string): Promise<CoreLoopResult> {
+  runTurn(text: string): Promise<ToolLoopResult> {
     return this.agent.send([{ type: "text", text }]).promise;
   }
 

@@ -36,17 +36,6 @@ export type YieldAction =
  * documents. Input-flavored: the native index is assigned when it lands. */
 export type InjectedContent = AgentInput;
 
-/** Why a supervisor asked to suspend before a request. Core's turn loop does
- * not act on the reason — it only has to leave the log coherent and resumable
- * — but the set of reasons is closed, so whoever handles the suspension narrows
- * on `kind` rather than casting. */
-export type SuspendReason = YieldSuspendReason;
-
-/** The model called yield_to_parent and its result is in the log. Produced
- * only by Thread's own yield gate and consumed only by Thread's turn loop —
- * it never escapes to an owner. */
-export type YieldSuspendReason = { kind: "yield"; value: YieldValue };
-
 /** Action returned from the `onBeforeRequest` hook by a single supervisor. */
 export type SupervisorAction =
   | { type: "inject"; content: InjectedContent[] }
@@ -83,14 +72,12 @@ export type RequestContext = {
 export interface ToolLoopSupervisor {
   onToolLoopStart?(nativeMessageIdx: NativeMessageIdx): void;
   onToolLoopStop?(nativeMessageIdx: NativeMessageIdx): void;
-  /** Called by Thread after the batch's results are in the log. A supervisor
-   * may request suspension; Thread combines these into the single callback
-   * result returned to the tool loop. */
+  /** Called after the batch's results are in the log. Observe only. */
   onToolResults?(
     results: ToolResults,
     /** The idx of the message holding these results. */
     nativeMessageIdx: NativeMessageIdx,
-  ): SuspendReason | undefined;
+  ): void;
   onBeforeRequest?(context: RequestContext): Promise<SupervisorAction>;
   /** Would `onBeforeRequest` contribute anything right now? Must not commit
    * any "sent" state — it answers a question about a request that may never
@@ -176,12 +163,10 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
   onToolResults(
     results: ToolResults,
     nativeMessageIdx: NativeMessageIdx,
-  ): SuspendReason | undefined {
-    let suspend: SuspendReason | undefined;
+  ): void {
     this.forEach("onToolResults", undefined, (supervisor) => {
-      suspend ??= supervisor.onToolResults?.(results, nativeMessageIdx);
+      supervisor.onToolResults?.(results, nativeMessageIdx);
     });
-    return suspend;
   }
 
   async hasPendingContent(): Promise<boolean> {

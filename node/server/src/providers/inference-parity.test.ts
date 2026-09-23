@@ -9,7 +9,7 @@ import {
   type TestAgent,
   toolExecution,
 } from "../test-helpers.ts";
-import type { CoreLoopResult } from "../thread-api.ts";
+import type { ToolLoopResult } from "../thread-api.ts";
 import type { ToolLoopDeps } from "../tool-loop.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
@@ -59,7 +59,7 @@ type TurnSnapshot = {
   messages: ProviderMessage[];
   phaseDuringTurn: string;
   phaseAfterTurn: string;
-  turnResult: CoreLoopResult;
+  turnResult: ToolLoopResult;
   executorCalls: number;
 };
 

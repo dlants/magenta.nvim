@@ -6,7 +6,7 @@ import {
   type TestAgent,
   toolExecution,
 } from "../test-helpers.ts";
-import type { CoreLoopResult } from "../thread-api.ts";
+import type { ToolLoopResult } from "../thread-api.ts";
 import { executeToolBatch } from "../tool-executor.ts";
 import type { ToolExecutor } from "../tool-loop.ts";
 import type { ToolName } from "../tool-types.ts";
@@ -114,7 +114,7 @@ async function startTurn(
   client: MockOpenAIClient,
   agent: TestAgent,
   text = "hello",
-): Promise<{ turn: Promise<CoreLoopResult>; stream: MockResponseStream }> {
+): Promise<{ turn: Promise<ToolLoopResult>; stream: MockResponseStream }> {
   const next = client.streams.length;
   const turn = agent.send([{ type: "text", text }]);
   const stream = await client.awaitStreamAt(next);

@@ -300,6 +300,13 @@ Status: done.
 
 ## Yield recognised by core
 
+Status: done.
+- Decisions/deviations:
+  - `ToolLoopResult` and a standalone `RestResult` live in `thread-api.ts`; `ToolLoopResult` is exported from the barrel in place of `CoreLoopResult`.
+  - Yield detection is `findYield` in `tool-loop.ts`, run after `onToolResults` and the abort check.
+  - Existing tests already covered ordering, mixed batches, malformed calls and rejection resubmission (`agent.test.ts` "yield_to_parent as an ordinary tool", `thread.test.ts` deferred-yield-rejection). New: `agent.test.ts` "tool loop recognises yield" (ok yield ends loop, error result continues, aborted batch reports `aborted`).
+  - Full-suite runs still show load-dependent flakes in unrelated nvimclient tests (thread-abort); passes alone.
+
 - Goal:
   - `runToolLoop` detects an `ok` `yield_to_parent` result in the batch inline and ends the loop with `{ type: "yield", value }`.
   - `runToolLoop` returns `ToolLoopResult`.

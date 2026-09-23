@@ -38,7 +38,7 @@ import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { type ContextDelivery, Thread, type ThreadContext } from "./thread.ts";
-import type { CoreLoopResult, RestResult, YieldValue } from "./thread-api.ts";
+import type { RestResult, ToolLoopResult, YieldValue } from "./thread-api.ts";
 import { archiveThread } from "./thread-logger.ts";
 import { executeToolBatch } from "./tool-executor.ts";
 import {
@@ -94,11 +94,9 @@ export function flatLoop(owner: {
   return state.type === "running" ? state.activity : { type: "idle" };
 }
 
-/** Thread turns a suspension it cannot claim into a `suspended` result; the bare
- * harness has no owner to claim one, so it does the same. A `yield` suspension
- * is Thread's alone and has no rest-shaped form here. */
+/** A loop `yield` is Thread's to resolve and has no rest-shaped form here. */
 function restResult(
-  result: CoreLoopResult | undefined,
+  result: ToolLoopResult | undefined,
 ): RestResult | undefined {
   if (result?.type === "completed") {
     const { stopReason } = result;
@@ -106,7 +104,7 @@ function restResult(
       ? undefined
       : { type: "completed", stopReason };
   }
-  if (result?.type === "suspended") return undefined;
+  if (result?.type === "yield") return undefined;
   return result;
 }
 /** The bare-agent harness's stand-in for the thread: it owns the loop state
@@ -174,7 +172,7 @@ export class TestAgent {
   }
 
   private turn: ToolLoop | undefined;
-  private lastResult: CoreLoopResult | undefined;
+  private lastResult: ToolLoopResult | undefined;
 
   /** What `Thread.abort` does, for the tests that drive an agent without one:
    * mark the loop and wind the turn down through its handle. */
@@ -489,7 +487,7 @@ export const userInput = (text: string): AgentInput[] => [
 export const sendText = (
   agent: TestAgent,
   text: string,
-): Promise<CoreLoopResult> => agent.send([{ type: "text", text }]).promise;
+): Promise<ToolLoopResult> => agent.send([{ type: "text", text }]).promise;
 
 export async function cleanupArchive(threadId: ThreadId): Promise<void> {
   const dir = path.dirname(

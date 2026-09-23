@@ -40,13 +40,13 @@ import {
 import {
   ActiveSubmission,
   type AgentRequestContext,
-  type CoreLoopResult,
   type OnUpdate,
   type QueuedMessage,
   type RestResult,
   SubmissionAborted,
   type ThreadResult,
   type ThreadStatus,
+  type ToolLoopResult,
   type YieldState,
   type YieldValue,
 } from "./thread-api.ts";
@@ -359,31 +359,7 @@ export class Thread implements ThreadCoreView {
   private orderedSupervisors(
     core: ThreadCore,
   ): ReadonlyArray<ToolLoopSupervisor> {
-    return [
-      ...this.toolLoopSupervisors,
-      this.gate(),
-      ...this.contextSupervisors(core),
-    ];
-  }
-
-  /** Sits ahead of the context supervisors so a completed yield tool
-   * suspends before them. */
-  private gate(): ToolLoopSupervisor {
-    return {
-      onToolResults: (results) => {
-        for (const [id, result] of results) {
-          if (result.status !== "ok") continue;
-          const completed = this.resultArchive.get(id);
-          if (completed?.request.toolName === "yield_to_parent") {
-            return {
-              kind: "yield",
-              value: completed.request.input as YieldValue,
-            };
-          }
-        }
-        return undefined;
-      },
-    };
+    return [...this.toolLoopSupervisors, ...this.contextSupervisors(core)];
   }
 
   private contextSupervisors(
@@ -916,7 +892,7 @@ export class Thread implements ThreadCoreView {
     }
     const runToolLoop = async (
       submitted: AgentInput[],
-    ): Promise<CoreLoopResult> => {
+    ): Promise<ToolLoopResult> => {
       submission.throwIfAborted();
       const input = [...this.opening.splice(0), ...submitted];
       const supervisors = this.toolLoopChainFor(core);
@@ -935,14 +911,8 @@ export class Thread implements ThreadCoreView {
     };
     let result = await runToolLoop(messages);
     for (;;) {
-      // Every suspension funnels through here, so a yield raised by the yield
-      // tool is resolved inside the loop and the returned type is narrowed to
-      // the suspensions an owner can be handed.
-      if (result.type === "suspended") {
-        const resolved = await this.resolveYield(
-          result.reason.value,
-          submission,
-        );
+      if (result.type === "yield") {
+        const resolved = await this.resolveYield(result.value, submission);
         if (resolved.type === "settled") return resolved.result;
         result = await runToolLoop(resolved.messages);
         continue;

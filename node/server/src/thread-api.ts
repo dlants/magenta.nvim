@@ -3,11 +3,7 @@ import type {
   StopReason,
   ToolResults,
 } from "./providers/provider-types.ts";
-import type {
-  RequestContext,
-  SuspendReason,
-  YieldAction,
-} from "./thread-supervisor.ts";
+import type { RequestContext, YieldAction } from "./thread-supervisor.ts";
 import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
 import { Defer, untilAborted } from "./utils/async.ts";
 
@@ -26,34 +22,30 @@ export type ToolInvocationState =
     }
   | { type: "settled" };
 
-/** The core loop alternates agent messages and turn executions, until the
- * agent finishes or we intervene. `R` is the set of suspensions this caller
- * can be handed: the core's own loop can hand back a `yield`, while the
- * thread's loop resolves yields itself and so never surfaces one. */
 /** `context_budget` is the tool loop's own stop: the request was too large to
  * issue. Thread absorbs it by compacting, so owners never see it. */
 export type LoopStopReason = StopReason | "context_budget";
-export type CoreLoopResult<
-  R extends SuspendReason = SuspendReason,
-  S extends LoopStopReason = LoopStopReason,
-> =
-  | { type: "completed"; stopReason: S }
+
+/** How one run of the tool loop ended. `yield` is the model's request to hand
+ * back (the yield tool's result is already in the log); Thread's turn
+ * supervisors decide whether it stands. */
+export type ToolLoopResult =
+  | { type: "completed"; stopReason: LoopStopReason }
+  | { type: "yield"; value: YieldValue }
+  | { type: "aborted" }
+  | { type: "failed"; error: Error };
+
+/** The complete submission outcome, after internal continuations and
+ * compaction: never `context_budget`. Delivered to the submitter rather than
+ * broadcast as a lifecycle result. */
+export type RestResult =
+  | { type: "completed"; stopReason: StopReason }
   /** The submission settled without ever issuing a request (empty content),
    * so there was never a turn and there is nothing to continue from. */
   | { type: "empty" }
   | { type: "yielded"; value: YieldValue; resultPrefix?: string }
   | { type: "aborted" }
-  | { type: "failed"; error: Error }
-  /** The model called the yield tool; Thread decides whether it stands. */
-  | { type: "suspended"; reason: R };
-
-/** The complete submission outcome, after internal continuations and
- * compaction: no suspensions and never `context_budget`. Delivered to the submitter rather than broadcast as a lifecycle
- * result. */
-export type RestResult = Exclude<
-  CoreLoopResult<never, StopReason>,
-  { type: "suspended" }
->;
+  | { type: "failed"; error: Error };
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */
 export type ThreadResult =
@@ -148,13 +140,12 @@ export type YieldState = Extract<ThreadStatus, { type: "yielded" }>;
 export type AgentRequestContext = RequestContext;
 
 /** Called once per tool batch after its results have been written to the log,
- * including aborted batches. The callback cannot change the logged results,
- * but may suspend the turn before the next before-request callback.
- * Abort takes precedence over a returned suspension reason. */
+ * including aborted batches. Observe only: it cannot change the logged
+ * results or end the loop. */
 export type ToolResultsHook = (
   results: ToolResults,
   nativeMessageIdx: NativeMessageIdx,
-) => SuspendReason | undefined;
+) => void;
 
 /** The model called yield_to_parent and the tool result is already in the log.
  * Awaited; a refusal arrives as a follow-up system message after that

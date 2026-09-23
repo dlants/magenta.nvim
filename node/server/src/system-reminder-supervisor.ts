@@ -123,7 +123,7 @@ export class SystemReminderSupervisor implements ToolLoopSupervisor {
   onToolResults(
     results: ToolResults,
     nativeMessageIdx: NativeMessageIdx,
-  ): undefined {
+  ): void {
     const completedTools = this.deps.getCompletedTools();
     for (const [id, result] of results) {
       if (result.status !== "ok") continue;

@@ -27,7 +27,7 @@ import {
   GitSupervisor,
 } from "./supervisors/git-supervisor.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
-import type { CoreLoopResult, ToolInvocationState } from "./thread-api.ts";
+import type { ToolInvocationState, ToolLoopResult } from "./thread-api.ts";
 import {
   EditedFilesSupervisor,
   SystemInfoSupervisor,
@@ -394,7 +394,7 @@ export class ThreadCore {
     return budget.check(count);
   }
 
-  async runToolLoop(messages: AgentInput[]): Promise<CoreLoopResult> {
+  async runToolLoop(messages: AgentInput[]): Promise<ToolLoopResult> {
     if (!this.isActive) return { type: "aborted" };
     const turn = runToolLoop(
       {

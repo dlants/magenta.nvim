@@ -4745,3 +4745,77 @@ describe("nativeMessageIdx plumbing", () => {
     expect(new Set(appliedIdx)).toEqual(new Set([resultIdx[0]]));
   });
 });
+
+describe("tool loop recognises yield", () => {
+  const yieldOnce = (
+    result: { status: "ok"; value: [] } | { status: "error"; error: string },
+    type: "continue" | "aborted" = "continue",
+  ) =>
+    createTestAgent({
+      context: { threadType: "subagent" as ThreadType },
+      executeTools: (requests) =>
+        toolExecution(
+          Promise.resolve({
+            type,
+            results: new Map(requests.map(({ id }) => [id, result])),
+          }),
+        ),
+    });
+
+  it("ends the loop with the yield value once its result is logged", async () => {
+    const { agent, mockClient } = yieldOnce({ status: "ok", value: [] });
+    const { promise: turn } = agent.send([{ type: "text", text: "go" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "y-1" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      {
+        result: "done",
+      },
+    );
+    stream.finishResponse("tool_use");
+    expect(await turn).toEqual({ type: "yield", value: { result: "done" } });
+    expect(agent.getProviderMessages().at(-1)).toMatchObject({
+      content: [{ type: "tool_result", id: "y-1" }],
+    });
+    expect(mockClient.streams.length).toBe(1);
+  });
+
+  it("continues when the yield tool's result is an error", async () => {
+    const { agent, mockClient } = yieldOnce({ status: "error", error: "nope" });
+    const { promise: turn } = agent.send([{ type: "text", text: "go" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "y-1" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      {
+        result: "done",
+      },
+    );
+    stream.finishResponse("tool_use");
+    const next = await awaitNextStream(mockClient, stream);
+    expect(agent.getProviderMessages().at(-1)).toMatchObject({
+      content: [{ id: "y-1", result: { status: "error", error: "nope" } }],
+    });
+    next.finishResponse("end_turn");
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
+  });
+
+  it("reports an abort, not a yield, when the batch was aborted", async () => {
+    const { agent, mockClient } = yieldOnce(
+      { status: "ok", value: [] },
+      "aborted",
+    );
+    const { promise: turn } = agent.send([{ type: "text", text: "go" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "y-1" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      {
+        result: "done",
+      },
+    );
+    stream.finishResponse("tool_use");
+    expect(await turn).toEqual({ type: "aborted" });
+  });
+});

@@ -15,11 +15,11 @@ import type {
   ToolResults,
 } from "./providers/provider-types.ts";
 import type {
-  CoreLoopResult,
   ToolInvocationState,
+  ToolLoopResult,
   ToolResultsHook,
+  YieldValue,
 } from "./thread-api.ts";
-import type { SuspendReason } from "./thread-supervisor.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 
 export interface AgentContext {
@@ -60,7 +60,7 @@ export type LoopState = { aborting: boolean } & (
 
 export type ToolLoop = {
   readonly loopState: LoopState;
-  promise: Promise<CoreLoopResult>;
+  promise: Promise<ToolLoopResult>;
   abort(): void;
 };
 
@@ -87,7 +87,7 @@ export function runToolLoop(
     deps.onUpdate?.();
   };
 
-  const runLoop = async (): Promise<CoreLoopResult> => {
+  const runLoop = async (): Promise<ToolLoopResult> => {
     let initialInputPending = true;
     while (true) {
       if (loopState.aborting) return { type: "aborted" };
@@ -204,9 +204,8 @@ export function runToolLoop(
       );
 
       // Notify the owner after results are in the log, including on abort.
-      let suspend: SuspendReason | undefined;
       try {
-        suspend = deps.onToolResults(toolOutcome.results, resultMessageIdx);
+        deps.onToolResults(toolOutcome.results, resultMessageIdx);
       } catch (err) {
         logger.error(`onToolResults callback threw: ${(err as Error).message}`);
       }
@@ -217,9 +216,8 @@ export function runToolLoop(
         return { type: "aborted" };
       }
 
-      if (suspend) {
-        return { type: "suspended", reason: suspend };
-      }
+      const yielded = findYield(requested, toolOutcome.results);
+      if (yielded) return { type: "yield", value: yielded };
 
       // continue to the next iteration
     }
@@ -259,4 +257,19 @@ function completeToolResults(
     }
   }
   return filled;
+}
+
+/** The input of a `yield_to_parent` call in the batch that completed `ok`. */
+function findYield(
+  requested: NonEmptyRequestedTools,
+  results: ToolResults,
+): YieldValue | undefined {
+  for (const { id, request } of requested) {
+    if (request.status !== "ok") continue;
+    if (request.value.toolName !== "yield_to_parent") continue;
+    if (results.get(id)?.status === "ok") {
+      return request.value.input as YieldValue;
+    }
+  }
+  return undefined;
 }

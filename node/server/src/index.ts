@@ -285,11 +285,11 @@ export {
   type YieldState,
 } from "./thread.ts";
 export type {
-  CoreLoopResult,
   OnUpdate,
   QueuedMessage,
   RestResult,
   ThreadResult,
+  ToolLoopResult,
   YieldValue,
 } from "./thread-api.ts";
 export {
@@ -309,7 +309,6 @@ export type {
   EndTurnContext,
   RequestContext,
   SupervisorAction,
-  SuspendReason,
   ToolLoopSupervisor,
   TurnSupervisor,
   YieldAction,
