@@ -50,12 +50,10 @@ export type CoreLoopResult<
 /** The complete submission outcome, after internal continuations and
  * compaction: no suspensions and never `context_budget`. Delivered to the submitter rather than broadcast as a lifecycle
  * result. */
-export type RestResult =
-  | { type: "completed"; stopReason: StopReason }
-  | { type: "empty" }
-  | { type: "yielded"; value: YieldValue; resultPrefix?: string }
-  | { type: "aborted" }
-  | { type: "failed"; error: Error };
+export type RestResult = Exclude<
+  CoreLoopResult<never, StopReason>,
+  { type: "suspended" }
+>;
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */
 export type ThreadResult =

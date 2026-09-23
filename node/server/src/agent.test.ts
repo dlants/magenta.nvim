@@ -782,6 +782,24 @@ describe("Thread submissions across a compaction handoff", () => {
         };
       },
     },
+    {
+      trigger: "a budget stop after a tool batch",
+      expectedNext: ["carry on"],
+      start: async (core: Thread, mockClient: MockAnthropicClient) => {
+        mockClient.mockInputTokenCount = 50;
+        const result = core.submit({
+          type: "resolved",
+          messages: userText("edit a"),
+        });
+        const stream = await mockClient.awaitStream();
+        mockClient.mockInputTokenCountOnce = 200;
+        stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
+          script: `file \`/tmp/missing.txt\`\nnarrow /x/\nreplace "y"`,
+        });
+        stream.finishResponse("tool_use");
+        return { result };
+      },
+    },
   ])("ends $trigger in the same compacted state", async ({
     start,
     expectedNext,
@@ -822,6 +840,23 @@ describe("Thread submissions across a compaction handoff", () => {
       await core.destroy();
       await flushArchive(core);
       await cleanupArchive(threadId);
+    }
+  });
+
+  it("rests an explicit @compact on a thread without a compactor", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      resolve: resolveCompact,
+    });
+    try {
+      expect(core["context"].compaction).toBeUndefined();
+      const result = await core.submit({
+        type: "raw",
+        message: pendingMessage("@compact carry on"),
+      });
+      expect(result).toEqual({ type: "completed", stopReason: "end_turn" });
+      expect(mockClient.streams.length).toBe(0);
+    } finally {
+      await core.destroy();
     }
   });
 

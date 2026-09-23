@@ -194,7 +194,7 @@ type LoopResult = RestResult | CompactRequest;
 /** Compaction is not a suspension: the loop hands it to `startSubmission`,
  * which compacts and runs again. */
 type CompactRequest = { type: "compact"; nextPrompt: string | undefined };
-type CompactionOutcome =
+type CompactAndContinueOutcome =
   | { type: "continue"; messages: AgentInput[] }
   | { type: "settle"; result: RestResult };
 
@@ -689,7 +689,7 @@ export class Thread implements ThreadCoreView {
   private async compactAndContinue(
     handoff: string | undefined,
     submission: ActiveSubmission,
-  ): Promise<CompactionOutcome> {
+  ): Promise<CompactAndContinueOutcome> {
     const compactor = this.context.compaction?.compactor;
     // An explicit compaction with nobody to run it comes to rest. Budget
     // stops cannot land here: a budget is only installed with a compactor.

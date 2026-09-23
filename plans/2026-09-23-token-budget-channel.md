@@ -282,6 +282,12 @@ Status: done.
   - Chat's `StoppedReason` lost the `supervisor`/`compaction-requested` variants and `stoppedLabel`; thread-view lost its `suspended` case.
   - Compaction handoff tests in `agent.test.ts` now trigger via a queued `@compact` (with a `parseCompact`-aware resolver) instead of an end-turn suspend. Deleted tests of removed behaviour: end-turn/tool-result supervisor suspension (agent/thread-supervisor tests), "suspension nobody claims", the thread-view supervisor-stop render. "first compaction wins" became "joins their nudges".
   - New: `agent.test.ts` "ends $trigger in the same compacted state" (explicit idle, queued behind `@next`, budget stop). Existing abort/supersede compaction tests pass unchanged.
+  - Review follow-up:
+    - `RestResult` is derived: `Exclude<CoreLoopResult<never, StopReason>, { type: "suspended" }>`.
+    - Thread's local outcome type is `CompactAndContinueOutcome` (distinct from compaction's `CompactionOutcome`).
+    - New tests: "rests an explicit @compact on a thread without a compactor" and a "budget stop after a tool batch" case in the compaction parity table (continues with the handoff).
+    - The budget-without-compactor state was already unrepresentable (`compaction?: { compactor; tokenBudget? }`, stage 1).
+    - Collapsing `SuspendReason`/`YieldSuspendReason` is deferred to stage 4, which deletes them outright.
 
 - Goal:
   - `@compact` and queued `@compact` call `compactAndContinue` directly.
