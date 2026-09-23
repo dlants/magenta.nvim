@@ -30,7 +30,7 @@ function fixture(prepareThread?: SessionHost["prepareThread"]) {
     threadType: _threadType,
     turnSupervisors: _turnSupervisors,
     toolLoopSupervisors: _toolLoopSupervisors,
-    compactor: _compactor,
+    compaction: _compaction,
     ...context
   } = base.context;
   const prepared: PreparedThread = {

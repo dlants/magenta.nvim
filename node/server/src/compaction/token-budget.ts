@@ -5,7 +5,12 @@ export type BudgetDecision = { type: "proceed" } | { type: "stop" };
  * copied onto forks. */
 export class TokenBudget {
   static create(opts: { threshold?: number; handoff: string }): TokenBudget {
-    return new TokenBudget(opts.threshold ?? 300000, opts.handoff);
+    const threshold = opts.threshold ?? 300000;
+    if (!Number.isInteger(threshold) || threshold <= 0)
+      throw new Error(
+        `autoCompactThreshold must be a positive integer, got ${threshold}`,
+      );
+    return new TokenBudget(threshold, opts.handoff);
   }
 
   static clone(args: { source: TokenBudget }): TokenBudget {

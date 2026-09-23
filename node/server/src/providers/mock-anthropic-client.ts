@@ -510,6 +510,8 @@ export class MockAnthropicClient {
   public countTokensCalls = 0;
   /** When set, every preflight count rejects with it. */
   public countTokensError: Error | undefined;
+  /** If set, countTokens waits on this before answering. */
+  public countTokensGate: Promise<void> | undefined;
   /** The params of every preflight count, in order. */
   public countTokensRequests: Anthropic.Messages.MessageCountTokensParams[] =
     [];
@@ -527,7 +529,10 @@ export class MockAnthropicClient {
       this.countTokensCalls++;
       this.countTokensRequests.push(params);
       if (this.countTokensError) return Promise.reject(this.countTokensError);
-      return Promise.resolve({ input_tokens: this.mockInputTokenCount ?? 0 });
+      const answer = () => ({ input_tokens: this.mockInputTokenCount ?? 0 });
+      return this.countTokensGate
+        ? this.countTokensGate.then(answer)
+        : Promise.resolve(answer());
     },
   };
 

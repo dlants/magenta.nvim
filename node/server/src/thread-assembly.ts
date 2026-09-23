@@ -39,7 +39,7 @@ export type ChatThreadPolicy = {
  * the compactor are assembly's job, not the host's. */
 export type PreparedThreadContext = Omit<
   ThreadContextBase,
-  "turnSupervisors" | "toolLoopSupervisors" | "compactor"
+  "turnSupervisors" | "toolLoopSupervisors" | "compaction"
 >;
 
 export type ChatThreadType = Exclude<ThreadType, "compact">;
@@ -115,7 +115,6 @@ export function assembleThread(args: {
   const base = {
     ...context,
     turnSupervisors: [...buildTurnSupervisors(conversation, docker), titles],
-    ...(tokenBudget ? { tokenBudget } : {}),
   };
 
   const build = (
@@ -165,7 +164,7 @@ export function assembleThread(args: {
     ...build({
       ...base,
       threadType: conversation.threadType,
-      compactor,
+      compaction: { compactor, ...(tokenBudget ? { tokenBudget } : {}) },
     }),
   };
 }

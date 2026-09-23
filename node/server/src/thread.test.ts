@@ -20,6 +20,7 @@ import {
   awaitNextStream,
   cleanupArchive,
   cloneThread,
+  compactorSlot,
   createAgentWithMock,
   resetThread,
   uniqueThreadId,
@@ -513,7 +514,7 @@ describe("deferred submissions", () => {
 
     // The next stop is the earliest point where it can take effect.
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
-    core["context"].compactor = { run: compact };
+    compactorSlot(core).compactor = { run: compact };
     toolResultStream.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "aborted" });
     expect(compact).toHaveBeenCalledWith(
@@ -558,7 +559,7 @@ describe("deferred submissions", () => {
       core.enqueue({ type: "raw", message: pendingMessage(text) }, "next");
     }
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
-    core["context"].compactor = { run: compact };
+    compactorSlot(core).compactor = { run: compact };
     stream.finishResponse("end_turn");
 
     // There is no request left to carry "first", so it folds into the prompt
@@ -610,7 +611,7 @@ describe("deferred submissions", () => {
       "async",
     );
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
-    core["context"].compactor = { run: compact };
+    compactorSlot(core).compactor = { run: compact };
     stream.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "aborted" });
     expect(compact).toHaveBeenCalledWith(
@@ -658,7 +659,7 @@ describe("deferred submissions", () => {
       "next",
     );
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
-    core["context"].compactor = { run: compact };
+    compactorSlot(core).compactor = { run: compact };
     stream.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "aborted" });
     // The async content is spent, and the log it would have ridden is about to
@@ -854,7 +855,7 @@ describe("deferred submissions", () => {
         },
       };
 
-      core["context"].compactor = compactor;
+      compactorSlot(core).compactor = compactor;
       void core.submit({
         type: "resolved",
         messages: [

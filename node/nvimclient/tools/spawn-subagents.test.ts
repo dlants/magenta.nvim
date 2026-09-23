@@ -372,7 +372,7 @@ describe("yield behavior", () => {
       });
 
       const childWrapper = findChildThread(driver.magenta.chat);
-      const supervisor = childWrapper.thread.thread.turnSupervisors!.find(
+      const supervisor = childWrapper.thread.thread.turnSupervisors.find(
         (supervisor): supervisor is SubagentSupervisor =>
           supervisor instanceof SubagentSupervisor,
       )!;

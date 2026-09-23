@@ -22,7 +22,7 @@ it("root/user threads get a token budget", async () => {
 
     expect(thread.thread.tokenBudget).toBeDefined();
     expect(
-      thread.thread.turnSupervisors!.some(
+      thread.thread.turnSupervisors.some(
         (s) => s instanceof SubagentSupervisor,
       ),
     ).toBe(false);
@@ -69,7 +69,7 @@ it("subagent threads get both SubagentSupervisor and a token budget", async () =
     const childWrapper = chat.threadWrappers[childThreadId!];
     if (childWrapper?.state !== "initialized")
       throw new Error("Expected initialized child thread");
-    const supervisors = childWrapper.thread.thread.turnSupervisors!;
+    const supervisors = childWrapper.thread.thread.turnSupervisors;
     const tokenBudget = childWrapper.thread.thread.tokenBudget;
 
     expect(supervisors.some((s) => s instanceof SubagentSupervisor)).toBe(true);
@@ -206,9 +206,9 @@ it.each([
       throw new Error("expected an initialized thread");
     const thread = record.thread;
     try {
-      const policies = thread.turnSupervisors!;
+      const policies = thread.turnSupervisors;
       expect(policies.map((policy) => policy.constructor)).toEqual(expected);
-      expect(record.compactor).toBe(thread["context"].compactor);
+      expect(record.compactor).toBe(thread["context"].compaction?.compactor);
       expect(record.compactor === undefined).toBe(threadType === "compact");
       const resolve = thread["context"].resolve;
       const callbacks = thread.callbacks;
@@ -238,9 +238,9 @@ it("forks compact threads without a compactor or auto-compaction policy", async 
       throw new Error("expected an initialized fork");
     expect(fork.thread.threadType).toBe("compact");
     expect(fork.compactor).toBeUndefined();
-    expect(fork.thread["context"].compactor).toBeUndefined();
+    expect(fork.thread["context"].compaction?.compactor).toBeUndefined();
     expect(
-      fork.thread.turnSupervisors!.map((policy) => policy.constructor),
+      fork.thread.turnSupervisors.map((policy) => policy.constructor),
     ).toEqual([MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor]);
   });
 });

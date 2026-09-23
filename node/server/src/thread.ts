@@ -105,7 +105,11 @@ export interface ThreadContextBase
   extends AgentContext,
     Omit<
       ThreadCoreContext,
-      "threadType" | "logger" | "threadToolCreator" | "toolSpecs"
+      | "threadType"
+      | "logger"
+      | "threadToolCreator"
+      | "toolSpecs"
+      | "tokenBudget"
     > {
   clientToolCreator: ClientToolCreator;
   mcpToolManager: MCPToolManagerImpl;
@@ -119,7 +123,9 @@ export interface ThreadContextBase
   readonly resolve: ResolveSubmission;
   readonly turnSupervisors?: readonly TurnSupervisor[];
   readonly toolLoopSupervisors?: readonly ToolLoopSupervisor[];
-  compactor?: Compactor;
+  /** A budget is only meaningful with a compactor to act on its stop, so the
+   * two travel together; a compactor alone serves explicit `@compact`. */
+  compaction?: { compactor: Compactor; tokenBudget?: TokenBudget };
   threadManager: ThreadManager;
   environmentConfig: EnvironmentConfig;
 }
@@ -161,7 +167,9 @@ function joinText(messages: ReadonlyArray<AgentInput>): string {
  * past the compaction as prompt text — like an explicit `@compact` prompt —
  * rather than being summarized. Tool results are mid-loop, not a user turn,
  * and the abort marker is not something the user said. */
-function splitPendingUserText(messages: ReadonlyArray<ProviderMessage>): {
+export function splitPendingUserText(
+  messages: ReadonlyArray<ProviderMessage>,
+): {
   history: ReadonlyArray<ProviderMessage>;
   pendingUserText: string | undefined;
 } {
@@ -422,6 +430,9 @@ export class Thread implements ThreadCoreView {
     });
     return {
       ...this.context,
+      ...(this.context.compaction?.tokenBudget
+        ? { tokenBudget: this.context.compaction.tokenBudget }
+        : {}),
       threadToolCreator: this.threadToolCreator,
       toolSpecs: this.buildToolSpecs(),
     };
@@ -502,7 +513,7 @@ export class Thread implements ThreadCoreView {
     return this.context.turnSupervisors ?? [];
   }
   get tokenBudget(): TokenBudget | undefined {
-    return this.context.tokenBudget;
+    return this.context.compaction?.tokenBudget;
   }
   get toolLoopSupervisors(): readonly ToolLoopSupervisor[] {
     return this.context.toolLoopSupervisors ?? [];
@@ -692,7 +703,7 @@ export class Thread implements ThreadCoreView {
     reason: CompactSuspendReason,
     submission: ActiveSubmission,
   ): Promise<SuspensionOutcome> {
-    const compactor = this.context.compactor;
+    const compactor = this.context.compaction?.compactor;
     // A compaction with nobody to run it comes to rest like a plain stop.
     if (!compactor)
       return { type: "settle", result: { type: "suspended", reason } };
@@ -948,13 +959,13 @@ export class Thread implements ThreadCoreView {
       }
       if (result.type !== "completed") return result;
       if (result.stopReason === "context_budget") {
-        const handoff = this.context.tokenBudget?.handoff;
-        // Nobody to compact: the refused request comes to rest like end_turn.
-        if (!this.context.compactor || handoff === undefined)
-          return { type: "completed", stopReason: "end_turn" };
+        // Core only refuses when it holds a budget, which comes from here.
+        const tokenBudget = this.context.compaction?.tokenBudget;
+        if (!tokenBudget)
+          throw new Error("context_budget stop without a token budget");
         return {
           type: "suspended",
-          reason: { kind: "compact", nextPrompt: handoff },
+          reason: { kind: "compact", nextPrompt: tokenBudget.handoff },
         };
       }
       const stopReason = result.stopReason;

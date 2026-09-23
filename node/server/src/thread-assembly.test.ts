@@ -90,7 +90,7 @@ function setup(args?: {
     threadType: _threadType,
     turnSupervisors: _turnSupervisors,
     toolLoopSupervisors: _toolLoopSupervisors,
-    compactor: _compactor,
+    compaction: _compaction,
     ...rest
   } = context;
   const titleDefer = new Defer<ProviderToolUseResponse>();

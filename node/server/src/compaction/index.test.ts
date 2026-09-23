@@ -1,10 +1,15 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import { describe, expect, it } from "vitest";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
-import type { NativeMessageIdx } from "../providers/provider-types.ts";
+import { ABORT_MARKER_TEXT } from "../providers/inference-shared.ts";
+import type {
+  NativeMessageIdx,
+  ProviderMessage,
+} from "../providers/provider-types.ts";
 import { pendingMessage } from "../submission/index.ts";
 import {
   awaitNextStream,
+  compactorSlot,
   createAgentWithMock,
   resetThread,
   uniqueThreadId,
@@ -14,6 +19,7 @@ import { Defer } from "../utils/async.ts";
 
 const idx = 0 as NativeMessageIdx;
 
+import { splitPendingUserText } from "../thread.ts";
 import { ThreadCompactor } from "./compactor.ts";
 import type { CompactionOutcome } from "./index.ts";
 
@@ -39,7 +45,7 @@ describe("compaction submission ownership", () => {
     stream.streamText("partial response");
 
     let snapshots = 0;
-    thread["context"].compactor = {
+    compactorSlot(thread).compactor = {
       run: async (messages) => {
         snapshots++;
         expect(thread.isBusy).toBe(true);
@@ -128,7 +134,7 @@ describe("compaction submission ownership", () => {
       released.resolve();
       await aborted;
     });
-    thread["context"].compactor = {
+    compactorSlot(thread).compactor = {
       run: async () => ({
         type: "complete",
         summary: "summary",
@@ -174,7 +180,7 @@ describe("compaction submission ownership", () => {
     );
     const originalResult = thread.result;
     const originalCore = thread["core"];
-    thread["context"].compactor = {
+    compactorSlot(thread).compactor = {
       run: async () => ({
         type: "complete",
         summary: "work so far",
@@ -230,7 +236,7 @@ describe("compaction submission ownership", () => {
     );
     const entered = new Defer<void>();
     const outcome = new Defer<CompactionOutcome>();
-    thread["context"].compactor = {
+    compactorSlot(thread).compactor = {
       run: () => {
         entered.resolve();
         return outcome.promise;
@@ -478,7 +484,7 @@ it("an immediate submission supersedes a parked compaction before resolution", a
     },
     uniqueThreadId("compact-submit"),
   );
-  thread["context"].compactor = {
+  compactorSlot(thread).compactor = {
     run: () => {
       entered.resolve();
       return outcome.promise;
@@ -519,10 +525,12 @@ describe("complete submission ownership", () => {
     const resolutions: string[] = [];
     const { core: thread, mockClient } = createAgentWithMock(
       {
-        compactor: {
-          run: (_messages, _prompt, signal) => {
-            entered.resolve(signal);
-            return summary.promise;
+        compaction: {
+          compactor: {
+            run: (_messages, _prompt, signal) => {
+              entered.resolve(signal);
+              return summary.promise;
+            },
           },
         },
       },
@@ -615,12 +623,14 @@ describe("complete submission ownership", () => {
     const release = new Defer<void>();
     const { core: thread, mockClient } = createAgentWithMock(
       {
-        compactor: {
-          run: async () => ({
-            type: "complete",
-            summary: "old summary",
-            chunkCount: 1,
-          }),
+        compaction: {
+          compactor: {
+            run: async () => ({
+              type: "complete",
+              summary: "old summary",
+              chunkCount: 1,
+            }),
+          },
         },
       },
       uniqueThreadId("preempt-reset"),
@@ -687,10 +697,12 @@ describe("complete submission ownership", () => {
             },
           },
         ],
-        compactor: {
-          run: () => {
-            entered.resolve();
-            return outcome.promise;
+        compaction: {
+          compactor: {
+            run: () => {
+              entered.resolve();
+              return outcome.promise;
+            },
           },
         },
       },
@@ -779,7 +791,7 @@ describe("complete submission ownership", () => {
             },
           },
         ],
-        compactor,
+        compaction: { compactor },
         threadManager,
       },
       id,
@@ -851,11 +863,13 @@ describe("submission-owned compaction signal", () => {
             },
           },
         ],
-        compactor: {
-          run: (_messages, _prompt, runSignal) => {
-            signal = runSignal;
-            entered.resolve();
-            return outcome.promise;
+        compaction: {
+          compactor: {
+            run: (_messages, _prompt, runSignal) => {
+              signal = runSignal;
+              entered.resolve();
+              return outcome.promise;
+            },
           },
         },
       },
@@ -939,5 +953,52 @@ describe("submission-owned compaction signal", () => {
     });
     expect(thread.isBusy).toBe(false);
     await thread.destroy();
+  });
+});
+
+describe("splitPendingUserText", () => {
+  const user = (content: unknown[]): ProviderMessage =>
+    ({ role: "user", content }) as ProviderMessage;
+  const assistant = {
+    role: "assistant",
+    content: [{ type: "text", text: "answer" }],
+  } as ProviderMessage;
+  it.each([
+    [
+      "a lone user message is all there is to compact",
+      [user([{ type: "text", text: "hi" }])],
+    ],
+    [
+      "an abort marker is history, not input",
+      [assistant, user([{ type: "text", text: ABORT_MARKER_TEXT }])],
+    ],
+    [
+      "an image-only message carries no text",
+      [
+        assistant,
+        user([
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: "" },
+          },
+        ]),
+      ],
+    ],
+    [
+      "an empty text message carries no text",
+      [assistant, user([{ type: "text", text: "  " }])],
+    ],
+  ])("%s", (_name, messages) => {
+    expect(splitPendingUserText(messages)).toEqual({
+      history: messages,
+      pendingUserText: undefined,
+    });
+  });
+  it("carries trailing user text past the compaction", () => {
+    const messages = [assistant, user([{ type: "text", text: "next" }])];
+    expect(splitPendingUserText(messages)).toEqual({
+      history: [assistant],
+      pendingUserText: "next",
+    });
   });
 });

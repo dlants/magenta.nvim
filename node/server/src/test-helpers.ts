@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
+import type { Compactor } from "./compaction/index.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import type { ThreadLoopState } from "./loop-state.ts";
@@ -32,7 +33,6 @@ import type {
   Provider,
   ProviderMessage,
   ProviderToolSpec,
-  StopReason,
 } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
@@ -100,10 +100,12 @@ export function flatLoop(owner: {
 function restResult(
   result: CoreLoopResult | undefined,
 ): RestResult | undefined {
-  if (result?.type === "completed" && result.stopReason === "context_budget")
-    return undefined;
-  if (result?.type === "completed")
-    return { type: "completed", stopReason: result.stopReason as StopReason };
+  if (result?.type === "completed") {
+    const { stopReason } = result;
+    return stopReason === "context_budget"
+      ? undefined
+      : { type: "completed", stopReason };
+  }
   if (result?.type !== "suspended") return result;
   return result.reason.kind === "yield"
     ? undefined
@@ -544,4 +546,22 @@ export function resetThread(
   // A delivery still resolving loses its claim on the untouched entries.
   thread["mailbox"].restoreCheckout();
   return thread["replaceCore"](options);
+}
+
+/** Installs a test compactor while keeping any budget already configured:
+ * `compactorSlot(thread).compactor = { run }`. */
+export function compactorSlot(thread: Thread): { compactor: Compactor } {
+  return {
+    set compactor(compactor: Compactor) {
+      thread["context"].compaction = {
+        ...thread["context"].compaction,
+        compactor,
+      };
+    },
+    get compactor(): Compactor {
+      const compactor = thread["context"].compaction?.compactor;
+      if (!compactor) throw new Error("no compactor installed");
+      return compactor;
+    },
+  };
 }

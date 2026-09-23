@@ -14,6 +14,7 @@ import {
   awaitNextStream,
   cleanupArchive,
   cloneThread,
+  compactorSlot,
   createAgentWithMock,
   getContextDeliveries,
   resetThread,
@@ -251,7 +252,7 @@ describe("Thread-owned context delivery", () => {
         replacement = await f.request(f.thread, "replacement summary");
       } else {
         const previous = f.mockClient.streams.at(-1);
-        f.thread["context"].compactor = {
+        compactorSlot(f.thread).compactor = {
           run: async () => ({
             type: "complete",
             summary: "replacement summary",

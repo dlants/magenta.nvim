@@ -157,7 +157,12 @@ describe("agent parity for tagged user input", () => {
 
 function autoCompact() {
   return {
-    tokenBudget: TokenBudget.create({ handoff: "wrap up", threshold: 1 }),
+    compaction: {
+      compactor: {
+        run: () => Promise.reject(new Error("unexpected compaction")),
+      },
+      tokenBudget: TokenBudget.create({ handoff: "wrap up", threshold: 1 }),
+    },
   };
 }
 

@@ -19,4 +19,7 @@ describe("TokenBudget", () => {
     expect(clone.threshold).toBe(123);
     expect(clone.handoff).toBe("later");
   });
+  it.each([0, -1, Number.NaN, 1.5])("rejects threshold %s", (threshold) => {
+    expect(() => TokenBudget.create({ threshold, handoff: "go" })).toThrow();
+  });
 });

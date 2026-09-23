@@ -27,6 +27,7 @@ import {
   awaitNextStream,
   cleanupArchive,
   cloneThread,
+  compactorSlot,
   createAgentWithMock,
   createTestAgent,
   defaultAnthropicOptions,
@@ -65,7 +66,12 @@ function autoCompactSupervisors(
 ) {
   return {
     turnSupervisors: turnBefore,
-    tokenBudget: TokenBudget.create(opts),
+    compaction: {
+      compactor: {
+        run: () => Promise.reject(new Error("unexpected compaction")),
+      },
+      tokenBudget: TokenBudget.create(opts),
+    },
   };
 }
 
@@ -554,7 +560,7 @@ describe("Thread turn loop", () => {
 /** Record handoffs through the same compactor capability as production. */
 function trackCompactions(core: Thread): { prompts: (string | undefined)[] } {
   const prompts: (string | undefined)[] = [];
-  core["context"].compactor = {
+  compactorSlot(core).compactor = {
     run: async (_messages, prompt) => {
       prompts.push(prompt);
       return { type: "aborted" };
@@ -604,7 +610,7 @@ describe("Thread submissions across a compaction handoff", () => {
       const compactor = stubCompactor();
       const oldAgent = core["core"].manager;
       let settled: RestResult | undefined;
-      core["context"].compactor = compactor;
+      compactorSlot(core).compactor = compactor;
       const result = core.submit({
         type: "resolved",
         messages: [
@@ -653,7 +659,7 @@ describe("Thread submissions across a compaction handoff", () => {
       // not something to send.
 
       const oldAgent = core["core"].manager;
-      core["context"].compactor = stubCompactor();
+      compactorSlot(core).compactor = stubCompactor();
       const result = core.submit({
         type: "resolved",
         messages: [
@@ -722,7 +728,7 @@ describe("Thread submissions across a compaction handoff", () => {
         },
       };
       let settled: RestResult | undefined;
-      core["context"].compactor = compactor;
+      compactorSlot(core).compactor = compactor;
       const result = core.submit({
         type: "resolved",
         messages: [
@@ -776,7 +782,7 @@ describe("Thread submissions across a compaction handoff", () => {
       threadId,
     );
     try {
-      core["context"].compactor = stubCompactor({
+      compactorSlot(core).compactor = stubCompactor({
         type: "error",
         message: "boom",
       });
@@ -825,7 +831,7 @@ describe("Thread submissions across a compaction handoff", () => {
     );
     try {
       const compactor = stubCompactor();
-      core["context"].compactor = compactor;
+      compactorSlot(core).compactor = compactor;
       const result = core.submit({
         type: "resolved",
         messages: [
@@ -1692,7 +1698,7 @@ describe("TokenBudget integration", () => {
     mockClient.mockInputTokenCount = 200;
     const histories: ProviderMessage[][] = [];
     const release = new Defer<void>();
-    core["context"].compactor = {
+    compactorSlot(core).compactor = {
       run: (history) => {
         histories.push([...history]);
         mockClient.mockInputTokenCount = 10;
@@ -1729,7 +1735,7 @@ describe("TokenBudget integration", () => {
     });
     mockClient.mockInputTokenCount = 50;
     const histories: ProviderMessage[][] = [];
-    core["context"].compactor = {
+    compactorSlot(core).compactor = {
       run: (history) => {
         histories.push([...history]);
         return Promise.resolve({ type: "aborted" });
@@ -1766,6 +1772,27 @@ describe("TokenBudget integration", () => {
     await done;
     expect(mockClient.countTokensCalls).toBe(0);
   });
+  it("settles aborted, without compacting, when aborted mid-count", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      ...autoCompactSupervisors({ threshold: 100, handoff: "go" }),
+    });
+    mockClient.mockInputTokenCount = 200;
+    const gate = new Defer<void>();
+    mockClient.countTokensGate = gate.promise;
+    const done = core.submit({
+      type: "resolved",
+      messages: [{ type: "text", text: "hello" }],
+    });
+    await pollUntil(() => {
+      if (mockClient.countTokensCalls > 0) return true;
+      throw new Error("waiting for count");
+    });
+    const aborted = core.abort();
+    gate.resolve();
+    await aborted;
+    expect(await done).toEqual({ type: "aborted" });
+    expect(mockClient.streams.length).toBe(0);
+  });
   it("never lets context_budget reach turn supervisors or the submitter", async () => {
     const seen: string[] = [];
     const { core, mockClient } = createAgentWithMock({
@@ -1778,15 +1805,25 @@ describe("TokenBudget integration", () => {
         },
       ]),
     });
-    delete core["context"].compactor;
     mockClient.mockInputTokenCount = 200;
-    const result = await core.submit({
+    compactorSlot(core).compactor = {
+      run: () => {
+        mockClient.mockInputTokenCount = 10;
+        return Promise.resolve({
+          type: "complete" as const,
+          summary: "SUMMARY",
+          chunkCount: 1,
+        });
+      },
+    };
+    const result = core.submit({
       type: "resolved",
       messages: [{ type: "text", text: "hello" }],
     });
-    expect(result).toEqual({ type: "completed", stopReason: "end_turn" });
+    const stream = await mockClient.awaitStream();
+    stream.finishResponse("end_turn");
+    expect(await result).toEqual({ type: "completed", stopReason: "end_turn" });
     expect(seen).not.toContain("context_budget");
-    expect(mockClient.streams.length).toBe(0);
   });
   it("does not trigger compaction when input tokens are below the threshold", async () => {
     const { core, mockClient } = createAgentWithMock({
@@ -3784,7 +3821,7 @@ describe("Agent conversation archive", () => {
       });
       await flushArchive(core);
 
-      core["context"].compactor = {
+      compactorSlot(core).compactor = {
         run: () =>
           Promise.resolve({
             type: "complete",
@@ -3984,7 +4021,7 @@ describe("Thread survives the compaction agent swap", () => {
     mockClient: MockAnthropicClient,
   ): Promise<void> {
     const streamsBefore = mockClient.streams.length;
-    core["context"].compactor = {
+    compactorSlot(core).compactor = {
       run: () =>
         Promise.resolve({
           type: "complete",
@@ -4085,7 +4122,7 @@ describe("Thread survives the compaction agent swap", () => {
       threadId,
     );
     try {
-      core["context"].compactor = {
+      compactorSlot(core).compactor = {
         run: () =>
           Promise.resolve({
             type: "complete",
@@ -4123,7 +4160,7 @@ describe("Thread survives the compaction agent swap", () => {
       threadId,
     );
     try {
-      core["context"].compactor = {
+      compactorSlot(core).compactor = {
         run: () =>
           Promise.resolve({
             type: "complete",

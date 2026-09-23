@@ -225,6 +225,13 @@ Status: done.
   - `MockAnthropicClient.countTokensRequests` records count params for the "count sees the input" test.
   - Tests: `agent.test.ts` "TokenBudget integration", `compaction/token-budget.test.ts`, retargeted assembly/session/parity/nvim wiring tests.
   - Full-suite nvimclient runs show load-dependent stream-timeout flakes in unrelated files (script-manager, spawn-subagents, thread-compact); each passes when run alone.
+  - Review follow-up:
+    - `ThreadContextBase` now groups `compaction?: { compactor; tokenBudget? }` (no top-level `compactor`/`tokenBudget`), so a budget without a compactor can't be expressed. Thread passes `compaction.tokenBudget` into `coreContext()`. A `context_budget` stop without a budget throws as an invariant violation, and the "rest as end_turn" fallback is gone. The no-compactor test was rewritten to compact and continue.
+    - Tests install compactors via `compactorSlot(thread).compactor = …` (test-helpers), which keeps any configured budget.
+    - `TokenBudget.create` rejects thresholds that are not positive integers.
+    - `splitPendingUserText` is exported and covered by a table test in `compaction/index.test.ts`.
+    - Abort during a pending `countTokens` (via the new `MockAnthropicClient.countTokensGate`) settles `aborted`, and no request is issued.
+    - Removed the `restResult` stop-reason cast and the `turnSupervisors!` assertions.
 
 - Goal:
   - `TokenBudget` exists, and assembly installs it (fresh from policy, cloned on fork) instead of `AutoCompactSupervisor`.

@@ -503,12 +503,12 @@ it("fresh and forked threads resolve their first command with equivalent executi
       source.thread["context"].getScriptRunner?.(),
     );
     expect(
-      fork.thread.turnSupervisors!.map((policy) => policy.constructor),
+      fork.thread.turnSupervisors.map((policy) => policy.constructor),
     ).toEqual([MaxTokensSupervisor, TitleSupervisor]);
     expect(fork.thread["context"].resolve).not.toBe(
       source.thread["context"].resolve,
     );
-    expect(fork.compactor).toBe(fork.thread["context"].compactor);
+    expect(fork.compactor).toBe(fork.thread["context"].compaction?.compactor);
     expect(fork.compactor).not.toBe(source.compactor);
     await fs.writeFile(
       path.join(dirs.tmpDir, "fork-only.txt"),
