@@ -506,6 +506,8 @@ export class MockAnthropicClient {
 
   /** If set, countTokens will return this value as input_tokens */
   public mockInputTokenCount: number | undefined;
+  /** If set, the next count answers this instead, then clears it. */
+  public mockInputTokenCountOnce: number | undefined;
   /** How many preflight counts the agent has issued. */
   public countTokensCalls = 0;
   /** When set, every preflight count rejects with it. */
@@ -529,7 +531,11 @@ export class MockAnthropicClient {
       this.countTokensCalls++;
       this.countTokensRequests.push(params);
       if (this.countTokensError) return Promise.reject(this.countTokensError);
-      const answer = () => ({ input_tokens: this.mockInputTokenCount ?? 0 });
+      const once = this.mockInputTokenCountOnce;
+      this.mockInputTokenCountOnce = undefined;
+      const answer = () => ({
+        input_tokens: once ?? this.mockInputTokenCount ?? 0,
+      });
       return this.countTokensGate
         ? this.countTokensGate.then(answer)
         : Promise.resolve(answer());

@@ -338,6 +338,7 @@ export function createAgentWithMock(
 type TestAgentOpts = {
   onUpdate?: () => void;
   onBeforeRequest?: ToolLoopDeps["onBeforeRequest"];
+  checkBudget?: ToolLoopDeps["checkBudget"];
   onToolResults?: ToolLoopDeps["onToolResults"];
   context?: TestContextOverrides;
   /** Stand in for real tool execution. Tests about the loop's handling of
@@ -405,10 +406,9 @@ function buildTestAgent(
     logger: context.logger,
     manager,
     executeTools,
-    onBeforeRequest:
-      opts.onBeforeRequest ??
-      (() => Promise.resolve({ type: "proceed", injections: [] })),
-    checkBudget: () => Promise.resolve({ type: "proceed" }),
+    onBeforeRequest: opts.onBeforeRequest ?? (() => Promise.resolve([])),
+    checkBudget:
+      opts.checkBudget ?? (() => Promise.resolve({ type: "proceed" })),
     onToolResults: opts.onToolResults ?? (() => undefined),
     onUpdate: opts.onUpdate ?? (() => {}),
   });

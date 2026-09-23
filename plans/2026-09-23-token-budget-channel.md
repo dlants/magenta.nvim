@@ -251,6 +251,16 @@ Status: done.
 
 ## Strip suspension from the tool-loop supervisor protocol
 
+Status: done.
+- Decisions/deviations:
+  - `RequestFacts` is now an alias of `RequestContext`; `CombinedRequestAction` and `BeforeRequestDecision` are deleted. The loop dep `onBeforeRequest` returns `AgentInput[]`.
+  - `gate()` no longer takes the core; it keeps only yield detection.
+  - `ThreadCore.checkBudget` clears `preflightTokenCount` on a failed count (the deleted gate used to), so a stale count is never shown.
+  - `createTestAgent` accepts `checkBudget`; the parity "stops without issuing the continuation" tests now stop via the budget and expect `completed`/`context_budget`.
+  - `MockAnthropicClient.mockInputTokenCountOnce` answers one count, which replaced the supervisor-suspension triggers in compaction/thread/agent tests.
+  - Deleted tests of the removed protocol: chain "first suspension wins", "Thread preflight token count" hook tests (kept the failed-count test, retargeted to a budget), "suspending at the gate", reminder/queue "suspended request" tests, system-reminder suspension decline, and "compact suspension without a compactor" (unreachable without supervisor suspension; stage 3 removes the path).
+  - New tests: `thread.test.ts` "leaves next/async content flushed into a budget-stopped request to the compaction it fed"; `thread-core-context.test.ts` "context injected into a budget-stopped request is re-delivered by the fresh core".
+
 - Goal:
   - `SupervisorAction` loses `suspend`.
   - `RequestContext` loses `status` and `inputTokenCount`.

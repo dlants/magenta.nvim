@@ -146,8 +146,6 @@ export class SystemReminderSupervisor implements ToolLoopSupervisor {
   }
 
   async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
-    if (context.status === "suspended") return { type: "none" };
-
     const lastStanding = this.standingHistory.at(-1);
     const standingFires =
       !lastStanding ||

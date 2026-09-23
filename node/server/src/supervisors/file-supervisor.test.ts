@@ -61,8 +61,6 @@ describe("FileSupervisor", () => {
 
     await fileIO.writeFile(TEST_PATH, "formatted content");
     const action = await supervisor.onBeforeRequest({
-      status: "pending",
-      inputTokenCount: 0,
       outputTokenCount: 0,
       nativeMessageIdx: 0 as NativeMessageIdx,
     });
@@ -75,8 +73,6 @@ describe("FileSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
-          status: "pending",
-          inputTokenCount: 0,
           outputTokenCount: 0,
           nativeMessageIdx: 0 as NativeMessageIdx,
         })
@@ -90,8 +86,6 @@ describe("FileSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
-          status: "pending",
-          inputTokenCount: 0,
           outputTokenCount: 0,
           nativeMessageIdx: 0 as NativeMessageIdx,
         })
@@ -107,8 +101,6 @@ describe("FileSupervisor", () => {
     supervisor.addFileContext(IMAGE_PATH, IMAGE_REL, IMAGE_FILE_TYPE);
 
     const action = await supervisor.onBeforeRequest({
-      status: "pending",
-      inputTokenCount: 0,
       outputTokenCount: 0,
       nativeMessageIdx: 0 as NativeMessageIdx,
     });
@@ -137,8 +129,6 @@ describe("FileSupervisor", () => {
       expect(await supervisor.hasPendingContent()).toBe(false);
       expect(
         await supervisor.onBeforeRequest({
-          status: "pending",
-          inputTokenCount: 0,
           outputTokenCount: 0,
           nativeMessageIdx: 0 as NativeMessageIdx,
         }),
@@ -168,8 +158,6 @@ describe("FileSupervisor", () => {
     expect(
       (
         await clone.onBeforeRequest({
-          status: "pending",
-          inputTokenCount: 0,
           outputTokenCount: 0,
           nativeMessageIdx: 0 as NativeMessageIdx,
         })
@@ -180,8 +168,6 @@ describe("FileSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
-          status: "pending",
-          inputTokenCount: 0,
           outputTokenCount: 0,
           nativeMessageIdx: 0 as NativeMessageIdx,
         })
@@ -215,8 +201,6 @@ describe("FileSupervisor conversation lifetime", () => {
       });
     });
     const request = supervisor.onBeforeRequest({
-      status: "pending",
-      inputTokenCount: 0,
       outputTokenCount: 0,
       nativeMessageIdx: 0 as NativeMessageIdx,
     });
@@ -235,8 +219,6 @@ describe("FileSupervisor conversation lifetime", () => {
     expect(
       (
         await clone.onBeforeRequest({
-          status: "pending",
-          inputTokenCount: 0,
           outputTokenCount: 0,
           nativeMessageIdx: 0 as NativeMessageIdx,
         })

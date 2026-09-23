@@ -19,10 +19,7 @@ import type {
   ToolInvocationState,
   ToolResultsHook,
 } from "./thread-api.ts";
-import type {
-  CombinedRequestAction,
-  SuspendReason,
-} from "./thread-supervisor.ts";
+import type { SuspendReason } from "./thread-supervisor.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 
 export interface AgentContext {
@@ -71,7 +68,7 @@ export type ToolLoopDeps = AgentContext & {
   manager: NativeInferenceManager;
   onUpdate?: () => void;
   executeTools: ToolExecutor;
-  onBeforeRequest: () => Promise<BeforeRequestDecision>;
+  onBeforeRequest: () => Promise<AgentInput[]>;
   /** After injections and input are in the log, before the request. */
   checkBudget: () => Promise<BudgetDecision>;
   onToolResults: ToolResultsHook;
@@ -96,21 +93,16 @@ export function runToolLoop(
       if (loopState.aborting) return { type: "aborted" };
 
       updateLoopState({ type: "preparing", aborting: loopState.aborting });
-      // The owner coordinates request policy and returns one combined decision.
-      const decision = await deps.onBeforeRequest();
-      // Injected content and the caller's own input go into the log even when
-      // the loop is suspended, so both are there for the resume.
-      if (decision.injections.length > 0) {
-        manager.appendUserMessage(decision.injections);
+      // Injections always land, so a budget stop hands them to compaction.
+      const injections = await deps.onBeforeRequest();
+      if (injections.length > 0) {
+        manager.appendUserMessage(injections);
       }
       if (initialInputPending) {
         manager.appendUserMessage(input);
         initialInputPending = false;
       }
 
-      if (decision.type === "suspend") {
-        return { type: "suspended", reason: decision.reason };
-      }
       if (loopState.aborting) return { type: "aborted" };
       const budget = await deps.checkBudget();
       if (loopState.aborting) return { type: "aborted" };
@@ -253,10 +245,6 @@ export function runToolLoop(
     },
   };
 }
-
-/** The combined decision the supervisor chain produces. One declaration, so
- * the runner's input and the chain's output cannot drift. */
-export type BeforeRequestDecision = CombinedRequestAction;
 
 function completeToolResults(
   requested: ReadonlyArray<RequestedTool>,

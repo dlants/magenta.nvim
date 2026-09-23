@@ -1,5 +1,6 @@
 import { AnthropicError, APIError } from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TokenBudget } from "../compaction/token-budget.ts";
 import {
   createAgentWithMock,
   createTestAgent,
@@ -131,9 +132,17 @@ describe("Agent retry logic", () => {
   it("does not re-fire the before-request gate, or re-count, on a retried request", async () => {
     let calls = 0;
     const { core, mockClient } = createAgentWithMock({
+      compaction: {
+        compactor: {
+          run: () => Promise.reject(new Error("unexpected compaction")),
+        },
+        tokenBudget: TokenBudget.create({
+          threshold: 1_000_000,
+          handoff: "go",
+        }),
+      },
       toolLoopSupervisors: [
         {
-          requestPreflightTokenCount: true,
           onBeforeRequest: () => {
             calls++;
             return Promise.resolve({ type: "none" });

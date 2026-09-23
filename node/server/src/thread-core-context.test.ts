@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { FsFileIO } from "./capabilities/file-io.ts";
 import type { GitState } from "./capabilities/git-client.ts";
+import { TokenBudget } from "./compaction/token-budget.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import { pendingMessage, resolveAsText } from "./submission/index.ts";
@@ -461,69 +462,45 @@ describe("Thread-owned context delivery", () => {
     }
   });
 
-  it("a suspended request commits no context or reminder delivery", async () => {
-    let suspend = true;
+  it("context injected into a budget-stopped request is re-delivered by the fresh core", async () => {
     const f = await fixture({
-      toolLoopSupervisors: [
-        {
-          onBeforeRequest: () =>
-            Promise.resolve(
-              suspend
-                ? {
-                    type: "suspend" as const,
-                    reason: { kind: "suspend" as const, message: "halt" },
-                  }
-                : { type: "none" as const },
-            ),
+      compaction: {
+        compactor: {
+          run: () =>
+            Promise.resolve({
+              type: "complete",
+              summary: "SUMMARY TEXT",
+              chunkCount: 1,
+            }),
         },
-      ],
+        tokenBudget: TokenBudget.create({ threshold: 100, handoff: "go on" }),
+      },
     });
     try {
       f.setGit();
-
-      expect(
-        await f.thread.submit({
-          type: "resolved",
-          messages: [
-            {
-              type: "text",
-              text: "start",
-            },
-          ],
-        }),
-      ).toEqual({
-        type: "suspended",
-        reason: { kind: "suspend", message: "halt" },
-      });
-      expect(f.mockClient.streams).toHaveLength(0);
-      expect(f.manager.files[f.file].agentView).toBeUndefined();
-      expect(
-        f.thread["core"].gitSupervisor?.gitTracker.getAgentView()?.branch,
-      ).toBe("initial-branch");
-
-      suspend = false;
+      f.mockClient.mockInputTokenCountOnce = 200;
       const sent = f.thread.submit({
         type: "resolved",
         messages: [
           {
             type: "text",
-            text: "resume",
+            text: "start",
           },
         ],
       });
       const stream = await f.mockClient.awaitStream();
       const text = JSON.stringify(stream.messages);
+      expect(text).toContain("SUMMARY TEXT");
       expect(text).toContain("original tracked content");
       expect(text).toContain("replacement-branch");
       expect(text).toContain("<system-info>");
-      expect(text).toContain("Remember the skills");
       stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
-      await sent;
+      expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
+      expect(f.mockClient.streams).toHaveLength(1);
     } finally {
       await f.cleanup();
     }
   });
-
   it.each([
     false,
     true,

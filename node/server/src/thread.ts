@@ -334,8 +334,6 @@ export class Thread implements ThreadCoreView {
       chain = new ToolLoopSupervisorChain(() => this.orderedSupervisors(core), {
         logger: this.context.logger,
         signal: () => this.submissionSignal,
-        countTokens: () =>
-          core.manager.countTokens?.() ?? Promise.resolve(undefined),
       });
       this.chains.set(core, chain);
     }
@@ -365,21 +363,15 @@ export class Thread implements ThreadCoreView {
   ): ReadonlyArray<ToolLoopSupervisor> {
     return [
       ...this.toolLoopSupervisors,
-      this.gate(core),
+      this.gate(),
       ...this.contextSupervisors(core),
     ];
   }
 
-  /** Sits between the chat supervisors and the context supervisors, where the
-   * thread's own two ordering facts live: the preflight count the chat
-   * supervisors may have forced is published before any context supervisor
-   * reads it, and a completed yield tool suspends ahead of them. */
-  private gate(core: ThreadCore): ToolLoopSupervisor {
+  /** Sits ahead of the context supervisors so a completed yield tool
+   * suspends before them. */
+  private gate(): ToolLoopSupervisor {
     return {
-      onBeforeRequest: (ctx) => {
-        core.preflightTokenCount = ctx.inputTokenCount;
-        return Promise.resolve({ type: "none" });
-      },
       onToolResults: (results) => {
         for (const [id, result] of results) {
           if (result.status !== "ok") continue;
@@ -888,8 +880,7 @@ export class Thread implements ThreadCoreView {
   private async queueFlushAction(
     ctx: AgentRequestContext,
   ): Promise<SupervisorAction> {
-    if (ctx.status === "suspended" || !this.queued.async.length)
-      return { type: "none" };
+    if (!this.queued.async.length) return { type: "none" };
     return {
       type: "inject",
       content: await this.flushAsyncIntoRequest(

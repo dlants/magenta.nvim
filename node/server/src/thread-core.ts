@@ -34,12 +34,7 @@ import {
   type ToolLoopSupervisorChain,
 } from "./thread-supervisor.ts";
 import { executeToolBatch } from "./tool-executor.ts";
-import {
-  type BeforeRequestDecision,
-  runToolLoop,
-  type ToolExecution,
-  type ToolLoop,
-} from "./tool-loop.ts";
+import { runToolLoop, type ToolExecution, type ToolLoop } from "./tool-loop.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
 import type { HomeDir, NvimCwd } from "./utils/files.ts";
@@ -368,8 +363,8 @@ export class ThreadCore {
     return this.resultMessageIdx;
   }
 
-  private async beforeRequest(): Promise<BeforeRequestDecision> {
-    if (!this.isActive) return { type: "proceed", injections: [] };
+  private async beforeRequest(): Promise<AgentInput[]> {
+    if (!this.isActive) return [];
     return this.callbacks.supervisor.beforeRequest({
       outputTokenCount: this.manager.log.messages.reduce(
         (total, message) => total + (message.usage?.outputTokens ?? 0),
@@ -391,6 +386,8 @@ export class ThreadCore {
       this.context.logger.warn(
         `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+      // A stale count would describe a different conversation.
+      this.preflightTokenCount = undefined;
       return { type: "proceed" };
     }
     this.preflightTokenCount = count;

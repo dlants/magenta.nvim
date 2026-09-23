@@ -146,7 +146,7 @@ describe("ToolLoop lifecycle and progress", () => {
       onBeforeRequest: async () => {
         entered.resolve();
         await gate.promise;
-        return { type: "proceed", injections: [] };
+        return [];
       },
     });
     const turn = agent.send([

@@ -19,8 +19,6 @@ import { pollUntil } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 
 const context: RequestContext = {
-  status: "pending",
-  inputTokenCount: 400000,
   outputTokenCount: 0,
   nativeMessageIdx: 0 as NativeMessageIdx,
 };
@@ -104,46 +102,6 @@ describe("Thread supervisor arbitration", () => {
     expect(body.indexOf("second")).toBeLessThan(body.indexOf("hello"));
     stream.finishResponse("end_turn");
     await turn;
-  });
-  it("lets the first before-request suspension win, with later hooks told it suspended", async () => {
-    const observed: (string | undefined)[] = [];
-    const { core, mockClient } = createAgentWithMock({
-      toolLoopSupervisors: [
-        {
-          onBeforeRequest: () =>
-            Promise.resolve({
-              type: "suspend",
-              reason: { kind: "suspend", message: "first" },
-            }),
-        },
-        {
-          onBeforeRequest: (ctx: RequestContext) => {
-            observed.push(
-              ctx.status === "suspended" ? ctx.reason.kind : undefined,
-            );
-            return Promise.resolve({
-              type: "suspend",
-              reason: { kind: "suspend", message: "second" },
-            });
-          },
-        },
-      ],
-    });
-    expect(
-      await core.submit({ type: "resolved", messages: userInput("hello") }),
-    ).toEqual({
-      type: "suspended",
-      reason: { kind: "suspend", message: "first" },
-    });
-    expect(core.loopState).toMatchObject({
-      type: "idle",
-      lastResult: {
-        type: "suspended",
-        reason: { kind: "suspend", message: "first" },
-      },
-    });
-    expect(observed).toEqual(["suspend"]);
-    expect(mockClient.streams).toHaveLength(0);
   });
   it("lets a rejecting yield gate win over one whose hook throws", async () => {
     const { core, mockClient } = createAgentWithMock({

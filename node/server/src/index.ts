@@ -324,7 +324,6 @@ export {
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 export {
-  type BeforeRequestDecision,
   type LoopState,
   runToolLoop,
   type ToolExecutor,

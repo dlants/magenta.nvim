@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ThreadType } from "./chat-types.ts";
 import type { Compactor } from "./compaction/index.ts";
+import { TokenBudget } from "./compaction/token-budget.ts";
 import {
   loopActiveTools,
   loopLabel,
@@ -670,151 +671,20 @@ describe("deferred submissions", () => {
       expect.any(AbortSignal),
     );
   });
-  it("keeps a queue flushed for a stop-suspended request for the next request", async () => {
-    const threadId = uniqueThreadId("deferred-stop-suspend");
-    let requests = 0;
-    let suspend = true;
-    const { core, mockClient } = createAgentWithMock(
-      {
-        toolLoopSupervisors: [
-          {
-            onBeforeRequest: () =>
-              Promise.resolve(
-                suspend && ++requests > 1
-                  ? {
-                      type: "suspend" as const,
-                      reason: { kind: "suspend" as const, message: "halt" },
-                    }
-                  : { type: "none" as const },
-              ),
-          },
-        ],
-      },
-      threadId,
-    );
-    try {
-      // Not the opening request of the send: the one the stop-time flush
-      // produces.
-
-      const first = core.submit({
-        type: "resolved",
-        messages: [
-          {
-            type: "text",
-            text: "start",
-          },
-        ],
-      });
-      const stream = await mockClient.awaitStream();
-      core.enqueue({ type: "raw", message: pendingMessage("queued") }, "next");
-      stream.finishResponse("end_turn");
-      // The stop flushed the queue for a request the gate then refused. The
-      // content is spent — it cannot be resolved again — so it is held for
-      // whatever request this thread issues next.
-      expect(await first).toEqual({
-        type: "suspended",
-        reason: { kind: "suspend", message: "halt" },
-      });
-      expect(core.queued.next).toEqual([]);
-      expect(userTexts(core)).toContain("queued");
-      suspend = false;
-      void core.submit({
-        type: "resolved",
-        messages: [
-          {
-            type: "text",
-            text: "resume",
-          },
-        ],
-      });
-      const resumed = await awaitNextStream(mockClient, stream);
-      expect(userTexts(core).filter((t) => t === "queued")).toHaveLength(1);
-      resumed.finishResponse("end_turn");
-    } finally {
-      await core.destroy();
-      await cleanupArchive(threadId);
-    }
-  });
-  it("keeps a system reminder pending across a suspended request", async () => {
-    const threadId = uniqueThreadId("reminder-suspend");
-    let suspend = true;
-    const { core, mockClient } = createAgentWithMock(
-      {
-        toolLoopSupervisors: [
-          {
-            onBeforeRequest: () =>
-              Promise.resolve(
-                suspend
-                  ? {
-                      type: "suspend" as const,
-                      reason: { kind: "suspend" as const, message: "halt" },
-                    }
-                  : { type: "none" as const },
-              ),
-          },
-        ],
-      },
-      threadId,
-    );
-    try {
-      expect(
-        await core.submit({
-          type: "resolved",
-          messages: [
-            {
-              type: "text",
-              text: "start",
-            },
-          ],
-        }),
-      ).toEqual({
-        type: "suspended",
-        reason: { kind: "suspend", message: "halt" },
-      });
-      // A reminder placed in a request that is never issued would be marked
-      // sent and silently lost.
-      expect(mockClient.streams).toHaveLength(0);
-      expect(JSON.stringify(core.getProviderMessages())).not.toContain(
-        "system-reminder",
-      );
-      suspend = false;
-      void core.submit({
-        type: "resolved",
-        messages: [
-          {
-            type: "text",
-            text: "resume",
-          },
-        ],
-      });
-      const stream = await mockClient.awaitStream();
-      expect(JSON.stringify(stream.messages)).toContain("Remember the skills");
-      stream.finishResponse("end_turn");
-    } finally {
-      await core.destroy();
-      await cleanupArchive(threadId);
-    }
-  });
-  it("leaves a queue flushed for a suspended request to the compaction it fed", async () => {
-    const threadId = uniqueThreadId("deferred-compact");
+  it.each([
+    "next",
+    "async",
+  ] as const)("leaves %s content flushed into a budget-stopped request to the compaction it fed", async (queue) => {
+    const threadId = uniqueThreadId(`deferred-compact-${queue}`);
     const calls: string[] = [];
-    let requests = 0;
-    let compacted = false;
     const { core, mockClient } = createAgentWithMock(
       {
-        toolLoopSupervisors: [
-          {
-            onBeforeRequest: () =>
-              Promise.resolve(
-                !compacted && ++requests > 1
-                  ? {
-                      type: "suspend" as const,
-                      reason: { kind: "compact", nextPrompt: undefined },
-                    }
-                  : { type: "none" as const },
-              ),
+        compaction: {
+          compactor: {
+            run: () => Promise.reject(new Error("replaced below")),
           },
-        ],
+          tokenBudget: TokenBudget.create({ threshold: 100, handoff: "" }),
+        },
       },
       threadId,
       (message) => {
@@ -844,8 +714,7 @@ describe("deferred submissions", () => {
               ? m.content.flatMap((c) => (c.type === "text" ? [c.text] : []))
               : [],
           );
-          compacted = true;
-          queueAtHandoff = core.queued.next.length;
+          queueAtHandoff = core.queued[queue].length;
           callsAtHandoff = calls.length;
           return Promise.resolve({
             type: "complete",
@@ -866,10 +735,11 @@ describe("deferred submissions", () => {
         ],
       });
       const stream = await mockClient.awaitStream();
-      core.enqueue({ type: "raw", message: pendingMessage("queued") }, "next");
+      core.enqueue({ type: "raw", message: pendingMessage("queued") }, queue);
+      mockClient.mockInputTokenCountOnce = 200;
       stream.finishResponse("end_turn");
 
-      // The stop flushed the queue for the request the gate then refused to
+      // The stop flushed the queue for the request the budget then refused to
       // issue. That content is the unanswered trailing user message, so the
       // compaction carries it forward as the next prompt instead of
       // summarizing it, and the continuation delivers it verbatim.
@@ -880,7 +750,7 @@ describe("deferred submissions", () => {
       expect(compactNextPrompt).toBe("queued");
       expect(calls).toEqual(["queued"]);
       expect(userTexts(core)).toContain("queued");
-      expect(core.queued.next).toEqual([]);
+      expect(core.queued[queue]).toEqual([]);
       contStream.streamText("resumed");
       contStream.finishResponse("end_turn");
     } finally {

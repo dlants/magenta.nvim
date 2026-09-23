@@ -16,6 +16,7 @@ import {
 } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { Defer } from "../utils/async.ts";
+import { TokenBudget } from "./token-budget.ts";
 
 const idx = 0 as NativeMessageIdx;
 
@@ -682,21 +683,8 @@ describe("complete submission ownership", () => {
     const entered = new Defer<void>();
     const outcome = new Defer<CompactionOutcome>();
     let resolutions = 0;
-    let compact = false;
     const { core: thread, mockClient } = createAgentWithMock(
       {
-        toolLoopSupervisors: [
-          {
-            onBeforeRequest: async () => {
-              if (!compact) return { type: "none" };
-              compact = false;
-              return {
-                type: "suspend",
-                reason: { kind: "compact", nextPrompt: "resume retry" },
-              };
-            },
-          },
-        ],
         compaction: {
           compactor: {
             run: () => {
@@ -704,6 +692,10 @@ describe("complete submission ownership", () => {
               return outcome.promise;
             },
           },
+          tokenBudget: TokenBudget.create({
+            threshold: 100,
+            handoff: "resume retry",
+          }),
         },
       },
       uniqueThreadId("retry-compaction"),
@@ -719,7 +711,7 @@ describe("complete submission ownership", () => {
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("request failed"));
     expect((await first).type).toBe("failed");
-    compact = true;
+    mockClient.mockInputTokenCountOnce = 200;
 
     const retry = thread.retry();
     await entered.promise;
@@ -779,24 +771,14 @@ describe("complete submission ownership", () => {
     });
     const { core: thread, mockClient } = createAgentWithMock(
       {
-        toolLoopSupervisors: [
-          {
-            onBeforeRequest: async () => {
-              if (!compact) return { type: "none" };
-              compact = false;
-              return {
-                type: "suspend",
-                reason: { kind: "compact", nextPrompt: undefined },
-              };
-            },
-          },
-        ],
-        compaction: { compactor },
+        compaction: {
+          compactor,
+          tokenBudget: TokenBudget.create({ threshold: 100, handoff: "" }),
+        },
         threadManager,
       },
       id,
     );
-    let compact = false;
 
     // The compaction needs answered history: an unanswered trailing user
     // message is carried forward as the next prompt, not compacted.
@@ -808,7 +790,7 @@ describe("complete submission ownership", () => {
     firstStream.streamText("answer");
     firstStream.finishResponse("end_turn");
     await first;
-    compact = true;
+    mockClient.mockInputTokenCountOnce = 200;
 
     const sent = thread.submit({
       type: "resolved",
@@ -848,21 +830,8 @@ describe("submission-owned compaction signal", () => {
     const entered = new Defer<void>();
     const outcome = new Defer<CompactionOutcome>();
     let signal: AbortSignal | undefined;
-    let compact = true;
-    const { core: thread } = createAgentWithMock(
+    const { core: thread, mockClient } = createAgentWithMock(
       {
-        toolLoopSupervisors: [
-          {
-            onBeforeRequest: async () => {
-              if (!compact) return { type: "none" };
-              compact = false;
-              return {
-                type: "suspend",
-                reason: { kind: "compact", nextPrompt: undefined },
-              };
-            },
-          },
-        ],
         compaction: {
           compactor: {
             run: (_messages, _prompt, runSignal) => {
@@ -871,10 +840,12 @@ describe("submission-owned compaction signal", () => {
               return outcome.promise;
             },
           },
+          tokenBudget: TokenBudget.create({ threshold: 100, handoff: "" }),
         },
       },
       uniqueThreadId(id),
     );
+    mockClient.mockInputTokenCountOnce = 200;
     const sent = thread.submit({
       type: "resolved",
       messages: [text("history")],
@@ -909,36 +880,6 @@ describe("submission-owned compaction signal", () => {
     outcome.resolve({ type: "aborted" });
     expect(signalOf()?.aborted).toBe(true);
     expect(await sent).toEqual({ type: "aborted" });
-    expect(thread.isBusy).toBe(false);
-    await thread.destroy();
-  });
-  it("comes to rest when a compact suspension has no compactor to run it", async () => {
-    let compact = true;
-    const { core: thread } = createAgentWithMock(
-      {
-        toolLoopSupervisors: [
-          {
-            onBeforeRequest: async () => {
-              if (!compact) return { type: "none" };
-              compact = false;
-              return {
-                type: "suspend",
-                reason: { kind: "compact", nextPrompt: undefined },
-              };
-            },
-          },
-        ],
-      },
-      uniqueThreadId("compaction-missing-compactor"),
-    );
-    const sent = thread.submit({
-      type: "resolved",
-      messages: [text("history")],
-    });
-    expect(await sent).toEqual({
-      type: "suspended",
-      reason: { kind: "compact", nextPrompt: undefined },
-    });
     expect(thread.isBusy).toBe(false);
     await thread.destroy();
   });

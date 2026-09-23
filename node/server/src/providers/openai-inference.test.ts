@@ -927,10 +927,7 @@ describe("OpenAIInferenceManager pending message indices", () => {
       tools: [spec],
       onBeforeRequest: () => {
         requestIdx.push(agent.manager.getPendingUserMessageIdx());
-        return Promise.resolve({
-          type: "proceed",
-          injections: [userText(`INJECTED-${requestIdx.length - 1}`)],
-        });
+        return Promise.resolve([userText(`INJECTED-${requestIdx.length - 1}`)]);
       },
       onToolResults: (_results, nativeMessageIdx) => {
         resultIdx.push(nativeMessageIdx);
@@ -970,12 +967,9 @@ describe("OpenAIInferenceManager pending message indices", () => {
     const hooks = {
       onBeforeRequest: () => {
         requestIdx.push(agent.manager.getPendingUserMessageIdx());
-        return Promise.resolve({
-          type: "proceed" as const,
-          injections: [
-            userText(`ATTACHMENT-INJECTION-${requestIdx.length - 1}`),
-          ],
-        });
+        return Promise.resolve([
+          userText(`ATTACHMENT-INJECTION-${requestIdx.length - 1}`),
+        ]);
       },
       onToolResults: (
         _results: ToolResults,

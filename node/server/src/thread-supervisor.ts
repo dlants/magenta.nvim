@@ -56,12 +56,8 @@ export type YieldSuspendReason = { kind: "yield"; value: YieldValue };
  * show. */
 export type PlainSuspendReason = { kind: "suspend"; message: string };
 
-/** Action returned from the `onBeforeRequest` hook by a single supervisor.
- *
- * `suspend` says "stop before issuing this request and hand back to my
- * owner". */
+/** Action returned from the `onBeforeRequest` hook by a single supervisor. */
 export type SupervisorAction =
-  | { type: "suspend"; reason: SuspendReason }
   | { type: "inject"; content: InjectedContent[] }
   | { type: "none" };
 
@@ -84,20 +80,14 @@ export type EndTurnContext = {
 };
 
 export type RequestContext = {
-  inputTokenCount: number | undefined;
   /** Cumulative output tokens across the agent's message log. */
   outputTokenCount: number;
   /** The idx of the message that will carry this request's injections. */
   nativeMessageIdx: NativeMessageIdx;
-} & (
-  | { status: "pending" }
-  /** An earlier hook has already suspended this request, so it will never be
-   * issued. A supervisor that commits agent-visible state must decline. */
-  | { status: "suspended"; reason: SuspendReason }
-);
+};
 
 /** Participates in a single tool loop: contributes context to each request,
- * observes tool batches, and may suspend the loop before a request. It has no
+ * and observes tool batches. It cannot stop a request, and it has no
  * say in what happens once the loop comes to rest. */
 export interface ToolLoopSupervisor {
   onToolLoopStart?(nativeMessageIdx: NativeMessageIdx): void;
@@ -110,11 +100,6 @@ export interface ToolLoopSupervisor {
     /** The idx of the message holding these results. */
     nativeMessageIdx: NativeMessageIdx,
   ): SuspendReason | undefined;
-  /** This supervisor reads `context.inputTokenCount` in `onBeforeRequest` and
-   * needs it to describe the request it is deciding about, so the tool loop
-   * counts the conversation before consulting it. Declaring it is what makes
-   * the count happen at all. */
-  requestPreflightTokenCount?: boolean;
   onBeforeRequest?(context: RequestContext): Promise<SupervisorAction>;
   /** Would `onBeforeRequest` contribute anything right now? Must not commit
    * any "sent" state — it answers a question about a request that may never
@@ -137,21 +122,7 @@ export interface TurnSupervisor {
   onYield?(result: YieldValue): Promise<YieldAction>;
 }
 
-/** What the caller of the chain knows about the request before any supervisor
- * has been consulted. The input token count is deliberately absent: only the
- * chain knows whether any member declared that it needs one. */
-export type RequestFacts = Pick<
-  RequestContext,
-  "outputTokenCount" | "nativeMessageIdx"
->;
-
-/** The chain's combined before-request decision. Injections gathered before a
- * suspension still travel with it: the runner appends them to the log so they
- * are in place for whatever resumes the thread. */
-export type CombinedRequestAction = { injections: AgentInput[] } & (
-  | { type: "proceed" }
-  | { type: "suspend"; reason: SuspendReason }
-);
+export type RequestFacts = RequestContext;
 
 export type SupervisorChainDeps = {
   logger: Logger;
@@ -190,21 +161,9 @@ abstract class ChainBase<Member> {
   }
 }
 
-/** The fan-out from a tool loop to its supervisors. Combination rules: first
- * suspend wins and injections concatenate in member order. */
+/** The fan-out from a tool loop to its supervisors. Injections concatenate in
+ * member order. */
 export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
-  constructor(
-    members: () => readonly ToolLoopSupervisor[],
-    deps: SupervisorChainDeps & {
-      /** Supplied lazily because only a declaring member forces the count. */
-      countTokens: () => Promise<number | undefined>;
-    },
-  ) {
-    super(members, deps);
-    this.countTokens = deps.countTokens;
-  }
-  private readonly countTokens: () => Promise<number | undefined>;
-
   onToolLoopStart(nativeMessageIdx: NativeMessageIdx): void {
     this.forEach("onToolLoopStart", undefined, (supervisor) =>
       supervisor.onToolLoopStart?.(nativeMessageIdx),
@@ -251,50 +210,23 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
     return false;
   }
 
-  /** The token count happens at most once per request, only when a declaring
-   * member is reached and nothing has suspended yet. */
-  async beforeRequest(facts: RequestFacts): Promise<CombinedRequestAction> {
+  async beforeRequest(facts: RequestFacts): Promise<AgentInput[]> {
     const signal = this.deps.signal();
     const injections: AgentInput[] = [];
-    let suspend: SuspendReason | undefined;
-    let tokenCount: number | undefined;
-    let counted = false;
     for (const supervisor of this.members()) {
       if (signal.aborted) break;
       if (!supervisor.onBeforeRequest) continue;
-      if (supervisor.requestPreflightTokenCount && !counted && !suspend) {
-        counted = true;
-        try {
-          tokenCount = await this.countTokens();
-        } catch (error) {
-          this.deps.logger.warn(
-            `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-        if (signal.aborted) break;
-      }
       let action: SupervisorAction;
       try {
-        action = await supervisor.onBeforeRequest({
-          ...facts,
-          inputTokenCount: tokenCount,
-          ...(suspend === undefined
-            ? { status: "pending" as const }
-            : { status: "suspended" as const, reason: suspend }),
-        });
+        action = await supervisor.onBeforeRequest(facts);
       } catch (error) {
         this.logThrow("onBeforeRequest", error);
         continue;
       }
       if (signal.aborted) break;
-      if (action.type === "suspend") suspend ??= action.reason;
-      else if (action.type === "inject") {
-        injections.push(...action.content);
-      }
+      if (action.type === "inject") injections.push(...action.content);
     }
-    return suspend === undefined
-      ? { type: "proceed", injections }
-      : { type: "suspend", reason: suspend, injections };
+    return injections;
   }
 }
 
@@ -486,8 +418,7 @@ export class SystemInfoSupervisor implements ToolLoopSupervisor {
   }
 
   async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
-    if (context.status === "suspended" || this.injectedAt !== undefined)
-      return { type: "none" };
+    if (this.injectedAt !== undefined) return { type: "none" };
     this.injectedAt = context.nativeMessageIdx;
     return injectText(formatSystemInfo(this.systemInfo));
   }

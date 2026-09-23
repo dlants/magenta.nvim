@@ -173,22 +173,17 @@ describe("onBeforeRequest", () => {
       Promise.resolve({ type: "continue" as const, results: new Map() }),
     );
 
-  const held = { kind: "suspend" as const, message: "held" };
-  /** The gate fires on the opening request too; this one holds the
+  /** The budget is checked on the opening request too; this one stops the
    * continuation that would carry the tool results. */
   const holdSecond =
-    (bump: () => number): ToolLoopDeps["onBeforeRequest"] =>
+    (bump: () => number): ToolLoopDeps["checkBudget"] =>
     () =>
-      Promise.resolve(
-        bump() === 1
-          ? { type: "proceed", injections: [] }
-          : { type: "suspend", reason: held, injections: [] },
-      );
+      Promise.resolve(bump() === 1 ? { type: "proceed" } : { type: "stop" });
 
   it("stops the anthropic turn without issuing the continuation", async () => {
     let calls = 0;
     const { agent, mockClient } = createTestAgent({
-      onBeforeRequest: holdSecond(() => ++calls),
+      checkBudget: holdSecond(() => ++calls),
     });
     const { promise: sendPromise } = agent.send([
       {
@@ -202,7 +197,10 @@ describe("onBeforeRequest", () => {
     });
     stream.finishResponse("tool_use", { inputTokens: 1, outputTokens: 1 });
     const result = await sendPromise;
-    expect(result).toEqual({ type: "suspended", reason: held });
+    expect(result).toEqual({
+      type: "completed",
+      stopReason: "context_budget",
+    });
     expect(calls).toBe(2);
     expect(mockClient.streams).toHaveLength(1);
   });
@@ -211,7 +209,7 @@ describe("onBeforeRequest", () => {
     let calls = 0;
     const { agent, mockClient } = createTestOpenAIAgent({
       executeTools: emptyResults,
-      onBeforeRequest: holdSecond(() => ++calls),
+      checkBudget: holdSecond(() => ++calls),
     });
     const { promise: sendPromise } = agent.send([
       {
@@ -225,7 +223,10 @@ describe("onBeforeRequest", () => {
     });
     stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
     const result = await sendPromise;
-    expect(result).toEqual({ type: "suspended", reason: held });
+    expect(result).toEqual({
+      type: "completed",
+      stopReason: "context_budget",
+    });
     expect(calls).toBe(2);
     expect(mockClient.streams).toHaveLength(1);
   });

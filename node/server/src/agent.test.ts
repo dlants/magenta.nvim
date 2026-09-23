@@ -2028,7 +2028,6 @@ describe("TokenBudget integration", () => {
   });
   it("keeps the injection in the log when a compaction follows it", async () => {
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [MaxTokensSupervisor.create()],
       toolLoopSupervisors: [
         // max_tokens plans a continuation, so the stop reaches the
         // before-request supervisors at all.
@@ -2040,21 +2039,14 @@ describe("TokenBudget integration", () => {
             if (asked || requests === 1)
               return Promise.resolve({ type: "none" as const });
             asked = true;
+            mockClient.mockInputTokenCount = 200;
             return Promise.resolve(injectText("note"));
           },
         },
-        {
-          onBeforeRequest: () =>
-            Promise.resolve(
-              asked
-                ? {
-                    type: "suspend" as const,
-                    reason: { kind: "compact", nextPrompt: "carry on" },
-                  }
-                : { type: "none" as const },
-            ),
-        },
       ],
+      ...autoCompactSupervisors({ threshold: 100, handoff: "carry on" }, [
+        MaxTokensSupervisor.create(),
+      ]),
     });
     let asked = false;
     let requests = 0;
@@ -2098,21 +2090,12 @@ describe("TokenBudget integration", () => {
               return Promise.resolve({ type: "none" as const });
             }
             asked = true;
+            mockClient.mockInputTokenCount = 200;
             return Promise.resolve(injectText("tool-path note"));
           },
         },
-        {
-          onBeforeRequest: () =>
-            Promise.resolve(
-              asked
-                ? {
-                    type: "suspend" as const,
-                    reason: { kind: "compact", nextPrompt: "carry on" },
-                  }
-                : { type: "none" as const },
-            ),
-        },
       ],
+      ...autoCompactSupervisors({ threshold: 100, handoff: "carry on" }),
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     let asked = false;
@@ -4205,78 +4188,10 @@ describe("Thread survives the compaction agent swap", () => {
   });
 });
 describe("Thread preflight token count", () => {
-  const noteCount = (
-    seen: (number | undefined)[],
-    preflight?: true,
-  ): ToolLoopSupervisor => ({
-    ...(preflight ? { requestPreflightTokenCount: true } : {}),
-    onBeforeRequest: (ctx) => {
-      seen.push(ctx.inputTokenCount);
-      return Promise.resolve({ type: "none" as const });
-    },
-  });
-
-  it("issues no count when no hook asks for one", async () => {
-    const seen: (number | undefined)[] = [];
-    const { core: agent, mockClient } = createAgentWithMock({
-      toolLoopSupervisors: [noteCount(seen)],
-    });
-
-    mockClient.mockInputTokenCount = 42;
-    const turn = agent.submit({
-      type: "resolved",
-      messages: [
-        {
-          type: "text",
-          text: "hello",
-        },
-      ],
-    });
-    const stream = await mockClient.awaitStream();
-    stream.streamText("ok");
-    stream.finishResponse("end_turn");
-    await turn;
-    expect(mockClient.countTokensCalls).toBe(0);
-    expect(seen).toEqual([undefined]);
-    expect(agent.inputTokenCount).toBeUndefined();
-  });
-
-  it("counts once per request, immediately before the first hook that asks", async () => {
-    const seen: (number | undefined)[] = [];
-    const { core: agent, mockClient } = createAgentWithMock({
-      toolLoopSupervisors: [
-        noteCount(seen),
-        noteCount(seen, true),
-        noteCount(seen, true),
-      ],
-    });
-
-    mockClient.mockInputTokenCount = 42;
-    const turn = agent.submit({
-      type: "resolved",
-      messages: [
-        {
-          type: "text",
-          text: "hello",
-        },
-      ],
-    });
-    const stream = await mockClient.awaitStream();
-    stream.streamText("ok");
-    stream.finishResponse("end_turn");
-    await turn;
-    // The hook ahead of the counting one decides without a count; the two
-    // behind it share the one that was taken.
-    expect(seen).toEqual([undefined, 42, 42]);
-    expect(mockClient.countTokensCalls).toBe(1);
-    expect(agent.inputTokenCount).toBe(42);
-  });
-
   it("clears the count when it fails rather than reporting a stale one", async () => {
-    const seen: (number | undefined)[] = [];
-    const { core: agent, mockClient } = createAgentWithMock({
-      toolLoopSupervisors: [noteCount(seen, true)],
-    });
+    const { core: agent, mockClient } = createAgentWithMock(
+      autoCompactSupervisors({ threshold: 1000, handoff: "go" }),
+    );
 
     mockClient.mockInputTokenCount = 42;
     const first = agent.submit({
@@ -4312,74 +4227,10 @@ describe("Thread preflight token count", () => {
     stream2.streamText("ok");
     stream2.finishResponse("end_turn");
     await second;
-    // The previous request's number would make a hook decide about the wrong
-    // conversation, so it is dropped.
-    expect(seen).toEqual([42, undefined]);
     expect(agent.inputTokenCount).toBeUndefined();
   });
-  it("does not count when an earlier hook has already suspended", async () => {
-    const seen: (number | undefined)[] = [];
-    const { core: agent, mockClient } = createAgentWithMock({
-      toolLoopSupervisors: [
-        {
-          onBeforeRequest: () =>
-            Promise.resolve({
-              type: "suspend",
-              reason: { kind: "suspend", message: "held" },
-            }),
-        },
-        noteCount(seen, true),
-      ],
-    });
-
-    mockClient.mockInputTokenCount = 42;
-    expect(
-      await agent.submit({
-        type: "resolved",
-        messages: [
-          {
-            type: "text",
-            text: "hello",
-          },
-        ],
-      }),
-    ).toEqual({
-      type: "suspended",
-      reason: { kind: "suspend", message: "held" },
-    });
-    // The later hook is still consulted — a stop is a fact it may need to
-    // record — but the request it would decide about is never issued.
-    expect(seen).toEqual([undefined]);
-    expect(mockClient.countTokensCalls).toBe(0);
-  });
 });
-
 describe("Agent turn loop", () => {
-  it("suspending at the gate issues no request", async () => {
-    const { agent, mockClient } = createTestAgent({
-      onBeforeRequest: () =>
-        Promise.resolve({
-          type: "suspend",
-          reason: { kind: "suspend", message: "held" },
-          injections: [],
-        }),
-    });
-    expect(
-      await agent.send([
-        {
-          type: "text",
-          text: "hello",
-        },
-      ]).promise,
-    ).toEqual({
-      type: "suspended",
-      reason: { kind: "suspend", message: "held" },
-    });
-    expect(mockClient.streams).toHaveLength(0);
-    // The caller's content still lands, so the next request carries it.
-    expect(agent.getProviderMessages()).toHaveLength(1);
-  });
-
   it("an abort mid-stream unwinds once, leaving one abort marker", async () => {
     const { agent, mockClient } = createTestAgent();
     const { promise: turn } = agent.send([
@@ -4480,15 +4331,12 @@ describe("Agent turn loop", () => {
   it("injections from the gate ride the caller's own user message", async () => {
     const { agent, mockClient } = createTestAgent({
       onBeforeRequest: () =>
-        Promise.resolve({
-          type: "proceed",
-          injections: [
-            {
-              type: "text",
-              text: "injected",
-            },
-          ],
-        }),
+        Promise.resolve([
+          {
+            type: "text",
+            text: "injected",
+          },
+        ]),
     });
     const { promise: turn } = agent.send([
       {

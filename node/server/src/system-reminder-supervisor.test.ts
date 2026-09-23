@@ -48,22 +48,8 @@ function makeSupervisor(contextFiles: ContextTracker["files"] = {}) {
 function request(
   outputTokenCount: number,
   nativeMessageIdx = 0 as NativeMessageIdx,
-  status: RequestContext["status"] = "pending",
 ): RequestContext {
-  return status === "pending"
-    ? {
-        status,
-        inputTokenCount: 0,
-        outputTokenCount,
-        nativeMessageIdx,
-      }
-    : {
-        status,
-        reason: { kind: "suspend", message: "halt" },
-        inputTokenCount: 0,
-        outputTokenCount,
-        nativeMessageIdx,
-      };
+  return { outputTokenCount, nativeMessageIdx };
 }
 
 function results(): ToolResults {
@@ -74,10 +60,9 @@ async function reminderText(
   supervisor: SystemReminderSupervisor,
   tokens: number,
   nativeMessageIdx = 0 as NativeMessageIdx,
-  status: RequestContext["status"] = "pending",
 ) {
   const action = await supervisor.onBeforeRequest(
-    request(tokens, nativeMessageIdx, status),
+    request(tokens, nativeMessageIdx),
   );
   if (action.type !== "inject") return undefined;
   return action.content
@@ -274,29 +259,5 @@ describe("SystemReminderSupervisor activated reminders", () => {
     supervisor.activateReminder("pet the cat", 0 as NativeMessageIdx);
     const text = (await reminderText(supervisor, 0)) ?? "";
     expect(text.match(/pet the cat/g)?.length).toBe(1);
-  });
-});
-
-describe("SystemReminderSupervisor suspension", () => {
-  it("does not consume standing or bash reminders on a suspended request", async () => {
-    const { record, supervisor } = makeSupervisor();
-    record(TOOL_ID, {
-      toolName: "bash_command",
-      exitCode: 0,
-      signal: undefined,
-      logFilePath: "/tmp/log",
-      logFileLineCount: 100,
-      logFileCharCount: 1000,
-      outputText: "trimmed",
-      wasAbbreviated: true,
-    });
-    supervisor.onToolResults(results(), 0 as NativeMessageIdx);
-
-    expect(
-      await reminderText(supervisor, 0, 1 as NativeMessageIdx, "suspended"),
-    ).toBeUndefined();
-    const delivered = await reminderText(supervisor, 0, 1 as NativeMessageIdx);
-    expect(delivered).toContain("Remember the skills");
-    expect(delivered).toContain("bash_summarizer");
   });
 });
