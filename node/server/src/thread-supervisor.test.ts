@@ -5,16 +5,13 @@ import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import type { SystemInfo } from "./providers/system-prompt.ts";
 import { createAgentWithMock, noopLogger, userInput } from "./test-helpers.ts";
 import {
-  AutoCompactSupervisor,
-  coreLivenessCheck,
   EditedFilesSupervisor,
   type EndTurnContext,
   injectText,
   type RequestContext,
-  SupervisorChain,
   SystemInfoSupervisor,
-  submissionGuard,
-  type ThreadSupervisor,
+  type TurnSupervisor,
+  TurnSupervisorChain,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
@@ -31,7 +28,7 @@ const context: RequestContext = {
 describe("Thread supervisor arbitration", () => {
   it("applies request injections in supervisor order, ignoring quiet supervisors", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         { onBeforeRequest: () => Promise.resolve(injectText("first")) },
         {},
         { onBeforeRequest: () => Promise.resolve({ type: "none" }) },
@@ -58,7 +55,7 @@ describe("Thread supervisor arbitration", () => {
 
   it("asks pending-content supervisors before issuing a content-only request", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         { hasPendingContent: () => Promise.resolve(false) },
         {},
         {
@@ -77,7 +74,7 @@ describe("Thread supervisor arbitration", () => {
 
   it("issues no request when no supervisor has pending content", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {},
         { hasPendingContent: () => Promise.resolve(false) },
       ],
@@ -92,7 +89,7 @@ describe("Thread supervisor arbitration", () => {
 
   it("keeps injections in supervisor order with the user's own content last", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         { onBeforeRequest: () => Promise.resolve(injectText("first")) },
         { onBeforeRequest: () => Promise.resolve(injectText("second")) },
       ],
@@ -111,7 +108,7 @@ describe("Thread supervisor arbitration", () => {
   it("lets the first before-request suspension win, with later hooks told it suspended", async () => {
     const observed: (string | undefined)[] = [];
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () =>
             Promise.resolve({
@@ -151,7 +148,7 @@ describe("Thread supervisor arbitration", () => {
   it("lets a rejecting yield gate win over one whose hook throws", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
-      chatSupervisors: [
+      turnSupervisors: [
         {
           onYield: () => {
             throw new Error("boom");
@@ -186,7 +183,7 @@ describe("Thread supervisor arbitration", () => {
   it("accepts the yield when the only yield hook throws", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
-      chatSupervisors: [
+      turnSupervisors: [
         {
           onYield: () => {
             throw new Error("boom");
@@ -215,7 +212,7 @@ describe("Thread supervisor arbitration", () => {
   it("lets a chat supervisor's tool-result suspension beat the yield gate", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onToolResults: () => ({ kind: "suspend", message: "chat first" }),
         },
@@ -248,7 +245,7 @@ describe("Thread supervisor arbitration", () => {
 
   it("ignores a throwing pending-content hook and still asks the rest", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           hasPendingContent: () => {
             throw new Error("boom");
@@ -272,17 +269,17 @@ describe("Thread supervisor arbitration", () => {
       throw new Error("boom");
     };
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
-          onAgentLoopStart: boom,
-          onAgentLoopStop: boom,
+          onToolLoopStart: boom,
+          onToolLoopStop: boom,
           onBeforeRequest: boom,
           onToolResults: boom,
-          onEndTurnWithoutYield: boom,
           onToolApplied: boom,
         },
         { onBeforeRequest: () => Promise.resolve(injectText("survivor")) },
       ],
+      turnSupervisors: [{ onEndTurnWithoutYield: boom }],
     });
     const turn = core.submit({
       type: "resolved",
@@ -296,7 +293,7 @@ describe("Thread supervisor arbitration", () => {
   });
   it("lets the first suspension win over an end-turn nudge and later suspension", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      turnSupervisors: [
         {
           onEndTurnWithoutYield: () => ({
             type: "send-message",
@@ -366,14 +363,14 @@ describe("EditedFilesSupervisor", () => {
 
   it("truncates edits inside a group and drops groups after the clone point", () => {
     const source = EditedFilesSupervisor.create();
-    source.onAgentLoopStart(idx(0));
+    source.onToolLoopStart(idx(0));
     apply(source, 2, "original", "first");
     apply(source, 4, "first", "second");
     apply(source, 4, "other", "changed", "/tmp/b.txt");
-    source.onAgentLoopStop(idx(5));
-    source.onAgentLoopStart(idx(6));
+    source.onToolLoopStop(idx(5));
+    source.onToolLoopStart(idx(6));
     apply(source, 8, "second", "third");
-    source.onAgentLoopStop(idx(9));
+    source.onToolLoopStop(idx(9));
     const clone = EditedFilesSupervisor.clone({
       source,
       nativeMessageIdx: idx(2),
@@ -396,9 +393,9 @@ describe("EditedFilesSupervisor", () => {
       nativeMessageIdx: idx(5),
     });
     expect(atEnd.groups).toEqual([source.groups[0]]);
-    clone.onAgentLoopStart(idx(3));
+    clone.onToolLoopStart(idx(3));
     apply(clone, 5, "first", "fork");
-    clone.onAgentLoopStop(idx(6));
+    clone.onToolLoopStop(idx(6));
     expect(new Set(clone.groups.map((group) => group.id)).size).toBe(2);
     expect(source.groups[0].files[0].content).toBe("second");
     expect(source.groups[1].files[0].content).toBe("third");
@@ -409,7 +406,7 @@ describe("EditedFilesSupervisor", () => {
     const source = EditedFilesSupervisor.create();
     apply(source, 0, "ignored", "outside loop");
     expect(source.groups).toEqual([]);
-    source.onAgentLoopStart(idx(1));
+    source.onToolLoopStart(idx(1));
     apply(source, 2, "original", "first");
     const clone = EditedFilesSupervisor.clone({
       source,
@@ -424,9 +421,9 @@ describe("EditedFilesSupervisor", () => {
     });
     view.pop();
     apply(source, 4, "first", "second");
-    source.onAgentLoopStop(idx(5));
+    source.onToolLoopStop(idx(5));
     apply(source, 6, "second", "ignored after stop");
-    clone.onAgentLoopStop(idx(10));
+    clone.onToolLoopStop(idx(10));
     expect(clone.groups[0]).toMatchObject({
       endNativeMessageIdx: 2,
       files: [{ path: "/tmp/a.txt", snapshot: "original", content: "first" }],
@@ -507,139 +504,21 @@ describe("UnsupervisedSupervisor", () => {
   });
 });
 
-describe("AutoCompactSupervisor", () => {
-  it("clones the configured threshold and continuation prompt", async () => {
-    const source = AutoCompactSupervisor.create({
-      threshold: 123456,
-      nextPrompt: "continue after compacting",
-    });
-    const clone = AutoCompactSupervisor.clone({ source });
-    const context = (inputTokenCount: number) => ({
-      status: "pending" as const,
-      inputTokenCount,
-      outputTokenCount: 0,
-      nativeMessageIdx: 0 as NativeMessageIdx,
-    });
-
-    expect(await clone.onBeforeRequest(context(123455))).toEqual({
-      type: "none",
-    });
-    expect(await clone.onBeforeRequest(context(123456))).toEqual({
-      type: "suspend",
-      reason: {
-        kind: "compact",
-        nextPrompt: "continue after compacting",
-      },
-    });
-  });
-
-  it("suspends for compaction at or over the threshold", async () => {
-    const sup = AutoCompactSupervisor.create({
-      threshold: 300000,
-      nextPrompt: "go",
-    });
-    expect(
-      await sup.onBeforeRequest({
-        status: "pending",
-        inputTokenCount: 300000,
-        outputTokenCount: 0,
-        nativeMessageIdx: 0 as NativeMessageIdx,
-      }),
-    ).toEqual({
-      type: "suspend",
-      reason: { kind: "compact", nextPrompt: "go" },
-    });
-    expect(
-      await sup.onBeforeRequest({
-        status: "pending",
-        inputTokenCount: 400000,
-        outputTokenCount: 0,
-        nativeMessageIdx: 0 as NativeMessageIdx,
-      }),
-    ).toEqual({
-      type: "suspend",
-      reason: { kind: "compact", nextPrompt: "go" },
-    });
-  });
-
-  it("returns none below the threshold or without a token count", async () => {
-    const sup = AutoCompactSupervisor.create({
-      threshold: 300000,
-      nextPrompt: "go",
-    });
-    expect(
-      await sup.onBeforeRequest({
-        status: "pending",
-        inputTokenCount: 299999,
-        outputTokenCount: 0,
-        nativeMessageIdx: 0 as NativeMessageIdx,
-      }),
-    ).toEqual({ type: "none" });
-    expect(
-      await sup.onBeforeRequest({
-        status: "pending",
-        inputTokenCount: undefined,
-        outputTokenCount: 0,
-        nativeMessageIdx: 0 as NativeMessageIdx,
-      }),
-    ).toEqual({ type: "none" });
-  });
-
-  it("suspends at a resting end turn only over the threshold", () => {
-    const sup = AutoCompactSupervisor.create({
-      threshold: 300000,
-      nextPrompt: "go",
-    });
-    const at = (inputTokenCount: number | undefined): EndTurnContext => ({
-      stopReason: "end_turn",
-      inputTokenCount,
-      lastAssistantMessage: undefined,
-      nativeMessageIdx: 0 as NativeMessageIdx,
-    });
-    expect(sup.onEndTurnWithoutYield(at(300000))).toEqual({
-      type: "suspend",
-      reason: { kind: "compact", nextPrompt: "go" },
-    });
-    expect(sup.onEndTurnWithoutYield(at(299999))).toEqual({ type: "none" });
-    expect(sup.onEndTurnWithoutYield(at(undefined))).toEqual({ type: "none" });
-  });
-
-  it("defaults the threshold to 300000", async () => {
-    const sup = AutoCompactSupervisor.create({ nextPrompt: "go" });
-    expect(
-      await sup.onBeforeRequest({
-        status: "pending",
-        inputTokenCount: 300000,
-        outputTokenCount: 0,
-        nativeMessageIdx: 0 as NativeMessageIdx,
-      }),
-    ).toEqual({
-      type: "suspend",
-      reason: { kind: "compact", nextPrompt: "go" },
-    });
-    expect(
-      await sup.onBeforeRequest({
-        status: "pending",
-        inputTokenCount: 299999,
-        outputTokenCount: 0,
-        nativeMessageIdx: 0 as NativeMessageIdx,
-      }),
-    ).toEqual({ type: "none" });
-  });
-});
 describe("SupervisorChain onSubmission", () => {
   function chain(
-    members: ThreadSupervisor[],
+    members: TurnSupervisor[],
     args: { live: boolean; errors: string[] },
   ) {
-    return new SupervisorChain(() => members, {
+    return new TurnSupervisorChain(() => members, {
       logger: {
         ...noopLogger,
         error: (message: string) => args.errors.push(message),
       } as Logger,
-      guard: () => submissionGuard(() => args.live),
-      coreIsCurrent: coreLivenessCheck(() => true),
-      countTokens: () => Promise.resolve(undefined),
+      signal: () => {
+        const controller = new AbortController();
+        if (!args.live) controller.abort();
+        return controller.signal;
+      },
     });
   }
   const messages = [

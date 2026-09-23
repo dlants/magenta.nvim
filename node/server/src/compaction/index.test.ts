@@ -63,7 +63,7 @@ describe("compaction submission ownership", () => {
 
   it("cancels a busy compaction while the old loop is settling", async () => {
     const { core: thread, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           hasPendingContent: () => {
             entered.resolve();
@@ -675,7 +675,7 @@ describe("complete submission ownership", () => {
     let compact = false;
     const { core: thread, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [
+        toolLoopSupervisors: [
           {
             onBeforeRequest: async () => {
               if (!compact) return { type: "none" };
@@ -767,7 +767,7 @@ describe("complete submission ownership", () => {
     });
     const { core: thread, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [
+        toolLoopSupervisors: [
           {
             onBeforeRequest: async () => {
               if (!compact) return { type: "none" };
@@ -784,11 +784,23 @@ describe("complete submission ownership", () => {
       },
       id,
     );
-    let compact = true;
+    let compact = false;
+
+    // The compaction needs answered history: an unanswered trailing user
+    // message is carried forward as the next prompt, not compacted.
+    const first = thread.submit({
+      type: "resolved",
+      messages: [text("history")],
+    });
+    const firstStream = await mockClient.awaitStream();
+    firstStream.streamText("answer");
+    firstStream.finishResponse("end_turn");
+    await first;
+    compact = true;
 
     const sent = thread.submit({
       type: "resolved",
-      messages: [text("history")],
+      messages: [text("pending")],
     });
     await spawning.promise;
     let replacement: ReturnType<typeof thread.submit> | undefined;
@@ -804,7 +816,7 @@ describe("complete submission ownership", () => {
     expect(await sent).toEqual({ type: "aborted" });
     expect(deleted).toEqual([child]);
     if (replacement) {
-      const stream = await mockClient.awaitStream();
+      const stream = await awaitNextStream(mockClient, firstStream);
       stream.finishResponse("end_turn");
       expect(await replacement).toEqual({
         type: "completed",
@@ -827,7 +839,7 @@ describe("submission-owned compaction signal", () => {
     let compact = true;
     const { core: thread } = createAgentWithMock(
       {
-        chatSupervisors: [
+        toolLoopSupervisors: [
           {
             onBeforeRequest: async () => {
               if (!compact) return { type: "none" };
@@ -890,7 +902,7 @@ describe("submission-owned compaction signal", () => {
     let compact = true;
     const { core: thread } = createAgentWithMock(
       {
-        chatSupervisors: [
+        toolLoopSupervisors: [
           {
             onBeforeRequest: async () => {
               if (!compact) return { type: "none" };

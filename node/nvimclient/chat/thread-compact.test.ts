@@ -1,11 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { ToolName, ToolRequestId } from "@magenta/server";
-import {
-  AutoCompactSupervisor,
-  compactionRunThreadIds,
-  type ThreadCompactor,
-} from "@magenta/server";
+import { compactionRunThreadIds, type ThreadCompactor } from "@magenta/server";
 import { expect, it } from "vitest";
 import type { MockStream } from "../providers/mock-anthropic-client.ts";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
@@ -759,9 +755,7 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
       const originalThread = driver.magenta.chat.getActiveThread();
 
       // The supervisor built from options should carry the configured threshold.
-      const autoCompact = originalThread.thread.chatSupervisors!.find(
-        (s): s is AutoCompactSupervisor => s instanceof AutoCompactSupervisor,
-      );
+      const autoCompact = originalThread.thread.tokenBudget;
       expect(autoCompact).toBeDefined();
 
       await pollUntil(
@@ -940,7 +934,10 @@ it("auto-compact uses the configured next prompt from options", async () => {
     async (driver) => {
       await driver.showSidebar();
 
-      driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+      // Stay under the threshold for the first exchange: an unanswered
+      // trailing user message is carried past compaction rather than
+      // compacted, so compaction needs answered history to summarize.
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 1000;
 
       await driver.inputMagentaText("What is 2+2?");
       await driver.send();
@@ -965,6 +962,9 @@ it("auto-compact uses the configured next prompt from options", async () => {
           text: "working on it",
           toolRequests: [],
         });
+        driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+        await driver.inputMagentaText("And 3+3?");
+        await driver.send();
       }
 
       if (!compactSubagentStream)
@@ -990,7 +990,10 @@ it("script-spawned thread honors per-thread autoCompactPrompt override", async (
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
-    driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+    // Stay under the threshold for the first exchange: an unanswered
+    // trailing user message is carried past compaction rather than
+    // compacted, so compaction needs answered history to summarize.
+    driver.mockAnthropic.mockClient.mockInputTokenCount = 1000;
 
     const threadId = await driver.magenta.chat.session.spawnScriptThread({
       scriptInvocationId: "inv-prompt-override" as ScriptInvocationId,
@@ -1026,6 +1029,11 @@ it("script-spawned thread honors per-thread autoCompactPrompt override", async (
         text: "working on it",
         toolRequests: [],
       });
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+      void thread.thread.submit({
+        type: "resolved",
+        messages: [{ type: "text", text: "keep going" }],
+      });
     }
 
     if (!compactSubagentStream)
@@ -1049,7 +1057,10 @@ it("script-spawned thread without prompt override falls back to the default temp
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
-    driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+    // Stay under the threshold for the first exchange: an unanswered
+    // trailing user message is carried past compaction rather than
+    // compacted, so compaction needs answered history to summarize.
+    driver.mockAnthropic.mockClient.mockInputTokenCount = 1000;
 
     const threadId = await driver.magenta.chat.session.spawnScriptThread({
       scriptInvocationId: "inv-no-override" as ScriptInvocationId,
@@ -1079,6 +1090,11 @@ it("script-spawned thread without prompt override falls back to the default temp
         stopReason: "end_turn",
         text: "working on it",
         toolRequests: [],
+      });
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+      void thread.thread.submit({
+        type: "resolved",
+        messages: [{ type: "text", text: "keep going" }],
       });
     }
 

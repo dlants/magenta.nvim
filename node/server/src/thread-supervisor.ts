@@ -72,9 +72,6 @@ export function injectText(
   return { type: "inject", content: [{ type: "text", text }] };
 }
 
-/** A supervisor's contribution to Thread's combined before-request decision. */
-export type RequestAction = SupervisorAction;
-
 export type EndTurnContext = {
   stopReason: StopReason;
   /** The thread's input token count as of this stop, so an end-turn
@@ -99,25 +96,22 @@ export type RequestContext = {
   | { status: "suspended"; reason: SuspendReason }
 );
 
-export interface ThreadSupervisor {
-  /** The resolved content of a submission, reported once per submission just
-   * before its first turn. Observational only: nothing the hook returns can
-   * affect the submission. */
-  onSubmission?(messages: readonly AgentInput[]): void;
-  onAgentLoopStart?(nativeMessageIdx: NativeMessageIdx): void;
-  onAgentLoopStop?(nativeMessageIdx: NativeMessageIdx): void;
-  onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
-  onYield?(result: YieldValue): Promise<YieldAction>;
+/** Participates in a single tool loop: contributes context to each request,
+ * observes tool batches, and may suspend the loop before a request. It has no
+ * say in what happens once the loop comes to rest. */
+export interface ToolLoopSupervisor {
+  onToolLoopStart?(nativeMessageIdx: NativeMessageIdx): void;
+  onToolLoopStop?(nativeMessageIdx: NativeMessageIdx): void;
   /** Called by Thread after the batch's results are in the log. A supervisor
    * may request suspension; Thread combines these into the single callback
-   * result returned to the agent loop. */
+   * result returned to the tool loop. */
   onToolResults?(
     results: ToolResults,
     /** The idx of the message holding these results. */
     nativeMessageIdx: NativeMessageIdx,
   ): SuspendReason | undefined;
   /** This supervisor reads `context.inputTokenCount` in `onBeforeRequest` and
-   * needs it to describe the request it is deciding about, so the agent
+   * needs it to describe the request it is deciding about, so the tool loop
    * counts the conversation before consulting it. Declaring it is what makes
    * the count happen at all. */
   requestPreflightTokenCount?: boolean;
@@ -129,6 +123,18 @@ export interface ThreadSupervisor {
    * worth a request. */
   hasPendingContent?(): Promise<boolean>;
   onToolApplied?: OnToolAppliedHook;
+}
+
+/** Participates in turn-taking: observes what is submitted, and decides what
+ * happens when a tool loop hands the turn back — rest, auto-respond, or
+ * suspend. */
+export interface TurnSupervisor {
+  /** The resolved content of a submission, reported once per submission just
+   * before its first tool loop. Observational only: nothing the hook returns
+   * can affect the submission. */
+  onSubmission?(messages: readonly AgentInput[]): void;
+  onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
+  onYield?(result: YieldValue): Promise<YieldAction>;
 }
 
 /** What the caller of the chain knows about the request before any supervisor
@@ -147,80 +153,34 @@ export type CombinedRequestAction = { injections: AgentInput[] } & (
   | { type: "suspend"; reason: SuspendReason }
 );
 
-/** Answers "is the submission this hook was started for still the live one".
- * Obtained fresh per hook and checked between members. */
-export type SubmissionGuard = (() => boolean) & {
-  readonly __guard: "submission";
-};
-
-/** Answers the looser "is this core still the thread's core". True for a turn
- * that is unwinding under an abort, so hooks that record what already
- * happened keep running. */
-export type CoreLivenessCheck = (() => boolean) & { readonly __guard: "core" };
-
-export function submissionGuard(check: () => boolean): SubmissionGuard {
-  return check as SubmissionGuard;
-}
-
-export function coreLivenessCheck(check: () => boolean): CoreLivenessCheck {
-  return check as CoreLivenessCheck;
-}
-
-/** The chain's own surface. Deliberately not `ThreadSupervisor`: the chain
- * combines its members' decisions, so its before-request hook returns a
- * `CombinedRequestAction` that no single supervisor can express, and it is
- * not itself nestable as a member. */
-export interface SupervisorFanOut {
-  onSubmission(messages: readonly AgentInput[]): void;
-  onAgentLoopStart(nativeMessageIdx: NativeMessageIdx): void;
-  onAgentLoopStop(nativeMessageIdx: NativeMessageIdx): void;
-  onToolApplied: OnToolAppliedHook;
-  onToolResults(
-    results: ToolResults,
-    nativeMessageIdx: NativeMessageIdx,
-  ): SuspendReason | undefined;
-  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction;
-  onYield(value: YieldValue): Promise<YieldAction>;
-  hasPendingContent(): Promise<boolean>;
-  beforeRequest(facts: RequestFacts): Promise<CombinedRequestAction>;
-}
-
 export type SupervisorChainDeps = {
   logger: Logger;
-  /** Called once at the start of a hook; the guard it returns is checked
-   * between members so a submission that lands mid-fan-out stops the rest. */
-  guard: () => SubmissionGuard;
-  /** Looser liveness for the hooks that record what the turn already did —
-   * loop start/stop, applied tools, tool results. They must still run for a
-   * turn that is unwinding under an abort. */
-  coreIsCurrent: CoreLivenessCheck;
-  /** Supplied lazily because only a declaring member forces the count. */
-  countTokens: () => Promise<number | undefined>;
+  /** The live submission's signal, taken once at the start of a hook and
+   * checked between members, so an abort mid-fan-out stops the rest. Hooks
+   * that record what a tool loop already did (loop start/stop, applied tools,
+   * tool results) are not gated: the core stops driving them once disposed. */
+  signal: () => AbortSignal;
 };
 
-/** The single fan-out point from a thread to its supervisors. Owns the
- * combination rules — first suspend wins, injections concatenate in member
- * order, end-turn texts join, first accept/reject wins — plus the guarding and
- * error logging that used to be repeated per hook. */
-export class SupervisorChain implements SupervisorFanOut {
+abstract class ChainBase<Member> {
   constructor(
-    private readonly members: () => readonly ThreadSupervisor[],
-    private readonly deps: SupervisorChainDeps,
+    protected readonly members: () => readonly Member[],
+    protected readonly deps: SupervisorChainDeps,
   ) {}
 
-  private logThrow(hook: string, error: unknown): void {
+  protected logThrow(hook: string, error: unknown): void {
     this.deps.logger.error(
       `${hook} hook threw: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
-  private forEach(
+  protected forEach(
     hook: string,
-    isCurrent: SubmissionGuard | CoreLivenessCheck,
-    visit: (supervisor: ThreadSupervisor) => void,
+    signal: AbortSignal | undefined,
+    visit: (supervisor: Member) => void,
   ): void {
     for (const supervisor of this.members()) {
-      if (!isCurrent()) return;
+      if (signal?.aborted) return;
       try {
         visit(supervisor);
       } catch (error) {
@@ -228,27 +188,37 @@ export class SupervisorChain implements SupervisorFanOut {
       }
     }
   }
+}
 
-  onSubmission(messages: readonly AgentInput[]): void {
-    this.forEach("onSubmission", this.deps.guard(), (supervisor) =>
-      supervisor.onSubmission?.(messages),
+/** The fan-out from a tool loop to its supervisors. Combination rules: first
+ * suspend wins and injections concatenate in member order. */
+export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
+  constructor(
+    members: () => readonly ToolLoopSupervisor[],
+    deps: SupervisorChainDeps & {
+      /** Supplied lazily because only a declaring member forces the count. */
+      countTokens: () => Promise<number | undefined>;
+    },
+  ) {
+    super(members, deps);
+    this.countTokens = deps.countTokens;
+  }
+  private readonly countTokens: () => Promise<number | undefined>;
+
+  onToolLoopStart(nativeMessageIdx: NativeMessageIdx): void {
+    this.forEach("onToolLoopStart", undefined, (supervisor) =>
+      supervisor.onToolLoopStart?.(nativeMessageIdx),
     );
   }
 
-  onAgentLoopStart(nativeMessageIdx: NativeMessageIdx): void {
-    this.forEach("onAgentLoopStart", this.deps.coreIsCurrent, (supervisor) =>
-      supervisor.onAgentLoopStart?.(nativeMessageIdx),
-    );
-  }
-
-  onAgentLoopStop(nativeMessageIdx: NativeMessageIdx): void {
-    this.forEach("onAgentLoopStop", this.deps.coreIsCurrent, (supervisor) =>
-      supervisor.onAgentLoopStop?.(nativeMessageIdx),
+  onToolLoopStop(nativeMessageIdx: NativeMessageIdx): void {
+    this.forEach("onToolLoopStop", undefined, (supervisor) =>
+      supervisor.onToolLoopStop?.(nativeMessageIdx),
     );
   }
 
   onToolApplied: OnToolAppliedHook = (event) => {
-    this.forEach("onToolApplied", this.deps.coreIsCurrent, (supervisor) =>
+    this.forEach("onToolApplied", undefined, (supervisor) =>
       supervisor.onToolApplied?.(event),
     );
   };
@@ -258,16 +228,90 @@ export class SupervisorChain implements SupervisorFanOut {
     nativeMessageIdx: NativeMessageIdx,
   ): SuspendReason | undefined {
     let suspend: SuspendReason | undefined;
-    this.forEach("onToolResults", this.deps.coreIsCurrent, (supervisor) => {
+    this.forEach("onToolResults", undefined, (supervisor) => {
       suspend ??= supervisor.onToolResults?.(results, nativeMessageIdx);
     });
     return suspend;
   }
 
+  async hasPendingContent(): Promise<boolean> {
+    const signal = this.deps.signal();
+    for (const supervisor of this.members()) {
+      if (!supervisor.hasPendingContent) continue;
+      let pending: boolean;
+      try {
+        pending = await supervisor.hasPendingContent();
+      } catch (error) {
+        this.logThrow("hasPendingContent", error);
+        continue;
+      }
+      if (signal.aborted) return false;
+      if (pending) return true;
+    }
+    return false;
+  }
+
+  /** The token count happens at most once per request, only when a declaring
+   * member is reached and nothing has suspended yet. */
+  async beforeRequest(facts: RequestFacts): Promise<CombinedRequestAction> {
+    const signal = this.deps.signal();
+    const injections: AgentInput[] = [];
+    let suspend: SuspendReason | undefined;
+    let tokenCount: number | undefined;
+    let counted = false;
+    for (const supervisor of this.members()) {
+      if (signal.aborted) break;
+      if (!supervisor.onBeforeRequest) continue;
+      if (supervisor.requestPreflightTokenCount && !counted && !suspend) {
+        counted = true;
+        try {
+          tokenCount = await this.countTokens();
+        } catch (error) {
+          this.deps.logger.warn(
+            `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        if (signal.aborted) break;
+      }
+      let action: SupervisorAction;
+      try {
+        action = await supervisor.onBeforeRequest({
+          ...facts,
+          inputTokenCount: tokenCount,
+          ...(suspend === undefined
+            ? { status: "pending" as const }
+            : { status: "suspended" as const, reason: suspend }),
+        });
+      } catch (error) {
+        this.logThrow("onBeforeRequest", error);
+        continue;
+      }
+      if (signal.aborted) break;
+      if (action.type === "suspend") suspend ??= action.reason;
+      else if (action.type === "inject") {
+        injections.push(...action.content);
+      }
+    }
+    return suspend === undefined
+      ? { type: "proceed", injections }
+      : { type: "suspend", reason: suspend, injections };
+  }
+}
+
+/** The fan-out from a thread's turn-taking to its supervisors. Combination
+ * rules: end-turn suspend wins over texts, texts join, first accept/reject
+ * wins. */
+export class TurnSupervisorChain extends ChainBase<TurnSupervisor> {
+  onSubmission(messages: readonly AgentInput[]): void {
+    this.forEach("onSubmission", this.deps.signal(), (supervisor) =>
+      supervisor.onSubmission?.(messages),
+    );
+  }
+
   onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
     const texts: string[] = [];
     let suspend: Extract<EndTurnAction, { type: "suspend" }> | undefined;
-    this.forEach("onEndTurnWithoutYield", this.deps.guard(), (supervisor) => {
+    this.forEach("onEndTurnWithoutYield", this.deps.signal(), (supervisor) => {
       const action = supervisor.onEndTurnWithoutYield?.(context);
       if (action?.type === "send-message") texts.push(action.text);
       else if (action?.type === "suspend") suspend ??= action;
@@ -298,69 +342,6 @@ export class SupervisorChain implements SupervisorFanOut {
       ? { type: "send-message", text: texts.join("\n\n") }
       : { type: "none" };
   }
-
-  async hasPendingContent(): Promise<boolean> {
-    const isCurrent = this.deps.guard();
-    for (const supervisor of this.members()) {
-      if (!supervisor.hasPendingContent) continue;
-      let pending: boolean;
-      try {
-        pending = await supervisor.hasPendingContent();
-      } catch (error) {
-        this.logThrow("hasPendingContent", error);
-        continue;
-      }
-      if (!isCurrent()) return false;
-      if (pending) return true;
-    }
-    return false;
-  }
-
-  /** The token count happens at most once per request, only when a declaring
-   * member is reached and nothing has suspended yet. */
-  async beforeRequest(facts: RequestFacts): Promise<CombinedRequestAction> {
-    const isCurrent = this.deps.guard();
-    const injections: AgentInput[] = [];
-    let suspend: SuspendReason | undefined;
-    let tokenCount: number | undefined;
-    let counted = false;
-    for (const supervisor of this.members()) {
-      if (!isCurrent()) break;
-      if (!supervisor.onBeforeRequest) continue;
-      if (supervisor.requestPreflightTokenCount && !counted && !suspend) {
-        counted = true;
-        try {
-          tokenCount = await this.deps.countTokens();
-        } catch (error) {
-          this.deps.logger.warn(
-            `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-        if (!isCurrent()) break;
-      }
-      let action: SupervisorAction;
-      try {
-        action = await supervisor.onBeforeRequest({
-          ...facts,
-          inputTokenCount: tokenCount,
-          ...(suspend === undefined
-            ? { status: "pending" as const }
-            : { status: "suspended" as const, reason: suspend }),
-        });
-      } catch (error) {
-        this.logThrow("onBeforeRequest", error);
-        continue;
-      }
-      if (!isCurrent()) break;
-      if (action.type === "suspend") suspend ??= action.reason;
-      else if (action.type === "inject") {
-        injections.push(...action.content);
-      }
-    }
-    return suspend === undefined
-      ? { type: "proceed", injections }
-      : { type: "suspend", reason: suspend, injections };
-  }
 }
 
 export type EditedFile = {
@@ -380,7 +361,7 @@ type EditedFileHistoryGroup = Omit<EditedFileGroup, "files"> & {
   edits: (EditedFile & { nativeMessageIdx: NativeMessageIdx })[];
 };
 
-export class EditedFilesSupervisor implements ThreadSupervisor {
+export class EditedFilesSupervisor implements ToolLoopSupervisor {
   private history: EditedFileHistoryGroup[] = [];
   private nextGroupId = 0;
   private activeGroup: EditedFileHistoryGroup | undefined;
@@ -428,7 +409,7 @@ export class EditedFilesSupervisor implements ThreadSupervisor {
     });
   }
 
-  onAgentLoopStart(nativeMessageIdx: NativeMessageIdx): void {
+  onToolLoopStart(nativeMessageIdx: NativeMessageIdx): void {
     const group: EditedFileHistoryGroup = {
       id: this.nextGroupId++,
       startNativeMessageIdx: nativeMessageIdx,
@@ -438,7 +419,7 @@ export class EditedFilesSupervisor implements ThreadSupervisor {
     this.activeGroup = group;
   }
 
-  onAgentLoopStop(nativeMessageIdx: NativeMessageIdx): void {
+  onToolLoopStop(nativeMessageIdx: NativeMessageIdx): void {
     if (!this.activeGroup) return;
     this.activeGroup.endNativeMessageIdx = nativeMessageIdx;
     this.activeGroup = undefined;
@@ -475,7 +456,7 @@ function containsYieldTag(
  * supervisor rather than agent behaviour, so the owner decides which threads
  * get it — the compaction thread, whose content its caller composes exactly,
  * does not. */
-export class SystemInfoSupervisor implements ThreadSupervisor {
+export class SystemInfoSupervisor implements ToolLoopSupervisor {
   private constructor(
     private readonly systemInfo: SystemInfo,
     private injectedAt: HistoryIdx | undefined,
@@ -517,7 +498,7 @@ export class SystemInfoSupervisor implements ThreadSupervisor {
  * rather than in the agent because it is a policy over a stop, and it must be
  * consulted before any other end-turn supervisor can read the stop as a
  * refusal to yield. */
-export class MaxTokensSupervisor implements ThreadSupervisor {
+export class MaxTokensSupervisor implements TurnSupervisor {
   static create(): MaxTokensSupervisor {
     return new MaxTokensSupervisor();
   }
@@ -538,7 +519,7 @@ export class MaxTokensSupervisor implements ThreadSupervisor {
 /** For regular subagents. Only intervenes when the agent writes a
  *  `<yield>` XML tag instead of calling the tool. Otherwise allows
  *  the agent to stop normally. */
-export class SubagentSupervisor implements ThreadSupervisor {
+export class SubagentSupervisor implements TurnSupervisor {
   static create(): SubagentSupervisor {
     return new SubagentSupervisor();
   }
@@ -566,7 +547,7 @@ export class SubagentSupervisor implements ThreadSupervisor {
 
 /** For unsupervised threads (e.g. docker_unsupervised). Always prompts
  *  the agent to resume work when it stops without yielding. */
-export class UnsupervisedSupervisor implements ThreadSupervisor {
+export class UnsupervisedSupervisor implements TurnSupervisor {
   static create(opts?: { maxRestarts?: number }): UnsupervisedSupervisor {
     return new UnsupervisedSupervisor(opts?.maxRestarts ?? 5, 0);
   }
@@ -609,63 +590,5 @@ export class UnsupervisedSupervisor implements ThreadSupervisor {
 
   async onYield(_result: YieldValue): Promise<YieldAction> {
     return { type: "none" };
-  }
-}
-
-/** Triggers auto-compaction when the thread's input token count breaches
- *  a configurable threshold. Only implements the handoff hook. */
-export class AutoCompactSupervisor implements ThreadSupervisor {
-  readonly requestPreflightTokenCount = true;
-
-  static create(opts: {
-    nextPrompt: string;
-    threshold?: number;
-  }): AutoCompactSupervisor {
-    return new AutoCompactSupervisor(opts.nextPrompt, opts.threshold ?? 300000);
-  }
-
-  /** `ThreadSupervisor` is an interface, not a closed union, so a `kind`
-   * discriminant would not narrow a `ThreadSupervisor[]` lookup either. The
-   * runtime check lives here rather than at the call site. */
-  static find(
-    supervisors: readonly ThreadSupervisor[],
-  ): AutoCompactSupervisor | undefined {
-    return supervisors.find(
-      (supervisor): supervisor is AutoCompactSupervisor =>
-        supervisor instanceof AutoCompactSupervisor,
-    );
-  }
-
-  static clone(args: { source: AutoCompactSupervisor }): AutoCompactSupervisor {
-    return new AutoCompactSupervisor(
-      args.source.nextPrompt,
-      args.source.threshold,
-    );
-  }
-
-  private constructor(
-    private readonly nextPrompt: string,
-    private readonly threshold: number,
-  ) {}
-
-  private breached(inputTokenCount: number | undefined): boolean {
-    return inputTokenCount !== undefined && inputTokenCount >= this.threshold;
-  }
-
-  private get reason(): CompactSuspendReason {
-    return { kind: "compact", nextPrompt: this.nextPrompt };
-  }
-
-  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
-    if (!this.breached(context.inputTokenCount)) return { type: "none" };
-    return { type: "suspend", reason: this.reason };
-  }
-
-  /** A thread that comes to rest over the threshold still has to compact:
-   * waiting for the next request would put the user's next message in the
-   * log first. */
-  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
-    if (!this.breached(context.inputTokenCount)) return { type: "none" };
-    return { type: "suspend", reason: this.reason };
   }
 }

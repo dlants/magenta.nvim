@@ -131,7 +131,7 @@ describe("Agent retry logic", () => {
   it("does not re-fire the before-request gate, or re-count, on a retried request", async () => {
     let calls = 0;
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           requestPreflightTokenCount: true,
           onBeforeRequest: () => {

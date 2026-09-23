@@ -13,7 +13,6 @@ import {
   TitleSupervisor,
 } from "./thread-assembly.ts";
 import {
-  AutoCompactSupervisor,
   MaxTokensSupervisor,
   SubagentSupervisor,
 } from "./thread-supervisor.ts";
@@ -29,7 +28,8 @@ function fixture(prepareThread?: SessionHost["prepareThread"]) {
   threads.push(base.core);
   const {
     threadType: _threadType,
-    chatSupervisors: _chatSupervisors,
+    turnSupervisors: _turnSupervisors,
+    toolLoopSupervisors: _toolLoopSupervisors,
     compactor: _compactor,
     ...context
   } = base.context;
@@ -63,8 +63,8 @@ it("owns construction and fork policies with no view attached", async () => {
   const record = session.getThread(id);
   if (record?.state !== "initialized") throw new Error("expected initialized");
   expect(
-    record.thread.chatSupervisors.map((policy) => policy.constructor),
-  ).toEqual([MaxTokensSupervisor, AutoCompactSupervisor, TitleSupervisor]);
+    record.thread.turnSupervisors.map((policy) => policy.constructor),
+  ).toEqual([MaxTokensSupervisor, TitleSupervisor]);
   // biome-ignore lint/complexity/useLiteralKeys: verify the injected execution boundary
   expect(record.thread["context"].threadManager).toBe(session);
   const forkId = await session.forkThread(id);
@@ -74,8 +74,8 @@ it("owns construction and fork policies with no view attached", async () => {
   expect(fork.compactor).not.toBe(record.compactor);
   expect(fork.parentThreadId).toBeUndefined();
   expect(
-    fork.thread.chatSupervisors.map((policy) => policy.constructor),
-  ).toEqual([MaxTokensSupervisor, AutoCompactSupervisor, TitleSupervisor]);
+    fork.thread.turnSupervisors.map((policy) => policy.constructor),
+  ).toEqual([MaxTokensSupervisor, TitleSupervisor]);
 });
 
 it("derives a child's profile and environment from the parent record", async () => {
@@ -211,7 +211,7 @@ it("compact children get no compactor and no auto-compaction policy", async () =
   if (fork?.state !== "initialized") throw new Error("expected fork");
   expect(fork.compactor).toBeUndefined();
   expect(
-    fork.thread.chatSupervisors.map((policy) => policy.constructor),
+    fork.thread.turnSupervisors.map((policy) => policy.constructor),
   ).toEqual([MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor]);
 });
 
@@ -341,18 +341,8 @@ it("freezes a fork at the requested index even if the source advances", async ()
     expect.objectContaining({ type: "fork_notification" }),
   ]);
   expect([...fork.thread.activeReminders]).toEqual(["original reminder"]);
-  const policy = AutoCompactSupervisor.find(fork.thread.chatSupervisors)!;
-  expect(
-    policy.onEndTurnWithoutYield({
-      stopReason: "end_turn",
-      inputTokenCount: 100_000,
-      lastAssistantMessage: undefined,
-      nativeMessageIdx: fork.thread.nativeMessageIdx,
-    }),
-  ).toEqual({
-    type: "suspend",
-    reason: { kind: "compact", nextPrompt: "continue" },
-  });
+  expect(fork.thread.tokenBudget?.handoff).toBe("continue");
+  expect(fork.thread.tokenBudget?.check(100_000)).toEqual({ type: "stop" });
 });
 
 it("aborts the subtree but returns only the requested thread's unsent input", async () => {

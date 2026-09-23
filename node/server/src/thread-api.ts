@@ -32,8 +32,14 @@ export type ToolInvocationState =
  * agent finishes or we intervene. `R` is the set of suspensions this caller
  * can be handed: the core's own loop can hand back a `yield`, while the
  * thread's loop resolves yields itself and so never surfaces one. */
-export type CoreLoopResult<R extends SuspendReason = SuspendReason> =
-  | { type: "completed"; stopReason: StopReason }
+/** `context_budget` is the tool loop's own stop: the request was too large to
+ * issue. Thread absorbs it by compacting, so owners never see it. */
+export type LoopStopReason = StopReason | "context_budget";
+export type CoreLoopResult<
+  R extends SuspendReason = SuspendReason,
+  S extends LoopStopReason = LoopStopReason,
+> =
+  | { type: "completed"; stopReason: S }
   /** The submission settled without ever issuing a request (empty content),
    * so there was never a turn and there is nothing to continue from. */
   | { type: "empty" }
@@ -52,7 +58,8 @@ export type CoreLoopResult<R extends SuspendReason = SuspendReason> =
  * itself. Delivered to the submitter rather than broadcast as a lifecycle
  * result. */
 export type RestResult = CoreLoopResult<
-  PlainSuspendReason | CompactSuspendReason
+  PlainSuspendReason | CompactSuspendReason,
+  StopReason
 >;
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */

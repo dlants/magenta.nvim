@@ -1,12 +1,7 @@
-import {
-  type AgentTurn,
-  type BeforeRequestDecision,
-  runAgentLoop,
-  type ToolExecution,
-} from "./agent.ts";
 import type { FileIO } from "./capabilities/file-io.ts";
 import type { GitClient, GitState } from "./capabilities/git-client.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
+import type { BudgetDecision, TokenBudget } from "./compaction/token-budget.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -35,10 +30,16 @@ import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
 import type { CoreLoopResult, ToolInvocationState } from "./thread-api.ts";
 import {
   EditedFilesSupervisor,
-  type SupervisorFanOut,
   SystemInfoSupervisor,
+  type ToolLoopSupervisorChain,
 } from "./thread-supervisor.ts";
 import { executeToolBatch } from "./tool-executor.ts";
+import {
+  type BeforeRequestDecision,
+  runToolLoop,
+  type ToolExecution,
+  type ToolLoop,
+} from "./tool-loop.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
 import type { HomeDir, NvimCwd } from "./utils/files.ts";
@@ -57,6 +58,8 @@ export interface ThreadCoreContext {
   fileIO: FileIO;
   gitClient: GitClient;
   discoverHierarchy?: HierarchyDiscovery;
+  /** Absent: never count, always proceed. */
+  tokenBudget?: TokenBudget;
   threadToolCreator: ThreadToolCreator;
 }
 
@@ -72,7 +75,7 @@ export interface ThreadCoreCallbacks {
   /** The single fan-out point to the thread's supervisors. Narrowed to the
    * three hooks core actually drives. */
   supervisor: Pick<
-    SupervisorFanOut,
+    ToolLoopSupervisorChain,
     "onToolApplied" | "onToolResults" | "beforeRequest"
   >;
 }
@@ -305,7 +308,7 @@ export class ThreadCore {
     this.disposed = true;
     this.fileSupervisor.destroy();
     if (this.gitSupervisor) this.gitSupervisor.callbacks = {};
-    await this.abortAgentTurn();
+    await this.abortToolLoop();
   }
 
   private resultMessageIdx: NativeMessageIdx | undefined;
@@ -376,15 +379,34 @@ export class ThreadCore {
     });
   }
 
-  async runTurn(messages: AgentInput[]): Promise<CoreLoopResult> {
+  /** Counts the log exactly as it will be sent: injections and input are
+   * already appended. */
+  private async checkBudget(): Promise<BudgetDecision> {
+    const budget = this.context.tokenBudget;
+    if (!budget || !this.manager.countTokens) return { type: "proceed" };
+    let count: number;
+    try {
+      count = await this.manager.countTokens();
+    } catch (error) {
+      this.context.logger.warn(
+        `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return { type: "proceed" };
+    }
+    this.preflightTokenCount = count;
+    return budget.check(count);
+  }
+
+  async runToolLoop(messages: AgentInput[]): Promise<CoreLoopResult> {
     if (!this.isActive) return { type: "aborted" };
-    const turn = runAgentLoop(
+    const turn = runToolLoop(
       {
         logger: this.context.logger,
         manager: this.manager,
         executeTools: (requests, publishTools) =>
           this.executeTools(requests, publishTools),
         onBeforeRequest: () => this.beforeRequest(),
+        checkBudget: () => this.checkBudget(),
         onToolResults: (results, idx) =>
           this.isActive
             ? this.callbacks.supervisor.onToolResults(results, idx)
@@ -394,7 +416,7 @@ export class ThreadCore {
       },
       messages,
     );
-    this.agentTurn = turn;
+    this.toolLoop = turn;
     this.handleUpdate();
     try {
       const result = await turn.promise;
@@ -411,19 +433,19 @@ export class ThreadCore {
       }
       return result;
     } finally {
-      this.agentTurn = undefined;
+      this.toolLoop = undefined;
       this.handleUpdate();
     }
   }
-  private agentTurn: AgentTurn | undefined;
+  private toolLoop: ToolLoop | undefined;
   get activity() {
-    return this.agentTurn?.loopState;
+    return this.toolLoop?.loopState;
   }
   get aborting(): boolean {
-    return this.agentTurn?.loopState.aborting ?? false;
+    return this.toolLoop?.loopState.aborting ?? false;
   }
-  async abortAgentTurn(): Promise<void> {
-    const turn = this.agentTurn;
+  async abortToolLoop(): Promise<void> {
+    const turn = this.toolLoop;
     if (!turn) return;
     turn.abort();
     await turn.promise.catch(() => {});

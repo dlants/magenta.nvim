@@ -4,7 +4,7 @@ import type { YieldValue } from "./thread-api.ts";
 import type {
   EndTurnAction,
   EndTurnContext,
-  ThreadSupervisor,
+  TurnSupervisor,
   YieldAction,
 } from "./thread-supervisor.ts";
 import { UnsupervisedSupervisor } from "./thread-supervisor.ts";
@@ -18,7 +18,7 @@ type DockerSupervisorArgs = {
 };
 type DockerTeardownConfig = Readonly<Omit<DockerSupervisorArgs, "maxRestarts">>;
 
-export class DockerSupervisor implements ThreadSupervisor {
+export class DockerSupervisor implements TurnSupervisor {
   static create(args: DockerSupervisorArgs): DockerSupervisor {
     const teardownConfig: DockerTeardownConfig = {
       containerName: args.containerName,

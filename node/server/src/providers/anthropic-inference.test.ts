@@ -1,6 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ToolExecutor } from "../agent.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderProfile } from "../provider-options.ts";
 import {
@@ -11,6 +10,7 @@ import {
   toolExecution,
 } from "../test-helpers.ts";
 import type { CoreLoopResult } from "../thread-api.ts";
+import type { ToolExecutor } from "../tool-loop.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { delay, pollUntil } from "../utils/async.ts";
 import type { AnthropicInferenceManager } from "./anthropic-inference.ts";

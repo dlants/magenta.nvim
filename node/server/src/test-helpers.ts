@@ -3,15 +3,6 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
-import {
-  type AgentLoopDeps,
-  type AgentTurn,
-  type LoopState,
-  runAgentLoop,
-  type ToolExecution,
-  type ToolExecutor,
-  type ToolOutcome,
-} from "./agent.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
@@ -41,6 +32,7 @@ import type {
   Provider,
   ProviderMessage,
   ProviderToolSpec,
+  StopReason,
 } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
@@ -49,6 +41,15 @@ import { type ContextDelivery, Thread, type ThreadContext } from "./thread.ts";
 import type { CoreLoopResult, RestResult, YieldValue } from "./thread-api.ts";
 import { archiveThread } from "./thread-logger.ts";
 import { executeToolBatch } from "./tool-executor.ts";
+import {
+  type LoopState,
+  runToolLoop,
+  type ToolExecution,
+  type ToolExecutor,
+  type ToolLoop,
+  type ToolLoopDeps,
+  type ToolOutcome,
+} from "./tool-loop.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
 import { clientToolCreator } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
@@ -99,6 +100,10 @@ export function flatLoop(owner: {
 function restResult(
   result: CoreLoopResult | undefined,
 ): RestResult | undefined {
+  if (result?.type === "completed" && result.stopReason === "context_budget")
+    return undefined;
+  if (result?.type === "completed")
+    return { type: "completed", stopReason: result.stopReason as StopReason };
   if (result?.type !== "suspended") return result;
   return result.reason.kind === "yield"
     ? undefined
@@ -109,7 +114,7 @@ function restResult(
 export class TestAgent {
   readonly manager: NativeInferenceManager;
 
-  constructor(private deps: AgentLoopDeps) {
+  constructor(private deps: ToolLoopDeps) {
     this.manager = deps.manager;
   }
 
@@ -127,8 +132,8 @@ export class TestAgent {
     return this.manager.log.messages;
   }
 
-  send(messages?: AgentInput[]): AgentTurn {
-    const turn = runAgentLoop(this.deps, messages);
+  send(messages?: AgentInput[]): ToolLoop {
+    const turn = runToolLoop(this.deps, messages);
     this.turn = turn;
     const promise = turn.promise.then(
       (result) => {
@@ -168,7 +173,7 @@ export class TestAgent {
     };
   }
 
-  private turn: AgentTurn | undefined;
+  private turn: ToolLoop | undefined;
   private lastResult: CoreLoopResult | undefined;
 
   /** What `Thread.abort` does, for the tests that drive an agent without one:
@@ -330,8 +335,8 @@ export function createAgentWithMock(
 /** What every test agent can vary, whichever provider backs it. */
 type TestAgentOpts = {
   onUpdate?: () => void;
-  onBeforeRequest?: AgentLoopDeps["onBeforeRequest"];
-  onToolResults?: AgentLoopDeps["onToolResults"];
+  onBeforeRequest?: ToolLoopDeps["onBeforeRequest"];
+  onToolResults?: ToolLoopDeps["onToolResults"];
   context?: TestContextOverrides;
   /** Stand in for real tool execution. Tests about the loop's handling of
    * tool outcomes supply this instead of wiring up real tools. */
@@ -401,6 +406,7 @@ function buildTestAgent(
     onBeforeRequest:
       opts.onBeforeRequest ??
       (() => Promise.resolve({ type: "proceed", injections: [] })),
+    checkBudget: () => Promise.resolve({ type: "proceed" }),
     onToolResults: opts.onToolResults ?? (() => undefined),
     onUpdate: opts.onUpdate ?? (() => {}),
   });
@@ -432,7 +438,7 @@ export const defaultOpenAIOptions: OpenAIInferenceOptions = {
 };
 
 /** The same harness over the openai manager. Both providers are driven by the
- * same `runAgentLoop`, so the two differ only in which client is mocked. */
+ * same `runToolLoop`, so the two differ only in which client is mocked. */
 export function createTestOpenAIAgent(
   opts?: TestAgentOpts & {
     openaiOptions?: Partial<OpenAIInferenceOptions>;
@@ -530,7 +536,8 @@ export function resetThread(
   thread: Thread,
   options: Parameters<Thread["replaceCore"]>[0],
 ) {
-  thread["cancelSubmission"]();
+  const inFlight = thread["inFlight"];
+  if (inFlight) void inFlight.abort();
   // Only the live submission is dropped: a settled yield outlives a reset.
   if (thread["status"].type === "running")
     thread["status"] = { type: "idle", lastResult: undefined };

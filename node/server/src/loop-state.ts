@@ -1,6 +1,6 @@
-import type { LoopState } from "./agent.ts";
 import type { StreamingBlock } from "./providers/provider-types.ts";
 import type { RestResult } from "./thread-api.ts";
+import type { LoopState } from "./tool-loop.ts";
 import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
 
 export type ThreadLoopState =

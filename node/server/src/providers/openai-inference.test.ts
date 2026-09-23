@@ -1,6 +1,5 @@
 import type OpenAI from "openai";
 import { describe, expect, it } from "vitest";
-import type { ToolExecutor } from "../agent.ts";
 import {
   createTestOpenAIAgent,
   flatLoop,
@@ -9,6 +8,7 @@ import {
 } from "../test-helpers.ts";
 import type { CoreLoopResult } from "../thread-api.ts";
 import { executeToolBatch } from "../tool-executor.ts";
+import type { ToolExecutor } from "../tool-loop.ts";
 import type { ToolName } from "../tool-types.ts";
 import {
   ABORT_TOOL_RESULT_TEXT,

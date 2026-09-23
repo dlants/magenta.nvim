@@ -1,12 +1,11 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import {
-  AutoCompactSupervisor,
   DockerSupervisor,
   MaxTokensSupervisor,
-  type NativeMessageIdx,
   SubagentSupervisor,
   type ThreadId,
   TitleSupervisor,
+  type TokenBudget,
   type ToolName,
   type ToolRequestId,
 } from "@magenta/server";
@@ -15,26 +14,22 @@ import { expect, it } from "vitest";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import { withDriver } from "../test/preamble.ts";
 
-it("root/user threads get an AutoCompactSupervisor", async () => {
+it("root/user threads get a token budget", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
     const thread = driver.magenta.chat.getActiveThread();
 
+    expect(thread.thread.tokenBudget).toBeDefined();
     expect(
-      thread.thread.chatSupervisors!.some(
-        (s) => s instanceof AutoCompactSupervisor,
-      ),
-    ).toBe(true);
-    expect(
-      thread.thread.chatSupervisors!.some(
+      thread.thread.turnSupervisors!.some(
         (s) => s instanceof SubagentSupervisor,
       ),
     ).toBe(false);
   });
 });
 
-it("subagent threads get both SubagentSupervisor and AutoCompactSupervisor", async () => {
+it("subagent threads get both SubagentSupervisor and a token budget", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
@@ -74,12 +69,11 @@ it("subagent threads get both SubagentSupervisor and AutoCompactSupervisor", asy
     const childWrapper = chat.threadWrappers[childThreadId!];
     if (childWrapper?.state !== "initialized")
       throw new Error("Expected initialized child thread");
-    const supervisors = childWrapper.thread.thread.chatSupervisors!;
+    const supervisors = childWrapper.thread.thread.turnSupervisors!;
+    const tokenBudget = childWrapper.thread.thread.tokenBudget;
 
     expect(supervisors.some((s) => s instanceof SubagentSupervisor)).toBe(true);
-    expect(supervisors.some((s) => s instanceof AutoCompactSupervisor)).toBe(
-      true,
-    );
+    expect(tokenBudget).toBeDefined();
   });
 });
 
@@ -131,10 +125,8 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
         const wrapper = chat.threadWrappers[id];
         if (wrapper?.state !== "initialized")
           throw new Error("expected initialized thread");
-        const sup = wrapper.thread.thread.chatSupervisors!.find(
-          (s): s is AutoCompactSupervisor => s instanceof AutoCompactSupervisor,
-        );
-        if (!sup) throw new Error("expected AutoCompactSupervisor");
+        const sup = wrapper.thread.thread.tokenBudget;
+        if (!sup) throw new Error("expected token budget");
         return sup;
       };
 
@@ -142,18 +134,11 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
       const fallback = getSupervisor(defaultId);
 
       // The override compacts at 100k; the default only at 300k.
-      const ask = async (sup: AutoCompactSupervisor, inputTokenCount: number) =>
-        (
-          await sup.onBeforeRequest({
-            status: "pending",
-            inputTokenCount,
-            outputTokenCount: 0,
-            nativeMessageIdx: 0 as NativeMessageIdx,
-          })
-        ).type;
-      expect(await ask(overridden, 100_000)).toBe("suspend");
-      expect(await ask(fallback, 100_000)).toBe("none");
-      expect(await ask(fallback, 300_000)).toBe("suspend");
+      const ask = (sup: TokenBudget, inputTokenCount: number) =>
+        sup.check(inputTokenCount).type === "stop" ? "suspend" : "none";
+      expect(ask(overridden, 100_000)).toBe("suspend");
+      expect(ask(fallback, 100_000)).toBe("none");
+      expect(ask(fallback, 300_000)).toBe("suspend");
       const sourceWrapper = chat.threadWrappers[overriddenId];
       if (sourceWrapper?.state !== "initialized")
         throw new Error("expected source thread");
@@ -170,7 +155,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
       expect(forkWrapper.thread.thread["context"].yieldSchema).toEqual(
         yieldSchema,
       );
-      expect(await ask(getSupervisor(forkId), 100_000)).toBe("suspend");
+      expect(ask(getSupervisor(forkId), 100_000)).toBe("suspend");
       expect(getSupervisor(forkId)).not.toBe(overridden);
     },
   );
@@ -185,22 +170,12 @@ it.each([
   {
     threadType: "docker_root" as const,
     supervised: false,
-    expected: [
-      MaxTokensSupervisor,
-      SubagentSupervisor,
-      AutoCompactSupervisor,
-      TitleSupervisor,
-    ],
+    expected: [MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor],
   },
   {
     threadType: "subagent" as const,
     supervised: true,
-    expected: [
-      MaxTokensSupervisor,
-      DockerSupervisor,
-      AutoCompactSupervisor,
-      TitleSupervisor,
-    ],
+    expected: [MaxTokensSupervisor, DockerSupervisor, TitleSupervisor],
   },
 ])("constructs $threadType supervised=$supervised with ordered, stable policies", async ({
   threadType,
@@ -231,7 +206,7 @@ it.each([
       throw new Error("expected an initialized thread");
     const thread = record.thread;
     try {
-      const policies = thread.chatSupervisors!;
+      const policies = thread.turnSupervisors!;
       expect(policies.map((policy) => policy.constructor)).toEqual(expected);
       expect(record.compactor).toBe(thread["context"].compactor);
       expect(record.compactor === undefined).toBe(threadType === "compact");
@@ -241,7 +216,7 @@ it.each([
         seed: [],
         archive: { type: "none" },
       });
-      expect(thread.chatSupervisors).toBe(policies);
+      expect(thread.turnSupervisors).toBe(policies);
       expect(thread["context"].resolve).toBe(resolve);
       expect(thread.callbacks).toBe(callbacks);
     } finally {
@@ -265,7 +240,7 @@ it("forks compact threads without a compactor or auto-compaction policy", async 
     expect(fork.compactor).toBeUndefined();
     expect(fork.thread["context"].compactor).toBeUndefined();
     expect(
-      fork.thread.chatSupervisors!.map((policy) => policy.constructor),
+      fork.thread.turnSupervisors!.map((policy) => policy.constructor),
     ).toEqual([MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor]);
   });
 });

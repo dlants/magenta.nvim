@@ -1,10 +1,10 @@
-import type { ToolExecution, ToolOutcome } from "./agent.ts";
 import type {
   NonEmptyRequestedTools,
   ToolResultInput,
   ToolResultValue,
 } from "./providers/provider-types.ts";
 import type { ToolInvocationState } from "./thread-api.ts";
+import type { ToolExecution, ToolOutcome } from "./tool-loop.ts";
 import type {
   ActiveToolEntry,
   CompletedToolInfo,

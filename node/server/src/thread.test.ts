@@ -401,7 +401,7 @@ describe("deferred submissions", () => {
   it("does not drain the async queue into an agent-internal submission", async () => {
     const { core, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [
+        turnSupervisors: [
           {
             onYield: async () => {
               if (rejected) return { type: "none" as const };
@@ -675,7 +675,7 @@ describe("deferred submissions", () => {
     let suspend = true;
     const { core, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [
+        toolLoopSupervisors: [
           {
             onBeforeRequest: () =>
               Promise.resolve(
@@ -739,7 +739,7 @@ describe("deferred submissions", () => {
     let suspend = true;
     const { core, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [
+        toolLoopSupervisors: [
           {
             onBeforeRequest: () =>
               Promise.resolve(
@@ -801,7 +801,7 @@ describe("deferred submissions", () => {
     let compacted = false;
     const { core, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [
+        toolLoopSupervisors: [
           {
             onBeforeRequest: () =>
               Promise.resolve(
@@ -834,8 +834,10 @@ describe("deferred submissions", () => {
       let queueAtHandoff = -1;
       let callsAtHandoff = -1;
       let compactedTexts: string[] = [];
+      let compactNextPrompt: string | undefined;
       const compactor: Compactor = {
-        run: (messages) => {
+        run: (messages, nextPrompt) => {
+          compactNextPrompt = nextPrompt;
           compactedTexts = messages.flatMap((m) =>
             m.role === "user"
               ? m.content.flatMap((c) => (c.type === "text" ? [c.text] : []))
@@ -867,15 +869,16 @@ describe("deferred submissions", () => {
       stream.finishResponse("end_turn");
 
       // The stop flushed the queue for the request the gate then refused to
-      // issue. The content still went into the log that request appended to,
-      // so the compaction it triggered saw it; nothing re-delivers it
-      // verbatim afterwards, and the follow-up is the plain continue prompt.
+      // issue. That content is the unanswered trailing user message, so the
+      // compaction carries it forward as the next prompt instead of
+      // summarizing it, and the continuation delivers it verbatim.
       const contStream = await awaitNextStream(mockClient, stream);
       expect(queueAtHandoff).toBe(0);
       expect(callsAtHandoff).toBe(1);
-      expect(compactedTexts).toContain("queued");
+      expect(compactedTexts).not.toContain("queued");
+      expect(compactNextPrompt).toBe("queued");
       expect(calls).toEqual(["queued"]);
-      expect(userTexts(core)).not.toContain("queued");
+      expect(userTexts(core)).toContain("queued");
       expect(core.queued.next).toEqual([]);
       contStream.streamText("resumed");
       contStream.finishResponse("end_turn");
@@ -945,7 +948,7 @@ describe("Thread aborts the tools it owns", () => {
     );
     const { core, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [{ onToolResults }],
+        toolLoopSupervisors: [{ onToolResults }],
         fileIO: {
           readFile: async () => "file contents",
           writeFile: async () => {},
@@ -1022,7 +1025,9 @@ describe("Thread aborts the tools it owns", () => {
     resolveStat();
     await stopping;
     expect(await sent).toEqual({ type: "aborted" });
-    expect(onToolResults).toHaveBeenCalledTimes(action === "abort" ? 1 : 0);
+    // Aborting unwinds the turn on its live core, which reports what settled;
+    // a reset disposes the core first, so nothing is reported.
+    expect(onToolResults).toHaveBeenCalledTimes(action === "reset" ? 0 : 1);
     expect(archive.size).toBe(1);
     expect(archive.get("tool-1" as ToolRequestId)).toMatchObject({
       request: {
@@ -1277,7 +1282,7 @@ describe("Thread.abort between turns", () => {
     let onUpdate: () => void = () => {};
     const { core, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [
+        toolLoopSupervisors: [
           {
             onBeforeRequest: () => {
               if (++requests > 1) stopConsultations.push("continuation");
@@ -1492,7 +1497,7 @@ describe("system-info preamble", () => {
 describe("empty send gate", () => {
   it("issues a request for an empty send when a supervisor has content", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           hasPendingContent: () => Promise.resolve(true),
           onBeforeRequest: () =>
@@ -1510,7 +1515,9 @@ describe("empty send gate", () => {
 
   it("issues no request for an empty send when nothing is pending", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [{ hasPendingContent: () => Promise.resolve(false) }],
+      toolLoopSupervisors: [
+        { hasPendingContent: () => Promise.resolve(false) },
+      ],
     });
 
     expect(await core.submit({ type: "resolved", messages: [] })).toEqual({
@@ -1522,7 +1529,9 @@ describe("empty send gate", () => {
   it("issues no request for a standing reminder alone, and still delivers it later", async () => {
     const { core, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [{ hasPendingContent: () => Promise.resolve(false) }],
+        toolLoopSupervisors: [
+          { hasPendingContent: () => Promise.resolve(false) },
+        ],
       },
       uniqueThreadId("empty-send-reminder"),
       (message) =>
@@ -1563,7 +1572,7 @@ describe("empty send gate", () => {
 
   it("supersedes an empty send whose probe is still in flight", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [{ hasPendingContent: () => probe.promise }],
+      toolLoopSupervisors: [{ hasPendingContent: () => probe.promise }],
     });
     const probe = new Defer<boolean>();
 
@@ -1597,7 +1606,7 @@ describe("empty send gate", () => {
         ),
     };
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [supervisor],
+      toolLoopSupervisors: [supervisor],
     });
     let available = false;
 
@@ -1675,7 +1684,7 @@ describe("thread status", () => {
   it("keeps the teardown guard when the accepting submission never settles", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
-      chatSupervisors: [
+      turnSupervisors: [
         { onYield: () => Promise.resolve({ type: "accept" as const }) },
       ],
     });
@@ -1736,7 +1745,7 @@ describe("replaceable conversation core", () => {
 
   it("replaces conversation state but preserves the result contract and queues", async () => {
     const { core } = createAgentWithMock({
-      chatSupervisors: [{ hasPendingContent: () => probe.promise }],
+      toolLoopSupervisors: [{ hasPendingContent: () => probe.promise }],
     });
     const original = core["core"];
     const result = core.result;
@@ -1771,7 +1780,7 @@ describe("replaceable conversation core", () => {
 
   it("an old probe cannot finish the replacement's first loop", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [{ hasPendingContent: () => probe.promise }],
+      toolLoopSupervisors: [{ hasPendingContent: () => probe.promise }],
     });
     const probe = new Defer<boolean>();
 
@@ -1801,7 +1810,7 @@ describe("replaceable conversation core", () => {
     "destroy",
   ] as const)("%s invalidates a pending yield decision", async (action) => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      turnSupervisors: [
         {
           onYield: () => {
             entered.resolve();
@@ -1946,9 +1955,6 @@ describe("replaceable conversation core", () => {
     await expect(
       core.submit({ type: "raw", message: pendingMessage("late") }),
     ).rejects.toThrow("destroyed");
-    await expect(
-      resetThread(core, { archive: { type: "none" } }),
-    ).rejects.toThrow("destroyed");
     expect(mockClient.streams).toHaveLength(0);
   });
 });
@@ -2004,7 +2010,7 @@ describe("submission ownership", () => {
     const gate = new Defer<void>();
     let laterConsulted = 0;
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: async () => {
             if (entered.resolved) return { type: "none" as const };
@@ -2101,7 +2107,7 @@ describe("stale outer submissions", () => {
     const entered = new Defer<void>();
     const pending = new Defer<boolean>();
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           hasPendingContent: () => {
             entered.resolve();
@@ -2220,7 +2226,7 @@ describe("stale outer submissions", () => {
     const gate = new Defer<typeof decision>();
     let yields = 0;
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      turnSupervisors: [
         {
           onYield: () => {
             if (yields++ > 0) return Promise.resolve({ type: "none" as const });

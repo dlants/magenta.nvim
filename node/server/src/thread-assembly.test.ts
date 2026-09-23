@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ThreadId } from "./chat-types.ts";
+import type { TokenBudget } from "./compaction/token-budget.ts";
 import { DockerSupervisor } from "./docker-supervisor.ts";
 import type { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
 import type {
@@ -23,7 +24,6 @@ import {
   TitleSupervisor,
 } from "./thread-assembly.ts";
 import {
-  AutoCompactSupervisor,
   MaxTokensSupervisor,
   SubagentSupervisor,
 } from "./thread-supervisor.ts";
@@ -75,17 +75,8 @@ function freshRoot(policy?: Partial<ChatThreadPolicy>): ThreadInitialization {
   };
 }
 
-/** `threshold`/`nextPrompt` are private construction state with no reader on
- * the supervisor; a fork's inheritance is only observable by looking. */
-function autoCompactSettings(supervisor: AutoCompactSupervisor): {
-  threshold: number;
-  nextPrompt: string;
-} {
-  const { threshold, nextPrompt } = supervisor as unknown as {
-    threshold: number;
-    nextPrompt: string;
-  };
-  return { threshold, nextPrompt };
+function budgetSettings(budget: TokenBudget | undefined) {
+  return budget && { threshold: budget.threshold, handoff: budget.handoff };
 }
 
 function setup(args?: {
@@ -97,7 +88,8 @@ function setup(args?: {
   const forceToolUse = vi.fn();
   const {
     threadType: _threadType,
-    chatSupervisors: _chatSupervisors,
+    turnSupervisors: _turnSupervisors,
+    toolLoopSupervisors: _toolLoopSupervisors,
     compactor: _compactor,
     ...rest
   } = context;
@@ -183,12 +175,12 @@ describe("assembleThread", () => {
 
   it("orders chat supervisors by conversation kind", async () => {
     const root = setup();
-    expect(root.thread.chatSupervisors.map((s) => s.constructor)).toEqual([
+    expect(root.thread.turnSupervisors.map((s) => s.constructor)).toEqual([
       MaxTokensSupervisor,
-      AutoCompactSupervisor,
       TitleSupervisor,
     ]);
     expect(root.compactor).toBeDefined();
+    expect(root.thread.tokenBudget).toBeDefined();
 
     const subagent = setup({
       initialization: {
@@ -198,10 +190,9 @@ describe("assembleThread", () => {
         policy: defaultPolicy,
       },
     });
-    expect(subagent.thread.chatSupervisors.map((s) => s.constructor)).toEqual([
+    expect(subagent.thread.turnSupervisors.map((s) => s.constructor)).toEqual([
       MaxTokensSupervisor,
       SubagentSupervisor,
-      AutoCompactSupervisor,
       TitleSupervisor,
     ]);
 
@@ -213,13 +204,8 @@ describe("assembleThread", () => {
         policy: defaultPolicy,
       },
     });
-    expect(dockerRoot.thread.chatSupervisors.map((s) => s.constructor)).toEqual(
-      [
-        MaxTokensSupervisor,
-        SubagentSupervisor,
-        AutoCompactSupervisor,
-        TitleSupervisor,
-      ],
+    expect(dockerRoot.thread.turnSupervisors.map((s) => s.constructor)).toEqual(
+      [MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor],
     );
 
     const compact = setup({
@@ -229,12 +215,13 @@ describe("assembleThread", () => {
         archiveOptions: { baseDir: TEST_ARCHIVE_DIR },
       },
     });
-    expect(compact.thread.chatSupervisors.map((s) => s.constructor)).toEqual([
+    expect(compact.thread.turnSupervisors.map((s) => s.constructor)).toEqual([
       MaxTokensSupervisor,
       SubagentSupervisor,
       TitleSupervisor,
     ]);
     expect(compact.compactor).toBeUndefined();
+    expect(compact.thread.tokenBudget).toBeUndefined();
 
     const docker = setup({
       initialization: freshRoot({
@@ -247,10 +234,9 @@ describe("assembleThread", () => {
         },
       }),
     });
-    expect(docker.thread.chatSupervisors.map((s) => s.constructor)).toEqual([
+    expect(docker.thread.turnSupervisors.map((s) => s.constructor)).toEqual([
       MaxTokensSupervisor,
       DockerSupervisor,
-      AutoCompactSupervisor,
       TitleSupervisor,
     ]);
 
@@ -273,10 +259,10 @@ describe("assembleThread", () => {
         autoCompactPrompt: "keep going",
       }),
     });
-    const supervisor = AutoCompactSupervisor.find(thread.chatSupervisors);
-    expect(supervisor && autoCompactSettings(supervisor)).toEqual({
+    const supervisor = thread.tokenBudget;
+    expect(budgetSettings(supervisor)).toEqual({
       threshold: 1234,
-      nextPrompt: "keep going",
+      handoff: "keep going",
     });
     await thread.destroy();
     await cleanupArchive(id);
@@ -300,16 +286,15 @@ describe("assembleThread", () => {
     });
 
     expect(fork.thread.threadType).toEqual("subagent");
-    expect(fork.thread.chatSupervisors.map((s) => s.constructor)).toEqual([
+    expect(fork.thread.turnSupervisors.map((s) => s.constructor)).toEqual([
       MaxTokensSupervisor,
       SubagentSupervisor,
-      AutoCompactSupervisor,
       TitleSupervisor,
     ]);
-    const supervisor = AutoCompactSupervisor.find(fork.thread.chatSupervisors);
-    expect(supervisor && autoCompactSettings(supervisor)).toEqual({
+    const supervisor = fork.thread.tokenBudget;
+    expect(budgetSettings(supervisor)).toEqual({
       threshold: 4321,
-      nextPrompt: "resume",
+      handoff: "resume",
     });
 
     // The fork's manager is cloned from the source, so its requests go to the

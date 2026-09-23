@@ -1,6 +1,6 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import { describe, expect, it } from "vitest";
-import type { AgentLoopDeps } from "../agent.ts";
+import { TokenBudget } from "../compaction/token-budget.ts";
 import {
   createAgentWithMock,
   createTestAgent,
@@ -10,7 +10,7 @@ import {
   toolExecution,
 } from "../test-helpers.ts";
 import type { CoreLoopResult } from "../thread-api.ts";
-import { AutoCompactSupervisor } from "../thread-supervisor.ts";
+import type { ToolLoopDeps } from "../tool-loop.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
 import { ABORT_MARKER_TEXT } from "./inference-shared.ts";
@@ -155,6 +155,12 @@ describe("agent parity for tagged user input", () => {
   });
 });
 
+function autoCompact() {
+  return {
+    tokenBudget: TokenBudget.create({ handoff: "wrap up", threshold: 1 }),
+  };
+}
+
 describe("onBeforeRequest", () => {
   /** The runner fills a result for every requested tool it isn't handed. */
   const emptyResults = () =>
@@ -166,7 +172,7 @@ describe("onBeforeRequest", () => {
   /** The gate fires on the opening request too; this one holds the
    * continuation that would carry the tool results. */
   const holdSecond =
-    (bump: () => number): AgentLoopDeps["onBeforeRequest"] =>
+    (bump: () => number): ToolLoopDeps["onBeforeRequest"] =>
     () =>
       Promise.resolve(
         bump() === 1
@@ -281,44 +287,23 @@ describe("abort parity", () => {
 
 describe("preflight token count parity", () => {
   /** The count is provider-specific: only the anthropic manager implements
-   * `countTokens`. On openai a hook that asks for one sees `undefined`, so
-   * `AutoCompactSupervisor` cannot fire — auto-compaction is an
+   * `countTokens`. On openai the budget has nothing to check, so it
+   * cannot fire — auto-compaction is an
    * anthropic-only feature until openai grows a counting endpoint. */
-  it("suspends for compaction on anthropic and not on openai", async () => {
+  it("stops for the budget on anthropic and not on openai", async () => {
     const { core: agent, mockClient } = createAgentWithMock({
-      chatSupervisors: [
-        AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
-      ],
+      ...autoCompact(),
     });
 
     mockClient.mockInputTokenCount = 100;
-    expect(
-      await agent.submit({
-        type: "resolved",
-        messages: [
-          {
-            type: "text",
-            text: "go",
-          },
-        ],
-      }),
-    ).toEqual({
-      type: "suspended",
-      reason: { kind: "compact", nextPrompt: "wrap up" },
+    expect(await agent["core"].runToolLoop([text("go")])).toEqual({
+      type: "completed",
+      stopReason: "context_budget",
     });
-
-    expect(agent.loopState).toMatchObject({
-      type: "idle",
-      lastResult: {
-        type: "suspended",
-        reason: { kind: "compact", nextPrompt: "wrap up" },
-      },
-    });
+    expect(mockClient.streams.length).toBe(0);
     const openai = createTestOpenAIAgent({ executeTools: noExecutor });
     const { core: openaiThread } = createAgentWithMock({
-      chatSupervisors: [
-        AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
-      ],
+      ...autoCompact(),
       provider: {
         createInferenceManager: () => openai.agent.manager,
         forceToolUse: () => {
@@ -327,9 +312,7 @@ describe("preflight token count parity", () => {
       },
     });
 
-    // Only exercise the request gate: the resting end-turn policy can compact
-    // from reported usage even when preflight counting is unavailable.
-    const sendPromise = openaiThread["core"].runTurn([
+    const sendPromise = openaiThread["core"].runToolLoop([
       {
         type: "text",
         text: "go",

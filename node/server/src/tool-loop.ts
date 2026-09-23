@@ -1,3 +1,4 @@
+import type { BudgetDecision } from "./compaction/token-budget.ts";
 import type { Logger } from "./logger.ts";
 import {
   ABORT_TOOL_RESULT_TEXT,
@@ -60,26 +61,28 @@ export type LoopState = { aborting: boolean } & (
     }
 );
 
-export type AgentTurn = {
+export type ToolLoop = {
   readonly loopState: LoopState;
   promise: Promise<CoreLoopResult>;
   abort(): void;
 };
 
-export type AgentLoopDeps = AgentContext & {
+export type ToolLoopDeps = AgentContext & {
   manager: NativeInferenceManager;
   onUpdate?: () => void;
   executeTools: ToolExecutor;
   onBeforeRequest: () => Promise<BeforeRequestDecision>;
+  /** After injections and input are in the log, before the request. */
+  checkBudget: () => Promise<BudgetDecision>;
   onToolResults: ToolResultsHook;
 };
 
 /** One full assistant turn - iterating through tool invocations until the agent decides to stop.
  */
-export function runAgentLoop(
-  deps: AgentLoopDeps,
+export function runToolLoop(
+  deps: ToolLoopDeps,
   input: AgentInput[] = [],
-): AgentTurn {
+): ToolLoop {
   const { logger, manager } = deps;
   let loopState: LoopState = { type: "preparing", aborting: false };
   const updateLoopState = (next: LoopState) => {
@@ -107,6 +110,12 @@ export function runAgentLoop(
 
       if (decision.type === "suspend") {
         return { type: "suspended", reason: decision.reason };
+      }
+      if (loopState.aborting) return { type: "aborted" };
+      const budget = await deps.checkBudget();
+      if (loopState.aborting) return { type: "aborted" };
+      if (budget.type === "stop") {
+        return { type: "completed", stopReason: "context_budget" };
       }
       if (loopState.aborting) return { type: "aborted" };
 

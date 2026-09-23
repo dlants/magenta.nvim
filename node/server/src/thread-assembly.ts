@@ -1,6 +1,7 @@
 import type { DockerSpawnConfig } from "./capabilities/thread-manager.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import { ThreadCompactor } from "./compaction/compactor.ts";
+import { TokenBudget } from "./compaction/token-budget.ts";
 import { DockerSupervisor } from "./docker-supervisor.ts";
 import type {
   AgentInput,
@@ -15,10 +16,9 @@ import {
 } from "./thread.ts";
 import { archiveThread, type ThreadLogger } from "./thread-logger.ts";
 import {
-  AutoCompactSupervisor,
   MaxTokensSupervisor,
   SubagentSupervisor,
-  type ThreadSupervisor,
+  type TurnSupervisor,
 } from "./thread-supervisor.ts";
 import { generateTitle } from "./tools/thread-title.ts";
 
@@ -35,11 +35,11 @@ export type ChatThreadPolicy = {
   autoCompactPrompt: string;
 };
 
-/** The dependencies a host prepares. Conversation kind, chat supervisors and
+/** The dependencies a host prepares. Conversation kind, supervisors and
  * the compactor are assembly's job, not the host's. */
 export type PreparedThreadContext = Omit<
   ThreadContextBase,
-  "chatSupervisors" | "compactor"
+  "turnSupervisors" | "toolLoopSupervisors" | "compactor"
 >;
 
 export type ChatThreadType = Exclude<ThreadType, "compact">;
@@ -89,7 +89,7 @@ type Conversation =
       threadType: ChatThreadType;
       autoCompact:
         | { type: "policy"; policy: ChatThreadPolicy }
-        | { type: "inherit"; source: AutoCompactSupervisor };
+        | { type: "inherit"; source: TokenBudget };
     };
 
 /** Build a ready Thread (plus its compactor) from prepared dependencies.
@@ -111,9 +111,11 @@ export function assembleThread(args: {
 
   const titles = new TitleSupervisor(context);
 
+  const tokenBudget = buildTokenBudget(conversation);
   const base = {
     ...context,
-    chatSupervisors: [...buildChatSupervisors(conversation, docker), titles],
+    turnSupervisors: [...buildTurnSupervisors(conversation, docker), titles],
+    ...(tokenBudget ? { tokenBudget } : {}),
   };
 
   const build = (
@@ -181,23 +183,23 @@ function resolveConversation(
   }
   const source = initialization.sourceThread;
   if (source.threadType === "compact") return { threadType: "compact" };
-  const sourceAutoCompact = AutoCompactSupervisor.find(source.chatSupervisors);
-  if (!sourceAutoCompact) {
+  const sourceBudget = source.tokenBudget;
+  if (!sourceBudget) {
     throw new Error(
-      `Cannot fork thread ${source.id}: no auto-compaction supervisor to inherit`,
+      `Cannot fork thread ${source.id}: no token budget to inherit`,
     );
   }
   return {
     threadType: source.threadType,
-    autoCompact: { type: "inherit", source: sourceAutoCompact },
+    autoCompact: { type: "inherit", source: sourceBudget },
   };
 }
 
-function buildChatSupervisors(
+function buildTurnSupervisors(
   conversation: Conversation,
   docker: ChatThreadPolicy["docker"],
-): ThreadSupervisor[] {
-  const supervisors: ThreadSupervisor[] = [MaxTokensSupervisor.create()];
+): TurnSupervisor[] {
+  const supervisors: TurnSupervisor[] = [MaxTokensSupervisor.create()];
   if (docker?.supervised) {
     supervisors.push(
       DockerSupervisor.create({
@@ -214,27 +216,27 @@ function buildChatSupervisors(
   ) {
     supervisors.push(SubagentSupervisor.create());
   }
-  if (conversation.threadType !== "compact") {
-    const { autoCompact } = conversation;
-    supervisors.push(
-      autoCompact.type === "inherit"
-        ? AutoCompactSupervisor.clone({ source: autoCompact.source })
-        : AutoCompactSupervisor.create({
-            ...(autoCompact.policy.autoCompactThreshold !== undefined
-              ? { threshold: autoCompact.policy.autoCompactThreshold }
-              : {}),
-            nextPrompt: autoCompact.policy.autoCompactPrompt,
-          }),
-    );
-  }
   return supervisors;
 }
 
+function buildTokenBudget(conversation: Conversation): TokenBudget | undefined {
+  if (conversation.threadType === "compact") return undefined;
+  const { autoCompact } = conversation;
+  return autoCompact.type === "inherit"
+    ? TokenBudget.clone({ source: autoCompact.source })
+    : TokenBudget.create({
+        ...(autoCompact.policy.autoCompactThreshold !== undefined
+          ? { threshold: autoCompact.policy.autoCompactThreshold }
+          : {}),
+        handoff: autoCompact.policy.autoCompactPrompt,
+      });
+}
+
 /** Requests a title once, from the first submission that carries text. It is
- * a chat supervisor so it survives core replacement and needs no owner-facing
+ * a turn supervisor so it survives core replacement and needs no owner-facing
  * callback; a late response cannot overwrite an explicit label or a destroyed
  * thread. */
-export class TitleSupervisor implements ThreadSupervisor {
+export class TitleSupervisor implements TurnSupervisor {
   /** The attachment and request facts are one state, so "requested but no
    * thread" is not representable. Construction invokes no hooks, so the
    * thread is always attached before the first submission is reported. */

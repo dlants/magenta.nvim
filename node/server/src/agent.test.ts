@@ -6,6 +6,7 @@ import type { ToolApplied } from "./capabilities/context-tracker.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { CompactionOutcome, Compactor } from "./compaction/index.ts";
+import { TokenBudget } from "./compaction/token-budget.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import { loopActiveTools, loopLabel } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -41,11 +42,11 @@ import type { Thread, ThreadContext } from "./thread.ts";
 import type { RestResult } from "./thread-api.ts";
 import { flushArchive } from "./thread-logger.ts";
 import {
-  AutoCompactSupervisor,
   injectText,
   MaxTokensSupervisor,
   SubagentSupervisor,
-  type ThreadSupervisor,
+  type ToolLoopSupervisor,
+  type TurnSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 import type {
@@ -57,6 +58,16 @@ import type { ClientToolContext } from "./tools/create-tool.ts";
 import { Defer, delay, pollUntil } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
+
+function autoCompactSupervisors(
+  opts: Parameters<typeof TokenBudget.create>[0],
+  turnBefore: TurnSupervisor[] = [],
+) {
+  return {
+    turnSupervisors: turnBefore,
+    tokenBudget: TokenBudget.create(opts),
+  };
+}
 
 describe("Thread.loopState", () => {
   it("is idle with no result before anything is sent", () => {
@@ -256,7 +267,7 @@ describe("Thread.submit result", () => {
     { result: '{"count":3}', type: "text", text: "not a wrapper" },
   ])("passes custom input unchanged to hooks and consumers: %j", async (input) => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      turnSupervisors: [
         {
           onYield: async (value) => {
             expect(value).toEqual(input);
@@ -464,7 +475,7 @@ describe("Thread turn loop", () => {
     const threadId = uniqueThreadId("queue-beats-suspend");
     const { core, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [
+        turnSupervisors: [
           {
             onEndTurnWithoutYield: () => ({
               type: "suspend" as const,
@@ -507,7 +518,7 @@ describe("Thread turn loop", () => {
   });
   it("keeps the submitted message in the log when a continuation fails", async () => {
     const { core, mockClient } = createAgentWithMock(
-      { chatSupervisors: [MaxTokensSupervisor.create()] },
+      { turnSupervisors: [MaxTokensSupervisor.create()] },
       uniqueThreadId("continuation-failure"),
     );
 
@@ -572,7 +583,7 @@ describe("Thread submissions across a compaction handoff", () => {
   };
 
   /** Suspends once, at the first stop. */
-  const compactOnce = (nextPrompt: string | undefined): ThreadSupervisor => {
+  const compactOnce = (nextPrompt: string | undefined): TurnSupervisor => {
     let asked = false;
     return {
       onEndTurnWithoutYield: () => {
@@ -586,7 +597,7 @@ describe("Thread submissions across a compaction handoff", () => {
   it("stays pending until the post-compaction turn comes to rest", async () => {
     const threadId = uniqueThreadId("send-compaction");
     const { core, mockClient } = createAgentWithMock(
-      { chatSupervisors: [compactOnce("carry on")] },
+      { turnSupervisors: [compactOnce("carry on")] },
       threadId,
     );
     try {
@@ -633,7 +644,7 @@ describe("Thread submissions across a compaction handoff", () => {
   it("falls back to the default continuation when the prompt resolves to nothing", async () => {
     const threadId = uniqueThreadId("send-compaction-empty-prompt");
     const { core, mockClient } = createAgentWithMock(
-      { chatSupervisors: [compactOnce("   ")] },
+      { turnSupervisors: [compactOnce("   ")] },
       threadId,
     );
     try {
@@ -682,7 +693,7 @@ describe("Thread submissions across a compaction handoff", () => {
     let handoffs = 0;
     const { core, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [
+        turnSupervisors: [
           {
             onEndTurnWithoutYield: () => {
               if (handoffs >= prompts.length) return { type: "none" as const };
@@ -761,7 +772,7 @@ describe("Thread submissions across a compaction handoff", () => {
   it("resolves failed when the summarizing pass errors out", async () => {
     const threadId = uniqueThreadId("compaction-error");
     const { core, mockClient } = createAgentWithMock(
-      { chatSupervisors: [compactOnce(undefined)] },
+      { turnSupervisors: [compactOnce(undefined)] },
       threadId,
     );
     try {
@@ -794,7 +805,7 @@ describe("Thread submissions across a compaction handoff", () => {
     let asked = false;
     const { core, mockClient } = createAgentWithMock(
       {
-        chatSupervisors: [
+        turnSupervisors: [
           {
             onEndTurnWithoutYield: () => {
               if (asked) return { type: "none" as const };
@@ -1142,7 +1153,7 @@ describe("MaxTokensSupervisor", () => {
 
   it("continues a truncated text-only response", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [MaxTokensSupervisor.create()],
+      turnSupervisors: [MaxTokensSupervisor.create()],
     });
 
     void core.submit({
@@ -1165,7 +1176,7 @@ describe("MaxTokensSupervisor", () => {
   it("is the only supervisor to speak on max_tokens, and spends no restart", async () => {
     const unsupervised = UnsupervisedSupervisor.create();
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [MaxTokensSupervisor.create(), unsupervised],
+      turnSupervisors: [MaxTokensSupervisor.create(), unsupervised],
     });
 
     void core.submit({
@@ -1195,7 +1206,7 @@ describe("MaxTokensSupervisor", () => {
   });
   it("takes precedence over a subagent's yield-tag nudge", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      turnSupervisors: [
         MaxTokensSupervisor.create(),
         SubagentSupervisor.create(),
       ],
@@ -1299,9 +1310,7 @@ describe("yield_to_parent as an ordinary tool", () => {
   });
   it("wins over a compaction the same turn would otherwise trigger", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
-        AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-      ],
+      ...autoCompactSupervisors({ threshold: 100, handoff: "go" }),
       threadType: "subagent" as ThreadType,
     });
 
@@ -1554,7 +1563,7 @@ describe("Agent.abort appends user abort message", () => {
 describe("SubagentSupervisor yield tag detection", () => {
   it("nudges agent when it writes a <yield_to_parent> XML tag instead of calling the tool", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [SubagentSupervisor.create()],
+      turnSupervisors: [SubagentSupervisor.create()],
       threadType: "subagent" as ThreadType,
     });
 
@@ -1596,7 +1605,7 @@ describe("SubagentSupervisor yield tag detection", () => {
 
   it("does not intervene when agent stops without a yield tag", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [SubagentSupervisor.create()],
+      turnSupervisors: [SubagentSupervisor.create()],
       threadType: "subagent" as ThreadType,
     });
 
@@ -1625,12 +1634,10 @@ function countOccurrences(value: unknown, needle: string): number {
   return JSON.stringify(value).split(needle).length - 1;
 }
 
-describe("AutoCompactSupervisor integration", () => {
+describe("TokenBudget integration", () => {
   it("compacts at the gate of the request whose conversation breaches the threshold", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
-        AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-      ],
+      ...autoCompactSupervisors({ threshold: 100, handoff: "go" }),
     });
 
     mockClient.mockInputTokenCount = 50;
@@ -1678,11 +1685,112 @@ describe("AutoCompactSupervisor integration", () => {
     expect(mockClient.streams.length).toBe(1);
   });
 
+  it("refuses the first request once the count, input included, breaches", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      ...autoCompactSupervisors({ threshold: 100, handoff: "go" }),
+    });
+    mockClient.mockInputTokenCount = 200;
+    const histories: ProviderMessage[][] = [];
+    const release = new Defer<void>();
+    core["context"].compactor = {
+      run: (history) => {
+        histories.push([...history]);
+        mockClient.mockInputTokenCount = 10;
+        return release.promise.then(() => ({
+          type: "complete" as const,
+          summary: "SUMMARY",
+          chunkCount: 1,
+        }));
+      },
+    };
+    const done = core.submit({
+      type: "resolved",
+      messages: [{ type: "text", text: "hello" }],
+    });
+    await pollUntil(() => {
+      if (histories.length > 0) return true;
+      throw new Error("waiting for compaction");
+    });
+    const counted = mockClient.countTokensRequests[0].messages;
+    expect(JSON.stringify(counted[counted.length - 1])).toContain("hello");
+    expect(mockClient.streams.length).toBe(0);
+    release.resolve();
+    const stream = await mockClient.awaitStream();
+    expect(JSON.stringify(stream.params.messages)).toContain("go");
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    expect(await done).toEqual({ type: "completed", stopReason: "end_turn" });
+  });
+  it("carries a breaching tool batch's results into compaction unsent", async () => {
+    const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
+    const { core, mockClient } = createAgentWithMock({
+      ...autoCompactSupervisors({ threshold: 100, handoff: "go" }),
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
+    });
+    mockClient.mockInputTokenCount = 50;
+    const histories: ProviderMessage[][] = [];
+    core["context"].compactor = {
+      run: (history) => {
+        histories.push([...history]);
+        return Promise.resolve({ type: "aborted" });
+      },
+    };
+    void core.submit({
+      type: "resolved",
+      messages: [{ type: "text", text: "edit a" }],
+    });
+    const stream = await mockClient.awaitStream();
+    mockClient.mockInputTokenCount = 200;
+    stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
+      script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
+    });
+    stream.finishResponse("tool_use");
+    await pollUntil(() => {
+      if (histories.length > 0) return true;
+      throw new Error("waiting for compaction");
+    });
+    expect(
+      histories[0].some((m) => m.content.some((c) => c.type === "tool_result")),
+    ).toBe(true);
+    expect(mockClient.streams.length).toBe(1);
+  });
+  it("never counts without a budget", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const done = core.submit({
+      type: "resolved",
+      messages: [{ type: "text", text: "hello" }],
+    });
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    await done;
+    expect(mockClient.countTokensCalls).toBe(0);
+  });
+  it("never lets context_budget reach turn supervisors or the submitter", async () => {
+    const seen: string[] = [];
+    const { core, mockClient } = createAgentWithMock({
+      ...autoCompactSupervisors({ threshold: 100, handoff: "go" }, [
+        {
+          onEndTurnWithoutYield: (ctx) => {
+            seen.push(ctx.stopReason);
+            return { type: "none" };
+          },
+        },
+      ]),
+    });
+    delete core["context"].compactor;
+    mockClient.mockInputTokenCount = 200;
+    const result = await core.submit({
+      type: "resolved",
+      messages: [{ type: "text", text: "hello" }],
+    });
+    expect(result).toEqual({ type: "completed", stopReason: "end_turn" });
+    expect(seen).not.toContain("context_budget");
+    expect(mockClient.streams.length).toBe(0);
+  });
   it("does not trigger compaction when input tokens are below the threshold", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
-        AutoCompactSupervisor.create({ threshold: 100000, nextPrompt: "go" }),
-      ],
+      ...autoCompactSupervisors({ threshold: 100000, handoff: "go" }),
     });
 
     mockClient.mockInputTokenCount = 50;
@@ -1713,9 +1821,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("triggers compaction on a tool_use handoff after tools resolve", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
-        AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-      ],
+      ...autoCompactSupervisors({ threshold: 100, handoff: "go" }),
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
 
@@ -1750,10 +1856,9 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("compacts at the gate of the continuation a max_tokens stop asks for", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      ...autoCompactSupervisors({ threshold: 100, handoff: "go" }, [
         MaxTokensSupervisor.create(),
-        AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-      ],
+      ]),
     });
 
     mockClient.mockInputTokenCount = 50;
@@ -1785,7 +1890,7 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("appends an injected text to the message log", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () => {
             if (injected) return Promise.resolve({ type: "none" as const });
@@ -1831,7 +1936,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("injects an image on the tool_use continuation, after the tool result", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () => {
             // The opening request is skipped: the injection belongs on the
@@ -1886,10 +1991,10 @@ describe("AutoCompactSupervisor integration", () => {
   });
   it("keeps the injection in the log when a compaction follows it", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      turnSupervisors: [MaxTokensSupervisor.create()],
+      toolLoopSupervisors: [
         // max_tokens plans a continuation, so the stop reaches the
         // before-request supervisors at all.
-        MaxTokensSupervisor.create(),
         {
           onBeforeRequest: () => {
             // The opening request of the send is skipped; the note rides the
@@ -1935,7 +2040,11 @@ describe("AutoCompactSupervisor integration", () => {
       throw new Error("waiting for compaction");
     });
     expect(compactions.prompts.length).toBe(1);
-    expect(compactions.prompts[0]).toBe("carry on");
+    // The unanswered trailing user message (the injection plus the max_tokens
+    // nudge) is carried past the compaction after the explicit prompt.
+    expect(compactions.prompts[0]).toBe(
+      "carry on\n\nnote\nYour previous response was truncated due to the output token limit. Please continue where you left off.",
+    );
     // Exactly once: the snapshot handed to the compaction manager is
     // `getProviderMessages()`, and nothing is left in agent-local state that
     // the swap would either drop or replay.
@@ -1944,7 +2053,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("appends a tool_use-path injection immediately when a compaction follows", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () => {
             requests++;
@@ -1997,7 +2106,7 @@ describe("AutoCompactSupervisor integration", () => {
   });
   it("keeps an injection in the log when the next request fails", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () => {
             if (injected) return Promise.resolve({ type: "none" as const });
@@ -2059,7 +2168,7 @@ describe("AutoCompactSupervisor integration", () => {
   });
   it("keeps an injection in the log when the next request is aborted", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () => {
             if (injected) return Promise.resolve({ type: "none" as const });
@@ -2122,13 +2231,13 @@ describe("AutoCompactSupervisor integration", () => {
   });
 
   it("consults all supervisors in order and the first compaction wins", async () => {
-    const first: ThreadSupervisor = {
+    const first: TurnSupervisor = {
       onEndTurnWithoutYield: () => {
         calls.push("first");
         return { type: "none" };
       },
     };
-    const second: ThreadSupervisor = {
+    const second: TurnSupervisor = {
       onEndTurnWithoutYield: () => {
         calls.push("second");
         return {
@@ -2137,7 +2246,7 @@ describe("AutoCompactSupervisor integration", () => {
         };
       },
     };
-    const third: ThreadSupervisor = {
+    const third: TurnSupervisor = {
       onEndTurnWithoutYield: () => {
         calls.push("third");
         return {
@@ -2147,7 +2256,7 @@ describe("AutoCompactSupervisor integration", () => {
       },
     };
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [first, second, third],
+      turnSupervisors: [first, second, third],
     });
     const calls: string[] = [];
 
@@ -2177,7 +2286,7 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("injects on the opening request of a send, ahead of the user content", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () => {
             requests++;
@@ -2216,8 +2325,8 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("consults onBeforeRequest exactly once per request across a handoff", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
-        MaxTokensSupervisor.create(),
+      turnSupervisors: [MaxTokensSupervisor.create()],
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () => {
             requests++;
@@ -2259,7 +2368,7 @@ describe("AutoCompactSupervisor integration", () => {
   });
   it("does not consult onBeforeRequest at a stop that issues no request", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () => {
             requests++;
@@ -2309,7 +2418,7 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("reports tool results before the continuation's before-request hook, with output tokens", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onToolResults: (results) => {
             events.push(`results:${results.size}`);
@@ -2367,7 +2476,7 @@ describe("AutoCompactSupervisor integration", () => {
       },
     );
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onToolResults: (results) => {
             events.push(`results:${results.size}`);
@@ -2416,7 +2525,7 @@ describe("AutoCompactSupervisor integration", () => {
   });
   it("reports tool results when the turn yields instead of continuing", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onToolResults: (results) => {
             events.push(`results:${results.size}`);
@@ -2459,7 +2568,7 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("drops a submission aborted while its before-request hooks are in flight", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: async () => {
             await gate.promise;
@@ -2490,7 +2599,7 @@ describe("AutoCompactSupervisor integration", () => {
   });
   it("issues a request for a submission-time injection with no user content", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           hasPendingContent: () => Promise.resolve(true),
           onBeforeRequest: () => Promise.resolve(injectText("solo note")),
@@ -2507,9 +2616,7 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("compacts from a plain send, exactly once, when already over threshold", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
-        AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
-      ],
+      ...autoCompactSupervisors({ threshold: 100, handoff: "go" }),
     });
 
     mockClient.mockInputTokenCount = 200;
@@ -2544,13 +2651,13 @@ describe("Thread.onToolApplied", () => {
       "/tmp/a.txt": "hello",
       "/tmp/b.txt": "other",
     });
-    const collector = (supervisor: number): ThreadSupervisor => ({
+    const collector = (supervisor: number): ToolLoopSupervisor => ({
       onToolApplied: ({ absFilePath, tool }) => {
         applied.push({ supervisor, path: absFilePath, type: tool.type });
       },
     });
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [collector(0), collector(1)],
+      toolLoopSupervisors: [collector(0), collector(1)],
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     const applied: {
@@ -2600,7 +2707,7 @@ describe("Thread.onToolApplied", () => {
   it("keeps editedFileGroups bookkeeping when a subscriber throws", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onToolApplied: () => {
             throw new Error("subscriber blew up");
@@ -4064,7 +4171,7 @@ describe("Thread preflight token count", () => {
   const noteCount = (
     seen: (number | undefined)[],
     preflight?: true,
-  ): ThreadSupervisor => ({
+  ): ToolLoopSupervisor => ({
     ...(preflight ? { requestPreflightTokenCount: true } : {}),
     onBeforeRequest: (ctx) => {
       seen.push(ctx.inputTokenCount);
@@ -4075,7 +4182,7 @@ describe("Thread preflight token count", () => {
   it("issues no count when no hook asks for one", async () => {
     const seen: (number | undefined)[] = [];
     const { core: agent, mockClient } = createAgentWithMock({
-      chatSupervisors: [noteCount(seen)],
+      toolLoopSupervisors: [noteCount(seen)],
     });
 
     mockClient.mockInputTokenCount = 42;
@@ -4100,7 +4207,7 @@ describe("Thread preflight token count", () => {
   it("counts once per request, immediately before the first hook that asks", async () => {
     const seen: (number | undefined)[] = [];
     const { core: agent, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         noteCount(seen),
         noteCount(seen, true),
         noteCount(seen, true),
@@ -4131,7 +4238,7 @@ describe("Thread preflight token count", () => {
   it("clears the count when it fails rather than reporting a stale one", async () => {
     const seen: (number | undefined)[] = [];
     const { core: agent, mockClient } = createAgentWithMock({
-      chatSupervisors: [noteCount(seen, true)],
+      toolLoopSupervisors: [noteCount(seen, true)],
     });
 
     mockClient.mockInputTokenCount = 42;
@@ -4176,7 +4283,7 @@ describe("Thread preflight token count", () => {
   it("does not count when an earlier hook has already suspended", async () => {
     const seen: (number | undefined)[] = [];
     const { core: agent, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () =>
             Promise.resolve({
@@ -4551,7 +4658,7 @@ describe("nativeMessageIdx plumbing", () => {
 
   it("onBeforeRequest reports the idx its injection lands at, on the opening request", async () => {
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: (ctx) => {
             seen.push(ctx.nativeMessageIdx);
@@ -4587,7 +4694,7 @@ describe("nativeMessageIdx plumbing", () => {
   it("onBeforeRequest reports the tool-result message on a continuation, because the injection merges into it", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/b.txt": "other" });
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: (ctx) => {
             requestIdx.push(ctx.nativeMessageIdx);
@@ -4636,7 +4743,7 @@ describe("nativeMessageIdx plumbing", () => {
   it("onToolResults and onToolApplied report the idx of the message that holds the tool result", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/b.txt": "other" });
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onToolApplied: ({ nativeMessageIdx }) => {
             appliedIdx.push(nativeMessageIdx);
@@ -4690,7 +4797,7 @@ describe("nativeMessageIdx plumbing", () => {
       "/tmp/c.txt": "more",
     });
     const { core, mockClient } = createAgentWithMock({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onToolApplied: ({ nativeMessageIdx }) => {
             appliedIdx.push(nativeMessageIdx);

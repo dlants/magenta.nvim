@@ -1,10 +1,3 @@
-export {
-  type BeforeRequestDecision,
-  type LoopState,
-  runAgentLoop,
-  type ToolExecutor,
-  type ToolOutcome,
-} from "./agent.ts";
 export type { AgentInfo, AgentsMap } from "./agents/agents.ts";
 export { loadAgents } from "./agents/agents.ts";
 export type { AnthropicAuth, OAuthTokens } from "./anthropic-auth.ts";
@@ -82,6 +75,10 @@ export {
   type ThreadCompactorDeps,
   type ThreadCompactorEvents,
 } from "./compaction/index.ts";
+export {
+  type BudgetDecision,
+  TokenBudget,
+} from "./compaction/token-budget.ts";
 export { provisionContainer } from "./container/provision.ts";
 export { teardownContainer } from "./container/teardown.ts";
 export type {
@@ -312,21 +309,27 @@ export type {
   EndTurnAction,
   EndTurnContext,
   PlainSuspendReason,
-  RequestAction,
   RequestContext,
   SupervisorAction,
   SuspendReason,
-  ThreadSupervisor,
+  ToolLoopSupervisor,
+  TurnSupervisor,
   YieldAction,
 } from "./thread-supervisor.ts";
 export {
-  AutoCompactSupervisor,
   EditedFilesSupervisor,
   MaxTokensSupervisor,
   SubagentSupervisor,
   SystemInfoSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
+export {
+  type BeforeRequestDecision,
+  type LoopState,
+  runToolLoop,
+  type ToolExecutor,
+  type ToolOutcome,
+} from "./tool-loop.ts";
 export type {
   ActiveToolEntry,
   CompletedToolInfo,

@@ -15,7 +15,7 @@ import type {
   InjectedContent,
   RequestContext,
   SupervisorAction,
-  ThreadSupervisor,
+  ToolLoopSupervisor,
 } from "../thread-supervisor.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { formatSummary, summarizeFile } from "../utils/file-summary.ts";
@@ -229,7 +229,7 @@ export function buildClonedFiles(sourceFiles: Files): Files {
   return next;
 }
 
-export class FileSupervisor implements ContextTracker, ThreadSupervisor {
+export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
   /** Assigned by the owner once it exists; a retired supervisor drops them. */
   callbacks: FileSupervisorCallbacks = {};
   public files: Files;

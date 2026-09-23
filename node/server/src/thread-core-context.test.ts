@@ -207,19 +207,16 @@ describe("Thread-owned context delivery", () => {
     }
   });
 
-  it("destroy during reset does not construct a replacement generation", async () => {
+  it("destroy during reset waits for the replacement and disposes it", async () => {
     const f = await fixture();
     try {
       const oldCore = f.thread["core"];
-      const constructions = f.create.mock.calls.length;
       const reset = resetThread(f.thread, { archive: { type: "none" } });
-      const rejected = expect(reset).rejects.toThrow("destroyed");
       await f.thread.destroy();
-      await rejected;
-      expect(f.thread["core"]).toBe(oldCore);
+      const replacement = await reset;
+      expect(replacement).not.toBe(oldCore);
       expect(oldCore.isActive).toBe(false);
-      expect(f.create).toHaveBeenCalledTimes(constructions);
-      expect(f.destroy).toHaveBeenCalledTimes(1);
+      expect(replacement.isActive).toBe(false);
     } finally {
       await f.cleanup();
     }
@@ -466,7 +463,7 @@ describe("Thread-owned context delivery", () => {
   it("a suspended request commits no context or reminder delivery", async () => {
     let suspend = true;
     const f = await fixture({
-      chatSupervisors: [
+      toolLoopSupervisors: [
         {
           onBeforeRequest: () =>
             Promise.resolve(

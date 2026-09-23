@@ -150,7 +150,7 @@ export function gitUpdateToText(update: GitContextUpdate): string {
 import type {
   RequestContext,
   SupervisorAction,
-  ThreadSupervisor,
+  ToolLoopSupervisor,
 } from "../thread-supervisor.ts";
 import { injectText } from "../thread-supervisor.ts";
 import {
@@ -173,7 +173,7 @@ export type GitSupervisorCallbacks = {
   ) => void;
 };
 
-export class GitSupervisor implements ThreadSupervisor {
+export class GitSupervisor implements ToolLoopSupervisor {
   /** Assigned by the owner once it exists; a retired supervisor drops them. */
   callbacks: GitSupervisorCallbacks = {};
 

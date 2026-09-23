@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ToolOutcome } from "./agent.ts";
 import { loopLabel, loopStreamingBlock } from "./loop-state.ts";
 import { awaitNextStream, createTestAgent } from "./test-helpers.ts";
 import type { ToolInvocationState } from "./thread-api.ts";
+import type { ToolOutcome } from "./tool-loop.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
 
-describe("AgentTurn lifecycle and progress", () => {
+describe("ToolLoop lifecycle and progress", () => {
   it("owns streaming and tool progress until the turn settles", async () => {
     const entered = new Defer<void>();
     const tools = new Defer<ToolOutcome>();

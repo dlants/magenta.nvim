@@ -14,7 +14,7 @@ import {
   injectText,
   type RequestContext,
   type SupervisorAction,
-  type ThreadSupervisor,
+  type ToolLoopSupervisor,
 } from "./thread-supervisor.ts";
 import {
   type CompletedToolInfo,
@@ -72,7 +72,7 @@ function appendMonotonic<T extends { nativeMessageIdx: NativeMessageIdx }>(
 
 /** Owns everything about system reminders: which ones are active, when they
  * fire, and what they say. */
-export class SystemReminderSupervisor implements ThreadSupervisor {
+export class SystemReminderSupervisor implements ToolLoopSupervisor {
   private constructor(
     private readonly deps: SystemReminderDeps,
     private readonly standingHistory: StandingReminderEntry[],
