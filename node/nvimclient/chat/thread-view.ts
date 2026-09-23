@@ -175,8 +175,6 @@ function renderTurnResult(
     case "empty":
     case "yielded":
       return renderStopReason("end_turn", usage);
-    case "suspended":
-      return d`Stopped: ${result.reason.kind === "suspend" ? result.reason.message : "compaction requested"}${usage ? d` ${renderUsage(usage)}` : d``}`;
     case "aborted":
       return d`[ABORTED] ${usage ? d` ${renderUsage(usage)}` : d``} `;
     case "failed":

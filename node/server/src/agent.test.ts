@@ -15,6 +15,7 @@ import { AnthropicInferenceManager } from "./providers/anthropic-inference.ts";
 import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
 import { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
 import type {
+  AgentInput,
   CreateInferenceManagerOptions,
   InferenceOptions,
   NativeInferenceManager,
@@ -22,7 +23,12 @@ import type {
   Provider,
   ProviderMessage,
 } from "./providers/provider-types.ts";
-import { pendingMessage } from "./submission/index.ts";
+import {
+  parseCompact,
+  pendingMessage,
+  type ResolveSubmission,
+  resolveAsText,
+} from "./submission/index.ts";
 import {
   awaitNextStream,
   cleanupArchive,
@@ -477,51 +483,6 @@ describe("Thread turn loop", () => {
     second.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
   });
-  it("delivers a queued message before an end-turn supervisor can suspend", async () => {
-    const threadId = uniqueThreadId("queue-beats-suspend");
-    const { core, mockClient } = createAgentWithMock(
-      {
-        turnSupervisors: [
-          {
-            onEndTurnWithoutYield: () => ({
-              type: "suspend" as const,
-              reason: { kind: "suspend" as const, message: "halt" },
-            }),
-          },
-        ],
-      },
-      threadId,
-    );
-
-    const sent = core.submit({
-      type: "resolved",
-      messages: [
-        {
-          type: "text",
-          text: "start",
-        },
-      ],
-    });
-    const stream = await mockClient.awaitStream();
-    core.enqueue(
-      { type: "raw", message: pendingMessage("queued follow-up") },
-      "next",
-    );
-    stream.streamText("ok");
-    stream.finishResponse("end_turn");
-    // The queue is consulted first: the suspension has to wait for the thread
-    // to actually come to rest.
-    const second = await awaitNextStream(mockClient, stream);
-    expect(JSON.stringify(second.messages)).toContain("queued follow-up");
-    second.streamText("done");
-    second.finishResponse("end_turn");
-    expect(await sent).toEqual({
-      type: "suspended",
-      reason: { kind: "suspend", message: "halt" },
-    });
-    await core.destroy();
-    await cleanupArchive(threadId);
-  });
   it("keeps the submitted message in the log when a continuation fails", async () => {
     const { core, mockClient } = createAgentWithMock(
       { turnSupervisors: [MaxTokensSupervisor.create()] },
@@ -588,22 +549,21 @@ describe("Thread submissions across a compaction handoff", () => {
     };
   };
 
-  /** Suspends once, at the first stop. */
-  const compactOnce = (nextPrompt: string | undefined): TurnSupervisor => {
-    let asked = false;
-    return {
-      onEndTurnWithoutYield: () => {
-        if (asked) return { type: "none" };
-        asked = true;
-        return { type: "suspend", reason: { kind: "compact", nextPrompt } };
-      },
-    };
+  const resolveCompact: ResolveSubmission = async (message) => {
+    const { compact, rest } = parseCompact(message);
+    return { ...(await resolveAsText(rest)), compact };
   };
+  /** Compacts at the next stop, via a queued `@compact`. */
+  const queueCompact = (core: Thread, prompt = "") =>
+    core.enqueue(
+      { type: "raw", message: pendingMessage(`@compact ${prompt}`.trim()) },
+      "next",
+    );
 
   it("stays pending until the post-compaction turn comes to rest", async () => {
     const threadId = uniqueThreadId("send-compaction");
     const { core, mockClient } = createAgentWithMock(
-      { turnSupervisors: [compactOnce("carry on")] },
+      { resolve: resolveCompact },
       threadId,
     );
     try {
@@ -624,6 +584,7 @@ describe("Thread submissions across a compaction handoff", () => {
         settled = r;
       });
       const stream = await mockClient.awaitStream();
+      queueCompact(core, "carry on");
       stream.streamText("done");
       stream.finishResponse("end_turn");
       const contStream = await pollUntil(() => {
@@ -650,7 +611,7 @@ describe("Thread submissions across a compaction handoff", () => {
   it("falls back to the default continuation when the prompt resolves to nothing", async () => {
     const threadId = uniqueThreadId("send-compaction-empty-prompt");
     const { core, mockClient } = createAgentWithMock(
-      { turnSupervisors: [compactOnce("   ")] },
+      { resolve: resolveCompact },
       threadId,
     );
     try {
@@ -670,6 +631,7 @@ describe("Thread submissions across a compaction handoff", () => {
         ],
       });
       const stream = await mockClient.awaitStream();
+      queueCompact(core);
       stream.streamText("done");
       stream.finishResponse("end_turn");
       const contStream = await pollUntil(() => {
@@ -696,23 +658,8 @@ describe("Thread submissions across a compaction handoff", () => {
   it("stays pending across two consecutive handoffs, reseeding each time", async () => {
     const threadId = uniqueThreadId("send-compaction-twice");
     const prompts = ["first continuation", "second continuation"];
-    let handoffs = 0;
     const { core, mockClient } = createAgentWithMock(
-      {
-        turnSupervisors: [
-          {
-            onEndTurnWithoutYield: () => {
-              if (handoffs >= prompts.length) return { type: "none" as const };
-              const nextPrompt = prompts[handoffs];
-              handoffs++;
-              return {
-                type: "suspend" as const,
-                reason: { kind: "compact" as const, nextPrompt },
-              };
-            },
-          },
-        ],
-      },
+      { resolve: resolveCompact },
       threadId,
     );
     try {
@@ -745,6 +692,7 @@ describe("Thread submissions across a compaction handoff", () => {
       let stream = await mockClient.awaitStream();
       for (const [idx, prompt] of prompts.entries()) {
         const oldAgent = core["core"].manager;
+        queueCompact(core, prompt);
         stream.streamText("done");
         stream.finishResponse("end_turn");
         const prev = stream;
@@ -775,10 +723,112 @@ describe("Thread submissions across a compaction handoff", () => {
     }
   });
 
+  const userText = (text: string): AgentInput[] => [{ type: "text", text }];
+  const firstTurn = async (core: Thread, mockClient: MockAnthropicClient) => {
+    const sent = core.submit({ type: "resolved", messages: userText("hello") });
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    await sent;
+  };
+  it.each([
+    {
+      trigger: "an explicit @compact while idle",
+      expectedNext: ["carry on"],
+      start: async (core: Thread, mockClient: MockAnthropicClient) => {
+        await firstTurn(core, mockClient);
+        return {
+          result: core.submit({
+            type: "raw",
+            message: pendingMessage("@compact carry on"),
+          }),
+        };
+      },
+    },
+    {
+      trigger: "a queued @compact behind @next content",
+      expectedNext: ["follow up", "carry on"],
+      start: async (core: Thread, mockClient: MockAnthropicClient) => {
+        const sent = core.submit({
+          type: "resolved",
+          messages: userText("hello"),
+        });
+        const stream = await mockClient.awaitStream();
+        core.enqueue(
+          { type: "raw", message: pendingMessage("follow up") },
+          "next",
+        );
+        core.enqueue(
+          { type: "raw", message: pendingMessage("@compact carry on") },
+          "next",
+        );
+        stream.streamText("done");
+        stream.finishResponse("end_turn");
+        return { result: sent };
+      },
+    },
+    {
+      trigger: "a budget stop mid-submission",
+      expectedNext: ["carry on", "again"],
+      start: async (core: Thread, mockClient: MockAnthropicClient) => {
+        mockClient.mockInputTokenCount = 50;
+        await firstTurn(core, mockClient);
+        mockClient.mockInputTokenCountOnce = 200;
+        return {
+          result: core.submit({
+            type: "resolved",
+            messages: userText("again"),
+          }),
+        };
+      },
+    },
+  ])("ends $trigger in the same compacted state", async ({
+    start,
+    expectedNext,
+  }) => {
+    const threadId = uniqueThreadId("compaction-parity");
+    const { core, mockClient } = createAgentWithMock(
+      {
+        resolve: resolveCompact,
+        ...autoCompactSupervisors({ threshold: 100, handoff: "carry on" }),
+      },
+      threadId,
+    );
+    try {
+      const compactor = stubCompactor();
+      compactorSlot(core).compactor = compactor;
+      const firstManager = core["core"].manager;
+      const { result } = await start(core, mockClient);
+      const contStream = await pollUntil(() => {
+        if (core["core"].manager === firstManager)
+          throw new Error("waiting for swap");
+        const last = mockClient.streams.at(-1);
+        if (!last || mockClient.streams.length < 2)
+          throw new Error("waiting for the continuation");
+        return last;
+      });
+      expect(compactor.calls).toHaveLength(1);
+      const body = JSON.stringify(contStream.messages);
+      expect(body).toContain("SUMMARY TEXT");
+      for (const text of expectedNext) expect(body).toContain(text);
+      expect(body).not.toContain("done");
+      contStream.streamText("resumed");
+      contStream.finishResponse("end_turn");
+      expect(await result).toEqual({
+        type: "completed",
+        stopReason: "end_turn",
+      });
+    } finally {
+      await core.destroy();
+      await flushArchive(core);
+      await cleanupArchive(threadId);
+    }
+  });
+
   it("resolves failed when the summarizing pass errors out", async () => {
     const threadId = uniqueThreadId("compaction-error");
     const { core, mockClient } = createAgentWithMock(
-      { turnSupervisors: [compactOnce(undefined)] },
+      { resolve: resolveCompact },
       threadId,
     );
     try {
@@ -796,77 +846,10 @@ describe("Thread submissions across a compaction handoff", () => {
         ],
       });
       const stream = await mockClient.awaitStream();
+      queueCompact(core);
       stream.streamText("done");
       stream.finishResponse("end_turn");
       expect(await result).toMatchObject({ type: "failed" });
-    } finally {
-      await core.destroy();
-      await flushArchive(core);
-      await cleanupArchive(threadId);
-    }
-  });
-
-  it("treats a suspension nobody claims as a plain stop", async () => {
-    const threadId = uniqueThreadId("suspend-unclaimed");
-    let asked = false;
-    const { core, mockClient } = createAgentWithMock(
-      {
-        turnSupervisors: [
-          {
-            onEndTurnWithoutYield: () => {
-              if (asked) return { type: "none" as const };
-              asked = true;
-              return {
-                type: "suspend" as const,
-                reason: {
-                  kind: "suspend" as const,
-                  message: "budget exhausted",
-                },
-              };
-            },
-          },
-        ],
-      },
-      threadId,
-    );
-    try {
-      const compactor = stubCompactor();
-      compactorSlot(core).compactor = compactor;
-      const result = core.submit({
-        type: "resolved",
-        messages: [
-          {
-            type: "text",
-            text: "hello",
-          },
-        ],
-      });
-      const stream = await mockClient.awaitStream();
-      stream.streamText("done");
-      stream.finishResponse("end_turn");
-      expect(await result).toEqual({
-        type: "suspended",
-        reason: { kind: "suspend", message: "budget exhausted" },
-      });
-      expect(core.lastResult()).toEqual({
-        type: "suspended",
-        reason: { kind: "suspend", message: "budget exhausted" },
-      });
-      expect(compactor.calls).toEqual([]);
-      // The log is coherent and resumable: a fresh send just continues.
-      const next = core.submit({
-        type: "resolved",
-        messages: [
-          {
-            type: "text",
-            text: "again",
-          },
-        ],
-      });
-      const stream2 = await awaitNextStream(mockClient, stream);
-      stream2.streamText("ok");
-      stream2.finishResponse("end_turn");
-      expect(await next).toEqual({ type: "completed", stopReason: "end_turn" });
     } finally {
       await core.destroy();
       await flushArchive(core);
@@ -2250,7 +2233,7 @@ describe("TokenBudget integration", () => {
     stream3.finishResponse("end_turn");
   });
 
-  it("consults all supervisors in order and the first compaction wins", async () => {
+  it("consults all supervisors in order and joins their nudges", async () => {
     const first: TurnSupervisor = {
       onEndTurnWithoutYield: () => {
         calls.push("first");
@@ -2260,27 +2243,23 @@ describe("TokenBudget integration", () => {
     const second: TurnSupervisor = {
       onEndTurnWithoutYield: () => {
         calls.push("second");
-        return {
-          type: "suspend",
-          reason: { kind: "compact", nextPrompt: "go" },
-        };
+        return calls.length > 3
+          ? { type: "none" }
+          : { type: "send-message", text: "go" };
       },
     };
     const third: TurnSupervisor = {
       onEndTurnWithoutYield: () => {
         calls.push("third");
-        return {
-          type: "suspend",
-          reason: { kind: "compact", nextPrompt: "stop" },
-        };
+        return calls.length > 3
+          ? { type: "none" }
+          : { type: "send-message", text: "stop" };
       },
     };
     const { core, mockClient } = createAgentWithMock({
       turnSupervisors: [first, second, third],
     });
     const calls: string[] = [];
-
-    const compactions = trackCompactions(core);
 
     void core.submit({
       type: "resolved",
@@ -2301,7 +2280,8 @@ describe("TokenBudget integration", () => {
     });
 
     expect(calls).toEqual(["first", "second", "third"]);
-    expect(compactions.prompts[0]).toBe("go");
+    const next = await awaitNextStream(mockClient, stream);
+    expect(JSON.stringify(next.messages)).toContain("go\\n\\nstop");
   });
 
   it("injects on the opening request of a send, ahead of the user content", async () => {

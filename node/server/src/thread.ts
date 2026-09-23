@@ -4,11 +4,7 @@ import type { GitState } from "./capabilities/git-client.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
-import {
-  type Compactor,
-  type CompactSuspendReason,
-  summaryText,
-} from "./compaction/index.ts";
+import { type Compactor, summaryText } from "./compaction/index.ts";
 import type { TokenBudget } from "./compaction/token-budget.ts";
 import type { ThreadLoopState } from "./loop-state.ts";
 import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
@@ -65,7 +61,6 @@ import {
   type EditedFileGroup,
   type RequestContext,
   type SupervisorAction,
-  type SuspendReason,
   type ToolLoopSupervisor,
   ToolLoopSupervisorChain,
   type TurnSupervisor,
@@ -195,8 +190,11 @@ export function splitPendingUserText(
 /** What the turn loop can hand back: a `yield` suspension is resolved inside
  * the loop, so the owner's suspension handling never has to consider it —
  * which makes it exactly the submission outcome. */
-type LoopResult = RestResult;
-type SuspensionOutcome =
+type LoopResult = RestResult | CompactRequest;
+/** Compaction is not a suspension: the loop hands it to `startSubmission`,
+ * which compacts and runs again. */
+type CompactRequest = { type: "compact"; nextPrompt: string | undefined };
+type CompactionOutcome =
   | { type: "continue"; messages: AgentInput[] }
   | { type: "settle"; result: RestResult };
 
@@ -663,17 +661,14 @@ export class Thread implements ThreadCoreView {
         );
       this.turnChain.onSubmission(resolved.messages);
       let result: LoopResult = resolved.compact
-        ? {
-            type: "suspended",
-            reason: { kind: "compact", nextPrompt: compactPrompt(resolved) },
-          }
+        ? { type: "compact", nextPrompt: compactPrompt(resolved) }
         : await this.runLoop(resolved.messages, submission, force);
-      while (result.type === "suspended") {
+      while (result.type === "compact") {
         submission.throwIfAborted();
-        const reason = result.reason;
-        if (reason.kind === "suspend")
-          return finish({ type: "suspended", reason });
-        const outcome = await this.compactAndContinue(reason, submission);
+        const outcome = await this.compactAndContinue(
+          result.nextPrompt,
+          submission,
+        );
         if (outcome.type === "settle") return finish(outcome.result);
         result = await this.runLoop(outcome.messages, submission);
       }
@@ -692,22 +687,25 @@ export class Thread implements ThreadCoreView {
   }
 
   private async compactAndContinue(
-    reason: CompactSuspendReason,
+    handoff: string | undefined,
     submission: ActiveSubmission,
-  ): Promise<SuspensionOutcome> {
+  ): Promise<CompactionOutcome> {
     const compactor = this.context.compaction?.compactor;
-    // A compaction with nobody to run it comes to rest like a plain stop.
+    // An explicit compaction with nobody to run it comes to rest. Budget
+    // stops cannot land here: a budget is only installed with a compactor.
     if (!compactor)
-      return { type: "settle", result: { type: "suspended", reason } };
+      return {
+        type: "settle",
+        result: { type: "completed", stopReason: "end_turn" },
+      };
     // The signal is the compactor's cue to stop, but waiting on a run that
     // ignores it would wedge whoever is waiting for this thread to go quiet.
     const { history, pendingUserText } = splitPendingUserText(
       this.getProviderMessages(),
     );
     const nextPrompt =
-      [reason.nextPrompt?.trim(), pendingUserText]
-        .filter(Boolean)
-        .join("\n\n") || undefined;
+      [handoff?.trim(), pendingUserText].filter(Boolean).join("\n\n") ||
+      undefined;
     const outcome = await submission.step((signal) =>
       compactor.run(history, nextPrompt, signal),
     );
@@ -941,9 +939,10 @@ export class Thread implements ThreadCoreView {
       // tool is resolved inside the loop and the returned type is narrowed to
       // the suspensions an owner can be handed.
       if (result.type === "suspended") {
-        const reason = result.reason;
-        if (reason.kind !== "yield") return { type: "suspended", reason };
-        const resolved = await this.resolveYield(reason.value, submission);
+        const resolved = await this.resolveYield(
+          result.reason.value,
+          submission,
+        );
         if (resolved.type === "settled") return resolved.result;
         result = await runToolLoop(resolved.messages);
         continue;
@@ -954,10 +953,7 @@ export class Thread implements ThreadCoreView {
         const tokenBudget = this.context.compaction?.tokenBudget;
         if (!tokenBudget)
           throw new Error("context_budget stop without a token budget");
-        return {
-          type: "suspended",
-          reason: { kind: "compact", nextPrompt: tokenBudget.handoff },
-        };
+        return { type: "compact", nextPrompt: tokenBudget.handoff };
       }
       const stopReason = result.stopReason;
       const next = await this.continuation(stopReason, submission.signal);
@@ -965,11 +961,8 @@ export class Thread implements ThreadCoreView {
       switch (next.type) {
         case "rest":
           return { type: "completed", stopReason };
-        case "suspended":
-          // Back to the loop head, so a supervisor that suspends with a yield
-          // is resolved here rather than escaping to the owner.
-          result = { type: "suspended", reason: next.reason };
-          continue;
+        case "compact":
+          return next;
         case "messages": {
           result = await runToolLoop(next.messages);
           continue;
@@ -1043,13 +1036,10 @@ export class Thread implements ThreadCoreView {
     signal: AbortSignal,
   ): Promise<
     | { type: "rest" }
-    | { type: "suspended"; reason: SuspendReason }
+    | CompactRequest
     | { type: "messages"; messages: AgentInput[] }
   > {
     const planned = this.plannedContinuation(stopReason);
-    if (planned.type === "suspend") {
-      return { type: "suspended", reason: planned.reason };
-    }
     if (planned.type === "rest") return { type: "rest" };
     if (planned.type === "messages") {
       return { type: "messages", messages: planned.messages };
@@ -1059,10 +1049,7 @@ export class Thread implements ThreadCoreView {
     const flushed = await this.flushQueuesForNextTurn(signal);
     if (signal.aborted) return { type: "rest" };
     if (flushed.type === "compact") {
-      return {
-        type: "suspended",
-        reason: { kind: "compact", nextPrompt: flushed.nextPrompt },
-      };
+      return { type: "compact", nextPrompt: flushed.nextPrompt };
     }
     const messages = flushed.messages;
     if (!messages.length) return { type: "rest" };
@@ -1081,7 +1068,6 @@ export class Thread implements ThreadCoreView {
   ):
     | { type: "messages"; messages: AgentInput[] }
     | { type: "queues" }
-    | { type: "suspend"; reason: SuspendReason }
     | { type: "rest" } {
     if (
       stopReason === "end_turn" &&
@@ -1095,9 +1081,6 @@ export class Thread implements ThreadCoreView {
       lastAssistantMessage: this.core.lastAssistantMessage,
       nativeMessageIdx: this.core.manager.getNativeMessageIdx(),
     });
-    if (action?.type === "suspend") {
-      return { type: "suspend", reason: action.reason };
-    }
     if (action?.type === "send-message") {
       return {
         type: "messages",

@@ -1,5 +1,4 @@
 import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
-import type { CompactSuspendReason } from "./compaction/index.ts";
 import type { Logger } from "./logger.ts";
 import type {
   AgentInput,
@@ -23,7 +22,6 @@ import type { AbsFilePath } from "./utils/files.ts";
 /** Action returned from the `onEndTurnWithoutYield` hook. */
 export type EndTurnAction =
   | { type: "send-message"; text: string }
-  | { type: "suspend"; reason: SuspendReason }
   | { type: "none" };
 
 /** Action returned from the `onYield` hook. */
@@ -42,19 +40,12 @@ export type InjectedContent = AgentInput;
  * not act on the reason — it only has to leave the log coherent and resumable
  * — but the set of reasons is closed, so whoever handles the suspension narrows
  * on `kind` rather than casting. */
-export type SuspendReason =
-  | CompactSuspendReason
-  | PlainSuspendReason
-  | YieldSuspendReason;
+export type SuspendReason = YieldSuspendReason;
 
 /** The model called yield_to_parent and its result is in the log. Produced
  * only by Thread's own yield gate and consumed only by Thread's turn loop —
  * it never escapes to an owner. */
 export type YieldSuspendReason = { kind: "yield"; value: YieldValue };
-
-/** "Suspend this submission here"; nothing to hand off, just a reason to
- * show. */
-export type PlainSuspendReason = { kind: "suspend"; message: string };
 
 /** Action returned from the `onBeforeRequest` hook by a single supervisor. */
 export type SupervisorAction =
@@ -231,7 +222,7 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
 }
 
 /** The fan-out from a thread's turn-taking to its supervisors. Combination
- * rules: end-turn suspend wins over texts, texts join, first accept/reject
+ * rules: end-turn texts join, first accept/reject
  * wins. */
 export class TurnSupervisorChain extends ChainBase<TurnSupervisor> {
   onSubmission(messages: readonly AgentInput[]): void {
@@ -242,13 +233,10 @@ export class TurnSupervisorChain extends ChainBase<TurnSupervisor> {
 
   onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
     const texts: string[] = [];
-    let suspend: Extract<EndTurnAction, { type: "suspend" }> | undefined;
     this.forEach("onEndTurnWithoutYield", this.deps.signal(), (supervisor) => {
       const action = supervisor.onEndTurnWithoutYield?.(context);
       if (action?.type === "send-message") texts.push(action.text);
-      else if (action?.type === "suspend") suspend ??= action;
     });
-    if (suspend) return suspend;
     return texts.length
       ? { type: "send-message", text: texts.join("\n\n") }
       : { type: "none" };

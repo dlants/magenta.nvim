@@ -149,16 +149,10 @@ export type ChatMsg = {
 };
 
 /** How an idle thread came to rest, as a label: a provider stop reason, the
- * kind of result it settled on, or a supervisor's own stop message. */
-function stoppedLabel(reason: StoppedReason): string {
-  if (typeof reason === "string") return reason;
-  return reason.kind === "supervisor" ? reason.message : "compaction requested";
-}
+ * kind of result it settled on. */
 type StoppedReason =
   | StopReason
-  | Exclude<RestResult["type"], "completed" | "failed" | "suspended">
-  | { kind: "supervisor"; message: string }
-  | { kind: "compaction-requested" };
+  | Exclude<RestResult["type"], "completed" | "failed">;
 
 /** The view adapter over a Session: selection, expansion, viewed timestamps,
  * archive navigation and the NvimThread wrappers. The session owns identity,
@@ -704,7 +698,7 @@ export class Chat {
         return `⏳ ${summary.status.activity}`;
 
       case "stopped":
-        return `⏹️ stopped (${stoppedLabel(summary.status.reason)})`;
+        return `⏹️ stopped (${summary.status.reason})`;
 
       case "yielded":
         return "✅ yielded";
@@ -1205,18 +1199,6 @@ ${rows}${loadMore}`;
                   return {
                     type: "error" as const,
                     message: lastTurnResult.error.message,
-                  };
-                }
-                if (lastTurnResult?.type === "suspended") {
-                  return {
-                    type: "stopped" as const,
-                    reason:
-                      lastTurnResult.reason.kind === "suspend"
-                        ? {
-                            kind: "supervisor" as const,
-                            message: lastTurnResult.reason.message,
-                          }
-                        : { kind: "compaction-requested" as const },
                   };
                 }
                 return {

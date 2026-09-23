@@ -106,10 +106,8 @@ function restResult(
       ? undefined
       : { type: "completed", stopReason };
   }
-  if (result?.type !== "suspended") return result;
-  return result.reason.kind === "yield"
-    ? undefined
-    : { type: "suspended", reason: result.reason };
+  if (result?.type === "suspended") return undefined;
+  return result;
 }
 /** The bare-agent harness's stand-in for the thread: it owns the loop state
  * the same way, so what a test observes is what production observes. */

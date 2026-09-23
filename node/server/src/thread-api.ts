@@ -1,11 +1,9 @@
-import type { CompactSuspendReason } from "./compaction/index.ts";
 import type {
   NativeMessageIdx,
   StopReason,
   ToolResults,
 } from "./providers/provider-types.ts";
 import type {
-  PlainSuspendReason,
   RequestContext,
   SuspendReason,
   YieldAction,
@@ -46,21 +44,18 @@ export type CoreLoopResult<
   | { type: "yielded"; value: YieldValue; resultPrefix?: string }
   | { type: "aborted" }
   | { type: "failed"; error: Error }
-  /** A supervisor suspended the loop before a request was issued. The log is
-   * coherent and resumable; what to do about it is the owner's business. A
-   * suspension nobody claimed (no compactor for a `compact` reason, or a
-   * plain `suspend`) settles the submission this way rather than pretending
-   * it was `empty`, and the reason is what a view shows. */
+  /** The model called the yield tool; Thread decides whether it stands. */
   | { type: "suspended"; reason: R };
 
 /** The complete submission outcome, after internal continuations and
- * compaction: the same loop result, minus the yields the thread resolved
- * itself. Delivered to the submitter rather than broadcast as a lifecycle
+ * compaction: no suspensions and never `context_budget`. Delivered to the submitter rather than broadcast as a lifecycle
  * result. */
-export type RestResult = CoreLoopResult<
-  PlainSuspendReason | CompactSuspendReason,
-  StopReason
->;
+export type RestResult =
+  | { type: "completed"; stopReason: StopReason }
+  | { type: "empty" }
+  | { type: "yielded"; value: YieldValue; resultPrefix?: string }
+  | { type: "aborted" }
+  | { type: "failed"; error: Error };
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */
 export type ThreadResult =

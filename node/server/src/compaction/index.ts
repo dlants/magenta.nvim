@@ -1,11 +1,5 @@
 import type { ProviderMessage } from "../providers/provider-types.ts";
 
-/** A handoff consumed by Thread's submission coordinator when it has a compactor. */
-export type CompactSuspendReason = {
-  kind: "compact";
-  nextPrompt: string | undefined;
-};
-
 export type CompactionOutcome =
   | { type: "complete"; summary: string; chunkCount: number }
   | { type: "error"; message: string }

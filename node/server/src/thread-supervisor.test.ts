@@ -167,40 +167,6 @@ describe("Thread supervisor arbitration", () => {
     expect(mockClient.streams).toHaveLength(1);
   });
 
-  it("lets a chat supervisor's tool-result suspension beat the yield gate", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-      toolLoopSupervisors: [
-        {
-          onToolResults: () => ({ kind: "suspend", message: "chat first" }),
-        },
-      ],
-    });
-    const sent = core.submit({
-      type: "resolved",
-      messages: userInput("do the task"),
-    });
-    const stream = await mockClient.awaitStream();
-    stream.streamToolUse(
-      "yield-1" as ToolRequestId,
-      "yield_to_parent" as ToolName,
-      { result: "all done" },
-    );
-    stream.finishResponse("tool_use");
-    expect(await sent).toEqual({
-      type: "suspended",
-      reason: { kind: "suspend", message: "chat first" },
-    });
-    expect(core.loopState).toMatchObject({
-      type: "idle",
-      lastResult: {
-        type: "suspended",
-        reason: { kind: "suspend", message: "chat first" },
-      },
-    });
-    expect(mockClient.streams).toHaveLength(1);
-  });
-
   it("ignores a throwing pending-content hook and still asks the rest", async () => {
     const { core, mockClient } = createAgentWithMock({
       toolLoopSupervisors: [
@@ -248,54 +214,6 @@ describe("Thread supervisor arbitration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
     expect(await turn).toMatchObject({ type: "completed" });
-  });
-  it("lets the first suspension win over an end-turn nudge and later suspension", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [
-        {
-          onEndTurnWithoutYield: () => ({
-            type: "send-message",
-            text: "keep going",
-          }),
-        },
-        {
-          onEndTurnWithoutYield: () => ({
-            type: "suspend",
-            reason: { kind: "suspend", message: "first" },
-          }),
-        },
-        {
-          onEndTurnWithoutYield: () => {
-            observed.push("last");
-            return {
-              type: "suspend",
-              reason: { kind: "suspend", message: "second" },
-            };
-          },
-        },
-      ],
-    });
-    const observed: string[] = [];
-
-    const turn = core.submit({
-      type: "resolved",
-      messages: userInput("hello"),
-    });
-    const stream = await mockClient.awaitStream();
-    stream.finishResponse("end_turn");
-    expect(await turn).toEqual({
-      type: "suspended",
-      reason: { kind: "suspend", message: "first" },
-    });
-    expect(core.loopState).toMatchObject({
-      type: "idle",
-      lastResult: {
-        type: "suspended",
-        reason: { kind: "suspend", message: "first" },
-      },
-    });
-    expect(observed).toEqual(["last"]);
-    expect(mockClient.streams).toHaveLength(1);
   });
 });
 
