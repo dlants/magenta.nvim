@@ -6,6 +6,7 @@ import {
 } from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
+import { FakeShell, shellResult } from "./fakes.ts";
 import { withHarness } from "./harness.ts";
 
 const git = {
@@ -110,8 +111,94 @@ it("puts git state in the first message's system info", () =>
 it("disposal leaves no threads behind", async () => {
   await withHarness({}, async (h) => {
     await h.createRoot();
-    void h.session.createRootThread().catch(() => {});
+    const pending = h.session.createRootThread();
     await h.dispose();
+    await expect(pending).rejects.toThrow();
     expect(h.session.listThreads()).toEqual([]);
   });
 });
+
+function runBash(
+  h: Parameters<Parameters<typeof withHarness>[1]>[0],
+  command: string,
+) {
+  return (async () => {
+    const { thread } = await h.createRoot();
+    const done = h.send(thread, "run it");
+    const stream = await h.nextStream();
+    stream.streamToolUse(
+      "bash-1" as ToolRequestId,
+      "bash_command" as ToolName,
+      {
+        command,
+      },
+    );
+    stream.finishResponse("tool_use");
+    return { thread, done };
+  })();
+}
+async function finish(
+  h: Parameters<Parameters<typeof withHarness>[1]>[0],
+  done: Promise<unknown>,
+) {
+  const next = await h.nextStream();
+  next.finishResponse("end_turn");
+  await done;
+}
+it("runs a scripted shell command", () =>
+  withHarness({ shell: { "echo hi": { stdout: "hi-out" } } }, async (h) => {
+    const { thread, done } = await runBash(h, "echo hi");
+    await finish(h, done);
+    expect(h.shell.calls).toEqual(["echo hi"]);
+    expect(h.shell.pending).toEqual([]);
+    expect(JSON.stringify(thread.getProviderMessages())).toContain("hi-out");
+  }));
+it("leaves unscripted shell commands pending until settled", () =>
+  withHarness({}, async (h) => {
+    const { thread, done } = await runBash(h, "echo slow");
+    const call = await pollUntil(() => {
+      const entry = h.shell.pending[0];
+      if (!entry) throw new Error("waiting for shell");
+      return entry;
+    });
+    expect(call.command).toBe("echo slow");
+    call.result.resolve(shellResult({ stdout: "slow-out" }));
+    await finish(h, done);
+    expect(JSON.stringify(thread.getProviderMessages())).toContain("slow-out");
+  }));
+it("terminate settles pending shell commands with SIGTERM", async () => {
+  const shell = new FakeShell();
+  const result = shell.execute("sleep 10", {});
+  shell.terminate();
+  await expect(result).resolves.toMatchObject({
+    exitCode: 143,
+    signal: "SIGTERM",
+  });
+  expect(shell.pending).toEqual([]);
+});
+it("forks keep the source's system info rather than re-reading git", () =>
+  withHarness({ git }, async (h) => {
+    const { id, thread } = await h.createRoot();
+    const done = h.send(thread, "hello");
+    const stream = await h.nextStream();
+    stream.finishResponse("end_turn");
+    await done;
+    h.git.set({ ...git, branch: "other-branch" });
+    const fork = h.thread(await h.session.forkThread(id));
+    const first = JSON.stringify(fork.getProviderMessages()[0]);
+    expect(first).toContain("feature-x");
+    expect(first).not.toContain("other-branch");
+  }));
+it("seeds autoContext files from the in-memory fs", () =>
+  withHarness(
+    {
+      files: { "/project/context.md": "project notes" },
+      options: { autoContext: ["context.md"] },
+    },
+    async (h) => {
+      const { thread } = await h.createRoot();
+      expect(Object.keys(thread.contextFiles.files)).toEqual([
+        "/project/context.md",
+      ]);
+    },
+  ));

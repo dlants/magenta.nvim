@@ -95,8 +95,13 @@ export const defaultHarnessResolve: HarnessResolve = async (
     ? parseCompact(message)
     : { compact: false, rest: message };
   for (const match of rest.matchAll(FILE_REF)) {
-    const raw = (match[1] ?? match[2]) as UnresolvedFilePath;
-    const abs = resolveFilePath(host.cwd, raw, host.homeDir);
+    const raw = match[1] ?? match[2];
+    if (!raw) continue;
+    const abs = resolveFilePath(
+      host.cwd,
+      raw as UnresolvedFilePath,
+      host.homeDir,
+    );
     const info = await detectFileTypeViaFileIO(abs, host.fileIO);
     if (!info) continue;
     getContextFiles().addFileContext(
@@ -134,7 +139,8 @@ export class TestSessionHost implements SessionHost {
     provider: "anthropic",
     model: "claude-3-5-sonnet-20241022",
     fastModel: "claude-3-5-haiku-20241022",
-  } as ProviderProfile;
+    thinkingModel: "claude-3-5-sonnet-20241022",
+  } satisfies ProviderProfile;
   options: HarnessThreadOptions;
   agents: AgentsMap;
   resolve: HarnessResolve;
