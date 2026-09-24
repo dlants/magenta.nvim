@@ -1640,7 +1640,6 @@ describe("replaceable conversation core", () => {
     await core.abort();
     await reset;
     expect(core["core"]).not.toBe(original);
-    expect(core["core"].isActive).toBe(true);
     const sent = core.submit({
       type: "resolved",
       messages: [

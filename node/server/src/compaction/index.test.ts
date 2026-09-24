@@ -49,7 +49,6 @@ describe("compaction submission ownership", () => {
       run: async (messages) => {
         snapshots++;
         expect(thread.isBusy).toBe(true);
-        expect(thread["core"].isActive).toBe(true);
         expect(await previous).toEqual({ type: "aborted" });
         const snapshot = JSON.stringify(messages);
         await Promise.resolve();
@@ -95,7 +94,6 @@ describe("compaction submission ownership", () => {
     probe.resolve(true);
     expect(await previous).toEqual({ type: "aborted" });
     expect(await sent).toEqual({ type: "aborted" });
-    expect(thread["core"].isActive).toBe(true);
     expect(mockClient.streams).toHaveLength(0);
     await thread.destroy();
   });
@@ -142,7 +140,6 @@ describe("compaction submission ownership", () => {
       }),
     ).toEqual({ type: "aborted" });
     expect(thread["core"]).not.toBe(original);
-    expect(thread["core"].isActive).toBe(true);
     expect(mockClient.streams).toHaveLength(0);
     await thread.destroy();
   });
@@ -665,7 +662,6 @@ describe("complete submission ownership", () => {
     expect(await sent).toEqual({ type: "aborted" });
     const stream = await mockClient.awaitStream();
     expect(thread["core"]).not.toBe(oldCore);
-    expect(thread["core"].isActive).toBe(true);
     expect(JSON.stringify(stream.messages)).toContain("new submission");
     expect(JSON.stringify(stream.messages)).not.toContain(
       "Please continue from where you left off.",

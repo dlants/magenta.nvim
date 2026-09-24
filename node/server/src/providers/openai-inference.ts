@@ -15,6 +15,7 @@ import {
   assertCompleteToolResults,
   getRetryDelay,
   MAX_RETRY_DURATION,
+  withAbort,
   wrapStreamAbortSignalWithTimeout,
 } from "./inference-shared.ts";
 import {
@@ -33,7 +34,6 @@ import type {
   AgentLog,
   FinalizeReason,
   InferenceOptions,
-  InferenceRequest,
   NativeInferenceManager,
   NativeMessageIdx,
   NonEmptyRequestedTools,
@@ -510,8 +510,11 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       .map((block) => ({ id: block.id, request: block.request }));
   }
 
-  sendRequest(onEvent: OnStreamEvent): InferenceRequest {
-    return { promise: this.runRequest(onEvent), abort: () => this.abort() };
+  sendRequest(
+    onEvent: OnStreamEvent,
+    signal: AbortSignal,
+  ): Promise<RequestResult> {
+    return withAbort(this.runRequest(onEvent), signal, () => this.abort());
   }
 
   /** One provider request, including the retry/backoff budget. */

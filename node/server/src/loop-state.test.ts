@@ -15,7 +15,7 @@ describe("ToolLoop lifecycle and progress", () => {
       executeTools: (_requests, publishTools) => {
         publish = publishTools;
         entered.resolve();
-        return { promise: tools.promise, abort: () => {} };
+        return tools.promise;
       },
     });
     const turn = agent.send([
@@ -25,10 +25,7 @@ describe("ToolLoop lifecycle and progress", () => {
       },
     ]);
     const stream = await mockClient.awaitStream();
-    expect(turn.loopState).toMatchObject({
-      type: "streaming",
-      inFlight: { abort: expect.any(Function) },
-    });
+    expect(turn.loopState).toMatchObject({ type: "streaming" });
     expect(turn.loopState).not.toHaveProperty("send");
     stream.emitEvent({
       type: "content_block_start",
@@ -90,9 +87,10 @@ describe("ToolLoop lifecycle and progress", () => {
     const tools = new Defer<ToolOutcome>();
     const abort = vi.fn();
     const { agent, mockClient } = createTestAgent({
-      executeTools: () => {
+      executeTools: (_requests, _publish, signal) => {
+        signal.addEventListener("abort", abort);
         entered.resolve();
-        return { promise: tools.promise, abort };
+        return tools.promise;
       },
     });
     const first = agent.send([
@@ -109,16 +107,15 @@ describe("ToolLoop lifecycle and progress", () => {
     await entered.promise;
     expect(first.loopState).toMatchObject({
       type: "running_tools",
-      inFlight: { abort },
     });
     expect(first.loopState).not.toHaveProperty("send");
     first.abort();
     expect(abort).toHaveBeenCalledTimes(1);
-    expect(first.loopState.aborting).toBe(true);
+    expect(first.aborting).toBe(true);
     expect(loopLabel(agent.loopState)).toBe("running_tools");
     tools.resolve({ type: "aborted", results: new Map() });
     expect(await first.promise).toEqual({ type: "aborted" });
-    expect(first.loopState).toEqual({ type: "preparing", aborting: true });
+    expect(first.loopState).toEqual({ type: "preparing" });
     first.abort();
     expect(abort).toHaveBeenCalledTimes(1);
     expect(loopLabel(agent.loopState)).toBe("idle");
@@ -130,7 +127,7 @@ describe("ToolLoop lifecycle and progress", () => {
       },
     ]);
     const next = await awaitNextStream(mockClient, stream);
-    expect(second.loopState.aborting).toBe(false);
+    expect(second.aborting).toBe(false);
     next.streamText("done");
     next.finishResponse("end_turn");
     expect(await second.promise).toEqual({
@@ -157,7 +154,7 @@ describe("ToolLoop lifecycle and progress", () => {
     ]);
     await entered.promise;
     turn.abort();
-    expect(turn.loopState.aborting).toBe(true);
+    expect(turn.aborting).toBe(true);
     gate.resolve();
     expect(await turn.promise).toEqual({ type: "aborted" });
     expect(mockClient.streams).toHaveLength(0);

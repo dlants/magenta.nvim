@@ -217,8 +217,6 @@ describe("Thread-owned context delivery", () => {
       await f.thread.destroy();
       const replacement = await reset;
       expect(replacement).not.toBe(oldCore);
-      expect(oldCore.isActive).toBe(false);
-      expect(replacement.isActive).toBe(false);
     } finally {
       await f.cleanup();
     }
@@ -268,7 +266,6 @@ describe("Thread-owned context delivery", () => {
         await sent;
       }
       expect(f.thread["core"]).not.toBe(oldCore);
-      expect(oldCore.isActive).toBe(false);
       expect(f.thread["core"].fileSupervisor).not.toBe(f.manager);
       expect(f.create).toHaveBeenCalledTimes(2);
       expect(f.destroy).toHaveBeenCalledTimes(1);

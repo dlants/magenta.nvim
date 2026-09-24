@@ -52,11 +52,12 @@ describe("executeToolBatch", () => {
       },
       publishTools: () => {},
       onUpdate: () => {},
+      signal: new AbortController().signal,
     };
     const outcome = await executeToolBatch(
       [{ id: request.id, request: { status: "ok", value: request } }],
       deps,
-    ).promise;
+    );
     const completed = completedTools.get(request.id);
     expect(completed).toBeDefined();
     expect(completed?.request).toBe(request);
@@ -87,7 +88,9 @@ describe("executeToolBatch", () => {
       abort,
     };
     const completedTools = new Map<ToolRequestId, CompletedToolInfo>();
+    const controller = new AbortController();
     const deps = {
+      signal: controller.signal,
       completedTools,
       createTool: () => invocation,
       publishTools: () => {},
@@ -103,8 +106,8 @@ describe("executeToolBatch", () => {
     ];
 
     const execution = executeToolBatch(requests, deps);
-    execution.abort();
-    const outcome = await execution.promise;
+    controller.abort();
+    const outcome = await execution;
     expect(abort).toHaveBeenCalled();
     expect(outcome.type).toBe("aborted");
     expect(outcome.results.get(request.id)).toEqual({

@@ -343,12 +343,6 @@ export type StreamEvent =
 
 export type OnStreamEvent = (event: StreamEvent) => void;
 
-/** One in-flight request. Aborting it aborts that request and nothing else. */
-export type InferenceRequest = {
-  promise: Promise<RequestResult>;
-  abort(): void;
-};
-
 export interface NativeInferenceManager {
   readonly log: AgentLog;
   appendUserMessage(content: AgentInput[]): void;
@@ -374,8 +368,12 @@ export interface NativeInferenceManager {
   getNativeMessageIdx(): NativeMessageIdx;
   truncateMessages(messageIdx: NativeMessageIdx): void;
   clone(): NativeInferenceManager;
-  countTokens?(): Promise<number>;
-  sendRequest(onEvent: OnStreamEvent): InferenceRequest;
+  countTokens?(signal: AbortSignal): Promise<number>;
+  /** Aborting `signal` aborts this request and nothing else. */
+  sendRequest(
+    onEvent: OnStreamEvent,
+    signal: AbortSignal,
+  ): Promise<RequestResult>;
 }
 
 export type FinalizeReason =

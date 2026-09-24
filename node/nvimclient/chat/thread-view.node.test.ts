@@ -32,11 +32,6 @@ describe("thread-view renderStatus streaming", () => {
     const now = new Date();
     const text = await renderStatusToString({
       type: "streaming",
-      aborting: false,
-      inFlight: {
-        promise: Promise.resolve({ type: "aborted" }),
-        abort: () => {},
-      },
       startedAt: now,
       lastEventTime: new Date(now.getTime() - 1000),
       block: undefined,
@@ -50,11 +45,6 @@ describe("thread-view renderStatus streaming", () => {
     const now = new Date();
     const text = await renderStatusToString({
       type: "streaming",
-      aborting: false,
-      inFlight: {
-        promise: Promise.resolve({ type: "aborted" }),
-        abort: () => {},
-      },
       startedAt: new Date(now.getTime() - 4000),
       lastEventTime: new Date(now.getTime() - 4000),
       block: undefined,
@@ -68,11 +58,6 @@ describe("thread-view renderStatus streaming", () => {
     const now = new Date();
     const text = await renderStatusToString({
       type: "streaming",
-      aborting: false,
-      inFlight: {
-        promise: Promise.resolve({ type: "aborted" }),
-        abort: () => {},
-      },
       startedAt: new Date(now.getTime() - 2000),
       lastEventTime: new Date(now.getTime() - 2000),
       block: undefined,
@@ -90,7 +75,7 @@ describe("thread-view renderStatus streaming", () => {
   it("renders the preparing activity", async () => {
     const text = await renderStatusToString({
       type: "running",
-      activity: { type: "preparing", aborting: false },
+      activity: { type: "preparing" },
       aborting: false,
     });
     expect(text).toContain("Preparing...");
@@ -102,11 +87,6 @@ describe("thread-view renderStatus streaming", () => {
       type: "running",
       activity: {
         type: "streaming",
-        aborting: false,
-        inFlight: {
-          promise: Promise.resolve({ type: "aborted" }),
-          abort: () => {},
-        },
         startedAt: now,
         lastEventTime: now,
         block: undefined,

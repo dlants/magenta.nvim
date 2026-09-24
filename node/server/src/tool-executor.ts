@@ -4,7 +4,7 @@ import type {
   ToolResultValue,
 } from "./providers/provider-types.ts";
 import type { ToolInvocationState } from "./thread-api.ts";
-import type { ToolExecution, ToolOutcome } from "./tool-loop.ts";
+import type { ToolOutcome } from "./tool-loop.ts";
 import type {
   ActiveToolEntry,
   CompletedToolInfo,
@@ -21,16 +21,16 @@ export type ToolExecutorDeps = {
   /** Where the invocations are, for whoever renders them. */
   publishTools: (tools: ToolInvocationState) => void;
   onUpdate: () => void;
+  signal: AbortSignal;
 };
 
 export function executeToolBatch(
   requests: NonEmptyRequestedTools,
   deps: ToolExecutorDeps,
-): ToolExecution {
+): Promise<ToolOutcome> {
+  const { signal } = deps;
   let live = new Map<ToolRequestId, ActiveToolEntry>();
-  let aborting = false;
   const abort = () => {
-    aborting = true;
     for (const entry of live.values()) entry.handle.abort();
   };
 
@@ -94,6 +94,7 @@ export function executeToolBatch(
     }
 
     live = activeTools;
+    if (signal.aborted) abort();
     deps.publishTools({ type: "running", activeTools });
 
     const settled = await Promise.all(
@@ -127,12 +128,9 @@ export function executeToolBatch(
     live = new Map();
     deps.publishTools({ type: "settled" });
 
-    if (aborting) {
-      return { type: "aborted", results };
-    }
-
-    return { type: "continue", results };
+    return { type: signal.aborted ? "aborted" : "continue", results };
   }
 
-  return { promise: runBatch(), abort };
+  signal.addEventListener("abort", abort, { once: true });
+  return runBatch().finally(() => signal.removeEventListener("abort", abort));
 }

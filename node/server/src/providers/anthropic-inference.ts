@@ -26,6 +26,7 @@ import {
   assertCompleteToolResults,
   getRetryDelay,
   MAX_RETRY_DURATION,
+  withAbort,
   wrapStreamAbortSignalWithTimeout,
 } from "./inference-shared.ts";
 import type {
@@ -33,7 +34,6 @@ import type {
   AgentLog,
   FinalizeReason,
   InferenceOptions,
-  InferenceRequest,
   NativeInferenceManager,
   NativeMessageIdx,
   NonEmptyRequestedTools,
@@ -435,8 +435,11 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   /** One provider request: everything from placing it to accumulating its
    * stream, including the retry budget. Retries are invisible to the caller
    * apart from the `retry` updates. */
-  sendRequest(onEvent: OnStreamEvent): InferenceRequest {
-    return { promise: this.runRequest(onEvent), abort: () => this.abort() };
+  sendRequest(
+    onEvent: OnStreamEvent,
+    signal: AbortSignal,
+  ): Promise<RequestResult> {
+    return withAbort(this.runRequest(onEvent), signal, () => this.abort());
   }
 
   private async runRequest(onEvent: OnStreamEvent): Promise<RequestResult> {
@@ -673,7 +676,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
 
   /** The conversation as it would be sent right now. Preflight and awaited:
    * whoever asked for it is deciding about this request. */
-  async countTokens(): Promise<number> {
+  async countTokens(signal: AbortSignal): Promise<number> {
     const messagesWithCache = withCacheControl(
       stripTrailingThinkingBlocks(this.messages),
     );
@@ -686,7 +689,9 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     if (this.params.tool_choice)
       countParams.tool_choice = this.params.tool_choice;
     if (this.params.thinking) countParams.thinking = this.params.thinking;
-    const result = await this.client.messages.countTokens(countParams);
+    const result = await this.client.messages.countTokens(countParams, {
+      signal,
+    });
     return result.input_tokens;
   }
 

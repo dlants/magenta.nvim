@@ -7,7 +7,6 @@ import {
   createTestOpenAIAgent,
   flatLoop,
   type TestAgent,
-  toolExecution,
 } from "../test-helpers.ts";
 import type { ToolLoopResult } from "../thread-api.ts";
 import type { ToolLoopDeps } from "../tool-loop.ts";
@@ -169,7 +168,7 @@ function autoCompact() {
 describe("onBeforeRequest", () => {
   /** The runner fills a result for every requested tool it isn't handed. */
   const emptyResults = () =>
-    toolExecution(
+    Promise.resolve(
       Promise.resolve({ type: "continue" as const, results: new Map() }),
     );
 
@@ -302,7 +301,12 @@ describe("preflight token count parity", () => {
     });
 
     mockClient.mockInputTokenCount = 100;
-    expect(await agent["core"].runToolLoop([text("go")])).toEqual({
+    expect(
+      await agent["core"].runToolLoop(
+        [text("go")],
+        new AbortController().signal,
+      ),
+    ).toEqual({
       type: "completed",
       stopReason: "context_budget",
     });
@@ -318,12 +322,15 @@ describe("preflight token count parity", () => {
       },
     });
 
-    const sendPromise = openaiThread["core"].runToolLoop([
-      {
-        type: "text",
-        text: "go",
-      },
-    ]);
+    const sendPromise = openaiThread["core"].runToolLoop(
+      [
+        {
+          type: "text",
+          text: "go",
+        },
+      ],
+      new AbortController().signal,
+    );
     const stream = await openai.mockClient.awaitStream();
     stream.finishResponse("end_turn", { inputTokens: 100, outputTokens: 1 });
     expect(await sendPromise).toEqual({

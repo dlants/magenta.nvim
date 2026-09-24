@@ -80,6 +80,11 @@ import type { NvimCwd } from "./utils/files.ts";
 export type { ContextDelivery, ThreadCoreContext, ThreadStatus, YieldState };
 /** What hooks see when no submission is running: nothing can abort them. */
 const IDLE_SIGNAL = new AbortController().signal;
+const RETIRED_CORE_SUPERVISOR: ThreadCoreCallbacks["supervisor"] = {
+  onToolApplied: () => {},
+  onToolResults: () => {},
+  beforeRequest: async () => [],
+};
 export type ContextFileAccess = Readonly<
   Pick<
     FileSupervisor,
@@ -303,14 +308,20 @@ export class Thread implements ThreadCoreView {
 
   private readonly turnChain: TurnSupervisorChain;
 
+  /** A replaced core can still be finishing work; only the current core
+   * reaches the thread. */
   private coreCallbacks(getCore: () => ThreadCore): ThreadCoreCallbacks {
     const thread = this;
     return {
-      // A replaced core is disposed and stops reporting on its own.
-      onUpdate: () => this.handleUpdate(),
+      onUpdate: () => {
+        if (getCore() === this.core) this.handleUpdate();
+      },
       // Lazy: the core is still being constructed when this is handed to it.
       get supervisor() {
-        return thread.toolLoopChainFor(getCore());
+        const core = getCore();
+        return core === thread.core
+          ? thread.toolLoopChainFor(core)
+          : RETIRED_CORE_SUPERVISOR;
       },
     };
   }
@@ -450,11 +461,8 @@ export class Thread implements ThreadCoreView {
     return submission
       ? {
           type: "running",
-          activity: this.core.activity ?? {
-            type: "preparing",
-            aborting: submission.signal.aborted,
-          },
-          aborting: submission.signal.aborted || this.core.aborting,
+          activity: this.core.activity ?? { type: "preparing" },
+          aborting: submission.signal.aborted,
         }
       : { type: "idle", lastResult: this.lastResult() };
   }
@@ -552,10 +560,10 @@ export class Thread implements ThreadCoreView {
     // anything that overtakes this one while it waits simply aborts it.
     const previous = this.inFlight;
     if (previous) this.drainQueues();
-    // The core's tool loop is interrupted synchronously, before anything is
-    // awaited: an aborter must not leave live tools running for a microtask.
+    // The turn runs on the submission's signal, so aborting it interrupts
+    // the tool loop synchronously; only the preempted submission needs help.
     const submission = new ActiveSubmission(async () => {
-      await Promise.all([this.core.abortToolLoop(), previous?.abort()]);
+      await previous?.abort();
     });
     void previous?.abort();
     this.status = { type: "running", submission };
@@ -814,8 +822,6 @@ export class Thread implements ThreadCoreView {
     };
   }
   private async hasPendingContent(): Promise<boolean> {
-    const core = this.core;
-    if (!core.isActive) return false;
     return this.toolLoopChain.hasPendingContent();
   }
   private status: ThreadStatus = { type: "idle", lastResult: undefined };
@@ -853,7 +859,9 @@ export class Thread implements ThreadCoreView {
       try {
         notify("onToolLoopStart", core.manager.getPendingUserMessageIdx());
         this.turnSubmission = submission;
-        return await submission.settled(() => core.runToolLoop(input));
+        return await submission.settled(() =>
+          core.runToolLoop(input, submission.signal),
+        );
       } finally {
         if (this.turnSubmission === submission) this.turnSubmission = undefined;
         notify("onToolLoopStop", core.manager.getNativeMessageIdx());

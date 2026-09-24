@@ -1,11 +1,6 @@
 import { APIError } from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createTestOpenAIAgent,
-  flatLoop,
-  sendText,
-  toolExecution,
-} from "../test-helpers.ts";
+import { createTestOpenAIAgent, flatLoop, sendText } from "../test-helpers.ts";
 import type { ToolName } from "../tool-types.ts";
 import { ABORT_GRACE_PERIOD_MS } from "./inference-shared.ts";
 import type { MockOpenAIClient } from "./mock-openai-client.ts";
@@ -43,7 +38,7 @@ function setup() {
     tools: [spec],
     executeTools: (requests: ReadonlyArray<RequestedTool>) => {
       calls.push([...requests]);
-      return toolExecution(
+      return Promise.resolve(
         Promise.resolve({
           type: "continue" as const,
           results: errorResults(requests),
@@ -251,10 +246,14 @@ describe("OpenAIInferenceManager sendRequest", () => {
         text: "hello",
       },
     ]);
-    const request = manager.sendRequest((update) => updates.push(update));
+    const controller = new AbortController();
+    const request = manager.sendRequest(
+      (update) => updates.push(update),
+      controller.signal,
+    );
     return {
-      request: request.promise,
-      abort: () => request.abort(),
+      request,
+      abort: () => controller.abort(),
       updates,
       stream: streamAt(client, 0),
     };
@@ -305,7 +304,7 @@ describe("OpenAIInferenceManager sendRequest", () => {
     await tick();
     expect(manager.log.messages).toEqual(messagesAfterAbort);
 
-    const second = manager.sendRequest(() => {}).promise;
+    const second = manager.sendRequest(() => {}, new AbortController().signal);
     await tick();
     streamAt(client, 1).finishResponse();
     await tick();

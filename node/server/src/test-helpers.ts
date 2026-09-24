@@ -48,11 +48,9 @@ import { executeToolBatch } from "./tool-executor.ts";
 import {
   type LoopState,
   runToolLoop,
-  type ToolExecution,
   type ToolExecutor,
   type ToolLoop,
   type ToolLoopDeps,
-  type ToolOutcome,
 } from "./tool-loop.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
 import { clientToolCreator } from "./tools/create-tool.ts";
@@ -61,13 +59,6 @@ import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { pollUntil } from "./utils/async.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
-/** Wrap a plain promise as a `ToolExecution`, for the many test executors that
- * are never aborted. */
-export function toolExecution(
-  promise: Promise<ToolOutcome> | ToolOutcome,
-): ToolExecution {
-  return { promise: Promise.resolve(promise), abort: () => {} };
-}
 export const TEST_ARCHIVE_DIR = path.join(os.tmpdir(), "magenta-test-archive");
 
 export const noopLogger: Logger = {
@@ -112,6 +103,9 @@ function restResult(
 }
 /** The bare-agent harness's stand-in for the thread: it owns the loop state
  * the same way, so what a test observes is what production observes. */
+/** A turn plus the abort that production owners hold as a signal. */
+export type TestTurn = ToolLoop & { abort(): void; readonly aborting: boolean };
+
 export class TestAgent {
   readonly manager: NativeInferenceManager;
 
@@ -124,7 +118,7 @@ export class TestAgent {
       ? {
           type: "running",
           activity: this.turn.loopState,
-          aborting: this.turn.loopState.aborting,
+          aborting: this.turn.aborting,
         }
       : { type: "idle", lastResult: restResult(this.lastResult) };
   }
@@ -133,9 +127,20 @@ export class TestAgent {
     return this.manager.log.messages;
   }
 
-  send(messages?: AgentInput[]): ToolLoop {
-    const turn = runToolLoop(this.deps, messages);
-    this.turn = turn;
+  send(messages: AgentInput[] = []): TestTurn {
+    const controller = new AbortController();
+    const turn = runToolLoop(this.deps, messages, controller.signal);
+    const handle: TestTurn = {
+      get loopState() {
+        return turn.loopState;
+      },
+      abort: () => controller.abort(),
+      get aborting() {
+        return controller.signal.aborted;
+      },
+      promise: turn.promise,
+    };
+    this.turn = handle;
     const promise = turn.promise.then(
       (result) => {
         // Mirrors ThreadCore's abort bookkeeping around the turn.
@@ -147,7 +152,7 @@ export class TestAgent {
             },
           ]);
         }
-        if (this.turn === turn) {
+        if (this.turn === handle) {
           this.turn = undefined;
           this.lastResult = result;
           this.deps.onUpdate?.();
@@ -155,7 +160,7 @@ export class TestAgent {
         return result;
       },
       (error: unknown) => {
-        if (this.turn === turn) {
+        if (this.turn === handle) {
           this.turn = undefined;
           this.lastResult = {
             type: "failed",
@@ -169,12 +174,15 @@ export class TestAgent {
       get loopState() {
         return turn.loopState;
       },
-      abort: () => turn.abort(),
+      abort: () => controller.abort(),
+      get aborting() {
+        return controller.signal.aborted;
+      },
       promise,
     };
   }
 
-  private turn: ToolLoop | undefined;
+  private turn: TestTurn | undefined;
   private lastResult: ToolLoopResult | undefined;
 
   /** What `Thread.abort` does, for the tests that drive an agent without one:
@@ -399,8 +407,8 @@ function buildTestAgent(
   };
   const executeTools: ToolExecutor =
     opts.executeTools ??
-    ((requests, publishTools) =>
-      executeToolBatch(requests, { ...deps, publishTools }));
+    ((requests, publishTools, signal) =>
+      executeToolBatch(requests, { ...deps, publishTools, signal }));
   const agent = new TestAgent({
     logger: context.logger,
     manager,

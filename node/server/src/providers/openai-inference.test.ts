@@ -4,7 +4,6 @@ import {
   createTestOpenAIAgent,
   flatLoop,
   type TestAgent,
-  toolExecution,
 } from "../test-helpers.ts";
 import type { ToolLoopResult } from "../thread-api.ts";
 import { executeToolBatch } from "../tool-executor.ts";
@@ -85,16 +84,16 @@ function setup(
 ) {
   const calls: RequestedTool[][] = [];
   const state = { updates: 0 };
-  const executeTools: ToolExecutor = (requests, publishTools) => {
+  const executeTools: ToolExecutor = (requests, publishTools, signal) => {
     calls.push([...requests]);
     return (
       options.executeTools ??
       ((reqs: ReadonlyArray<RequestedTool>) =>
-        toolExecution({
+        Promise.resolve({
           type: "continue" as const,
           results: okResults(reqs),
         }))
-    )(requests, publishTools);
+    )(requests, publishTools, signal);
   };
   const { agent, mockClient: client } = createTestOpenAIAgent({
     ...(options.client ? { mockClient: options.client } : {}),
@@ -300,7 +299,7 @@ describe("OpenAIInferenceManager tool calls", () => {
   it("surfaces a tool_use block and echoes the call plus its output", async () => {
     const { client, agent, calls } = setup({
       executeTools: (requests) =>
-        toolExecution({
+        Promise.resolve({
           type: "continue",
           results: okResults(requests, "file contents"),
         }),
@@ -360,7 +359,7 @@ describe("OpenAIInferenceManager tool calls", () => {
   it("records the results and parks the agent when the executor suspends", async () => {
     const { client, agent } = setup({
       executeTools: (requests) =>
-        toolExecution({
+        Promise.resolve({
           type: "continue" as const,
           results: okResults(requests, "yielded"),
         }),
@@ -581,7 +580,7 @@ describe("OpenAIInferenceManager abort", () => {
   it("unwinds when the executor reports that it aborted its tools", async () => {
     const { client, agent } = setup({
       executeTools: () =>
-        toolExecution({ type: "aborted", results: new Map() }),
+        Promise.resolve({ type: "aborted", results: new Map() }),
     });
     const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
@@ -610,7 +609,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
   it("answers an id the executor omitted", async () => {
     const { client, agent } = setup({
       executeTools: () =>
-        toolExecution({ type: "continue", results: new Map() }),
+        Promise.resolve({ type: "continue", results: new Map() }),
     });
     const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
@@ -631,7 +630,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
   it("answers every id when the executor rejects", async () => {
     const { client, agent } = setup({
       executeTools: () =>
-        toolExecution(Promise.reject(new Error("executor blew up"))),
+        Promise.resolve(Promise.reject(new Error("executor blew up"))),
     });
     const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
@@ -708,7 +707,7 @@ describe("OpenAIInferenceManager clone", () => {
     const { client, agent } = setup({
       executeTools: (requests) => {
         midToolClone = agent.manager.clone();
-        return toolExecution({
+        return Promise.resolve({
           type: "continue",
           results: okResults(requests),
         });
@@ -755,7 +754,7 @@ describe("OpenAIInferenceManager tool result attachments", () => {
   ) {
     const { client, agent } = setup({
       executeTools: (requests) =>
-        toolExecution({
+        Promise.resolve({
           type: "continue" as const,
           results: new Map(
             requests.map((request) => [
@@ -982,7 +981,7 @@ describe("OpenAIInferenceManager pending message indices", () => {
     let agent!: TestAgent;
     const executeTools: NonNullable<
       Parameters<typeof createTestOpenAIAgent>[0]
-    >["executeTools"] = (requested, publishTools) =>
+    >["executeTools"] = (requested, publishTools, signal) =>
       executeToolBatch(requested, {
         completedTools: new Map(),
         createTool: (request) => ({
@@ -995,6 +994,7 @@ describe("OpenAIInferenceManager pending message indices", () => {
         }),
         publishTools,
         onUpdate: () => {},
+        signal,
       });
     const created = createTestOpenAIAgent({
       tools: [spec],

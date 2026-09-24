@@ -78,3 +78,15 @@ export function getRetryDelay(attempt: number): number {
     ? RETRY_DELAYS[attempt]
     : RETRY_DELAYS[RETRY_DELAYS.length - 1];
 }
+
+/** Ties an already-started request to `signal`. `started` must have run
+ * synchronously far enough for `abort` to find the request in flight. */
+export function withAbort<T>(
+  started: Promise<T>,
+  signal: AbortSignal,
+  abort: () => void,
+): Promise<T> {
+  if (signal.aborted) abort();
+  signal.addEventListener("abort", abort, { once: true });
+  return started.finally(() => signal.removeEventListener("abort", abort));
+}

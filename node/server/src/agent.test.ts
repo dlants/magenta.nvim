@@ -42,7 +42,6 @@ import {
   resetThread,
   sendResolved,
   TEST_ARCHIVE_DIR,
-  toolExecution,
   uniqueThreadId,
   userInput,
 } from "./test-helpers.ts";
@@ -4514,7 +4513,7 @@ describe("Agent turn loop", () => {
   it("a rejecting executor still answers every tool_use", async () => {
     const { agent, mockClient } = createTestAgent({
       executeTools: () =>
-        toolExecution(Promise.reject(new Error("executor blew up"))),
+        Promise.resolve(Promise.reject(new Error("executor blew up"))),
     });
     const { promise: turn } = agent.send([
       {
@@ -4546,7 +4545,7 @@ describe("Agent turn loop", () => {
   it("an executor that reports it aborted unwinds the turn once", async () => {
     const { agent, mockClient } = createTestAgent({
       executeTools: () =>
-        toolExecution(
+        Promise.resolve(
           Promise.resolve({ type: "aborted" as const, results: new Map() }),
         ),
     });
@@ -4891,7 +4890,7 @@ describe("tool loop recognises yield", () => {
     createTestAgent({
       context: { threadType: "subagent" as ThreadType },
       executeTools: (requests) =>
-        toolExecution(
+        Promise.resolve(
           Promise.resolve({
             type,
             results: new Map(requests.map(({ id }) => [id, result])),

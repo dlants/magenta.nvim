@@ -34,7 +34,7 @@ import {
   type ToolLoopSupervisorChain,
 } from "./thread-supervisor.ts";
 import { executeToolBatch } from "./tool-executor.ts";
-import { runToolLoop, type ToolExecution, type ToolLoop } from "./tool-loop.ts";
+import { runToolLoop, type ToolLoop, type ToolOutcome } from "./tool-loop.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
 import type { HomeDir, NvimCwd } from "./utils/files.ts";
@@ -94,7 +94,6 @@ interface ThreadCoreState {
 
 export class ThreadCore {
   preflightTokenCount: number | undefined;
-  private disposed = false;
 
   readonly manager: NativeInferenceManager;
   readonly toolSpecs: ProviderToolSpec[];
@@ -253,13 +252,12 @@ export class ThreadCore {
       contextTracker: this.fileSupervisor,
       edlRegisters: this.edlRegisters,
       onToolApplied: (absFilePath, tool, fileTypeInfo) => {
-        if (this.isActive)
-          callbacks.supervisor.onToolApplied({
-            absFilePath,
-            tool,
-            fileTypeInfo,
-            nativeMessageIdx: this.pendingResultMessageIdx,
-          });
+        callbacks.supervisor.onToolApplied({
+          absFilePath,
+          tool,
+          fileTypeInfo,
+          nativeMessageIdx: this.pendingResultMessageIdx,
+        });
       },
       requestRender: () => this.handleUpdate(),
     });
@@ -291,19 +289,15 @@ export class ThreadCore {
     return this.contextDeliveries.get(nativeMessageIdx);
   }
 
-  get isActive(): boolean {
-    return !this.disposed;
-  }
   private handleUpdate(): void {
-    if (!this.disposed) this.callbacks.onUpdate();
+    this.callbacks.onUpdate();
   }
 
-  async dispose(): Promise<void> {
-    if (this.disposed) return;
-    this.disposed = true;
+  /** Releases conversation-local resources. The owner aborts and awaits any
+   * running turn first. */
+  dispose(): void {
     this.fileSupervisor.destroy();
     if (this.gitSupervisor) this.gitSupervisor.callbacks = {};
-    await this.abortToolLoop();
   }
 
   private resultMessageIdx: NativeMessageIdx | undefined;
@@ -311,20 +305,18 @@ export class ThreadCore {
   private executeTools(
     requests: NonEmptyRequestedTools,
     publishTools: (tools: ToolInvocationState) => void,
-  ): ToolExecution {
+    signal: AbortSignal,
+  ): Promise<ToolOutcome> {
     this.resultMessageIdx = this.manager.getPendingResultMessageIdx(requests);
-    const execution = executeToolBatch(requests, {
+    return executeToolBatch(requests, {
       createTool: this.createTool,
       completedTools: this.completedTools,
       publishTools,
       onUpdate: () => this.handleUpdate(),
+      signal,
+    }).finally(() => {
+      this.resultMessageIdx = undefined;
     });
-    return {
-      ...execution,
-      promise: execution.promise.finally(() => {
-        this.resultMessageIdx = undefined;
-      }),
-    };
   }
   get lastAssistantMessage():
     | ReadonlyArray<ProviderMessageContent>
@@ -364,7 +356,6 @@ export class ThreadCore {
   }
 
   private async beforeRequest(): Promise<AgentInput[]> {
-    if (!this.isActive) return [];
     return this.callbacks.supervisor.beforeRequest({
       outputTokenCount: this.manager.log.messages.reduce(
         (total, message) => total + (message.usage?.outputTokens ?? 0),
@@ -376,13 +367,14 @@ export class ThreadCore {
 
   /** Counts the log exactly as it will be sent: injections and input are
    * already appended. */
-  private async checkBudget(): Promise<BudgetDecision> {
+  private async checkBudget(signal: AbortSignal): Promise<BudgetDecision> {
     const budget = this.context.tokenBudget;
     if (!budget || !this.manager.countTokens) return { type: "proceed" };
     let count: number;
     try {
-      count = await this.manager.countTokens();
+      count = await this.manager.countTokens(signal);
     } catch (error) {
+      if (signal.aborted) throw error;
       this.context.logger.warn(
         `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -394,24 +386,24 @@ export class ThreadCore {
     return budget.check(count);
   }
 
-  async runToolLoop(messages: AgentInput[]): Promise<ToolLoopResult> {
-    if (!this.isActive) return { type: "aborted" };
+  async runToolLoop(
+    messages: AgentInput[],
+    signal: AbortSignal,
+  ): Promise<ToolLoopResult> {
     const turn = runToolLoop(
       {
         logger: this.context.logger,
         manager: this.manager,
-        executeTools: (requests, publishTools) =>
-          this.executeTools(requests, publishTools),
+        executeTools: (requests, publishTools, signal) =>
+          this.executeTools(requests, publishTools, signal),
         onBeforeRequest: () => this.beforeRequest(),
-        checkBudget: () => this.checkBudget(),
+        checkBudget: (signal) => this.checkBudget(signal),
         onToolResults: (results, idx) =>
-          this.isActive
-            ? this.callbacks.supervisor.onToolResults(results, idx)
-            : undefined,
-
+          this.callbacks.supervisor.onToolResults(results, idx),
         onUpdate: () => this.handleUpdate(),
       },
       messages,
+      signal,
     );
     this.toolLoop = turn;
     this.handleUpdate();
@@ -437,14 +429,5 @@ export class ThreadCore {
   private toolLoop: ToolLoop | undefined;
   get activity() {
     return this.toolLoop?.loopState;
-  }
-  get aborting(): boolean {
-    return this.toolLoop?.loopState.aborting ?? false;
-  }
-  async abortToolLoop(): Promise<void> {
-    const turn = this.toolLoop;
-    if (!turn) return;
-    turn.abort();
-    await turn.promise.catch(() => {});
   }
 }

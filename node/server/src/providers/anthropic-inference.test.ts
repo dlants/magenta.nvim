@@ -7,10 +7,9 @@ import {
   flatLoop,
   noopLogger,
   type TestAgent,
-  toolExecution,
 } from "../test-helpers.ts";
 import type { ToolLoopResult } from "../thread-api.ts";
-import type { ToolExecutor } from "../tool-loop.ts";
+import type { ToolExecutor, ToolOutcome } from "../tool-loop.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { delay, pollUntil } from "../utils/async.ts";
 import type { AnthropicInferenceManager } from "./anthropic-inference.ts";
@@ -80,7 +79,7 @@ function trackUpdates(): Tracked {
 
 /** Default executor: no test reaches it unless it streams a tool_use. */
 const rejectingExecutor: ToolExecutor = () =>
-  toolExecution(Promise.reject(new Error("unexpected tool execution")));
+  Promise.resolve(Promise.reject(new Error("unexpected tool execution")));
 
 type CreateOptions = {
   model?: string;
@@ -365,7 +364,7 @@ describe("tool execution", () => {
     const agent = createAgent(mockClient, {
       executeTools: (requests) => {
         seen = requests;
-        return toolExecution(
+        return Promise.resolve(
           Promise.resolve({
             type: "continue" as const,
             results: okResults(requests),
@@ -400,7 +399,7 @@ describe("tool execution", () => {
     const toolUseId = "tool-omitted" as ToolRequestId;
     const agent = createAgent(mockClient, {
       executeTools: () =>
-        toolExecution({ type: "continue" as const, results: new Map() }),
+        Promise.resolve({ type: "continue" as const, results: new Map() }),
     });
 
     const turn = agent.runTurn("Hello");
@@ -427,7 +426,7 @@ describe("tool execution", () => {
     const toolUseId = "tool-reject" as ToolRequestId;
     const agent = createAgent(mockClient, {
       executeTools: () =>
-        toolExecution(Promise.reject(new Error("executor blew up"))),
+        Promise.resolve(Promise.reject(new Error("executor blew up"))),
     });
 
     const turn = agent.runTurn("Hello");
@@ -516,27 +515,28 @@ describe("hung stream abort", () => {
         text: "Hello",
       },
     ]);
-    const request = manager.sendRequest(() => {});
+    const controller = new AbortController();
+    const request = manager.sendRequest(() => {}, controller.signal);
     const stream = mockClient.streams[0];
     if (!stream) throw new Error("stream was not created");
     stream.ignoreAbort();
 
     let settled = false;
-    void request.promise.then(() => {
+    void request.then(() => {
       settled = true;
     });
-    request.abort();
+    controller.abort();
     await vi.advanceTimersByTimeAsync(ABORT_GRACE_PERIOD_MS - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await request.promise).toEqual({ type: "aborted" });
+    expect(await request).toEqual({ type: "aborted" });
 
     const messagesAfterAbort = structuredClone(manager.log.messages);
     stream.streamText("late response");
     await vi.advanceTimersByTimeAsync(0);
     expect(manager.log.messages).toEqual(messagesAfterAbort);
 
-    const second = manager.sendRequest(() => {}).promise;
+    const second = manager.sendRequest(() => {}, new AbortController().signal);
     const secondStream = mockClient.streams[1];
     if (!secondStream) throw new Error("second stream was not created");
     secondStream.finishResponse("end_turn");
@@ -984,7 +984,7 @@ describe("streaming block", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient, {
       executeTools: (requests) =>
-        toolExecution({
+        Promise.resolve({
           type: "continue" as const,
           results: okResults(requests),
         }),
@@ -1466,7 +1466,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
-          toolExecution({
+          Promise.resolve({
             type: "continue" as const,
             results: okResults(requests),
           }),
@@ -1500,7 +1500,7 @@ describe("web search result preservation", () => {
       const toolUseId = "tool-malformed" as ToolRequestId;
       const agent = createAgent(mockClient, {
         executeTools: () =>
-          toolExecution({
+          Promise.resolve({
             type: "continue" as const,
             results: new Map([
               [
@@ -1719,7 +1719,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
-          toolExecution({
+          Promise.resolve({
             type: "continue" as const,
             results: okResults(requests),
           }),
@@ -1815,8 +1815,8 @@ File context here
       const agent = createAgent(mockClient, {
         executeTools: (requests) => {
           onCalled();
-          return toolExecution(
-            new Promise((resolve) => {
+          return Promise.resolve(
+            new Promise<ToolOutcome>((resolve) => {
               releaseTools = () =>
                 resolve({ type: "continue", results: okResults(requests) });
             }),
@@ -2018,7 +2018,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
-          toolExecution({
+          Promise.resolve({
             type: "continue" as const,
             results: okResults(requests, "file contents"),
           }),
@@ -2062,8 +2062,8 @@ File context here
       const agent = createAgent(mockClient, {
         executeTools: () => {
           onCalled();
-          return toolExecution(
-            new Promise((resolve) => {
+          return Promise.resolve(
+            new Promise<ToolOutcome>((resolve) => {
               releaseTools = () =>
                 resolve({ type: "aborted", results: new Map() });
             }),
@@ -2110,8 +2110,8 @@ File context here
       const agent = createAgent(mockClient, {
         executeTools: () => {
           onCalled();
-          return toolExecution(
-            new Promise((resolve) => {
+          return Promise.resolve(
+            new Promise<ToolOutcome>((resolve) => {
               releaseTools = () =>
                 resolve({ type: "aborted", results: new Map() });
             }),
