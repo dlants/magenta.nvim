@@ -138,6 +138,11 @@ M.start = function(silent)
     end
   end
 
+  -- The inherited $NVIM may point at a different nvim (e.g. this is a
+  -- headless nvim launched from an agent's shell inside another nvim), which
+  -- would make node connect to, and hijack the bridge of, that other nvim.
+  env.NVIM = vim.v.servername
+
   if vim.env.MAGENTA_NODE_INSPECT then
     env.NODE_OPTIONS = "--inspect=" .. vim.env.MAGENTA_NODE_INSPECT
   end
@@ -222,6 +227,16 @@ local visual_commands = {
 
 M.bridge = function(channelId)
   Timings.record("lua: bridge called (node process connected)")
+
+  -- Never let a second node process take over a live bridge; a stray process
+  -- connecting via a leaked $NVIM would otherwise steal it and leave the real
+  -- one orphaned once the stray exits. Erroring makes the stray's startup fail.
+  if M.channel_id and M.channel_id ~= channelId and channel_alive(M.channel_id) then
+    local msg = "magenta: refusing bridge from channel " .. tostring(channelId)
+      .. "; channel " .. tostring(M.channel_id) .. " is still bridged"
+    vim.notify(msg, vim.log.levels.WARN)
+    error(msg)
+  end
 
   -- If a previous node process was running, clear its autocmds and
   -- command before we register new ones with the fresh channel id.

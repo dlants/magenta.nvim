@@ -875,6 +875,69 @@ describe("Thread submissions across a compaction handoff", () => {
     }
   });
 
+  it.each([
+    { pending: true, expected: "again", absent: "Please continue" },
+    {
+      pending: false,
+      expected: "Please continue from where you left off.",
+      absent: undefined,
+    },
+  ])("sends $expected after a budget stop with a blank handoff", async ({
+    pending,
+    expected,
+    absent,
+  }) => {
+    const threadId = uniqueThreadId("blank-handoff");
+    const { core, mockClient } = createAgentWithMock(
+      {
+        resolve: resolveCompact,
+        ...autoCompactSupervisors({ threshold: 100, handoff: "  \n " }),
+      },
+      threadId,
+    );
+    try {
+      const compactor = stubCompactor();
+      compactorSlot(core).compactor = compactor;
+      const firstManager = core["core"].manager;
+      mockClient.mockInputTokenCount = 50;
+      let result: Promise<unknown>;
+      if (pending) {
+        await firstTurn(core, mockClient);
+        mockClient.mockInputTokenCountOnce = 200;
+        result = core.submit({ type: "resolved", messages: userText("again") });
+      } else {
+        result = core.submit({
+          type: "resolved",
+          messages: userText("edit a"),
+        });
+        const stream = await mockClient.awaitStream();
+        mockClient.mockInputTokenCountOnce = 200;
+        stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
+          script: `file \`/tmp/missing.txt\`\nnarrow /x/\nreplace "y"`,
+        });
+        stream.finishResponse("tool_use");
+      }
+      const contStream = await pollUntil(() => {
+        if (core["core"].manager === firstManager)
+          throw new Error("waiting for swap");
+        const last = mockClient.streams.at(-1);
+        if (!last || mockClient.streams.length < 2)
+          throw new Error("waiting for the continuation");
+        return last;
+      });
+      expect(compactor.calls).toHaveLength(1);
+      const body = JSON.stringify(contStream.messages);
+      expect(body).toContain(expected);
+      if (absent) expect(body).not.toContain(absent);
+      contStream.streamText("resumed");
+      contStream.finishResponse("end_turn");
+      await result;
+    } finally {
+      await core.destroy();
+      await flushArchive(core);
+      await cleanupArchive(threadId);
+    }
+  });
   it("rests an explicit @compact on a thread without a compactor", async () => {
     const { core, mockClient } = createAgentWithMock({
       resolve: resolveCompact,

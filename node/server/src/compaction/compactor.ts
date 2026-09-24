@@ -16,6 +16,7 @@ import type {
   AgentInput,
   ProviderMessage,
 } from "../providers/provider-types.ts";
+import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { CompactionOutcome, Compactor } from "./index.ts";
 
 const COMPACT_PROMPT_TEMPLATE = readFileSync(
@@ -303,12 +304,17 @@ function buildChunkPrompt({
 /** The chunk prompt only needs to know what comes next, so non-text input
  * is named rather than inlined. */
 function renderNext(next: ReadonlyArray<AgentInput>): string {
-  const parts = next.map((input) =>
-    input.type === "text"
-      ? input.text
-      : input.type === "image"
-        ? "[image]"
-        : `[document: ${input.title ?? "untitled"}]`,
-  );
+  const parts = next.map((input) => {
+    switch (input.type) {
+      case "text":
+        return input.text;
+      case "image":
+        return "[image]";
+      case "document":
+        return `[document: ${input.title ?? "untitled"}]`;
+      default:
+        return assertUnreachable(input);
+    }
+  });
   return parts.join("\n").trim() || "Continue from where you left off.";
 }

@@ -145,7 +145,7 @@ export type ThreadArchiveOptions = {
  * compaction the flush ran into — never both. */
 type FlushedQueue =
   | { type: "messages"; messages: AgentInput[] }
-  | { type: "compact"; next: AgentInput[] };
+  | { type: "compact"; next: ReadonlyArray<AgentInput> };
 
 /** A compaction that suspends a request lands after the user's message is
  * already in the log. That message has not been answered, so it is carried
@@ -183,7 +183,7 @@ export function splitPendingUserText(
 type LoopResult = RestResult | CompactRequest;
 /** Compaction is not a suspension: the loop hands it to `startSubmission`,
  * which compacts and runs again. */
-type CompactRequest = { type: "compact"; next: AgentInput[] };
+type CompactRequest = { type: "compact"; next: ReadonlyArray<AgentInput> };
 type CompactAndContinueOutcome =
   | { type: "continue"; messages: AgentInput[] }
   | { type: "settle"; result: RestResult };

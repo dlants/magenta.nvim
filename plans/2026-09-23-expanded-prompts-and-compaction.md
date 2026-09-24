@@ -186,6 +186,7 @@ Status: DONE.
 - Deviation: `TokenBudget.handoff` stays a `string` (it is plain config, cloned onto forks and asserted as a string in tests); Thread wraps it as one text item (or `[]` when blank) at the `context_budget` stop.
 - Stage 3 interim: `splitPendingUserText` still returns text; `compactAndContinue` appends it to `next` as a single text item. Stage 3 replaces this.
 - `CompactionOutcome` shape is unchanged (stage 3 adds `next`/optional summary).
+- Review follow-up: `CompactRequest.next` and the flush compact variant are `ReadonlyArray<AgentInput>`; `renderNext` switches exhaustively (`assertUnreachable`). agent.test "sends $expected after a budget stop with a blank handoff" pins the whitespace-only handoff behaviour (pending user text sent alone; otherwise the "Please continue…" fallback). `nvimclient/bridge-guard.test.ts` covers the lua `M.bridge` live-channel guard (the `env.NVIM` override is untested: the start env isn't inspectable).
 - Tests: agent.test "sends an @compact prompt's image verbatim after compaction"; compaction/index.test "ThreadCompactor chunk prompt" placeholder test; thread.test flush tests now assert `AgentInput[]` in order. Test compactors use a local `nextText` helper to keep string expectations.
 
 - Goal:
