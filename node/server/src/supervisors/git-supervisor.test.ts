@@ -5,22 +5,14 @@ import type {
   GitState,
 } from "../capabilities/git-client.ts";
 import { parseGitState } from "../capabilities/git-client.ts";
-import type { Logger } from "../logger.ts";
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
+import { noopLogger } from "../test-helpers.ts";
 import {
   type GitContextUpdate,
   GitSupervisor,
   GitTracker,
   gitUpdateToText,
 } from "./git-supervisor.ts";
-
-const noopLogger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  trace: () => {},
-} as unknown as Logger;
 
 function state(branch: string): GitState {
   return {

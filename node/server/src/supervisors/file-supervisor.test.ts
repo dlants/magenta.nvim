@@ -26,12 +26,12 @@ const IMAGE_FILE_TYPE = {
   extension: ".jpg",
 };
 
-const logger = {
+const logger: Logger = {
   error: vi.fn(),
   warn: vi.fn(),
   info: vi.fn(),
   debug: vi.fn(),
-} as unknown as Logger;
+};
 
 function setup(files: Record<string, string>) {
   const fileIO = new InMemoryFileIO(files);

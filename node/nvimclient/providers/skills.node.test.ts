@@ -9,13 +9,12 @@ import { expect, it } from "vitest";
 import { BUILTIN_SKILLS_PATH } from "../options.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 
-const logger = {
+const logger: Logger = {
   debug: () => {},
   info: () => {},
   warn: () => {},
   error: () => {},
-  trace: () => {},
-} as unknown as Logger;
+};
 
 it("discovers the built-in authoring-magenta-scripts skill and it documents the harness", async () => {
   const skills = await loadSkills({

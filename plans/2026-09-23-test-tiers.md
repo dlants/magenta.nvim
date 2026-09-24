@@ -219,6 +219,7 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
   - Skills: `node/server/src/providers/skills-flow.test.ts` (A, 8, over `InMemoryFileIO`); nvimclient file replaced by `providers/skills.node.test.ts` (builtin skill discovery on real fs). Deviation: "only built-in skill"/"non-existent dir" cases become "section omitted when the dir doesn't exist" in A (the builtin path is a nvimclient option), with the builtin case covered in the node test.
   - `options-loader.test.ts` → `options-loader.node.test.ts` (B): `DynamicOptionsLoader` over a tmp home/project, no nvim.
   - `node/server/src/edited-files-flow.test.ts` (A, 2): per-turn groups with snapshot/content, created file with empty snapshot. Deviation: C `thread-edited-files.test.ts` left unchanged — all 3 tests assert rendering/`<CR>`/diffsplit/buffer behavior.
+  - Review follow-up: `skills-flow.test.ts` adds "logs when a skill overrides one with a duplicate name" (calls `loadSkills` with a capturing logger; the duplicate message is logged at `info` as an override, not `warn`) and "omits the skills section when no skills paths are configured" (`skillsPaths: []`). `noopLogger` in server `test-helpers.ts` now fully implements `Logger` without a cast; `auto-context`/`system-info`/`git-supervisor` tests use it, `file-supervisor.test.ts` and `skills.node.test.ts` use typed `Logger` literals (no `as unknown as`).
 
 ## 8. Port tool tests
 

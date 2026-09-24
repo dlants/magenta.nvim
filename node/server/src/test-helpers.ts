@@ -75,8 +75,7 @@ export const noopLogger: Logger = {
   info: () => {},
   warn: () => {},
   error: () => {},
-  trace: () => {},
-} as Logger;
+};
 
 export const defaultAnthropicOptions: AnthropicInferenceOptions = {
   authType: "max",

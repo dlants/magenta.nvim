@@ -1,5 +1,10 @@
 import { expect, it } from "vitest";
+import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
+import type { Logger } from "../logger.ts";
 import { type Harness, withHarness } from "../test/harness.ts";
+import { noopLogger } from "../test-helpers.ts";
+import type { HomeDir, NvimCwd } from "../utils/files.ts";
+import { loadSkills } from "./skills.ts";
 
 const SKILLS = "/project/.claude/skills";
 const skill = (name: string, description: string, body = "Content\n") =>
@@ -106,3 +111,36 @@ it("includes skills in system prompt not user messages", () =>
       );
     },
   ));
+it("logs when a skill overrides one with a duplicate name", async () => {
+  const infos: string[] = [];
+  const logger: Logger = {
+    ...noopLogger,
+    info: (msg) => infos.push(String(msg)),
+  };
+  const skills = await loadSkills({
+    cwd: "/project" as NvimCwd,
+    homeDir: "/home" as HomeDir,
+    logger,
+    fileIO: new InMemoryFileIO({
+      [`${SKILLS}/skill1/skill.md`]: skill("duplicate-name", "First dup"),
+      [`${SKILLS}/skill2/skill.md`]: skill("duplicate-name", "Second dup"),
+    }),
+    options: { skillsPaths: [".claude/skills"], agentsPaths: [] },
+  });
+  expect(Object.keys(skills)).toEqual(["duplicate-name"]);
+  expect(
+    infos.some(
+      (m) => m.includes('Skill "duplicate-name"') && m.includes("overrides"),
+    ),
+  ).toBe(true);
+});
+it("omits the skills section when no skills paths are configured", async () => {
+  const prompt = await withHarness(
+    {
+      files: { [`${SKILLS}/a/skill.md`]: skill("skill-a", "A") },
+      options: { skillsPaths: [] },
+    },
+    async (h) => (await h.createRoot()).thread.systemPrompt,
+  );
+  expect(prompt).not.toContain("Available Skills");
+});

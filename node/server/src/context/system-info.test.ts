@@ -1,23 +1,17 @@
 import path from "node:path";
 import { expect, it } from "vitest";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
-import type { Logger } from "../logger.ts";
 import {
   createSystemPrompt,
   formatSystemInfo,
 } from "../providers/system-prompt.ts";
+import { noopLogger } from "../test-helpers.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import { buildSystemInfo } from "./system-info.ts";
 
-const logger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-} as unknown as Logger;
 const cwd = "/project" as NvimCwd;
 const promptCtx = {
-  logger,
+  logger: noopLogger,
   cwd,
   options: {
     skillsPaths: [],

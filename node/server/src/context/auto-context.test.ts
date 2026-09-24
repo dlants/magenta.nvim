@@ -5,20 +5,13 @@ import { glob } from "glob";
 import { describe, expect, it } from "vitest";
 import { FsFileIO } from "../capabilities/file-io.ts";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
-import type { Logger } from "../logger.ts";
+import { noopLogger } from "../test-helpers.ts";
 import type { AbsFilePath, HomeDir, NvimCwd } from "../utils/files.ts";
 import {
   discoverHierarchyContext,
   globFiles,
   resolveAutoContext,
 } from "./auto-context.ts";
-
-const logger: Logger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-} as unknown as Logger;
 
 const cwd = "/project" as NvimCwd;
 const homeDir = "/home" as HomeDir;
@@ -34,7 +27,7 @@ describe("discoverHierarchyContext", () => {
       "/project/a/b/c/leaf.txt" as AbsFilePath,
       {
         fileIO,
-        logger,
+        logger: noopLogger,
         cwd,
         homeDir,
         hierarchyContextFileNames: ["context.md", "agent.md"],
@@ -54,7 +47,7 @@ describe("discoverHierarchyContext", () => {
       "/project/a/b/leaf.txt" as AbsFilePath,
       {
         fileIO,
-        logger,
+        logger: noopLogger,
         cwd,
         homeDir,
         hierarchyContextFileNames: ["context.md"],
@@ -70,7 +63,13 @@ describe("discoverHierarchyContext", () => {
     });
     const results = await discoverHierarchyContext(
       "/project/a/leaf.txt" as AbsFilePath,
-      { fileIO, logger, cwd, homeDir, hierarchyContextFileNames: [] },
+      {
+        fileIO,
+        logger: noopLogger,
+        cwd,
+        homeDir,
+        hierarchyContextFileNames: [],
+      },
     );
     expect(results).toEqual([]);
   });
@@ -88,7 +87,7 @@ describe("resolveAutoContext", () => {
     });
     const results = await resolveAutoContext({
       fileIO,
-      logger,
+      logger: noopLogger,
       cwd,
       homeDir,
       globs: [
@@ -109,7 +108,7 @@ describe("resolveAutoContext", () => {
     const fileIO = new InMemoryFileIO({ "/project/context.md": "x" });
     const results = await resolveAutoContext({
       fileIO,
-      logger,
+      logger: noopLogger,
       cwd,
       homeDir,
       globs: ["context.md", "**/context.md", "./context.md"],
@@ -129,7 +128,7 @@ describe("resolveAutoContext", () => {
       );
       const results = await resolveAutoContext({
         fileIO: new FsFileIO(),
-        logger,
+        logger: noopLogger,
         cwd: tmp as NvimCwd,
         homeDir,
         globs: ["context.md", "link.md"],
@@ -146,7 +145,13 @@ describe("resolveAutoContext", () => {
   it("returns nothing when no globs are configured", async () => {
     const fileIO = new InMemoryFileIO({ "/project/context.md": "x" });
     expect(
-      await resolveAutoContext({ fileIO, logger, cwd, homeDir, globs: [] }),
+      await resolveAutoContext({
+        fileIO,
+        logger: noopLogger,
+        cwd,
+        homeDir,
+        globs: [],
+      }),
     ).toEqual([]);
   });
 });
