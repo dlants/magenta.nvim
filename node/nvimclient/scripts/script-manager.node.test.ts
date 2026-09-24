@@ -31,6 +31,30 @@ async function pollUntil(fn: () => boolean, timeoutMs = 10000): Promise<void> {
   }
 }
 
+function expectInvocation(
+  scripts: ScriptManager,
+  id: Parameters<ScriptManager["childPid"]>[0],
+) {
+  const inv = scripts.invocations.get(id);
+  if (!inv) throw new Error(`no invocation ${id}`);
+  return inv;
+}
+
+function expectChildPid(
+  scripts: ScriptManager,
+  id: Parameters<ScriptManager["childPid"]>[0],
+): number {
+  const pid = scripts.childPid(id);
+  if (pid === undefined) throw new Error(`no child pid for ${id}`);
+  return pid;
+}
+
+function loggedChildPid(logs: readonly string[]): string {
+  const line = logs.find((l) => l.startsWith("child "));
+  if (!line) throw new Error(`no "child " log line in ${JSON.stringify(logs)}`);
+  return line.slice("child ".length);
+}
+
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -217,7 +241,7 @@ it("invokes a script that spawns a thread and resolves with the structured yield
       { sandboxBypassed: false },
     );
     (await h.streamWithText("work on thing")).respond(yieldOk("yield-1"));
-    const inv = scripts.invocations.get(id)!;
+    const inv = expectInvocation(scripts, id);
     await pollUntil(() => inv.state.type === "done");
     expect(inv.threadIds.length).toBe(1);
     expect(inv.logs).toContain("starting");
@@ -238,7 +262,7 @@ it("does not resolve a script's createThread() await on a subagent error", async
     );
     const stream = await h.streamWithText("work on thing");
     stream.respondWithError(new Error("Simulated subagent error"));
-    const inv = scripts.invocations.get(id)!;
+    const inv = expectInvocation(scripts, id);
     await pollUntil(() => inv.threadIds.length > 0);
     const thread = h.thread(inv.threadIds[0]);
     await pollUntil(() => thread.lastResult()?.type === "failed");
@@ -300,12 +324,10 @@ it("marks the invocation error when the runner throws", async () => {
 it("group-kills the subprocess tree on terminate", async () => {
   await withScripts({ project: LONG_LIVED_SCRIPT }, async ({ scripts }) => {
     const id = scripts.startScript("foo", {}, { sandboxBypassed: false });
-    const inv = scripts.invocations.get(id)!;
+    const inv = expectInvocation(scripts, id);
     await pollUntil(() => inv.logs.some((l) => l.startsWith("child ")));
-    const childPid = scripts.childPid(id)!;
-    const grandchildPid = Number(
-      inv.logs.find((l) => l.startsWith("child "))!.slice("child ".length),
-    );
+    const childPid = expectChildPid(scripts, id);
+    const grandchildPid = Number(loggedChildPid(inv.logs));
     expect(isAlive(childPid)).toBe(true);
     expect(isAlive(grandchildPid)).toBe(true);
     scripts.terminateAll();
@@ -403,12 +425,10 @@ it("deleting an invocation mid-creation leaves no orphan script thread", async (
 it("dispose terminates running invocations and rejects new ones", async () => {
   await withScripts({ project: LONG_LIVED_SCRIPT }, async ({ scripts }) => {
     const id = scripts.startScript("foo", {}, { sandboxBypassed: false });
-    const inv = scripts.invocations.get(id)!;
+    const inv = expectInvocation(scripts, id);
     await pollUntil(() => inv.logs.some((l) => l.startsWith("child ")));
-    const childPid = scripts.childPid(id)!;
-    const grandchildPid = Number(
-      inv.logs.find((l) => l.startsWith("child "))!.slice("child ".length),
-    );
+    const childPid = expectChildPid(scripts, id);
+    const grandchildPid = Number(loggedChildPid(inv.logs));
     await scripts.dispose();
     await pollUntil(() => !isAlive(childPid) && !isAlive(grandchildPid));
     expect(() =>

@@ -250,6 +250,7 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
   - Harness: `availableCapabilities` includes `"scripts"` when `session.scriptRunner` is set at preparation.
   - C `script-manager.test.ts` keeps 7: overview rendering, root-row bypass toggle, expand/collapse, pending permission under a collapsed row, invocation sandbox toggle approving a real `SandboxViolationHandler` violation, and the two `Magenta.destroy` owner-shutdown tests (they test the nvimclient owner's dispose ordering).
   - Deviation: no tier A tests — the ScriptManager reads the scripts dir with `node:fs` and forks real processes, so everything is B. `script-e2e.test.ts` left unchanged (end-to-end through the sidebar).
+  - Review follow-up: non-null assertions in `script-manager.node.test.ts` replaced by throwing helpers `expectInvocation`, `expectChildPid`, `loggedChildPid`.
 
 ## 10. Pure-logic nvimclient cleanups
 
