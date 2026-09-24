@@ -100,12 +100,21 @@ For comprehensive view system documentation and templating patterns, use `get_fi
 
 See `.magenta/skills/doc-testing/skill.md`.
 
-Prefer public submissions and real nvim flows with mock providers/Defer-controlled boundaries. Server `test-helpers.ts` contains explicit white-box lifecycle helpers (`resetThread`, `getFileSupervisor`) for tests that must inspect core-owned resources; those are not production APIs or exports from the server barrel.
+Three tiers, cheapest first:
+
+- A (default): node-only in the vitest process. Drive `Session`/`Thread` through the harness (`node/server/src/test/harness.ts`: `createHarness`/`withHarness`, `TestSessionHost`; fakes in `test/fakes.ts`: `FakeGitClient`, `FakeShell`) with the mock Anthropic client and `InMemoryFileIO`, and assert on thread/session state rather than rendered text.
+- B: real tmp dir / git repo / child processes, no nvim — only when real fs/git/process behavior is under test.
+- C: nvim process (`withDriver`/`withNvimClient`) — only for buffers, windows, keymaps, TUI rendering, the lua bridge and other nvim machinery.
+
+Vitest projects: `server` (`node/server/**`, `sdk/**`), `node` (`node/nvimclient/**/*.node.test.ts`, tiers A/B in the client), `nvim` (all other nvimclient tests, forks pool capped at 4). Name nvimclient tests that don't start nvim `*.node.test.ts`.
+
+Prefer public submissions with mock providers/Defer-controlled boundaries. Server `test-helpers.ts` contains explicit white-box lifecycle helpers (`resetThread`, `getFileSupervisor`) for tests that must inspect core-owned resources; those are not production APIs or exports from the server barrel.
 
 Quick reference:
 
 - Run tests: `npx vitest run` (from project root, for local development)
 - Run specific test: `npx vitest run <file>`
+- Run one project: `npx vitest run --project server` (or `node`, `nvim`)
 
 # Type checks
 

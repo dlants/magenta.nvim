@@ -8,10 +8,20 @@ description: Comprehensive guide for writing tests in magenta.nvim, including te
 To run the full test suite, use `npx vitest run` from the project root. You do not need to cd.
 To run a specific test file, use `npx vitest run <file>`. **Important** You do not need to cd.
 Test files should use the `.test.ts` extension (e.g., `myFeature.test.ts`).
-Tests should make use of the `node/nvimclient/test/preamble.ts` helpers.
-When doing integration-level testing, like user flows, use the `withDriver` helper and the interactions in `node/nvimclient/test/driver.ts`. When performing generic user actions that may be reusable between tests, put them into the NvimDriver class as helpers.
 
-As of July 2025, tests are now run in parallel for improved performance. The test infrastructure has been updated to support concurrent test execution.
+## Test tiers
+
+Pick the cheapest tier that exercises the behavior under test. The vitest config has three projects (`npx vitest run --project server|node|nvim`):
+
+- **Tier A (default): node-only, in-process.** Drive the server machinery (`Session`/`Thread`/`ThreadCore`/`NativeInferenceManager`) with the mock Anthropic client and `InMemoryFileIO`, and assert on state (`thread.getProviderMessages()`, `loopState`, `contextFiles`, `getContextDelivery`, session records, mock stream requests), not on rendered text. Use the harness in `node/server/src/test/harness.ts` (`createHarness`/`withHarness`, `TestSessionHost`) and the fakes in `node/server/src/test/fakes.ts` (`FakeGitClient` with `set(state)`, `FakeShell` with scripted results or test-settled `pending` Defers). Harness options cover seeded `files`, `git`, `shell`, `agents`, `luaExecutor`, `mcpServers`, `contextOverrides` and `intercept` (gate/fail thread preparation). Server tests live in `node/server/**` (project `server`, thread pool). Examples: `thread-flow.test.ts`, `thread-compact-flow.test.ts`, `fork-flow.test.ts`, `context/context-flow.test.ts`.
+- **Tier B: real tmp dir / git repo / child processes, still no nvim.** Only when real fs, git, or process behavior is under test (e.g. `capabilities/git-client.node.test.ts`, `capabilities/sandbox-shell.node.test.ts`, `scripts/script-manager.node.test.ts`). Create and clean up your own tmp dir.
+- **Tier C: nvim process** (`withDriver`/`withNvimClient` from `node/nvimclient/test/preamble.ts`). Only when nvim machinery is under test: buffers, extmarks, windows, keymaps, TUI rendering, the lua bridge, completions, nvim-side `@` commands (`@diag`, `@qf`, `@buf`), sandbox approval UI. Keep one representative test per rendering path. These run in a forks pool capped at 4 nvim processes, with the nvim `globalSetup`.
+
+Naming: server tests are `*.test.ts` under `node/server/`. Tests under `node/nvimclient/` that do not start nvim (tier A/B) must be named `*.node.test.ts` so they run in the `node` project; any other `node/nvimclient/**/*.test.ts` runs in the `nvim` project. nvimclient node tests may import server test helpers; the server must not import from nvimclient.
+
+The rest of this document describes the tier C harness.
+
+When doing integration-level testing, like user flows, use the `withDriver` helper and the interactions in `node/nvimclient/test/driver.ts`. When performing generic user actions that may be reusable between tests, put them into the NvimDriver class as helpers.
 
 ## Test Environment Setup
 

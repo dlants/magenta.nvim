@@ -267,6 +267,12 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
 
 - Goal: record new wall times per project next to the stage 1 baseline. Remove C tests left redundant after stages 5–10; update `.magenta/skills/doc-testing/skill.md` and `context.md` Testing section to describe the three tiers, the harness, and the `*.node.test.ts` convention (default = tier A).
 - Tests: full suite green; test count delta explained (moved vs deleted-as-duplicate, with the covering test named).
+- Status: DONE.
+  - Baseline (commit before stage 1, single config, measured via a worktree on the same machine): full suite 110s wall, 1808 tests (1122 server/sdk, 686 nvimclient; 7 failures there were worktree-environment related). Stage 1 recorded no baseline, so it was measured retroactively here.
+  - After stage 10: full `npx vitest run` 66s wall (vitest-reported 65.3s), 1827 tests. Per project run alone: `server` 25s / 1258 tests, `node` 5s / 45 tests, `nvim` 64s / 524 tests (2 skipped). The full run is now bounded by the `nvim` project.
+  - Count delta: nvim-backed tests 686 → 524 (−162); node-only 1122 → 1303 (+181); net +19. The moves and duplicate deletions are listed per stage above (stages 5–10 name the covering A/B tests). The net gain comes from new A coverage (harness smoke/parity, InMemoryFileIO/FakeShell unit tests, review follow-ups) and C cases that became several A cases.
+  - Pruning: no more C tests removed. After stages 5–10, each remaining C test asserts rendering, keymaps, buffers, sandbox approval UI or nvim-side `@` commands, and the plan keeps one C test per rendering path.
+  - Docs: `.magenta/skills/doc-testing/skill.md` gained a "Test tiers" section (tiers, harness/fakes, projects, `*.node.test.ts` naming). The `context.md` Testing section describes the three tiers and `--project`.
 
 # Appendix: per-file audit
 
