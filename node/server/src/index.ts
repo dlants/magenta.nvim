@@ -85,6 +85,14 @@ export type {
   ProvisionResult,
   TeardownResult,
 } from "./container/types.ts";
+export {
+  type AutoContextFile,
+  autoContextFilesToInitialFiles,
+  discoverHierarchyContext,
+  globFiles,
+  resolveAutoContext,
+} from "./context/auto-context.ts";
+export { buildSystemInfo } from "./context/system-info.ts";
 export type { Dispatch } from "./dispatch.ts";
 export { DockerSupervisor } from "./docker-supervisor.ts";
 export {

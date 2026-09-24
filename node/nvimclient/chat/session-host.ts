@@ -1,7 +1,12 @@
 import {
   type AgentInput,
+  autoContextFilesToInitialFiles,
+  buildSystemInfo,
   type ContextFileAccess,
   clientToolCreator,
+  createSystemPrompt,
+  discoverHierarchyContext,
+  FsFileIO,
   loadAgents,
   MCPToolManagerImpl,
   type PendingMessage,
@@ -10,17 +15,14 @@ import {
   type ProviderProfile,
   parseCompact,
   type ResolvedSubmission,
+  resolveAutoContext,
   type Session,
   type SessionHost,
+  type SystemPrompt,
   type ThreadId,
   type ThreadPreparation,
 } from "@magenta/server";
 import type { Lsp } from "../capabilities/lsp.ts";
-import {
-  autoContextFilesToInitialFiles,
-  discoverHierarchyContext,
-  resolveAutoContext,
-} from "../context/auto-context.ts";
 import {
   createDockerEnvironment,
   createLocalEnvironment,
@@ -29,17 +31,16 @@ import {
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { MagentaOptions } from "../options.ts";
 import { getProvider } from "../providers/provider.ts";
-import {
-  buildSystemInfo,
-  createSystemPrompt,
-  type SystemPrompt,
-} from "../providers/system-prompt.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { Sandbox } from "../sandbox-manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import type { CommandRegistry } from "./commands/registry.ts";
 import type { NvimThreadContext, SandboxRoot } from "./thread.ts";
+
+/** Auto/hierarchy context is discovered on the host filesystem, independent of
+ * a thread's (possibly sandboxed or docker) fileIO. */
+const hostFileIO = new FsFileIO();
 
 export type NvimHostContext = {
   dispatch: Dispatch<RootMsg>;
@@ -187,8 +188,11 @@ export class NvimSessionHost implements SessionHost {
       fileIO || source
         ? Promise.resolve([])
         : resolveAutoContext({
-            ...this.context,
-            options: this.context.getOptions(),
+            fileIO: hostFileIO,
+            logger: this.context.nvim.logger,
+            cwd: this.context.cwd,
+            homeDir: this.context.homeDir,
+            globs: this.context.getOptions().autoContext,
           }),
       resolvedConfig.type === "docker"
         ? createDockerEnvironment({
@@ -228,22 +232,24 @@ export class NvimSessionHost implements SessionHost {
 
     const systemInfo =
       source?.systemInfo ??
-      (await buildSystemInfo({
-        nvim: this.context.nvim,
+      buildSystemInfo({
         cwd: environment.cwd,
-        systemInfoOverrides: {
+        neovimVersion: String(
+          await this.context.nvim.call("nvim_eval", ["v:version"]),
+        ),
+        overrides: {
           git: initialGitState,
           ...(resolvedConfig.type === "docker"
             ? { platform: "linux (docker)", cwd: environment.cwd }
             : {}),
         },
-      }));
+      });
 
     // A fork continues the source's conversation, so it keeps its prompt.
     const systemPrompt =
       source?.systemPrompt ??
       (await createSystemPrompt(threadType, {
-        nvim: this.context.nvim,
+        logger: this.context.nvim.logger,
         cwd: environment.cwd,
         options: this.context.getOptions(),
         fileIO: environment.fileIO,
@@ -330,10 +336,11 @@ function prepareThreadDependencies(
     gitClient: env.gitClient,
     discoverHierarchy: (absFilePath) =>
       discoverHierarchyContext(absFilePath, {
-        nvim: context.nvim,
+        fileIO: hostFileIO,
+        logger: context.nvim.logger,
         cwd,
         homeDir,
-        options: context.options,
+        hierarchyContextFileNames: context.options.hierarchyContextFileNames,
       }),
     clientToolCreator: clientToolCreator({
       logger: context.nvim.logger,

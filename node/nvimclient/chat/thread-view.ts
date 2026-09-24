@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { SystemPrompt } from "@magenta/server";
 import {
   type CompactionRunState,
   type CompletedToolInfo,
@@ -36,7 +37,6 @@ import type {
   ToolResultInput,
   Usage,
 } from "../providers/provider.ts";
-import type { SystemPrompt } from "../providers/system-prompt.ts";
 import {
   renderToolInput,
   renderToolInputSummaryExpansion,

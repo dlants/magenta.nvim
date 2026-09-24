@@ -2,6 +2,7 @@ import type {
   GitState,
   ScriptSandboxRoot,
   SubagentConfig,
+  SystemInfo,
   ToolResultInput,
 } from "@magenta/server";
 import {
@@ -27,7 +28,6 @@ import { displaySnapshotDiff } from "../nvim/displaySnapshotDiff.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 import type { MagentaOptions, Profile } from "../options.ts";
-import type { SystemInfo } from "../providers/system-prompt.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";

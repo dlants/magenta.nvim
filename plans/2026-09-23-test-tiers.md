@@ -155,6 +155,11 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
   - Port `context/auto-context.test.ts` and `providers/system-prompt.test.ts` to A using `InMemoryFileIO` (walks up from nested file, empty names disables, home before project, docker prompt text, systemInfo overrides).
   - Glob parity: for a fixture tree, the FileIO-based matcher over `InMemoryFileIO` returns the same set as the previous `glob` implementation for the default autoContext patterns (`context.md`, `CLAUDE.md`, `.magenta/*.md`, `~/`-prefixed, case-insensitive), `nodir`, and gitignored paths if previously excluded.
   - Existing C tests in `context-manager.test.ts` for autoContext and hierarchy still pass unchanged (proves production wiring).
+- Status: DONE.
+  - `node/server/src/context/auto-context.ts` (`resolveAutoContext({fileIO, logger, cwd, homeDir, globs})`, `discoverHierarchyContext(abs, {fileIO, logger, cwd, homeDir, hierarchyContextFileNames})`, `globFiles`, `autoContextFilesToInitialFiles`) and `context/system-info.ts` (`buildSystemInfo({cwd, neovimVersion, overrides})`), exported from the server barrel. The nvimclient `context/auto-context.ts` and `providers/system-prompt.ts` wrappers were deleted; `NvimSessionHost` calls the server `createSystemPrompt` directly with `nvim.logger` and reads `v:version` itself.
+  - Globbing is a small in-house matcher over `FileIO` (`*`, `?`, `[...]`, `{a,b}`, `**`, case-insensitive, nodir, wildcards skip dotfiles like glob's default) — no new dependency. `glob` moved to devDependencies (used only by the parity test).
+  - Deviations: dedup is by `path.normalize` only (previously `fs.realpathSync`), so symlinked duplicates are no longer collapsed. Magic-less patterns return on-disk casing (glob echoed the pattern). The host passes a module-level `FsFileIO` for auto/hierarchy discovery (unchanged semantics: host fs, not the thread's sandbox/docker fileIO).
+  - Tests: `node/server/src/context/auto-context.test.ts` (hierarchy, autoContext over `InMemoryFileIO`, glob parity vs `glob` on a real tmp tree — tier B) and `context/system-info.test.ts` (ported system-prompt tests; the two docker prompt tests merged into one).
 
 ## 3. Tier A harness
 
