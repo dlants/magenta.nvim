@@ -168,6 +168,10 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
 - Tests:
   - Harness smoke tests: create root thread, send, respond via mock stream, assert `getProviderMessages`; fork; subagent spawn through `session`; `@file:` resolves against `InMemoryFileIO` into context; git state appears in first message system info; `dispose` leaves no pending threads.
   - A root thread's `turnSupervisors` order equals what `supervisor-wiring.test.ts` asserts for the nvim host (proves parity of the two hosts).
+- Status: DONE.
+  - `node/server/src/test/harness.ts` (`createHarness`, `withHarness`, `TestSessionHost`, `defaultHarnessResolve`) and `test/fakes.ts` (`FakeGitClient`, `FakeShell` with scripted responses or test-settled `pending` Defers). `TestSessionHost` uses the server `resolveAutoContext`/`discoverHierarchyContext`/`buildSystemInfo`/`createSystemPrompt` over the thread's FileIO, mirrors fork inheritance, and resolves at delivery time via `session.getThread(id)`.
+  - Deviations: `HarnessOptions.provider` (openai) not implemented yet — anthropic mock only. The default resolver handles `@compact` and `@file:` (via `detectFileTypeViaFileIO` + `contextFiles.addFileContext`, since `FileSupervisor.addFiles` detects type on the real fs). Host test knobs: `contextOverrides` (merged into every prepared context), `intercept(request, prepare)` (gate/fail/add `release`), mutable `options` (policy changes), `rejectedApprovals`. Archive still goes to `TEST_ARCHIVE_DIR`.
+  - `session.test.ts` now uses the harness (all 17 tests unchanged in intent). Smoke + parity tests in `test/harness.test.ts` (root order `[MaxTokens, Title]`, subagent order `[MaxTokens, Subagent, Title]` matching `supervisor-wiring.test.ts`).
 
 ## 4. Server tmp-dir tests → InMemoryFileIO
 

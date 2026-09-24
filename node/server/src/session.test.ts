@@ -1,18 +1,19 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { ThreadId } from "./chat-types.ts";
-import { type PreparedThread, Session, type SessionHost } from "./session.ts";
+import type { ProviderProfile } from "./provider-options.ts";
 import { pendingMessage, renderPending } from "./submission/index.ts";
 import {
+  createHarness,
+  type Harness,
+  type TestSessionHost,
+} from "./test/harness.ts";
+import {
   awaitNextStream,
-  createAgentWithMock,
   sendResolved,
   TEST_ARCHIVE_DIR,
   uniqueThreadId,
 } from "./test-helpers.ts";
-import {
-  type PreparedThreadContext,
-  TitleSupervisor,
-} from "./thread-assembly.ts";
+import { TitleSupervisor } from "./thread-assembly.ts";
 import {
   MaxTokensSupervisor,
   SubagentSupervisor,
@@ -20,42 +21,28 @@ import {
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer } from "./utils/async.ts";
 
-const sessions: Session[] = [];
-const threads: { destroy: () => Promise<void> }[] = [];
+const harnesses: Harness[] = [];
 
-/** A session over a mock-backed preparation: no editor, no view, no dispatch. */
-function fixture(prepareThread?: SessionHost["prepareThread"]) {
-  const base = createAgentWithMock(undefined, uniqueThreadId("session"));
-  threads.push(base.core);
-  const {
-    threadType: _threadType,
-    turnSupervisors: _turnSupervisors,
-    toolLoopSupervisors: _toolLoopSupervisors,
-    compaction: _compaction,
-    ...context
-  } = base.context;
-  const prepared: PreparedThread = {
-    context: context as PreparedThreadContext,
-    autoCompactThreshold: 100_000,
-    autoCompactPrompt: "continue",
-    archiveBaseDir: TEST_ARCHIVE_DIR,
-  };
-  const session = new Session({
-    prepareThread: prepareThread ?? (async () => prepared),
-    getActiveProfile: () => base.context.profile,
-  });
-  sessions.push(session);
-  return { session, prepared, ...base };
+/** A session over the node-only test host: no editor, no view, no dispatch. */
+function fixture(intercept?: TestSessionHost["intercept"]) {
+  const harness = createHarness();
+  harness.host.intercept = intercept;
+  harnesses.push(harness);
+  return { ...harness, profile: harness.host.profile };
 }
 
-/** Threads created through a fixture archive under the test directory. */
-function rootOptions(profile: ReturnType<SessionHost["getActiveProfile"]>) {
+function withRelease(
+  release: () => Promise<void>,
+): TestSessionHost["intercept"] {
+  return async (_request, prepare) => ({ ...(await prepare()), release });
+}
+
+function rootOptions(profile: ProviderProfile) {
   return { profile, threadType: "root" as const };
 }
 
 afterEach(async () => {
-  await Promise.all(sessions.splice(0).map((session) => session.dispose()));
-  await Promise.all(threads.splice(0).map((thread) => thread.destroy()));
+  await Promise.all(harnesses.splice(0).map((harness) => harness.dispose()));
 });
 
 it("owns construction and fork policies with no view attached", async () => {
@@ -80,14 +67,12 @@ it("owns construction and fork policies with no view attached", async () => {
 });
 
 it("derives a child's profile and environment from the parent record", async () => {
-  const { session, prepared } = fixture();
-  prepared.context = {
-    ...prepared.context,
+  const { session, host, profile } = fixture();
+  host.contextOverrides = {
     environmentConfig: { type: "docker", container: "remote", cwd: "/work" },
-    profile: { ...prepared.context.profile, fastModel: "fast-model" },
   };
   const parentId = await session.createThread({
-    profile: { ...prepared.context.profile, fastModel: "fast-model" },
+    profile: { ...profile, fastModel: "fast-model" },
     threadType: "root",
   });
   const childId = await session.spawnThread({
@@ -110,13 +95,13 @@ it("derives a child's profile and environment from the parent record", async () 
 });
 
 it("settles preparation failures and rejects unknown result ids", async () => {
-  const { session, context } = fixture(async () => {
+  const { session, profile } = fixture(async () => {
     throw new Error("preparation failed");
   });
   const id = uniqueThreadId("session-failure");
   const creation = session.createThread({
     threadId: id,
-    ...rootOptions(context.profile),
+    ...rootOptions(profile),
   });
   const result = session.awaitThreadResult(id);
   await expect(creation).rejects.toThrow("preparation failed");
@@ -131,18 +116,21 @@ it("settles preparation failures and rejects unknown result ids", async () => {
 });
 
 it("invalidates pending construction and awaits its late release during disposal", async () => {
-  const gate = new Defer<PreparedThread>();
-  const { session, context, prepared } = fixture(() => gate.promise);
+  const gate = new Defer<void>();
   const release = vi.fn(async () => {});
+  const { session, profile } = fixture(async (request, prepare) => {
+    await gate.promise;
+    return withRelease(release)!(request, prepare);
+  });
   const id = uniqueThreadId("session-pending");
   const creation = session.createThread({
     threadId: id,
-    ...rootOptions(context.profile),
+    ...rootOptions(profile),
   });
   const rejected = expect(creation).rejects.toThrow("cancelled");
   session.deleteThread(id);
   const disposal = session.dispose();
-  gate.resolve({ ...prepared, release });
+  gate.resolve();
   await rejected;
   await disposal;
   expect(release).toHaveBeenCalledTimes(1);
@@ -154,22 +142,23 @@ it("invalidates pending construction and awaits its late release during disposal
 });
 
 it("deleting a parent invalidates its in-flight child and leaves other roots alone", async () => {
-  const gate = new Defer<PreparedThread>();
-  const { session, prepared, context } = fixture(async (request) =>
-    request.options.parent ? gate.promise : prepared,
-  );
+  const gate = new Defer<void>();
+  const { session, profile } = fixture(async (request, prepare) => {
+    if (request.options.parent) await gate.promise;
+    return prepare();
+  });
   const root = await session.createRootThread();
   const other = await session.createRootThread();
   const child = uniqueThreadId("session-child");
   const creation = session.createThread({
     threadId: child,
     parent: root,
-    profile: context.profile,
+    profile,
     threadType: "compact",
   });
   const rejected = expect(creation).rejects.toThrow("cancelled");
   session.deleteThread(root);
-  gate.resolve(prepared);
+  gate.resolve();
   await rejected;
   expect(session.listThreads().map((record) => record.id)).toEqual([other]);
   await expect(session.awaitThreadResult(child)).resolves.toMatchObject({
@@ -178,20 +167,23 @@ it("deleting a parent invalidates its in-flight child and leaves other roots alo
 });
 
 it("aborts pending preparation and releases a late environment exactly once", async () => {
-  const gate = new Defer<PreparedThread>();
-  const { session, context, prepared } = fixture(() => gate.promise);
+  const gate = new Defer<void>();
   const release = vi.fn(async () => {});
+  const { session, profile } = fixture(async (request, prepare) => {
+    await gate.promise;
+    return withRelease(release)!(request, prepare);
+  });
   const id = uniqueThreadId("session-aborted");
   const creation = session.createThread({
     threadId: id,
-    ...rootOptions(context.profile),
+    ...rootOptions(profile),
   });
   const rejected = expect(creation).rejects.toThrow("cancelled");
   await session.abortThread(id);
   await expect(session.awaitThreadResult(id)).resolves.toMatchObject({
     type: "aborted",
   });
-  gate.resolve({ ...prepared, release });
+  gate.resolve();
   await rejected;
   expect(session.getThread(id)?.state).toBe("error");
   await session.dispose();
@@ -199,9 +191,9 @@ it("aborts pending preparation and releases a late environment exactly once", as
 });
 
 it("compact children get no compactor and no auto-compaction policy", async () => {
-  const { session, context } = fixture();
+  const { session, profile } = fixture();
   const id = await session.createThread({
-    profile: context.profile,
+    profile: profile,
     threadType: "compact",
   });
   const record = session.getThread(id);
@@ -217,9 +209,9 @@ it("compact children get no compactor and no auto-compaction policy", async () =
 });
 
 it("runs bootstrap input and settles a yield with no dispatch involved", async () => {
-  const { session, context, mockClient } = fixture();
+  const { session, profile, mockClient } = fixture();
   const id = await session.createThread({
-    profile: context.profile,
+    profile: profile,
     threadType: "subagent",
     label: "Headless worker",
     inputMessages: [
@@ -251,15 +243,8 @@ it("runs bootstrap input and settles a yield with no dispatch involved", async (
 });
 
 it("rejects approvals on deletion and releases environments even when destruction fails", async () => {
-  const { context, prepared } = fixture();
   const release = vi.fn(async () => {});
-  const rejectApprovals = vi.fn();
-  const session = new Session({
-    prepareThread: async () => ({ ...prepared, release }),
-    getActiveProfile: () => context.profile,
-    rejectApprovals,
-  });
-  sessions.push(session);
+  const { session, host } = fixture(withRelease(release));
   const id = await session.createRootThread();
   const record = session.getThread(id);
   if (record?.state !== "initialized") throw new Error("expected initialized");
@@ -270,31 +255,30 @@ it("rejects approvals on deletion and releases environments even when destructio
   });
   session.deleteThread(id);
   await session.dispose();
-  expect(rejectApprovals).toHaveBeenCalledWith(id);
+  expect(host.rejectedApprovals).toContain(id);
   expect(release).toHaveBeenCalledTimes(1);
 });
 
 it("uses the prepared environment when checking whether a fork is local", async () => {
-  const { session, context, prepared } = fixture();
-  prepared.context = {
-    ...prepared.context,
+  const { session, profile, host } = fixture();
+  host.contextOverrides = {
     environmentConfig: {
       type: "docker",
       container: "remote",
       cwd: "/workspace",
     },
   };
-  const id = await session.createThread(rootOptions(context.profile));
+  const id = await session.createThread(rootOptions(profile));
   expect(() => session.forkThread(id)).toThrow("local-source forks");
 });
 
 it("freezes a fork at the requested index even if the source advances", async () => {
-  const gate = new Defer<PreparedThread>();
-  const { session, prepared, mockClient } = fixture(async (request) =>
-    request.type === "fork" ? gate.promise : prepared,
-  );
-  prepared.context = {
-    ...prepared.context,
+  const gate = new Defer<void>();
+  const { session, host, mockClient } = fixture(async (request, prepare) => {
+    if (request.type === "fork") await gate.promise;
+    return prepare();
+  });
+  host.contextOverrides = {
     resolve: async (message) =>
       sendResolved(
         [
@@ -329,9 +313,9 @@ it("freezes a fork at the requested index even if the source advances", async ()
   await second;
   // Policy changes after the request cannot reshape the fork: it inherits the
   // source's compaction settings, not the host's current defaults.
-  prepared.autoCompactThreshold = 1;
-  prepared.autoCompactPrompt = "changed policy";
-  gate.resolve(prepared);
+  host.options.autoCompactThreshold = 1;
+  host.options.autoCompactPrompt = "changed policy";
+  gate.resolve();
   const forkId = await forkCreation;
   const fork = session.getThread(forkId);
   if (fork?.state !== "initialized") throw new Error("expected fork");
@@ -394,13 +378,8 @@ it("aborts the subtree but returns only the requested thread's unsent input", as
   });
 });
 it("destroys and releases a thread whose record is deleted after assembly", async () => {
-  const { context, prepared } = fixture();
   const release = vi.fn(async () => {});
-  const session = new Session({
-    prepareThread: async () => ({ ...prepared, release }),
-    getActiveProfile: () => context.profile,
-  });
-  sessions.push(session);
+  const { session } = fixture(withRelease(release));
   let destroy: ReturnType<typeof vi.spyOn> | undefined;
   session.on("changed", (id) => {
     const record = session.getThread(id);
@@ -414,11 +393,11 @@ it("destroys and releases a thread whose record is deleted after assembly", asyn
   expect(release).toHaveBeenCalledTimes(1);
 });
 it("refuses to reuse a thread id that is already registered", async () => {
-  const { session, context } = fixture();
+  const { session, profile } = fixture();
   const id = uniqueThreadId("session-duplicate");
-  await session.createThread({ threadId: id, ...rootOptions(context.profile) });
+  await session.createThread({ threadId: id, ...rootOptions(profile) });
   await expect(
-    session.createThread({ threadId: id, ...rootOptions(context.profile) }),
+    session.createThread({ threadId: id, ...rootOptions(profile) }),
   ).rejects.toThrow("already exists");
   expect(session.listThreads().map((record) => record.id)).toEqual([id]);
 });
@@ -436,13 +415,13 @@ it("records observed activity and ignores unknown ids", async () => {
   expect(changed).toEqual([id]);
 });
 it("disposal settles streaming work once, drains cleanup and rejects new work", async () => {
-  const { session, mockClient, context } = fixture();
+  const { session, mockClient, profile } = fixture();
   const root = await session.createRootThread();
   const record = session.getThread(root);
   if (record?.state !== "initialized") throw new Error("expected root");
   const compactChild = await session.createThread({
     parent: root,
-    profile: context.profile,
+    profile: profile,
     threadType: "compact",
   });
   const submission = record.thread.submit({
