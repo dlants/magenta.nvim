@@ -21,7 +21,7 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { formatSummary, summarizeFile } from "../utils/file-summary.ts";
 import {
   type AbsFilePath,
-  detectFileType,
+  detectFileTypeViaFileIO,
   FileCategory,
   type FileTypeInfo,
   type HomeDir,
@@ -516,7 +516,10 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
       const absFilePath = resolveFilePath(this.cwd, filePath, this.homeDir);
       const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
 
-      const fileTypeInfo = await detectFileType(absFilePath);
+      const fileTypeInfo = await detectFileTypeViaFileIO(
+        absFilePath,
+        this.fileIO,
+      );
       if (this.destroyed) return;
       this.revision++;
       if (!fileTypeInfo) {

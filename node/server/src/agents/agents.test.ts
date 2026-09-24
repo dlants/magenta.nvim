@@ -1,12 +1,12 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
+import * as nodeFs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderOptions } from "../provider-options.ts";
 import type { NvimCwd } from "../utils/files.ts";
@@ -29,15 +29,15 @@ function createTestLogger(): Logger {
 }
 
 describe("parseAgentFile", () => {
-  let tmpDir: string;
   const logger = createTestLogger();
-
+  const tmpDir = "/project";
+  let io: InMemoryFileIO;
+  const fs = {
+    writeFileSync: (p: string, content: string) => io.writeFileSync(p, content),
+    mkdirSync: (_p: string) => {},
+  };
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-test-"));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    io = new InMemoryFileIO({});
   });
 
   it("parses agent file with frontmatter and body", () => {
@@ -54,7 +54,7 @@ description: A test agent
 You are a test agent.`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toEqual({
       name: "test-agent",
       description: "A test agent",
@@ -85,7 +85,7 @@ Always be concise.
 </system_reminder>`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeDefined();
     expect(result!.systemPrompt).toBe("# Agent Prompt\n\nDo stuff.");
     expect(result!.systemReminder).toBe(
@@ -106,7 +106,7 @@ fastModel: true
 Fast prompt.`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeDefined();
     expect(result!.fastModel).toBe(true);
   });
@@ -124,7 +124,7 @@ fastModel: false
 Slow prompt.`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeDefined();
     expect(result!.fastModel).toBe(false);
   });
@@ -142,7 +142,7 @@ effort: max
 Think.`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeDefined();
     expect(result!.effort).toBe("max");
   });
@@ -160,7 +160,7 @@ effort: bogus
 Body.`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeDefined();
     expect(result!.effort).toBeUndefined();
   });
@@ -169,7 +169,7 @@ Body.`,
     const agentFile = path.join(tmpDir, "no-front.md");
     fs.writeFileSync(agentFile, "# No frontmatter\n\nJust content.");
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeUndefined();
   });
 
@@ -184,7 +184,7 @@ description: Missing name
 Content.`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeUndefined();
   });
 
@@ -199,7 +199,7 @@ name: no-desc-agent
 Content.`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeUndefined();
   });
 
@@ -216,7 +216,7 @@ tier: leaf
 Leaf prompt.`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeDefined();
     expect(result!.tier).toBe("leaf");
   });
@@ -234,7 +234,7 @@ tier: orchestrator
 Orchestrator prompt.`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeDefined();
     expect(result!.tier).toBe("orchestrator");
   });
@@ -251,22 +251,22 @@ description: No tier specified
 No tier prompt.`,
     );
 
-    const result = parseAgentFile(agentFile, { logger });
+    const result = parseAgentFile(agentFile, { logger, fs: io });
     expect(result).toBeDefined();
     expect(result!.tier).toBe("leaf");
   });
 });
 
 describe("loadAgents", () => {
-  let tmpDir: string;
   const logger = createTestLogger();
-
+  const tmpDir = "/project";
+  let io: InMemoryFileIO;
+  const fs = {
+    writeFileSync: (p: string, content: string) => io.writeFileSync(p, content),
+    mkdirSync: (_p: string) => {},
+  };
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-load-test-"));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    io = new InMemoryFileIO({});
   });
 
   it("discovers .md files from agents directory", () => {
@@ -298,6 +298,7 @@ Beta prompt.`,
 
     const result = loadAgents({
       cwd: tmpDir as NvimCwd,
+      fs: io,
       logger,
       options,
     });
@@ -341,6 +342,7 @@ Prompt 2.`,
 
     const result = loadAgents({
       cwd: tmpDir as NvimCwd,
+      fs: io,
       logger,
       options,
     });
@@ -369,6 +371,7 @@ Prompt.`,
 
     const result = loadAgents({
       cwd: tmpDir as NvimCwd,
+      fs: io,
       logger,
       options,
     });
@@ -398,6 +401,7 @@ Prompt.`,
 
     const result = loadAgents({
       cwd: tmpDir as NvimCwd,
+      fs: io,
       logger,
       options,
     });
@@ -413,6 +417,7 @@ Prompt.`,
 
     const result = loadAgents({
       cwd: tmpDir as NvimCwd,
+      fs: io,
       logger,
       options,
     });
@@ -428,6 +433,7 @@ Prompt.`,
 
     const result = loadAgents({
       cwd: tmpDir as NvimCwd,
+      fs: io,
       logger,
       options,
     });
@@ -468,9 +474,16 @@ describe("builtin agents", () => {
   });
 
   it("allows user override of default agent", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-override-"));
-    try {
-      fs.writeFileSync(
+    const tmpDir = "/overrides";
+    const io = new InMemoryFileIO({});
+    for (const entry of nodeFs.readdirSync(builtinDir)) {
+      if (entry.endsWith(".md")) {
+        const p = path.join(builtinDir, entry);
+        io.writeFileSync(p, nodeFs.readFileSync(p, "utf8"));
+      }
+    }
+    {
+      io.writeFileSync(
         path.join(tmpDir, "default.md"),
         `---
 name: default
@@ -488,14 +501,13 @@ Custom default prompt.`,
 
       const result = loadAgents({
         cwd: "/tmp" as NvimCwd,
+        fs: io,
         logger,
         options,
       });
 
       expect(result.default.description).toBe("Custom default agent");
       expect(result.default.systemPrompt).toBe("Custom default prompt.");
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });

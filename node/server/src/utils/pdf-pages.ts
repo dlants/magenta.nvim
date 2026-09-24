@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { PDFDocument } from "pdf-lib";
+import type { FileIO } from "../capabilities/file-io.ts";
 import type { ToolResultContent } from "../providers/provider-types.ts";
 import type { AbsFilePath } from "./files.ts";
 import type { Result } from "./result.ts";
@@ -7,10 +8,13 @@ import type { Result } from "./result.ts";
 export async function extractPDFPage(
   filePath: AbsFilePath,
   pageIndex: number,
+  fileIO?: Pick<FileIO, "readBinaryFile">,
 ): Promise<Result<Uint8Array>> {
   try {
     // Read the PDF file
-    const existingPdfBytes = await fs.promises.readFile(filePath);
+    const existingPdfBytes = fileIO
+      ? await fileIO.readBinaryFile(filePath)
+      : await fs.promises.readFile(filePath);
 
     // Load the PDF document
     const pdfDoc = await PDFDocument.load(existingPdfBytes);
@@ -48,10 +52,13 @@ export async function extractPDFPage(
 
 export async function getPDFPageCount(
   filePath: AbsFilePath,
+  fileIO?: Pick<FileIO, "readBinaryFile">,
 ): Promise<Result<number>> {
   try {
     // Read the PDF file
-    const existingPdfBytes = await fs.promises.readFile(filePath);
+    const existingPdfBytes = fileIO
+      ? await fileIO.readBinaryFile(filePath)
+      : await fs.promises.readFile(filePath);
 
     // Load the PDF document
     const pdfDoc = await PDFDocument.load(existingPdfBytes);
@@ -73,8 +80,9 @@ export async function getPDFPageCount(
 
 export async function getSummaryAsProviderContent(
   filePath: AbsFilePath,
+  fileIO?: Pick<FileIO, "readBinaryFile">,
 ): Promise<Result<ToolResultContent[]>> {
-  const pageCountResult = await getPDFPageCount(filePath);
+  const pageCountResult = await getPDFPageCount(filePath, fileIO);
 
   if (pageCountResult.status === "error") {
     return pageCountResult;

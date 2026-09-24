@@ -1,12 +1,10 @@
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ContextTracker,
   OnToolApplied,
 } from "../capabilities/context-tracker.ts";
-import { FsFileIO } from "../capabilities/file-io.ts";
+import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
 import type {
   AbsFilePath,
@@ -17,14 +15,20 @@ import type {
 import * as GetFile from "./getFile.ts";
 
 describe("GetFileTool unit tests", () => {
-  let tmpDir: string;
-
-  beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "getfile-unit-"));
-  });
-
-  afterEach(async () => {
-    await fs.rm(tmpDir, { recursive: true, force: true });
+  const tmpDir = "/project";
+  let io: InMemoryFileIO;
+  const fs = {
+    writeFile: async (
+      p: string,
+      content: string | Uint8Array,
+      _enc?: string,
+    ) => {
+      if (typeof content === "string") await io.writeFile(p, content);
+      else io.writeBinaryFile(p, Buffer.from(content));
+    },
+  };
+  beforeEach(() => {
+    io = new InMemoryFileIO({});
   });
 
   function createTool(
@@ -47,7 +51,7 @@ describe("GetFileTool unit tests", () => {
       {
         cwd: tmpDir as NvimCwd,
         homeDir: "/tmp/fake-home" as HomeDir,
-        fileIO: new FsFileIO(),
+        fileIO: io,
         contextTracker: mockContextTracker,
         onToolApplied,
       },
@@ -771,7 +775,7 @@ describe("GetFileTool unit tests", () => {
       {
         cwd: tmpDir as NvimCwd,
         homeDir: "/tmp/fake-home" as HomeDir,
-        fileIO: new FsFileIO(),
+        fileIO: io,
         contextTracker: mockContextTracker,
         onToolApplied,
       },

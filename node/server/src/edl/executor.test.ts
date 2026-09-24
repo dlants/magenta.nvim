@@ -1,26 +1,24 @@
-import * as fs from "node:fs/promises";
+import * as realFs from "node:fs/promises";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Executor, type InitialDocIndex, resolveIndex } from "./executor.ts";
+import { InMemoryFileIO } from "./in-memory-file-io.ts";
 import { parse } from "./parser.ts";
 
+let io = new InMemoryFileIO({});
+const fs = {
+  writeFile: (p: string, content: string, _enc?: string) =>
+    io.writeFile(p, content),
+  readFile: (p: string, _enc?: string) => io.readFile(p),
+};
 let testCounter = 0;
-
 async function withTmpDir(fn: (tmpDir: string) => Promise<void>) {
-  const tmpDir = path.join(
-    "/tmp/magenta-test",
-    `executor-${Date.now()}-${testCounter++}`,
-  );
-  await fs.mkdir(tmpDir, { recursive: true });
-  try {
-    await fn(tmpDir);
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
+  io = new InMemoryFileIO({});
+  await fn(`/project/executor-${testCounter++}`);
 }
 
 function executor(commands: ReturnType<typeof parse>) {
-  return new Executor().execute(commands);
+  return new Executor(io).execute(commands);
 }
 
 function expectFileError(
@@ -52,7 +50,7 @@ file \`${filePath}\`
 narrow_multiple /world/
 replace "planet"`;
     const commands = parse(script);
-    const executor = new Executor();
+    const executor = new Executor(io);
     const result = await executor.execute(commands);
 
     const content = await fs.readFile(filePath, "utf-8");
@@ -438,7 +436,7 @@ replace "replaced"`;
         "utf-8",
       );
 
-      const scriptTemplate = await fs.readFile(
+      const scriptTemplate = await realFs.readFile(
         path.join(__dirname, "fixtures/backslash-regex.edl"),
         "utf-8",
       );
@@ -454,7 +452,7 @@ replace "replaced"`;
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "const s = `hello \\`world\\``;\n", "utf-8");
 
-      const scriptTemplate = await fs.readFile(
+      const scriptTemplate = await realFs.readFile(
         path.join(__dirname, "fixtures/escaped-backtick-heredoc.edl"),
         "utf-8",
       );
@@ -471,7 +469,7 @@ replace "replaced"`;
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "const s = `hello \\`world\\``;\n", "utf-8");
 
-      const scriptTemplate = await fs.readFile(
+      const scriptTemplate = await realFs.readFile(
         path.join(__dirname, "fixtures/escaped-backtick-regex.edl"),
         "utf-8",
       );
@@ -1241,7 +1239,7 @@ replace "WORLD"`;
       await fs.writeFile(file1, "hello\n", "utf-8");
       await fs.writeFile(file2, "world\n", "utf-8");
 
-      const exec = new Executor();
+      const exec = new Executor(io);
       const script = `
 file \`${file1}\`
 select /nonexistent/
@@ -1538,7 +1536,7 @@ file \`${filePath}\`
 select /hello/
 replace "goodbye"`;
       const commands = parse(script);
-      const exec = new Executor();
+      const exec = new Executor(io);
       const result = await exec.execute(commands);
       expect(result.finalSelection?.ranges[0].content).toBe("goodbye");
     });
@@ -1551,7 +1549,7 @@ describe("register-based mutation commands", () => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello world\n", "utf-8");
 
-      const exec = new Executor();
+      const exec = new Executor(io);
       exec.registers.set("myReg", "replaced content");
       const commands = parse(
         `file \`${filePath}\`\nselect <<END\nhello world\nEND\nreplace myReg\n`,
@@ -1568,7 +1566,7 @@ describe("register-based mutation commands", () => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "line1\nline2\n", "utf-8");
 
-      const exec = new Executor();
+      const exec = new Executor(io);
       exec.registers.set("prefix", "INSERTED\n");
       const commands = parse(
         `file \`${filePath}\`\nselect <<END\nline2\nEND\ninsert_before prefix\n`,
@@ -1585,7 +1583,7 @@ describe("register-based mutation commands", () => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "line1\nline2\n", "utf-8");
 
-      const exec = new Executor();
+      const exec = new Executor(io);
       exec.registers.set("suffix", "APPENDED\n");
       const commands = parse(
         `file \`${filePath}\`\nselect <<END\nline1\nEND\ninsert_after suffix\n`,
@@ -1602,7 +1600,7 @@ describe("register-based mutation commands", () => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello\n", "utf-8");
 
-      const exec = new Executor();
+      const exec = new Executor(io);
       const commands = parse(
         `file \`${filePath}\`\nselect <<END\nhello\nEND\nreplace noSuchReg\n`,
       );
@@ -1617,7 +1615,7 @@ describe("register-based mutation commands", () => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello\n", "utf-8");
 
-      const exec = new Executor();
+      const exec = new Executor(io);
       const commands = parse(
         `file \`${filePath}\`\nselect <<END\nhello\nEND\ninsert_before noSuchReg\n`,
       );

@@ -1,23 +1,22 @@
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OnToolApplied } from "../capabilities/context-tracker.ts";
-import { FsFileIO } from "../capabilities/file-io.ts";
+import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import type { EdlRegisters } from "../index.ts";
 import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import * as Edl from "./edl.ts";
 
 describe("EdlTool unit tests", () => {
-  let tmpDir: string;
-
-  beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "edl-test-"));
-  });
-
-  afterEach(async () => {
-    await fs.rm(tmpDir, { recursive: true, force: true });
+  const tmpDir = "/project";
+  let io: InMemoryFileIO;
+  const fs = {
+    writeFile: (p: string, content: string, _enc?: string) =>
+      io.writeFile(p, content),
+    readFile: (p: string, _enc?: string) => io.readFile(p),
+  };
+  beforeEach(() => {
+    io = new InMemoryFileIO({});
   });
 
   it("edl edit dispatches context manager update", async () => {
@@ -44,7 +43,7 @@ replace "goodbye"`;
       {
         cwd: tmpDir as NvimCwd,
         homeDir: "/tmp/fake-home" as HomeDir,
-        fileIO: new FsFileIO(),
+        fileIO: io,
         edlRegisters,
         onToolApplied,
       },
@@ -85,7 +84,7 @@ replace "goodbye"`;
       {
         cwd: tmpDir as NvimCwd,
         homeDir: "/tmp/fake-home" as HomeDir,
-        fileIO: new FsFileIO(),
+        fileIO: io,
         edlRegisters,
         onToolApplied,
       },

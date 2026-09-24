@@ -1,4 +1,4 @@
-import * as fs from "node:fs";
+import * as nodeFs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
@@ -22,6 +22,13 @@ export type AgentsMap = {
   [agentName: string]: AgentInfo;
 };
 
+/** Sync fs subset used for agent discovery; injectable so tests can use InMemoryFileIO. */
+export type AgentsFs = {
+  readFileSync(path: string, encoding: "utf8"): string;
+  readdirSync(path: string): string[];
+  statSync(path: string): { isFile(): boolean; isDirectory(): boolean };
+};
+
 type AgentFrontmatter = {
   name?: string;
   description?: string;
@@ -34,6 +41,7 @@ export function loadAgents(context: {
   cwd: NvimCwd;
   logger: Logger;
   options: ProviderOptions;
+  fs?: AgentsFs;
 }): AgentsMap {
   const agents: AgentsMap = {};
 
@@ -85,8 +93,10 @@ function findAgentFilesInDirectory(
   context: {
     cwd: NvimCwd;
     logger: Logger;
+    fs?: AgentsFs;
   },
 ): string[] {
+  const fs = context.fs ?? nodeFs;
   const agentFiles: string[] = [];
 
   try {
@@ -136,8 +146,9 @@ function findAgentFilesInDirectory(
 
 export function parseAgentFile(
   agentFile: string,
-  context: { logger: Logger },
+  context: { logger: Logger; fs?: AgentsFs },
 ): AgentInfo | undefined {
+  const fs = context.fs ?? nodeFs;
   const content = fs.readFileSync(agentFile, "utf8");
 
   const frontmatter = extractAgentFrontmatter(content);

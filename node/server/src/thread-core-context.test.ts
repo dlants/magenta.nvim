@@ -1,9 +1,6 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { FsFileIO } from "./capabilities/file-io.ts";
 import type { GitState } from "./capabilities/git-client.ts";
 import { TokenBudget } from "./compaction/token-budget.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
@@ -11,6 +8,7 @@ import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import { pendingMessage } from "./submission/index.ts";
 import { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { PRE_HISTORY } from "./supervisors/history.ts";
+import { FakeGitClient } from "./test/fakes.ts";
 import {
   awaitNextStream,
   cleanupArchive,
@@ -35,14 +33,11 @@ import {
 } from "./utils/files.ts";
 
 async function fixture(overrides: TestContextOverrides = {}) {
-  const cwd = (await fs.mkdtemp(
-    path.join(os.tmpdir(), "thread-context-"),
-  )) as NvimCwd;
+  const cwd = "/project" as NvimCwd;
   const homeDir = cwd as unknown as HomeDir;
   const file = path.join(cwd, "tracked.txt") as AbsFilePath;
-  await fs.writeFile(file, "original tracked content\n");
-  const fileIO = new FsFileIO();
-  let git: GitState = {
+  const fileIO = new InMemoryFileIO({ [file]: "original tracked content\n" });
+  const git: GitState = {
     repoRoot: cwd,
     branch: "initial-branch",
     headSha: "111111111",
@@ -51,6 +46,7 @@ async function fixture(overrides: TestContextOverrides = {}) {
     unstagedCount: 0,
     untrackedCount: 0,
   };
+  const gitClient = new FakeGitClient(git);
   const create = vi.spyOn(FileSupervisor, "create");
   const { core: thread, mockClient } = createAgentWithMock(
     {
@@ -58,7 +54,7 @@ async function fixture(overrides: TestContextOverrides = {}) {
       homeDir,
       fileIO,
       initialGitState: git,
-      gitClient: { getState: async () => git },
+      gitClient,
       ...overrides,
     },
     uniqueThreadId("core-context"),
@@ -108,13 +104,16 @@ async function fixture(overrides: TestContextOverrides = {}) {
       getContextDeliveries(thread).filter((delivery) => delivery.files).length,
     request,
     setGit: () => {
-      git = { ...git, branch: "replacement-branch", headSha: "222222222" };
+      gitClient.set({
+        ...git,
+        branch: "replacement-branch",
+        headSha: "222222222",
+      });
     },
     async cleanup() {
       await thread.destroy();
       await flushArchive(thread);
       await cleanupArchive(thread.id);
-      await fs.rm(cwd, { recursive: true, force: true });
       vi.restoreAllMocks();
     },
   };
@@ -132,7 +131,7 @@ describe("Thread-owned context delivery", () => {
       expect(f.fileDeliveries()).toBe(0);
       expect(f.thread.getContextDelivery(retiredIdx)).toBeUndefined();
       const added = path.join(f.cwd, "added.txt") as AbsFilePath;
-      await fs.writeFile(added, "new generation content");
+      await f.fileIO.writeFile(added, "new generation content");
       await f.thread["core"].fileSupervisor.addFiles([
         added as string as UnresolvedFilePath,
       ]);
@@ -244,7 +243,7 @@ describe("Thread-owned context delivery", () => {
       expect(first).toContain("<system-info>");
       const oldCore = f.thread["core"];
       f.setGit();
-      await fs.writeFile(f.file, "replacement tracked content\n");
+      await f.fileIO.writeFile(f.file, "replacement tracked content\n");
       let replacement: string;
       if (operation === "reset") {
         await resetThread(f.thread, { archive: { type: "none" } });
@@ -282,7 +281,7 @@ describe("Thread-owned context delivery", () => {
       expect(replacement).toContain("replacement-branch");
       expect(f.fileDeliveries()).toBe(1);
       f.changed.mockClear();
-      await fs.writeFile(f.file, "a later tracked edit\n");
+      await f.fileIO.writeFile(f.file, "a later tracked edit\n");
       const replacementChanged = vi.fn();
       const replacementSupervisor = f.thread["core"].fileSupervisor;
       replacementSupervisor.callbacks = {
@@ -314,7 +313,7 @@ describe("Thread-owned context delivery", () => {
         mimeType: "text/plain",
         extension: "txt",
       });
-      await fs.writeFile(f.file, "source-only later content\n");
+      await f.fileIO.writeFile(f.file, "source-only later content\n");
       await f.request(f.thread, "source-only later request");
       fork = await cloneThread({
         sourceThread: f.thread,
@@ -341,7 +340,7 @@ describe("Thread-owned context delivery", () => {
         fork["core"].fileSupervisor.files[f.file].agentView,
       ).toBeUndefined();
       await f.thread.destroy();
-      await fs.writeFile(f.file, "fork after source destruction\n");
+      await f.fileIO.writeFile(f.file, "fork after source destruction\n");
       expect(await f.request(fork)).toContain("fork after source destruction");
       fork["core"].fileSupervisor.removeFileContext(f.file);
       expect(f.manager.files[f.file]).toBeDefined();
@@ -510,7 +509,7 @@ describe("Thread-owned context delivery", () => {
     let fork: Thread | undefined;
     try {
       await f.request();
-      await fs.writeFile(f.file, "pending external edit\n");
+      await f.fileIO.writeFile(f.file, "pending external edit\n");
       await f.manager.refreshPendingUpdates();
       let sent: ReturnType<Thread["submit"]> | undefined;
       if (busy) {

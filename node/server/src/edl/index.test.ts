@@ -1,22 +1,19 @@
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
+import { InMemoryFileIO } from "./in-memory-file-io.ts";
 import type { RunScriptResult } from "./index.ts";
 import { runScript } from "./index.ts";
 
+let io = new InMemoryFileIO({});
+const fs = {
+  writeFile: (p: string, content: string, _enc?: string) =>
+    io.writeFile(p, content),
+  readFile: (p: string, _enc?: string) => io.readFile(p),
+};
 let testCounter = 0;
-
 async function withTmpDir(fn: (tmpDir: string) => Promise<void>) {
-  const tmpDir = path.join(
-    "/tmp/magenta-test",
-    `runscript-${Date.now()}-${testCounter++}`,
-  );
-  await fs.mkdir(tmpDir, { recursive: true });
-  try {
-    await fn(tmpDir);
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
+  io = new InMemoryFileIO({});
+  await fn(`/project/runscript-${testCounter++}`);
 }
 
 function normalizePaths(
@@ -57,13 +54,18 @@ function normalizePaths(
   };
 }
 
+const run = (
+  script: string,
+  _fileIO?: undefined,
+  edlRegisters?: Parameters<typeof runScript>[2],
+) => runScript(script, io, edlRegisters);
 describe("runScript", () => {
   it("returns ok with trace, mutations, and final selection", async () => {
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello world\n", "utf-8");
 
-      const result = await runScript(`\
+      const result = await run(`\
 file \`${filePath}\`
 narrow /world/
 retain_first
@@ -78,7 +80,7 @@ replace "planet"`);
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello world\n", "utf-8");
 
-      const result = await runScript(`\
+      const result = await run(`\
 file \`${filePath}\`
 narrow /world/
 retain_first
@@ -96,7 +98,7 @@ replace "planet"`);
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "new.txt");
 
-      const result = await runScript(`\
+      const result = await run(`\
 newfile \`${filePath}\`
 insert_after <<BODY
 line one
@@ -114,7 +116,7 @@ BODY`);
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello world\n", "utf-8");
 
-      const result = await runScript(`\
+      const result = await run(`\
 file \`${filePath}\`
 narrow /hello/
 retain_first
@@ -125,7 +127,7 @@ narrow /nonexistent/`);
   });
 
   it("returns error on parse failure", async () => {
-    const result = await runScript("invalidcommand blah");
+    const result = await run("invalidcommand blah");
 
     expect(result).toMatchSnapshot();
   });
@@ -135,7 +137,7 @@ narrow /nonexistent/`);
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello world\n", "utf-8");
 
-      const result = await runScript(`\
+      const result = await run(`\
 file \`${filePath}\`
 narrow /hello/
 retain_first`);
@@ -149,7 +151,7 @@ retain_first`);
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello world\n", "utf-8");
 
-      const result = await runScript(`\
+      const result = await run(`\
 file \`${filePath}\`
 select <<FIND
 FIND`);
@@ -170,7 +172,7 @@ describe("register persistence across invocations", () => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "aaa bbb ccc", "utf-8");
 
-      const result1 = await runScript(`\
+      const result1 = await run(`\
 file \`${filePath}\`
 select /bbb/
 cut myReg`);
@@ -181,7 +183,7 @@ cut myReg`);
 
       await fs.writeFile(filePath, "aaa  ccc", "utf-8");
 
-      const result2 = await runScript(
+      const result2 = await run(
         `\
 file \`${filePath}\`
 select /  /
@@ -202,7 +204,7 @@ replace myReg`,
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello world", "utf-8");
 
-      const result1 = await runScript(`\
+      const result1 = await run(`\
 file \`${filePath}\`
 select /nonexistent/
 replace <<END
@@ -217,7 +219,7 @@ END`);
       );
       expect(result1.edlRegisters.nextSavedId).toBe(1);
 
-      const result2 = await runScript(
+      const result2 = await run(
         `\
 file \`${filePath}\`
 select /world/
@@ -240,7 +242,7 @@ replace _saved_1`,
       await fs.writeFile(file1, "foo bar baz", "utf-8");
       await fs.writeFile(file2, "start end", "utf-8");
 
-      const result1 = await runScript(`\
+      const result1 = await run(`\
 file \`${file1}\`
 select / bar/
 cut chunk`);
@@ -249,7 +251,7 @@ cut chunk`);
       if (result1.status !== "ok") return;
       expect(result1.edlRegisters.registers.get("chunk")).toBe(" bar");
 
-      const result2 = await runScript(
+      const result2 = await run(
         `\
 file \`${file2}\`
 select /start/
@@ -270,7 +272,7 @@ insert_after chunk`,
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello world", "utf-8");
 
-      const result1 = await runScript(`\
+      const result1 = await run(`\
 file \`${filePath}\`
 select /nonexistent/
 replace <<END
@@ -284,7 +286,7 @@ END`);
 
       await fs.writeFile(filePath, "hello world", "utf-8");
 
-      const result2 = await runScript(
+      const result2 = await run(
         `\
 file \`${filePath}\`
 select /alsoNonexistent/

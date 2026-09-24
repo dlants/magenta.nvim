@@ -337,7 +337,11 @@ You already have the most up-to-date information about the contents of this file
         };
       }
 
-      const pageResult = await extractPDFPage(absFilePath, fileReq.pdfPage);
+      const pageResult = await extractPDFPage(
+        absFilePath,
+        fileReq.pdfPage,
+        context.fileIO,
+      );
       if (isAborted()) return { type: "aborted" };
 
       if (pageResult.status === "error") {
@@ -383,7 +387,10 @@ You already have the most up-to-date information about the contents of this file
         };
       }
 
-      const pageCountResult = await getSummaryAsProviderContent(absFilePath);
+      const pageCountResult = await getSummaryAsProviderContent(
+        absFilePath,
+        context.fileIO,
+      );
       if (isAborted()) return { type: "aborted" };
 
       if (pageCountResult.status === "error") {

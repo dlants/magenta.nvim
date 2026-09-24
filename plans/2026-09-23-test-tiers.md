@@ -178,6 +178,13 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
 
 - Goal: `edl/executor`, `edl/index`, `tools/getFile`, `tools/edl`, `agents/agents`, `providers/codex-auth` use `InMemoryFileIO` (codex-auth: inject fs or FileIO for auth.json). `thread-core-context.test.ts` split into A (`FakeGitClient`) and a small B file for cases that need a real git repo.
 - Tests: same test names and assertions pass; no `mkdtemp`/`withTmpDir` remains in these files (grep check). Binary cases in getFile (PDF/image) keep fixture bytes loaded into `InMemoryFileIO` via `Buffer` (extend `InMemoryFileIO` to store `Buffer` if needed).
+- Status: DONE.
+  - `InMemoryFileIO` now stores `string | Buffer` (`writeBinaryFile`), `stat` reports real byte size, and has sync `readFileSync`/`readdirSync`/`statSync` for agent discovery.
+  - `edl/executor`, `edl/index`, `tools/getFile`, `tools/edl`: a local `fs` shim over a fresh `InMemoryFileIO` per test; `withTmpDir` now yields a virtual `/project/...` path. EDL `.edl` fixture scripts are still read from disk (source fixtures, not tmp dirs).
+  - Production fixes surfaced by the port: `extractPDFPage`/`getPDFPageCount`/`getSummaryAsProviderContent` take an optional `FileIO` (getFile passes its context fileIO; previously PDFs bypassed FileIO), and `FileSupervisor.addFiles` detects file type via `detectFileTypeViaFileIO(this.fileIO)` instead of the host fs.
+  - `agents/agents.ts`: `loadAgents`/`parseAgentFile` accept an optional sync `fs: AgentsFs` (defaults to `node:fs`); tests pass `InMemoryFileIO`. Builtin-agent test still reads the real builtin dir; the override test seeds builtin files into memory.
+  - `thread-core-context.test.ts`: already used a fake git client (no real repo), so no B split was needed; converted wholesale to `InMemoryFileIO` + `FakeGitClient`.
+  - Deviation: `providers/codex-auth.test.ts` stays tier B — it tests the atomic rename + `0o600` permissions of `auth.json`, which is real-fs behavior.
 
 ## 5. Port chat/thread, thread-abort, supervisor-wiring
 
