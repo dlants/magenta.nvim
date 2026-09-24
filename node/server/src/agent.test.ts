@@ -542,7 +542,7 @@ describe("Thread submissions across a compaction handoff", () => {
       run: (_messages, next) => {
         calls.push(nextText(next));
         return Promise.resolve(
-          outcome.type === "complete"
+          outcome.type === "complete" || outcome.type === "carried"
             ? { ...outcome, next: [...next] }
             : outcome,
         );
@@ -604,6 +604,51 @@ describe("Thread submissions across a compaction handoff", () => {
         type: "completed",
         stopReason: "end_turn",
       });
+    } finally {
+      await core.destroy();
+      await flushArchive(core);
+      await cleanupArchive(threadId);
+    }
+  });
+
+  it("carries without a summary opening or compaction archive when nothing was summarized", async () => {
+    const threadId = uniqueThreadId("send-compaction-carried");
+    const { core, mockClient } = createAgentWithMock(
+      { resolve: resolveCompact },
+      threadId,
+    );
+    try {
+      const oldAgent = core["core"].manager;
+      compactorSlot(core).compactor = stubCompactor({
+        type: "carried",
+        next: [],
+      });
+      const result = core.submit({
+        type: "resolved",
+        messages: [{ type: "text", text: "hello" }],
+      });
+      const stream = await mockClient.awaitStream();
+      queueCompact(core, "carried prompt");
+      stream.streamText("done");
+      stream.finishResponse("end_turn");
+      const contStream = await pollUntil(() => {
+        if (core["core"].manager === oldAgent)
+          throw new Error("waiting for swap");
+        return awaitNextStream(mockClient, stream);
+      });
+      const sent = JSON.stringify(contStream.messages);
+      expect(sent).not.toContain("SUMMARY TEXT");
+      expect(contStream.messages).toHaveLength(1);
+      expect(contStream.messages[0].content.at(-1)).toMatchObject({
+        type: "text",
+        text: "carried prompt",
+      });
+      contStream.streamText("resumed");
+      contStream.finishResponse("end_turn");
+      await result;
+      await flushArchive(core);
+      const types = (await readArchive(threadId)).map((e) => e.type);
+      expect(types).not.toContain("compaction");
     } finally {
       await core.destroy();
       await flushArchive(core);

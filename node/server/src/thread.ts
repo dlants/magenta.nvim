@@ -650,18 +650,20 @@ export class Thread implements ThreadCoreView {
           error: new Error(`Compaction failed: ${outcome.message}`),
         },
       };
-    const { summary, next } = outcome;
-    await this.replaceCore({
-      archive: summary
-        ? {
-            type: "compaction",
-            summary: summary.text,
-            chunkCount: summary.chunkCount,
-          }
-        : { type: "none" },
-    });
-    if (summary)
+    if (outcome.type === "complete") {
+      const { summary } = outcome;
+      await this.replaceCore({
+        archive: {
+          type: "compaction",
+          summary: summary.text,
+          chunkCount: summary.chunkCount,
+        },
+      });
       this.opening = [{ type: "text", text: summaryText(summary.text) }];
+    } else {
+      await this.replaceCore({ archive: { type: "none" } });
+    }
+    const { next } = outcome;
     submission.throwIfAborted();
     return {
       type: "continue",

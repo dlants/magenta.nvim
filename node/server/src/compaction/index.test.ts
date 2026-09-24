@@ -969,6 +969,25 @@ describe("ThreadCompactor pending turn split", () => {
     expect(prompts[0]).not.toContain("CTX");
   });
 
+  it("carries consecutive trailing user messages in order", async () => {
+    const { outcome, prompts } = await runSplit([
+      user([{ type: "text", text: "question" }]),
+      assistant,
+      user([{ type: "text", text: "first" }]),
+      user([image, { type: "text", text: "second" }]),
+    ]);
+    expect(outcome).toMatchObject({
+      type: "complete",
+      next: [
+        handoff,
+        { type: "text", text: "first" },
+        image,
+        { type: "text", text: "second" },
+      ],
+    });
+    expect(prompts[0]).not.toContain("first");
+    expect(prompts[0]).not.toContain("second");
+  });
   it("does not split a tool_result tail", async () => {
     const { outcome } = await runSplit([
       user([{ type: "text", text: "question" }]),
@@ -995,8 +1014,7 @@ describe("ThreadCompactor pending turn split", () => {
     ]);
     expect(prompts).toHaveLength(0);
     expect(outcome).toEqual({
-      type: "complete",
-      summary: undefined,
+      type: "carried",
       next: [handoff, { type: "text", text: "only" }],
     });
   });

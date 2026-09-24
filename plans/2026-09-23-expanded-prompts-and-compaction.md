@@ -209,6 +209,7 @@ Status: DONE.
 - `splitPendingUserText` deleted; its table test replaced by "ThreadCompactor pending turn split" in `compaction/index.test.ts` (chunk content observed through the child's `/chunk.md`).
 - Test compactors return `next: [...next]` (the handoff) and so no longer carry the pending tail. Tests that asserted Thread-side carrying were retargeted: thread.test "leaves %s content flushed…" now asserts the queued content is in the log handed to the compactor; agent.test parity/blank-handoff/injection tests expect only the handoff. The end-to-end AutoCompact+image and over-threshold-first-message cases are covered at the compactor level (split tests) rather than via a real compaction in Thread.
 - Existing direct `ThreadCompactor.run` tests gained a trailing assistant message so their lone user message is still chunked.
+- Review follow-up: "nothing to summarize" is its own `CompactionOutcome` variant, `{ type: "carried"; next }`, and `complete.summary` is required. Thread switches on `outcome.type` (archive `none`, no opening for `carried`). The duplicate `Compactor` JSDoc was merged. Tests added: agent.test "carries without a summary opening or compaction archive when nothing was summarized" (stub compactor returning `carried`), and compaction/index.test "carries consecutive trailing user messages in order".
 
 - Goal:
   - `ThreadCompactor.run` splits the log privately and returns `{ summary, next }`.

@@ -104,8 +104,7 @@ export class ThreadCompactor
 
     const { history, carried } = splitPendingTurn(messages);
     next = [...next, ...carried];
-    if (history.length === 0)
-      return { type: "complete", summary: undefined, next: [...next] };
+    if (history.length === 0) return { type: "carried", next: [...next] };
     const chunks = this.chunk(history);
     if (chunks.length === 0) {
       return { type: "error", message: "nothing to compact" };

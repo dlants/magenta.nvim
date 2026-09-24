@@ -6,19 +6,20 @@ import type {
 export type CompactionOutcome =
   | {
       type: "complete";
-      /** Absent when there was nothing to summarize. */
-      summary: { text: string; chunkCount: number } | undefined;
+      summary: { text: string; chunkCount: number };
       /** Sent verbatim on the fresh core: the handoff followed by any
        * unanswered user turn carried out of the log. Empty means "continue". */
       next: AgentInput[];
     }
+  /** Nothing to summarize: the log held only the unanswered user turn. */
+  | { type: "carried"; next: AgentInput[] }
   | { type: "error"; message: string }
   /** the run's child threads were deleted, or the parent went away */
   | { type: "aborted" };
 
-/** Thread hands over the whole log and the handoff input; how the log is
- * summarized and what is carried past it belong to the compactor. */
 /** A supplied capability consumed by Thread's submission coordinator.
+ * Thread hands over the whole log and the handoff input; how the log is
+ * summarized and what is carried past it belong to the compactor.
  * A thread without a compactor treats an unclaimed suspension as a stop. */
 export interface Compactor {
   run(
