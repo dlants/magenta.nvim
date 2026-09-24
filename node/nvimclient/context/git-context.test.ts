@@ -38,26 +38,7 @@ function findUserText(
   return undefined;
 }
 
-it("reports initial git state in the first user message", async () => {
-  await withDriver(
-    { setupFiles: async (tmpDir) => initRepo(tmpDir) },
-    async (driver) => {
-      await driver.showSidebar();
-      await driver.inputMagentaText("hello");
-      await driver.send();
-
-      const request = await driver.mockAnthropic.awaitPendingStream();
-      const systemInfo = findUserText(request.messages, "# System Information");
-      expect(systemInfo).toContain("Git branch: main");
-      expect(systemInfo).toContain("Git HEAD:");
-      expect(systemInfo).toContain("initial commit");
-
-      request.respond({ stopReason: "end_turn", text: "hi", toolRequests: [] });
-    },
-  );
-});
-
-it("attaches a git context update when the branch changes", async () => {
+it("renders the git context update when the branch changes", async () => {
   await withDriver(
     { setupFiles: async (tmpDir) => initRepo(tmpDir) },
     async (driver, dirs) => {
