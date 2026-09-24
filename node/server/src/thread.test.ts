@@ -530,7 +530,7 @@ describe("deferred submissions", () => {
     expect(await sent).toEqual({ type: "aborted" });
     expect(compact).toHaveBeenCalledWith(
       expect.any(Array),
-      "wrap it up",
+      [{ type: "text", text: "wrap it up" }],
       expect.any(AbortSignal),
     );
     expect(core.lastResult()).toEqual({ type: "aborted" });
@@ -589,7 +589,10 @@ describe("deferred submissions", () => {
     expect(await sent).toEqual({ type: "aborted" });
     expect(compact).toHaveBeenCalledWith(
       expect.any(Array),
-      "first\nwrap up",
+      [
+        { type: "text", text: "first" },
+        { type: "text", text: "wrap up" },
+      ],
       expect.any(AbortSignal),
     );
     // Everything behind the compaction keeps its place in the queue.
@@ -649,7 +652,7 @@ describe("deferred submissions", () => {
     expect(await sent).toEqual({ type: "aborted" });
     expect(compact).toHaveBeenCalledWith(
       expect.any(Array),
-      "from async",
+      [{ type: "text", text: "from async" }],
       expect.any(AbortSignal),
     );
   });
@@ -710,7 +713,10 @@ describe("deferred submissions", () => {
     // be thrown away: it travels on the compaction prompt rather than vanish.
     expect(compact).toHaveBeenCalledWith(
       expect.any(Array),
-      "async note\n\nwrap up",
+      [
+        { type: "text", text: "async note" },
+        { type: "text", text: "wrap up" },
+      ],
       expect.any(AbortSignal),
     );
   });
@@ -749,7 +755,7 @@ describe("deferred submissions", () => {
       let compactNextPrompt: string | undefined;
       const compactor: Compactor = {
         run: (messages, nextPrompt) => {
-          compactNextPrompt = nextPrompt;
+          compactNextPrompt = nextText(nextPrompt);
           compactedTexts = messages.flatMap((m) =>
             m.role === "user"
               ? m.content.flatMap((c) => (c.type === "text" ? [c.text] : []))
@@ -2399,3 +2405,10 @@ describe("detached delivery batches", () => {
     await sent;
   });
 });
+
+function nextText(next: ReadonlyArray<AgentInput>): string | undefined {
+  return (
+    next.flatMap((i) => (i.type === "text" ? [i.text] : [])).join("\n\n") ||
+    undefined
+  );
+}

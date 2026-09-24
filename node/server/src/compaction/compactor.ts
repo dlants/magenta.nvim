@@ -12,7 +12,10 @@ import {
 } from "../compact-renderer.ts";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import { Emitter } from "../emitter.ts";
-import type { ProviderMessage } from "../providers/provider-types.ts";
+import type {
+  AgentInput,
+  ProviderMessage,
+} from "../providers/provider-types.ts";
 import type { CompactionOutcome, Compactor } from "./index.ts";
 
 const COMPACT_PROMPT_TEMPLATE = readFileSync(
@@ -92,7 +95,7 @@ export class ThreadCompactor
 
   async run(
     messages: ReadonlyArray<ProviderMessage>,
-    nextPrompt: string | undefined,
+    next: ReadonlyArray<AgentInput>,
     signal: AbortSignal,
   ): Promise<CompactionOutcome> {
     this.discard();
@@ -129,7 +132,7 @@ export class ThreadCompactor
             chunkIndex,
             totalChunks: chunks.length,
             summary,
-            nextPrompt,
+            next,
           }),
           subagentConfig: { fastModel: true },
           fileIO,
@@ -262,13 +265,13 @@ function buildChunkPrompt({
   chunkIndex,
   totalChunks,
   summary,
-  nextPrompt,
+  next,
 }: {
   chunk: string;
   chunkIndex: number;
   totalChunks: number;
   summary: string;
-  nextPrompt: string | undefined;
+  next: ReadonlyArray<AgentInput>;
 }): string {
   const status = [`This is chunk ${chunkIndex + 1} of ${totalChunks}.`];
   if (chunkIndex === 0) {
@@ -295,8 +298,17 @@ function buildChunkPrompt({
   )
     .replace("{{chunk}}", chunk)
     .replace("{{status}}", status.join(" "))
-    .replace(
-      "{{next_prompt}}",
-      nextPrompt ?? "Continue from where you left off.",
-    );
+    .replace("{{next_prompt}}", () => renderNext(next));
+}
+/** The chunk prompt only needs to know what comes next, so non-text input
+ * is named rather than inlined. */
+function renderNext(next: ReadonlyArray<AgentInput>): string {
+  const parts = next.map((input) =>
+    input.type === "text"
+      ? input.text
+      : input.type === "image"
+        ? "[image]"
+        : `[document: ${input.title ?? "untitled"}]`,
+  );
+  return parts.join("\n").trim() || "Continue from where you left off.";
 }

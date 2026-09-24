@@ -179,6 +179,15 @@ Status: DONE.
 
 ## Structured compaction payload
 
+Status: DONE.
+- `CompactRequest.next`, `FlushedQueue`'s compact variant, `compactAndContinue(handoff: AgentInput[])` and `Compactor.run(messages, next, signal)` carry `AgentInput[]`; `joinText` is deleted. Queue flushes concatenate the flushed items ahead of the compaction's own `next`.
+- `buildChunkPrompt` renders `next` via `renderNext` (text joined by newlines, `[image]`, `[document: <title>]`, else "Continue from where you left off.").
+- After compaction, `next` is sent verbatim; empty sends "Please continue from where you left off.".
+- Deviation: `TokenBudget.handoff` stays a `string` (it is plain config, cloned onto forks and asserted as a string in tests); Thread wraps it as one text item (or `[]` when blank) at the `context_budget` stop.
+- Stage 3 interim: `splitPendingUserText` still returns text; `compactAndContinue` appends it to `next` as a single text item. Stage 3 replaces this.
+- `CompactionOutcome` shape is unchanged (stage 3 adds `next`/optional summary).
+- Tests: agent.test "sends an @compact prompt's image verbatim after compaction"; compaction/index.test "ThreadCompactor chunk prompt" placeholder test; thread.test flush tests now assert `AgentInput[]` in order. Test compactors use a local `nextText` helper to keep string expectations.
+
 - Goal:
   - `CompactSuspendReason.next: AgentInput[]`, and `Compactor.run` takes it.
   - `buildChunkPrompt` renders it.

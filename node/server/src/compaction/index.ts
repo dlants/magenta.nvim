@@ -1,4 +1,7 @@
-import type { ProviderMessage } from "../providers/provider-types.ts";
+import type {
+  AgentInput,
+  ProviderMessage,
+} from "../providers/provider-types.ts";
 
 export type CompactionOutcome =
   | { type: "complete"; summary: string; chunkCount: number }
@@ -11,7 +14,7 @@ export type CompactionOutcome =
 export interface Compactor {
   run(
     messages: ReadonlyArray<ProviderMessage>,
-    nextPrompt: string | undefined,
+    next: ReadonlyArray<AgentInput>,
     signal: AbortSignal,
   ): Promise<CompactionOutcome>;
 }

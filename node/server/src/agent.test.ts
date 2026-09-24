@@ -520,7 +520,7 @@ function trackCompactions(core: Thread): { prompts: (string | undefined)[] } {
   const prompts: (string | undefined)[] = [];
   compactorSlot(core).compactor = {
     run: async (_messages, prompt) => {
-      prompts.push(prompt);
+      prompts.push(nextText(prompt));
       return { type: "aborted" };
     },
   };
@@ -540,7 +540,7 @@ describe("Thread submissions across a compaction handoff", () => {
     return {
       calls,
       run: (_messages, nextPrompt) => {
-        calls.push(nextPrompt);
+        calls.push(nextText(nextPrompt));
         return Promise.resolve(outcome);
       },
     };
@@ -654,6 +654,39 @@ describe("Thread submissions across a compaction handoff", () => {
     }
   });
 
+  it("sends an @compact prompt's image verbatim after compaction", async () => {
+    const threadId = uniqueThreadId("send-compaction-image");
+    const image: AgentInput = {
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data: "SU1BR0U=" },
+    };
+    const { core, mockClient } = createAgentWithMock(
+      {
+        resolve: async () =>
+          compactResolved([{ type: "text", text: "look" }, image]),
+      },
+      threadId,
+    );
+    try {
+      const compactor = stubCompactor();
+      compactorSlot(core).compactor = compactor;
+      const result = core.submit({
+        type: "raw",
+        message: pendingMessage("@compact look"),
+      });
+      const stream = await mockClient.awaitStream();
+      const lastUser = stream.messages.at(-1);
+      expect(JSON.stringify(lastUser)).toContain("SU1BR0U=");
+      expect(JSON.stringify(lastUser)).toContain('"type":"image"');
+      expect(compactor.calls).toEqual(["look"]);
+      stream.finishResponse("end_turn");
+      await result;
+    } finally {
+      await core.destroy();
+      await flushArchive(core);
+      await cleanupArchive(threadId);
+    }
+  });
   it("stays pending across two consecutive handoffs, reseeding each time", async () => {
     const threadId = uniqueThreadId("send-compaction-twice");
     const prompts = ["first continuation", "second continuation"];
@@ -665,7 +698,7 @@ describe("Thread submissions across a compaction handoff", () => {
       const calls: (string | undefined)[] = [];
       const compactor: Compactor = {
         run: (_messages, nextPrompt) => {
-          calls.push(nextPrompt);
+          calls.push(nextText(nextPrompt));
           return Promise.resolve({
             type: "complete",
             summary: `SUMMARY ${calls.length}`,
@@ -4829,3 +4862,10 @@ describe("tool loop recognises yield", () => {
     expect(await turn).toEqual({ type: "aborted" });
   });
 });
+
+function nextText(next: ReadonlyArray<AgentInput>): string | undefined {
+  return (
+    next.flatMap((i) => (i.type === "text" ? [i.text] : [])).join("\n\n") ||
+    undefined
+  );
+}

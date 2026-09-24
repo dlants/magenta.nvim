@@ -294,7 +294,7 @@ describe("ThreadCompactor cancellation", () => {
           ],
         },
       ],
-      undefined,
+      [],
       cancellation.signal,
     );
     await spawned.promise;
@@ -351,8 +351,8 @@ it("a late first spawn cannot overwrite a newer compaction", async () => {
     threadManager: thread["context"].threadManager,
   });
   const cancellation = new AbortController();
-  const first = compactor.run(messages, undefined, cancellation.signal);
-  const second = compactor.run(messages, undefined, cancellation.signal);
+  const first = compactor.run(messages, [], cancellation.signal);
+  const second = compactor.run(messages, [], cancellation.signal);
   await Promise.resolve();
   const newer = compactor.current;
   expect(newer?.activeThreadId).toBe(newerChild);
@@ -430,7 +430,7 @@ it.each([
         ],
       },
     ],
-    undefined,
+    [],
     cancellation.signal,
   );
   await waiting.promise;
@@ -921,5 +921,54 @@ describe("splitPendingUserText", () => {
       history: [assistant],
       pendingUserText: "next",
     });
+  });
+});
+
+describe("ThreadCompactor chunk prompt", () => {
+  it("names non-text handoff input with placeholders", async () => {
+    const prompts: string[] = [];
+    const compactor = new ThreadCompactor({
+      parentThreadId: uniqueThreadId("compact-placeholder"),
+      threadManager: {
+        spawnThread: async (opts) => {
+          prompts.push(opts.prompt);
+          throw new Error("stop after spawn");
+        },
+        deleteThread: () => {},
+        awaitThreadResult: async () => {
+          throw new Error("unreachable");
+        },
+      },
+    });
+    await compactor
+      .run(
+        [
+          {
+            role: "user",
+            content: [{ nativeMessageIdx: idx, type: "text", text: "history" }],
+          },
+        ],
+        [
+          { type: "text", text: "look at this" },
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: "AAAA" },
+          },
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: "BBBB",
+            },
+            title: "spec.pdf",
+          },
+        ],
+        new AbortController().signal,
+      )
+      .catch(() => undefined);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("look at this\n[image]\n[document: spec.pdf]");
+    expect(prompts[0]).not.toContain("AAAA");
   });
 });

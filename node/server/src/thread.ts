@@ -145,17 +145,7 @@ export type ThreadArchiveOptions = {
  * compaction the flush ran into — never both. */
 type FlushedQueue =
   | { type: "messages"; messages: AgentInput[] }
-  | { type: "compact"; nextPrompt: string | undefined };
-
-/** Flushed content as a single prompt: the only way spent queue content can
- * travel across a suspension that throws the log away. */
-function joinText(messages: ReadonlyArray<AgentInput>): string {
-  return messages
-    .filter((m) => m.type === "text")
-    .map((m) => m.text)
-    .join("\n")
-    .trim();
-}
+  | { type: "compact"; next: AgentInput[] };
 
 /** A compaction that suspends a request lands after the user's message is
  * already in the log. That message has not been answered, so it is carried
@@ -193,7 +183,7 @@ export function splitPendingUserText(
 type LoopResult = RestResult | CompactRequest;
 /** Compaction is not a suspension: the loop hands it to `startSubmission`,
  * which compacts and runs again. */
-type CompactRequest = { type: "compact"; nextPrompt: string | undefined };
+type CompactRequest = { type: "compact"; next: AgentInput[] };
 type CompactAndContinueOutcome =
   | { type: "continue"; messages: AgentInput[] }
   | { type: "settle"; result: RestResult };
@@ -642,18 +632,11 @@ export class Thread implements ThreadCoreView {
       this.turnChain.onSubmission(prompt.content);
       let result: LoopResult =
         resolved.type === "compact"
-          ? // TODO(stage 2): carry `prompt.content` itself instead of text.
-            {
-              type: "compact",
-              nextPrompt: joinText(prompt.content) || undefined,
-            }
+          ? { type: "compact", next: prompt.content }
           : await this.runLoop(prompt.content, submission, force);
       while (result.type === "compact") {
         submission.throwIfAborted();
-        const outcome = await this.compactAndContinue(
-          result.nextPrompt,
-          submission,
-        );
+        const outcome = await this.compactAndContinue(result.next, submission);
         if (outcome.type === "settle") return finish(outcome.result);
         result = await this.runLoop(outcome.messages, submission);
       }
@@ -672,7 +655,7 @@ export class Thread implements ThreadCoreView {
   }
 
   private async compactAndContinue(
-    handoff: string | undefined,
+    handoff: ReadonlyArray<AgentInput>,
     submission: ActiveSubmission,
   ): Promise<CompactAndContinueOutcome> {
     const compactor = this.context.compaction?.compactor;
@@ -688,11 +671,11 @@ export class Thread implements ThreadCoreView {
     const { history, pendingUserText } = splitPendingUserText(
       this.getProviderMessages(),
     );
-    const nextPrompt =
-      [handoff?.trim(), pendingUserText].filter(Boolean).join("\n\n") ||
-      undefined;
+    const next: AgentInput[] = pendingUserText
+      ? [...handoff, { type: "text", text: pendingUserText }]
+      : [...handoff];
     const outcome = await submission.step((signal) =>
-      compactor.run(history, nextPrompt, signal),
+      compactor.run(history, next, signal),
     );
     if (outcome.type === "aborted")
       return { type: "settle", result: { type: "aborted" } };
@@ -720,12 +703,9 @@ export class Thread implements ThreadCoreView {
     submission.throwIfAborted();
     return {
       type: "continue",
-      messages: [
-        {
-          type: "text",
-          text: nextPrompt || "Please continue from where you left off.",
-        },
-      ],
+      messages: next.length
+        ? next
+        : [{ type: "text", text: "Please continue from where you left off." }],
     };
   }
   private opening: AgentInput[] = [];
@@ -782,15 +762,9 @@ export class Thread implements ThreadCoreView {
       if (signal.aborted) break;
       if (flushed.type === "compact") {
         // Anything already flushed ahead of the compaction is spent, and the
-        // log it would have ridden is about to be thrown away: it travels as
-        // prompt text, like the compacting flush's own preceding content.
-        const carried = joinText(messages);
-        return {
-          type: "compact",
-          nextPrompt:
-            [carried, flushed.nextPrompt].filter(Boolean).join("\n\n") ||
-            undefined,
-        };
+        // log it would have ridden is about to be thrown away: it is carried
+        // ahead of the compaction's own handoff content.
+        return { type: "compact", next: [...messages, ...flushed.next] };
       }
       messages.push(...flushed.messages);
     }
@@ -824,7 +798,7 @@ export class Thread implements ThreadCoreView {
             disposition: { type: "restore" },
             value: {
               type: "compact",
-              nextPrompt: joinText([...messages, ...content]) || undefined,
+              next: [...messages, ...content],
             },
           };
         }
@@ -935,7 +909,12 @@ export class Thread implements ThreadCoreView {
         const tokenBudget = this.context.compaction?.tokenBudget;
         if (!tokenBudget)
           throw new Error("context_budget stop without a token budget");
-        return { type: "compact", nextPrompt: tokenBudget.handoff };
+        return {
+          type: "compact",
+          next: tokenBudget.handoff.trim()
+            ? [{ type: "text", text: tokenBudget.handoff }]
+            : [],
+        };
       }
       const stopReason = result.stopReason;
       const next = await this.continuation(stopReason, submission.signal);
@@ -1031,7 +1010,7 @@ export class Thread implements ThreadCoreView {
     const flushed = await this.flushQueuesForNextTurn(signal);
     if (signal.aborted) return { type: "rest" };
     if (flushed.type === "compact") {
-      return { type: "compact", nextPrompt: flushed.nextPrompt };
+      return { type: "compact", next: flushed.next };
     }
     const messages = flushed.messages;
     if (!messages.length) return { type: "rest" };
