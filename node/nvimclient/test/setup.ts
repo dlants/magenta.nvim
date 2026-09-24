@@ -1,5 +1,6 @@
 import { realpathSync, rmSync } from "node:fs";
 import * as path from "node:path";
+import { threadId } from "node:worker_threads";
 import { afterAll } from "vitest";
 
 // Redirect magenta's scratch dir (thread archives, tool logs) into a per-worker
@@ -9,7 +10,8 @@ import { afterAll } from "vitest";
 const workerTempDir = path.join(
   realpathSync("/tmp"),
   "magenta-test-runtime",
-  String(process.pid),
+  // threadId distinguishes workers sharing a process in the threads pool.
+  `${process.pid}-${threadId}`,
 );
 process.env.MAGENTA_TEMP_DIR = workerTempDir;
 
