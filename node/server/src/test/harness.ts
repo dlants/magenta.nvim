@@ -294,6 +294,7 @@ export class TestSessionHost implements SessionHost {
         "shell",
         "threads",
         ...(this.luaExecutor ? (["nvim"] as const) : []),
+        ...(session.scriptRunner ? (["scripts"] as const) : []),
       ]),
       environmentConfig: request.options.environmentConfig ?? {
         type: "local",

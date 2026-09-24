@@ -245,6 +245,11 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
 
 - Goal: script discovery (project and home), parameter/contextFiles/reminder forwarding, spawn→yield resolution, subprocess cleanup on dispose → A/B against server `ScriptManager` with the harness session (B only where real script files/child processes are required). Overview rendering, row expansion, bypass toggle, approval under collapsed row stay C.
 - Tests: as above; confirm child processes are reaped (no leaked pids) in B tests.
+- Status: DONE.
+  - `node/nvimclient/scripts/script-manager.node.test.ts` (B, 13): real server `ScriptManager` (real script files in a tmp project/home, real child processes, the builtin SDK symlink) over the harness `Session` (threads use `InMemoryFileIO` seeded with the context file). Covers index.ts discovery, `~/.magenta/scripts`, spawn→yield (plus `getThreadYield`), no resolve on subagent error + retry, contextFiles/systemReminder, runner throw → error, group-kill on terminate, `run_script` trigger, `run_script` schema discovery, bypass seeded from the triggering thread (fake sandbox capability), invocation outliving its trigger, delete mid-creation (preparation gated via `host.intercept`), dispose. Group-kill and dispose assert both the script child and its grandchild pids are gone.
+  - Harness: `availableCapabilities` includes `"scripts"` when `session.scriptRunner` is set at preparation.
+  - C `script-manager.test.ts` keeps 7: overview rendering, root-row bypass toggle, expand/collapse, pending permission under a collapsed row, invocation sandbox toggle approving a real `SandboxViolationHandler` violation, and the two `Magenta.destroy` owner-shutdown tests (they test the nvimclient owner's dispose ordering).
+  - Deviation: no tier A tests — the ScriptManager reads the scripts dir with `node:fs` and forks real processes, so everything is B. `script-e2e.test.ts` left unchanged (end-to-end through the sidebar).
 
 ## 10. Pure-logic nvimclient cleanups
 
