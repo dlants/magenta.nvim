@@ -202,6 +202,11 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
 
 - Goal: 14 of 16 `thread-compact.test.ts` cases → A (auto-compact thresholds/prompts, script overrides, parked submission cancel/fail, context files and reminders retained, `@compact` in compact thread). `fork-thread.test.ts` context-update/reseed/tool-result/isolation cases → A. `thread-compact-view`, `fork-keybinding`, fork navigation and fork approval routing stay C.
 - Tests: moved tests assert `compactorSlot`, `thread.contextFiles`, deliveries, submission results. Remove any A case already equivalent to `compaction/index.test.ts` / `session.test.ts` and note which.
+- Status: DONE.
+  - `node/server/src/thread-compact-flow.test.ts` (tier A, 18 tests): the 17 non-rendering cases of `thread-compact.test.ts` (auto-context not seeded into chunk thread, no-continuation compact, rescue failed chunk, `@file` not expanded in chunk/summary, fork-then-compact via `session.forkThread`, threshold wiring/trigger, configured/per-thread/default prompts, no auto-compact in compact threads, context files and reminders kept, delete-child abort, empty-summary error, fresh `@compact` discards run, `@compact` text in compact thread, `@next @compact`). Assertions are on the session record's `compactor.runs/current`, `contextFiles`, stream contents.
+  - C `thread-compact.test.ts` keeps 3: full compact flow (turn-end notification, hierarchy after compaction, display), F-key fork + `@compact`, multi-chunk (renders `📦 [Compaction 1`).
+  - `node/server/src/fork-flow.test.ts` (tier A, 8 tests): context_update after fork (unchanged/changed/truncated reseed), `completedTools` survives fork (replaces "tool result not found" display check), source unaffected, fork_notification id-free + merged + absent in source, clone exactly once, fork execution wiring/isolation. C `fork-thread.test.ts` keeps sandbox bypass/approvals, forked-from/forked-to navigation, and the `forkedFrom` view-state test.
+  - Deviation: the default-template test now asserts the host's `autoCompactPrompt` option is used (the literal default text lives in nvimclient options).
 
 ## 7. Port context, git, reminders, skills, options-loader
 
