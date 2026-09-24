@@ -1,15 +1,12 @@
 import type { LoopState, RestResult, ThreadLoopState } from "@magenta/server";
 import { describe, expect, it } from "vitest";
-import { type Line, NvimBuffer } from "../nvim/buffer.ts";
-import type { Row0Indexed } from "../nvim/window.ts";
-import { mountView, pos } from "../tea/view.ts";
-import { withNvimClient } from "../test/preamble.ts";
+import { renderToString } from "../tea/view.ts";
 import { renderStatus } from "./thread-view.ts";
 
-async function renderStatusToString(
+function renderStatusToString(
   state: ThreadLoopState | Extract<LoopState, { type: "streaming" }>,
   lastTurnResult?: RestResult,
-): Promise<string> {
+): string {
   const loopState: ThreadLoopState =
     state.type === "streaming"
       ? {
@@ -18,35 +15,16 @@ async function renderStatusToString(
           aborting: false,
         }
       : state;
-  let text = "";
-  await withNvimClient(async (nvim) => {
-    const buffer = await NvimBuffer.create(false, true, nvim);
-    await buffer.setOption("modifiable", false);
-    await mountView({
-      view: () =>
-        renderStatus(
-          loopState,
-          undefined,
-          lastTurnResult,
-          undefined,
-          () => {},
-          undefined,
-        ),
-      props: {},
-      mount: {
-        nvim,
-        buffer,
-        startPos: pos(0, 0),
-        endPos: pos(0, 0),
-      },
-    });
-    const lines = await buffer.getLines({
-      start: 0 as Row0Indexed,
-      end: 100 as Row0Indexed,
-    });
-    text = (lines as Line[]).join("\n");
-  });
-  return text;
+  return renderToString(
+    renderStatus(
+      loopState,
+      undefined,
+      lastTurnResult,
+      undefined,
+      () => {},
+      undefined,
+    ),
+  );
 }
 
 describe("thread-view renderStatus streaming", () => {

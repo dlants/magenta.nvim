@@ -248,3 +248,10 @@ export function withCode(node: VDOMNode) {
 export function withInlineCode(node: VDOMNode) {
   return withExtmark(node, { hl_group: "@markup.raw.markdown_inline" });
 }
+
+/** Concatenates a view's text content without mounting it into a buffer. */
+export function renderToString(node: VDOMNode): string {
+  return node.type === "string"
+    ? node.content
+    : node.children.map(renderToString).join("");
+}
