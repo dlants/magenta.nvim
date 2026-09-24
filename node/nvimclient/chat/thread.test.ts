@@ -208,6 +208,184 @@ it("clears pending expand state when the queue drains", async () => {
   });
 });
 
+it("processes @diag keyword to include diagnostics in message", {
+  timeout: 10000,
+}, async () => {
+  await withDriver({}, async (driver) => {
+    // Create a file with syntax errors to generate diagnostics
+    await driver.editFile("test.ts");
+    await driver.showSidebar();
+
+    // Wait for diagnostics to be available
+    await pollUntil(
+      async () => {
+        const diagnostics = (await driver.nvim.call("nvim_exec_lua", [
+          `return vim.diagnostic.get(nil)`,
+          [],
+        ])) as unknown[];
+
+        if (diagnostics.length === 0) {
+          throw new Error("No diagnostics available yet");
+        }
+      },
+      { timeout: 5000 },
+    );
+
+    // Send a message with @diag keyword
+    await driver.inputMagentaText("Help me fix this issue @diag");
+    await driver.send();
+
+    const stream = await driver.mockAnthropic.awaitPendingStream();
+    stream.respond({
+      stopReason: "end_turn",
+      text: "I can see the diagnostics you've provided. Let me help you fix the issue.",
+      toolRequests: [],
+    });
+
+    // Verify the original message is displayed
+    await driver.assertDisplayBufferContains("Help me fix this issue @diag");
+
+    // Verify the diagnostics are appended as a separate content block
+    await driver.assertDisplayBufferContains("Current diagnostics:");
+    await driver.assertDisplayBufferContains(
+      "Property 'd' does not exist on type",
+    );
+    await driver.assertDisplayBufferContains("test.ts");
+
+    // Check the thread message structure
+    const thread = driver.magenta.chat.getActiveThread();
+    const messages = thread.thread.getProviderMessages();
+
+    // Should have user message and assistant response
+    expect(messages.length).toBe(2);
+
+    // The user message should have four content blocks: system_info +
+    // system_reminder + original text + diagnostics
+    expect(messages[0].content.length).toBe(4);
+    expect(messages[0].content[0].type).toBe("system_info");
+    const content0 = messages[0].content[2];
+    expect(content0.type).toBe("text");
+    expect((content0 as Extract<typeof content0, { type: "text" }>).text).toBe(
+      "Help me fix this issue @diag",
+    );
+    const content1 = messages[0].content[3];
+    expect(content1.type).toBe("text");
+    expect(
+      (content1 as Extract<typeof content1, { type: "text" }>).text,
+    ).toContain("Current diagnostics:");
+    expect(
+      (content1 as Extract<typeof content1, { type: "text" }>).text,
+    ).toContain("Property 'd' does not exist on type");
+  });
+});
+it("processes @qf keyword to include quickfix list in message", {
+  timeout: 10000,
+}, async () => {
+  await withDriver({}, async (driver) => {
+    // Create some test quickfix entries
+    await driver.nvim.call("nvim_command", [
+      "call setqflist([" +
+        "{'filename': 'test1.ts', 'lnum': 10, 'col': 5, 'text': 'Error: undefined variable'}," +
+        "{'filename': 'test2.js', 'lnum': 25, 'col': 12, 'text': 'Warning: unused import'}" +
+        "])",
+    ]);
+
+    await driver.showSidebar();
+
+    // Send a message with @qf keyword
+    await driver.inputMagentaText("Help me fix these issues @qf");
+    await driver.send();
+
+    const stream = await driver.mockAnthropic.awaitPendingStream();
+    stream.respond({
+      stopReason: "end_turn",
+      text: "I can see the quickfix list you've provided. Let me help you fix these issues.",
+      toolRequests: [],
+    });
+
+    // Verify the original message is displayed
+    await driver.assertDisplayBufferContains("Help me fix these issues @qf");
+
+    // Verify the quickfix list is appended as a separate content block
+    await driver.assertDisplayBufferContains("Current quickfix list:");
+    await driver.assertDisplayBufferContains("Error: undefined variable");
+    await driver.assertDisplayBufferContains("Warning: unused import");
+    await driver.assertDisplayBufferContains("test1.ts:10:5");
+    await driver.assertDisplayBufferContains("test2.js:25:12");
+
+    // Check the thread message structure
+    const thread = driver.magenta.chat.getActiveThread();
+    const messages = thread.thread.getProviderMessages();
+
+    // Should have user message and assistant response
+    expect(messages.length).toBe(2);
+
+    // The user message should have three content blocks: original text + quickfix list (after system_info)
+    expect(messages[0].content.length).toBe(4);
+    expect(messages[0].content[0].type).toBe("system_info");
+    const content0 = messages[0].content[2];
+    expect(content0.type).toBe("text");
+    expect((content0 as Extract<typeof content0, { type: "text" }>).text).toBe(
+      "Help me fix these issues @qf",
+    );
+    const content1 = messages[0].content[3];
+    expect(content1.type).toBe("text");
+    expect(
+      (content1 as Extract<typeof content1, { type: "text" }>).text,
+    ).toContain("Current quickfix list:");
+    expect(
+      (content1 as Extract<typeof content1, { type: "text" }>).text,
+    ).toContain("Error: undefined variable");
+    expect(
+      (content1 as Extract<typeof content1, { type: "text" }>).text,
+    ).toContain("Warning: unused import");
+  });
+});
+
+it("handles empty quickfix list with @qf command", {
+  timeout: 10000,
+}, async () => {
+  await withDriver({}, async (driver) => {
+    // Clear quickfix list
+    await driver.nvim.call("nvim_command", ["call setqflist([])"]);
+
+    await driver.showSidebar();
+
+    // Send a message with @qf keyword
+    await driver.inputMagentaText("Any issues to fix? @qf");
+    await driver.send();
+
+    const stream = await driver.mockAnthropic.awaitPendingStream();
+    stream.respond({
+      stopReason: "end_turn",
+      text: "I can see the quickfix list is empty. No issues to fix right now!",
+      toolRequests: [],
+    });
+
+    // Verify the original message is displayed
+    await driver.assertDisplayBufferContains("Any issues to fix? @qf");
+
+    // Verify the empty quickfix list is handled properly
+    await driver.assertDisplayBufferContains("Current quickfix list:");
+
+    // Check the thread message structure
+    const thread = driver.magenta.chat.getActiveThread();
+    const messages = thread.thread.getProviderMessages();
+
+    // Should have user message and assistant response
+    expect(messages.length).toBe(2);
+
+    // The user message should have three content blocks: original text + empty quickfix list (after system_info)
+    expect(messages[0].content.length).toBe(4);
+    expect(messages[0].content[0].type).toBe("system_info");
+    const content1 = messages[0].content[3];
+    expect(content1.type).toBe("text");
+    expect((content1 as Extract<typeof content1, { type: "text" }>).text).toBe(
+      "Current quickfix list:\n",
+    );
+  });
+});
+
 it("processes @buf keyword to include buffers list in message", {
   timeout: 10000,
 }, async () => {

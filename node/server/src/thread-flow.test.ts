@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { loopLabel } from "./loop-state.ts";
 import type { MockStream } from "./providers/mock-anthropic-client.ts";
 import { parseDelivery, renderPending } from "./submission/index.ts";
+import { shellResult } from "./test/fakes.ts";
 import { type Harness, withHarness } from "./test/harness.ts";
 import type { Thread } from "./thread.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
@@ -262,12 +263,7 @@ it("handles @async messages by queueing them and sending on next tool response",
     const call = await pendingShell(h);
     type(thread, "@async This should be queued");
     expect(thread.queued.async).toHaveLength(1);
-    call.result.resolve({
-      stdout: "secret",
-      stderr: "",
-      exitCode: 0,
-      signal: undefined,
-    } as never);
+    call.result.resolve(shellResult({ stdout: "secret" }));
     const stream2 = await h.nextStream();
     expect(wirePattern(stream2.messages)).toEqual([
       "user:text",
@@ -493,6 +489,30 @@ it("inserts error tool results when aborting while waiting for tool use", () =>
     expect(JSON.stringify(result)).toContain("aborted by the user");
   }));
 
+it("aborts tool use when sending new message while tool is executing", () =>
+  withHarness({}, async (h) => {
+    const { thread } = await h.createRoot();
+    void h.send(thread, "Run a slow command");
+    (await h.nextStream()).respond({
+      stopReason: "tool_use",
+      text: "I'll run a slow bash command for you.",
+      toolRequests: [bashRequest("bash-tool", "slow-command")],
+    });
+    const call = await pendingShell(h);
+    const done = h.send(thread, "Stop, do something else");
+    const request2 = await h.nextStream();
+    call.result.resolve(shellResult({ stdout: "late tool output" }));
+    request2.respond({
+      stopReason: "end_turn",
+      text: "Okay.",
+      toolRequests: [],
+    });
+    await done;
+    const history = JSON.stringify(thread.getProviderMessages());
+    expect(history).toContain("Stop, do something else");
+    expect(history).not.toContain("late tool output");
+    expect(JSON.stringify(request2.messages)).not.toContain("late tool output");
+  }));
 it("removes server_tool_use content when aborted before receiving results", () =>
   withHarness({}, async (h) => {
     const { thread } = await h.createRoot();

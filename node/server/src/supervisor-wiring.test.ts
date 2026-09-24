@@ -1,7 +1,7 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import { expect, it } from "vitest";
-import type { ScriptInvocationId, ThreadId } from "./chat-types.ts";
+import type { ScriptInvocationId, ThreadId, ThreadType } from "./chat-types.ts";
 import type { TokenBudget } from "./compaction/token-budget.ts";
 import { DockerSupervisor } from "./docker-supervisor.ts";
 import { withHarness } from "./test/harness.ts";
@@ -72,21 +72,25 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", () =
 
 it.each([
   {
-    threadType: "compact" as const,
+    threadType: "compact",
     supervised: false,
     expected: [MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor],
   },
   {
-    threadType: "docker_root" as const,
+    threadType: "docker_root",
     supervised: false,
     expected: [MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor],
   },
   {
-    threadType: "subagent" as const,
+    threadType: "subagent",
     supervised: true,
     expected: [MaxTokensSupervisor, DockerSupervisor, TitleSupervisor],
   },
-])("constructs $threadType supervised=$supervised with ordered, stable policies", ({
+] satisfies {
+  threadType: ThreadType;
+  supervised: boolean;
+  expected: unknown[];
+}[])("constructs $threadType supervised=$supervised with ordered, stable policies", ({
   threadType,
   supervised,
   expected,

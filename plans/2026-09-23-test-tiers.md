@@ -196,6 +196,7 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
   - `node/server/src/supervisor-wiring.test.ts`: whole file ported; nvimclient copy deleted. Root/subagent budget cases were already covered by `test/harness.test.ts` and not duplicated.
   - Harness: added `streamWithText(text)`.
   - Deviations: snapshot assertions replaced by explicit structure/text assertions. Tool approval waits are modeled with `FakeShell` pending commands instead of the sandbox approval prompt. Streaming previews (thinking/EDL/bash) and web-search rendering stay C (they assert rendered text only). `@diff`/`@staged`/non-existent `@file` stay C (nvim registry). The thinking C test keeps only the expand/collapse rendering; "aborts tool use while executing" merged into the A error-tool_result test. Permission-clearing abort tests stay C (sandbox handler is nvim-side). Deleted `@diag`/`@diagnostics`/`@qf`/`@quickfix`/empty-qf/`@buffers`/empty-buf C tests (covered by `commands/registry.test.ts`); `@buf` kept as the end-to-end test.
+  - Review follow-up: added A test "aborts tool use when sending new message while tool is executing" (pending FakeShell settled after the abort; late output absent from history). Restored C tests for `@diag`, `@qf`, and empty `@qf` (real nvim diagnostics/quickfix output); `@diagnostics`/`@quickfix`/`@buffers`/empty-`@buf` stay deleted as aliases. Replaced `as never` shell result with `shellResult(...)`; supervisor-wiring cases use `satisfies { threadType: ThreadType; ... }[]`.
 
 ## 6. Port compaction and fork
 
