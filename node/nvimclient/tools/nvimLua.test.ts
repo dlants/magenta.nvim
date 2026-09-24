@@ -14,76 +14,6 @@ function okText(result: ProviderToolResult): string {
   return (val0 as Extract<typeof val0, { type: "text" }>).text;
 }
 
-it("nvim_lua evaluates code and returns the result", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-    await driver.inputMagentaText("run some lua");
-    await driver.send();
-
-    const toolRequestId = "lua-1" as ToolRequestId;
-    const request = await driver.mockAnthropic.awaitPendingStream();
-    request.respond({
-      stopReason: "tool_use",
-      text: "ok",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: toolRequestId,
-            toolName: "nvim_lua" as ToolName,
-            input: { code: "return 1 + 2" },
-          },
-        },
-      ],
-    });
-
-    const request2 = await driver.mockAnthropic.awaitPendingStream();
-    request2.respond({
-      stopReason: "end_turn",
-      text: "done",
-      toolRequests: [],
-    });
-
-    const result = await pollForToolResult(driver, toolRequestId);
-    expect(okText(result)).toBe("3");
-  });
-});
-
-it("nvim_lua handles a nil return value", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-    await driver.inputMagentaText("run some lua");
-    await driver.send();
-
-    const toolRequestId = "lua-nil" as ToolRequestId;
-    const request = await driver.mockAnthropic.awaitPendingStream();
-    request.respond({
-      stopReason: "tool_use",
-      text: "ok",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: toolRequestId,
-            toolName: "nvim_lua" as ToolName,
-            input: { code: "local x = 1" },
-          },
-        },
-      ],
-    });
-
-    const request2 = await driver.mockAnthropic.awaitPendingStream();
-    request2.respond({
-      stopReason: "end_turn",
-      text: "done",
-      toolRequests: [],
-    });
-
-    const result = await pollForToolResult(driver, toolRequestId);
-    expect(okText(result)).toBe("Executed successfully, no return value.");
-  });
-});
-
 it("nvim_lua side effects are observable in neovim", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
@@ -124,45 +54,5 @@ it("nvim_lua side effects are observable in neovim", async () => {
       [],
     ]);
     expect(value).toBe(42);
-  });
-});
-
-it("nvim_lua surfaces Lua errors as error results", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-    await driver.inputMagentaText("run some lua");
-    await driver.send();
-
-    const toolRequestId = "lua-3" as ToolRequestId;
-    const request = await driver.mockAnthropic.awaitPendingStream();
-    request.respond({
-      stopReason: "tool_use",
-      text: "ok",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: toolRequestId,
-            toolName: "nvim_lua" as ToolName,
-            input: { code: "error('boom')" },
-          },
-        },
-      ],
-    });
-
-    const request2 = await driver.mockAnthropic.awaitPendingStream();
-    request2.respond({
-      stopReason: "end_turn",
-      text: "done",
-      toolRequests: [],
-    });
-
-    const result = await pollForToolResult(driver, toolRequestId);
-    expect(result.result.status).toBe("error");
-    const res = result.result as Extract<
-      typeof result.result,
-      { status: "error" }
-    >;
-    expect(res.error).toContain("boom");
   });
 });

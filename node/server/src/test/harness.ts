@@ -1,6 +1,7 @@
 import type { AgentsMap } from "../agents/agents.ts";
 import type { GitState } from "../capabilities/git-client.ts";
 import type { LspClient } from "../capabilities/lsp-client.ts";
+import type { LuaExecutor } from "../capabilities/lua-executor.ts";
 import type { ThreadId } from "../chat-types.ts";
 import {
   autoContextFilesToInitialFiles,
@@ -38,7 +39,9 @@ import type { ContextFileAccess, Thread } from "../thread.ts";
 import type { RestResult } from "../thread-api.ts";
 import type { PreparedThreadContext } from "../thread-assembly.ts";
 import { clientToolCreator } from "../tools/create-tool.ts";
-import type { MCPToolManager } from "../tools/mcp/manager.ts";
+import { MCPToolManager } from "../tools/mcp/manager.ts";
+import type { MCPServersConfig } from "../tools/mcp/options.ts";
+import type { ToolCapability } from "../tools/tool-registry.ts";
 import { pollUntil } from "../utils/async.ts";
 import {
   detectFileTypeViaFileIO,
@@ -84,6 +87,10 @@ export type HarnessOptions = {
   agents?: AgentsMap;
   options?: Partial<HarnessThreadOptions>;
   resolve?: HarnessResolve;
+  /** Enables `nvim_lua` (and the "nvim" capability) with a stub executor. */
+  luaExecutor?: LuaExecutor;
+  /** Real MCPToolManager over the given (e.g. `type: "mock"`) servers. */
+  mcpServers?: MCPServersConfig;
 };
 
 const FILE_REF = /@file:`([^`]+)`|@file:(\S+)/g;
@@ -119,8 +126,9 @@ export const defaultHarnessResolve: HarnessResolve = async (
 };
 
 const stubLsp = {} as LspClient;
-const stubMcp = {
+const emptyMcp = {
   serverMap: {},
+  disconnect: () => Promise.resolve(),
   getToolSpecs: () => [],
 } as unknown as MCPToolManager;
 
@@ -154,6 +162,8 @@ export class TestSessionHost implements SessionHost {
         prepare: () => Promise<PreparedThread>,
       ) => Promise<PreparedThread>)
     | undefined;
+  readonly mcp: MCPToolManager;
+  readonly luaExecutor: LuaExecutor | undefined;
   readonly rejectedApprovals: ThreadId[] = [];
   rejectApprovals(id: ThreadId): void {
     this.rejectedApprovals.push(id);
@@ -167,6 +177,10 @@ export class TestSessionHost implements SessionHost {
     this.shell = new FakeShell(opts.shell);
     this.agents = opts.agents ?? {};
     this.resolve = opts.resolve ?? defaultHarnessResolve;
+    this.luaExecutor = opts.luaExecutor;
+    this.mcp = opts.mcpServers
+      ? new MCPToolManager(opts.mcpServers, { logger: noopLogger })
+      : emptyMcp;
     this.options = {
       autoCompactThreshold: 100_000,
       autoCompactPrompt: "continue",
@@ -252,7 +266,7 @@ export class TestSessionHost implements SessionHost {
       ...(subagentConfig ? { subagentConfig } : {}),
       systemPrompt,
       systemInfo,
-      mcpToolManager: stubMcp,
+      mcpToolManager: this.mcp,
       threadManager: session,
       getScriptRunner,
       fileIO,
@@ -268,7 +282,7 @@ export class TestSessionHost implements SessionHost {
       clientToolCreator: clientToolCreator({
         logger: noopLogger,
         lspClient: stubLsp,
-        mcpToolManager: stubMcp,
+        mcpToolManager: this.mcp,
         cwd,
         homeDir,
         maxConcurrentSubagents: this.options.maxConcurrentSubagents,
@@ -278,8 +292,14 @@ export class TestSessionHost implements SessionHost {
         threadManager: session,
         getScriptRunner,
         getAgents,
+        luaExecutor: this.luaExecutor,
       }),
-      availableCapabilities: new Set(["file-io", "shell", "threads"]),
+      availableCapabilities: new Set<ToolCapability>([
+        "file-io",
+        "shell",
+        "threads",
+        ...(this.luaExecutor ? (["nvim"] as const) : []),
+      ]),
       environmentConfig: request.options.environmentConfig ?? {
         type: "local",
       },
@@ -368,7 +388,10 @@ export function createHarness(options: HarnessOptions = {}): Harness {
         last = stream;
         return stream;
       }),
-    dispose: () => session.dispose(),
+    async dispose() {
+      await session.dispose();
+      await host.mcp.disconnect();
+    },
   };
 }
 
