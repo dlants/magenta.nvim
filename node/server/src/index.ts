@@ -236,8 +236,9 @@ export {
   type ThreadPreparation,
 } from "./session.ts";
 export {
-  compactPrompt,
   type Delivery,
+  type ExpandedPrompt,
+  expandedPrompt,
   type PendingMessage,
   parseCompact,
   parseDelivery,

@@ -35,7 +35,11 @@ import type {
   ProviderToolSpec,
 } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
-import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
+import {
+  type ResolvedSubmission,
+  type ResolveSubmission,
+  resolveAsText,
+} from "./submission/index.ts";
 import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { type ContextDelivery, Thread, type ThreadContext } from "./thread.ts";
 import type { RestResult, ToolLoopResult, YieldValue } from "./thread-api.ts";
@@ -560,4 +564,16 @@ export function compactorSlot(thread: Thread): { compactor: Compactor } {
       return compactor;
     },
   };
+}
+
+/** Builds a `ResolvedSubmission` from the flat shape test resolvers produce. */
+export function toResolved(input: {
+  compact?: boolean;
+  messages: AgentInput[];
+  reminders?: string[];
+}): ResolvedSubmission {
+  const prompt = { content: input.messages, reminders: input.reminders ?? [] };
+  return input.compact
+    ? { type: "compact", next: prompt }
+    : { type: "send", prompt };
 }

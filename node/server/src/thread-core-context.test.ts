@@ -8,7 +8,7 @@ import type { GitState } from "./capabilities/git-client.ts";
 import { TokenBudget } from "./compaction/token-budget.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { NativeMessageIdx } from "./providers/provider-types.ts";
-import { pendingMessage, resolveAsText } from "./submission/index.ts";
+import { pendingMessage } from "./submission/index.ts";
 import { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { PRE_HISTORY } from "./supervisors/history.ts";
 import {
@@ -20,6 +20,7 @@ import {
   getContextDeliveries,
   resetThread,
   type TestContextOverrides,
+  toResolved,
   uniqueThreadId,
 } from "./test-helpers.ts";
 import type { Thread } from "./thread.ts";
@@ -229,16 +230,17 @@ describe("Thread-owned context delivery", () => {
     "compaction",
   ] as const)("%s reseeds files and preamble with a fresh tracker without replaying delivered comments", async (operation) => {
     const f = await fixture({
-      resolve: async () => ({
-        compact: true,
-        messages: [
-          {
-            type: "text",
-            text: "resume",
-          },
-        ],
-        reminders: [],
-      }),
+      resolve: async () =>
+        toResolved({
+          compact: true,
+          messages: [
+            {
+              type: "text",
+              text: "resume",
+            },
+          ],
+          reminders: [],
+        }),
     });
     try {
       const first = await f.request();
@@ -425,8 +427,11 @@ describe("Thread-owned context delivery", () => {
   it("a head fork retains standing and activated reminder history", async () => {
     const f = await fixture({
       resolve: async (message) => ({
-        ...(await resolveAsText(message)),
-        reminders: ["retain this reminder"],
+        type: "send",
+        prompt: {
+          content: [{ type: "text", text: message }],
+          reminders: ["retain this reminder"],
+        },
       }),
     });
     let fork: Thread | undefined;

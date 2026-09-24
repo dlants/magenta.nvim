@@ -44,6 +44,15 @@ So the submitted input keeps landing in the native log before compaction decides
 - `node/server/src/thread-assembly.ts`: builds AutoCompact from `autoCompactPrompt`.
 - `node/server/src/thread.ts`: `startSubmission`, `compactAndContinue`, queue flushes, `splitPendingUserText`, `joinText`.
 
+## Update after the token-budget plan landed
+
+`plans/2026-09-23-token-budget-channel.md` has landed. It changes several things this plan refers to; where they conflict, this note wins:
+- `CompactSuspendReason` no longer exists. Compaction now travels as Thread's internal `CompactRequest = { type: "compact"; nextPrompt: string | undefined }` (`thread.ts`), and `compactAndContinue(handoff, submission)` takes the handoff directly. Wherever this plan says `CompactSuspendReason.next`, read `CompactRequest.next: AgentInput[]` and `compactAndContinue(next, …)`.
+- `AutoCompactSupervisor` no longer exists. Its handoff is `TokenBudget.handoff` (`compaction/token-budget.ts`), currently a `string`; this plan makes it `AgentInput[]` (assembly wraps `autoCompactPrompt` as one text item).
+- Suspensions are gone: there is no `suspended` loop result and no supervisor suspend. Budget stops arrive as a `completed`/`context_budget` tool-loop result, which Thread turns into a `CompactRequest`. The loop appends injections and input before the budget check, so on a first-request budget stop the unanswered user turn is always the log's tail.
+- `splitPendingUserText` is now exported from `thread.ts` and has a table test in `compaction/index.test.ts`. Stage 3 moves that logic privately into `ThreadCompactor.run` (as designed below), deletes the export, and retargets the table test to drive `ThreadCompactor.run`.
+- Thread's compactor is at `context.compaction?.compactor` (grouped with `tokenBudget`); tests install one via `compactorSlot(thread).compactor = …` in `test-helpers.ts`.
+
 # Design
 
 There are three explicit stages of a prompt:
@@ -150,6 +159,12 @@ The compactor renders `next` for its template:
 # Stages
 
 ## Explicit prompt types
+
+Status: DONE.
+- Added `expandedPrompt(resolved)` accessor in `submission/index.ts` (exported) so Thread reads content/reminders uniformly.
+- `@compact` in `startSubmission` and queue flushes still flatten via `joinText` into `CompactRequest.nextPrompt` (TODO stage 2).
+- `resolveSubmission` in `session-host.ts` is exported for a unit test (`nvimclient/chat/resolve-submission.test.ts`).
+- Test resolvers use `toResolved({compact, messages, reminders})` from `test-helpers.ts`.
 
 - Goal:
   - `ExpandedPrompt` and the `ResolvedSubmission` union exist.

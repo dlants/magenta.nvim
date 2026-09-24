@@ -18,8 +18,9 @@ import type {
 } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import {
-  compactPrompt,
+  expandedPrompt,
   parseCompact,
+  type ResolvedSubmission,
   type ResolveSubmission,
   type SubmissionInput,
 } from "./submission/index.ts";
@@ -626,19 +627,28 @@ export class Thread implements ThreadCoreView {
       if (previous) await submission.step(() => previous.abort());
       const reset = this.reset;
       if (reset) await submission.step(() => reset);
-      const resolved =
+      const resolved: ResolvedSubmission =
         input.type === "raw"
           ? await submission.step(() => this.context.resolve(input.message))
-          : { messages: input.messages, reminders: [], compact: false };
-      for (const text of resolved.reminders)
+          : {
+              type: "send",
+              prompt: { content: input.messages, reminders: [] },
+            };
+      const prompt = expandedPrompt(resolved);
+      for (const text of prompt.reminders)
         this.activateReminder(
           text,
           this.core.manager.getPendingUserMessageIdx(),
         );
-      this.turnChain.onSubmission(resolved.messages);
-      let result: LoopResult = resolved.compact
-        ? { type: "compact", nextPrompt: compactPrompt(resolved) }
-        : await this.runLoop(resolved.messages, submission, force);
+      this.turnChain.onSubmission(prompt.content);
+      let result: LoopResult =
+        resolved.type === "compact"
+          ? // TODO(stage 2): carry `prompt.content` itself instead of text.
+            {
+              type: "compact",
+              nextPrompt: joinText(prompt.content) || undefined,
+            }
+          : await this.runLoop(prompt.content, submission, force);
       while (result.type === "compact") {
         submission.throwIfAborted();
         const outcome = await this.compactAndContinue(
@@ -753,7 +763,7 @@ export class Thread implements ThreadCoreView {
         );
         if (signal.aborted)
           return { disposition: { type: "commit" }, value: [] };
-        if (resolved) messages.push(...resolved.messages);
+        if (resolved) messages.push(...expandedPrompt(resolved).content);
       }
       return { disposition: { type: "commit" }, value: messages };
     });
@@ -809,17 +819,17 @@ export class Thread implements ThreadCoreView {
             value: { type: "messages", messages: [] },
           };
         if (!resolved) continue;
-        if (resolved.compact) {
+        const { content } = expandedPrompt(resolved);
+        if (resolved.type === "compact") {
           return {
             disposition: { type: "restore" },
             value: {
               type: "compact",
-              nextPrompt:
-                joinText([...messages, ...resolved.messages]) || undefined,
+              nextPrompt: joinText([...messages, ...content]) || undefined,
             },
           };
         }
-        messages.push(...resolved.messages);
+        messages.push(...content);
       }
       return {
         disposition: { type: "commit" },
@@ -831,16 +841,19 @@ export class Thread implements ThreadCoreView {
     entry: QueueEntry,
     signal: AbortSignal,
     nativeMessageIdx: NativeMessageIdx,
-  ) {
+  ): Promise<ResolvedSubmission | undefined> {
     if (entry.type === "resolved")
-      return { compact: false, messages: [entry.input], reminders: [] };
+      return {
+        type: "send",
+        prompt: { content: [entry.input], reminders: [] },
+      };
     try {
       const resolved = await untilAborted(
         this.context.resolve(entry.message),
         signal,
       );
       if (!resolved || signal.aborted) return undefined;
-      for (const text of resolved.reminders) {
+      for (const text of expandedPrompt(resolved).reminders) {
         this.activateReminder(text, nativeMessageIdx);
       }
       return resolved;

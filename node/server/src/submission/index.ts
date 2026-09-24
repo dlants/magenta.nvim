@@ -31,23 +31,19 @@ export type Submission = {
   message: PendingMessage;
 };
 
-export type ResolvedSubmission = {
-  compact: boolean;
-  messages: AgentInput[];
+/** Every command in a raw message has run. */
+export type ExpandedPrompt = {
+  content: AgentInput[];
   reminders: string[];
 };
-
-export function compactPrompt(
-  resolved: ResolvedSubmission,
-): string | undefined {
-  const text = resolved.messages
-    .filter((m) => m.type === "text")
-    .map((m) => m.text)
-    .join("\n")
-    .trim();
-  return text || undefined;
+export type ResolvedSubmission =
+  | { type: "send"; prompt: ExpandedPrompt }
+  /** `@compact <rest>`: `next` is `<rest>` expanded; empty content means
+   * "continue". */
+  | { type: "compact"; next: ExpandedPrompt };
+export function expandedPrompt(resolved: ResolvedSubmission): ExpandedPrompt {
+  return resolved.type === "send" ? resolved.prompt : resolved.next;
 }
-
 export type ResolveSubmission = (
   message: PendingMessage,
 ) => Promise<ResolvedSubmission>;
@@ -55,16 +51,11 @@ export type ResolveSubmission = (
 /** Used by threads whose content is composed programmatically (subagents, scripts). */
 export const resolveAsText: ResolveSubmission = (message) =>
   Promise.resolve({
-    compact: false,
-    messages: message.length
-      ? [
-          {
-            type: "text",
-            text: message,
-          },
-        ]
-      : [],
-    reminders: [],
+    type: "send",
+    prompt: {
+      content: message.length ? [{ type: "text", text: message }] : [],
+      reminders: [],
+    },
   });
 
 const COMPACT_PREFIX = /^\s*@compact(?!\w)\s*/;

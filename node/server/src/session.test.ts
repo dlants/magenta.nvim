@@ -6,6 +6,7 @@ import {
   awaitNextStream,
   createAgentWithMock,
   TEST_ARCHIVE_DIR,
+  toResolved,
   uniqueThreadId,
 } from "./test-helpers.ts";
 import {
@@ -294,16 +295,17 @@ it("freezes a fork at the requested index even if the source advances", async ()
   );
   prepared.context = {
     ...prepared.context,
-    resolve: async (message) => ({
-      compact: false,
-      reminders: [message],
-      messages: [
-        {
-          type: "text",
-          text: message,
-        },
-      ],
-    }),
+    resolve: async (message) =>
+      toResolved({
+        compact: false,
+        reminders: [message],
+        messages: [
+          {
+            type: "text",
+            text: message,
+          },
+        ],
+      }),
   };
   const id = await session.createRootThread();
   const record = session.getThread(id);

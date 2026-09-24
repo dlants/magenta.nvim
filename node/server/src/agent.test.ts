@@ -27,7 +27,6 @@ import {
   parseCompact,
   pendingMessage,
   type ResolveSubmission,
-  resolveAsText,
 } from "./submission/index.ts";
 import {
   awaitNextStream,
@@ -42,6 +41,7 @@ import {
   resetThread,
   TEST_ARCHIVE_DIR,
   toolExecution,
+  toResolved,
   uniqueThreadId,
   userInput,
 } from "./test-helpers.ts";
@@ -439,7 +439,7 @@ describe("Thread turn loop", () => {
       async (message) => {
         resolveEntered?.();
         await gate;
-        return {
+        return toResolved({
           compact: false,
           messages: [
             {
@@ -448,7 +448,7 @@ describe("Thread turn loop", () => {
             },
           ],
           reminders: [],
-        };
+        });
       },
     );
     const sent = core.submit({
@@ -551,7 +551,10 @@ describe("Thread submissions across a compaction handoff", () => {
 
   const resolveCompact: ResolveSubmission = async (message) => {
     const { compact, rest } = parseCompact(message);
-    return { ...(await resolveAsText(rest)), compact };
+    return toResolved({
+      compact,
+      messages: rest ? [{ type: "text", text: rest }] : [],
+    });
   };
   /** Compacts at the next stop, via a queued `@compact`. */
   const queueCompact = (core: Thread, prompt = "") =>
@@ -3785,16 +3788,17 @@ describe("Agent conversation archive", () => {
     const threadId = uniqueThreadId("archive-compact");
     const { core, mockClient } = createAgentWithMock(
       {
-        resolve: async () => ({
-          compact: true,
-          messages: [
-            {
-              type: "text",
-              text: "",
-            },
-          ],
-          reminders: [],
-        }),
+        resolve: async () =>
+          toResolved({
+            compact: true,
+            messages: [
+              {
+                type: "text",
+                text: "",
+              },
+            ],
+            reminders: [],
+          }),
       },
       threadId,
     );
@@ -4002,16 +4006,17 @@ describe("Agent thread state", () => {
 });
 
 describe("Thread survives the compaction agent swap", () => {
-  const compactResolver = async () => ({
-    compact: true,
-    messages: [
-      {
-        type: "text" as const,
-        text: "",
-      },
-    ],
-    reminders: [],
-  });
+  const compactResolver = async () =>
+    toResolved({
+      compact: true,
+      messages: [
+        {
+          type: "text" as const,
+          text: "",
+        },
+      ],
+      reminders: [],
+    });
   /** Drive a compaction handoff to completion, including the post-compaction
    * continuation turn the fresh agent issues. */
   async function compact(
@@ -4106,16 +4111,17 @@ describe("Thread survives the compaction agent swap", () => {
     const threadId = uniqueThreadId("compact-prefix");
     const { core, mockClient } = createAgentWithMock(
       {
-        resolve: async () => ({
-          compact: true,
-          messages: [
-            {
-              type: "text",
-              text: "",
-            },
-          ],
-          reminders: [],
-        }),
+        resolve: async () =>
+          toResolved({
+            compact: true,
+            messages: [
+              {
+                type: "text",
+                text: "",
+              },
+            ],
+            reminders: [],
+          }),
       },
       threadId,
     );

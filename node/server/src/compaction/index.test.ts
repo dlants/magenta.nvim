@@ -12,6 +12,7 @@ import {
   compactorSlot,
   createAgentWithMock,
   resetThread,
+  toResolved,
   uniqueThreadId,
 } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
@@ -27,11 +28,12 @@ import type { CompactionOutcome } from "./index.ts";
 describe("compaction submission ownership", () => {
   it("settles a busy turn before taking the compaction snapshot", async () => {
     const { core: thread, mockClient } = createAgentWithMock({
-      resolve: async () => ({
-        compact: true,
-        messages: [],
-        reminders: [],
-      }),
+      resolve: async () =>
+        toResolved({
+          compact: true,
+          messages: [],
+          reminders: [],
+        }),
     });
     const previous = thread.submit({
       type: "resolved",
@@ -78,11 +80,12 @@ describe("compaction submission ownership", () => {
           },
         },
       ],
-      resolve: async () => ({
-        compact: true,
-        messages: [],
-        reminders: [],
-      }),
+      resolve: async () =>
+        toResolved({
+          compact: true,
+          messages: [],
+          reminders: [],
+        }),
     });
     const entered = new Defer<void>();
     const probe = new Defer<boolean>();
@@ -107,16 +110,17 @@ describe("compaction submission ownership", () => {
 
   it("does not continue when reset disposal is interrupted", async () => {
     const { core: thread, mockClient } = createAgentWithMock({
-      resolve: async () => ({
-        compact: true,
-        messages: [
-          {
-            type: "text",
-            text: "continue",
-          },
-        ],
-        reminders: [],
-      }),
+      resolve: async () =>
+        toResolved({
+          compact: true,
+          messages: [
+            {
+              type: "text",
+              text: "continue",
+            },
+          ],
+          reminders: [],
+        }),
     });
     const original = thread["core"];
     const dispose = original.dispose.bind(original);
@@ -164,16 +168,17 @@ describe("compaction submission ownership", () => {
     };
     const { core: thread, mockClient } = createAgentWithMock(
       {
-        resolve: async () => ({
-          compact: true,
-          messages: [
-            {
-              type: "text",
-              text: "continue",
-            },
-          ],
-          reminders: [],
-        }),
+        resolve: async () =>
+          toResolved({
+            compact: true,
+            messages: [
+              {
+                type: "text",
+                text: "continue",
+              },
+            ],
+            reminders: [],
+          }),
         threadType: "subagent" as ThreadType,
         yieldSchema: schema,
       },
@@ -222,16 +227,17 @@ describe("compaction submission ownership", () => {
   ] as const)("does not apply a stale summary after %s", async (action) => {
     const { core: thread, mockClient } = createAgentWithMock(
       {
-        resolve: async () => ({
-          compact: true,
-          messages: [
-            {
-              type: "text",
-              text: "continue",
-            },
-          ],
-          reminders: [],
-        }),
+        resolve: async () =>
+          toResolved({
+            compact: true,
+            messages: [
+              {
+                type: "text",
+                text: "continue",
+              },
+            ],
+            reminders: [],
+          }),
       },
       uniqueThreadId("stale-compact"),
     );
@@ -471,16 +477,18 @@ it("an immediate submission supersedes a parked compaction before resolution", a
     {
       resolve: (message) =>
         message === "@compact"
-          ? Promise.resolve({
-              compact: true,
-              messages: [
-                {
-                  type: "text",
-                  text: "continue",
-                },
-              ],
-              reminders: [],
-            })
+          ? Promise.resolve(
+              toResolved({
+                compact: true,
+                messages: [
+                  {
+                    type: "text",
+                    text: "continue",
+                  },
+                ],
+                reminders: [],
+              }),
+            )
           : resolution.promise,
     },
     uniqueThreadId("compact-submit"),
@@ -506,7 +514,7 @@ it("an immediate submission supersedes a parked compaction before resolution", a
   expect(await sent).toEqual({ type: "aborted" });
   expect(mockClient.streams).toHaveLength(0);
   await thread.abort();
-  resolution.resolve({ messages: [], reminders: [], compact: false });
+  resolution.resolve(toResolved({ messages: [] }));
   expect(await next).toEqual({ type: "aborted" });
   await thread.destroy();
 });
@@ -538,11 +546,11 @@ describe("complete submission ownership", () => {
       uniqueThreadId("deferred-during-compaction"),
       async (message) => {
         resolutions.push(message);
-        return {
+        return toResolved({
           compact: message === "@compact",
           messages: message === "@compact" ? [] : [text(message)],
           reminders: [],
-        };
+        });
       },
     );
     const sent = thread.submit({
@@ -635,11 +643,12 @@ describe("complete submission ownership", () => {
         },
       },
       uniqueThreadId("preempt-reset"),
-      async (message) => ({
-        compact: message === "@compact",
-        messages: [text(message)],
-        reminders: [],
-      }),
+      async (message) =>
+        toResolved({
+          compact: message === "@compact",
+          messages: [text(message)],
+          reminders: [],
+        }),
     );
     const oldCore = thread["core"];
     const dispose = oldCore.dispose.bind(oldCore);
@@ -701,7 +710,11 @@ describe("complete submission ownership", () => {
       uniqueThreadId("retry-compaction"),
       async (message) => {
         resolutions++;
-        return { compact: false, messages: [text(message)], reminders: [] };
+        return toResolved({
+          compact: false,
+          messages: [text(message)],
+          reminders: [],
+        });
       },
     );
     const first = thread.submit({

@@ -378,7 +378,7 @@ function prepareThreadDependencies(
   };
 }
 
-async function resolveSubmission(
+export async function resolveSubmission(
   message: PendingMessage,
   context: PreparedNvimContext,
   getContextFileAccess: () => ContextFileAccess,
@@ -397,20 +397,21 @@ async function resolveSubmission(
       fileSupervisor: getContextFileAccess(),
       options: context.options,
     });
-  const messages: AgentInput[] = [
+  const content: AgentInput[] = [
     {
       type: "text",
       text: processedText,
     },
   ];
-  for (const content of additionalContent) {
+  for (const extra of additionalContent) {
     if (
-      content.type === "text" ||
-      content.type === "image" ||
-      content.type === "document"
+      extra.type === "text" ||
+      extra.type === "image" ||
+      extra.type === "document"
     ) {
-      messages.push(content);
+      content.push(extra);
     }
   }
-  return { compact, messages, reminders };
+  const prompt = { content, reminders };
+  return compact ? { type: "compact", next: prompt } : { type: "send", prompt };
 }
