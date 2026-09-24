@@ -44,6 +44,25 @@ describe("discoverHierarchyContext", () => {
     expect(relPaths).toEqual(["a/b/context.md", "a/context.md"]);
   });
 
+  it("skips unsupported context files and keeps walking upward", async () => {
+    const fileIO = new InMemoryFileIO({
+      "/project/a/b/leaf.txt": "leaf",
+      "/project/a/b/context.md": `\u007fELF\u0002\u0001\u0001${"\u0000".repeat(60)}`,
+      "/project/context.md": "root",
+    });
+    const results = await discoverHierarchyContext(
+      "/project/a/b/leaf.txt" as AbsFilePath,
+      {
+        fileIO,
+        logger,
+        cwd,
+        homeDir,
+        hierarchyContextFileNames: ["context.md"],
+      },
+    );
+    expect(results.map((r) => r.relFilePath)).toEqual(["context.md"]);
+  });
+
   it("returns empty array when hierarchyContextFileNames is empty", async () => {
     const fileIO = new InMemoryFileIO({
       "/project/a/leaf.txt": "leaf",
@@ -84,6 +103,44 @@ describe("resolveAutoContext", () => {
       "/project/.magenta/a.md",
       "/project/CONTEXT.md",
     ]);
+  });
+
+  it("dedups overlapping patterns lexically", async () => {
+    const fileIO = new InMemoryFileIO({ "/project/context.md": "x" });
+    const results = await resolveAutoContext({
+      fileIO,
+      logger,
+      cwd,
+      homeDir,
+      globs: ["context.md", "**/context.md", "./context.md"],
+    });
+    expect(results.map((r) => r.absFilePath)).toEqual(["/project/context.md"]);
+  });
+
+  it("accepts symlinked duplicates (dedup does not resolve realpath)", async () => {
+    const tmp = await fsPromises.realpath(
+      await fsPromises.mkdtemp(path.join(os.tmpdir(), "auto-ctx-link-")),
+    );
+    try {
+      await fsPromises.writeFile(path.join(tmp, "context.md"), "x");
+      await fsPromises.symlink(
+        path.join(tmp, "context.md"),
+        path.join(tmp, "link.md"),
+      );
+      const results = await resolveAutoContext({
+        fileIO: new FsFileIO(),
+        logger,
+        cwd: tmp as NvimCwd,
+        homeDir,
+        globs: ["context.md", "link.md"],
+      });
+      expect(results.map((r) => r.relFilePath).sort()).toEqual([
+        "context.md",
+        "link.md",
+      ]);
+    } finally {
+      await fsPromises.rm(tmp, { recursive: true, force: true });
+    }
   });
 
   it("returns nothing when no globs are configured", async () => {
@@ -128,6 +185,10 @@ describe("globFiles parity with the glob package", () => {
         "**/context.md",
         "src/**/*.md",
         "{docs,src}/*.md",
+        "[cC]laude.md",
+        "[!x]*.md",
+        "docs/**",
+        `../${path.basename(tmp)}/context.md`,
         "c?ntext.md",
         path.join(tmp, ".magenta/*.md"),
       ];

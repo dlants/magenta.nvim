@@ -56,6 +56,8 @@ export async function resolveAutoContext(ctx: {
       }),
     );
 
+    // Dedup is lexical: a symlink and its target are both kept (FileIO has no
+    // realpath).
     const unique = new Map<string, Match>();
     for (const match of perPattern.flat()) {
       const key = path.normalize(match.absFilePath);
@@ -84,7 +86,7 @@ export async function globFiles(
     .split(/[\\/]+/)
     .filter((s) => s.length > 0 && s !== ".");
 
-  const results = new Set<string>();
+  const results = new Set<AbsFilePath>();
   const visited = new Set<string>();
 
   const walk = async (dir: string, idx: number): Promise<void> => {
@@ -94,7 +96,7 @@ export async function globFiles(
 
     if (idx === segments.length) {
       if (dir !== root && !(await fileIO.isDirectory(dir))) {
-        results.add(dir);
+        results.add(dir as AbsFilePath);
       }
       return;
     }
@@ -106,6 +108,8 @@ export async function globFiles(
         const child = path.join(dir, entry);
         if (await fileIO.isDirectory(child)) {
           await walk(child, idx);
+        } else if (idx === segments.length - 1) {
+          results.add(child as AbsFilePath);
         }
       }
       return;
@@ -125,7 +129,7 @@ export async function globFiles(
   };
 
   await walk(root, 0);
-  return [...results].sort() as AbsFilePath[];
+  return [...results].sort();
 }
 
 async function safeReaddir(fileIO: FileIO, dir: string): Promise<string[]> {
