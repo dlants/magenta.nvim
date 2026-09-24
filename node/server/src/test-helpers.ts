@@ -566,14 +566,12 @@ export function compactorSlot(thread: Thread): { compactor: Compactor } {
   };
 }
 
-/** Builds a `ResolvedSubmission` from the flat shape test resolvers produce. */
-export function toResolved(input: {
-  compact?: boolean;
-  messages: AgentInput[];
-  reminders?: string[];
-}): ResolvedSubmission {
-  const prompt = { content: input.messages, reminders: input.reminders ?? [] };
-  return input.compact
-    ? { type: "compact", next: prompt }
-    : { type: "send", prompt };
+export function sendResolved(
+  content: AgentInput[],
+  reminders: string[] = [],
+): ResolvedSubmission {
+  return { type: "send", prompt: { content, reminders } };
+}
+export function compactResolved(content: AgentInput[]): ResolvedSubmission {
+  return { type: "compact", prompt: { content, reminders: [] } };
 }

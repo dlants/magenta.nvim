@@ -16,11 +16,11 @@ import {
   cleanupArchive,
   cloneThread,
   compactorSlot,
+  compactResolved,
   createAgentWithMock,
   getContextDeliveries,
   resetThread,
   type TestContextOverrides,
-  toResolved,
   uniqueThreadId,
 } from "./test-helpers.ts";
 import type { Thread } from "./thread.ts";
@@ -231,16 +231,12 @@ describe("Thread-owned context delivery", () => {
   ] as const)("%s reseeds files and preamble with a fresh tracker without replaying delivered comments", async (operation) => {
     const f = await fixture({
       resolve: async () =>
-        toResolved({
-          compact: true,
-          messages: [
-            {
-              type: "text",
-              text: "resume",
-            },
-          ],
-          reminders: [],
-        }),
+        compactResolved([
+          {
+            type: "text",
+            text: "resume",
+          },
+        ]),
     });
     try {
       const first = await f.request();

@@ -10,9 +10,10 @@ import { pendingMessage } from "../submission/index.ts";
 import {
   awaitNextStream,
   compactorSlot,
+  compactResolved,
   createAgentWithMock,
   resetThread,
-  toResolved,
+  sendResolved,
   uniqueThreadId,
 } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
@@ -28,12 +29,7 @@ import type { CompactionOutcome } from "./index.ts";
 describe("compaction submission ownership", () => {
   it("settles a busy turn before taking the compaction snapshot", async () => {
     const { core: thread, mockClient } = createAgentWithMock({
-      resolve: async () =>
-        toResolved({
-          compact: true,
-          messages: [],
-          reminders: [],
-        }),
+      resolve: async () => compactResolved([]),
     });
     const previous = thread.submit({
       type: "resolved",
@@ -80,12 +76,7 @@ describe("compaction submission ownership", () => {
           },
         },
       ],
-      resolve: async () =>
-        toResolved({
-          compact: true,
-          messages: [],
-          reminders: [],
-        }),
+      resolve: async () => compactResolved([]),
     });
     const entered = new Defer<void>();
     const probe = new Defer<boolean>();
@@ -111,16 +102,12 @@ describe("compaction submission ownership", () => {
   it("does not continue when reset disposal is interrupted", async () => {
     const { core: thread, mockClient } = createAgentWithMock({
       resolve: async () =>
-        toResolved({
-          compact: true,
-          messages: [
-            {
-              type: "text",
-              text: "continue",
-            },
-          ],
-          reminders: [],
-        }),
+        compactResolved([
+          {
+            type: "text",
+            text: "continue",
+          },
+        ]),
     });
     const original = thread["core"];
     const dispose = original.dispose.bind(original);
@@ -169,16 +156,12 @@ describe("compaction submission ownership", () => {
     const { core: thread, mockClient } = createAgentWithMock(
       {
         resolve: async () =>
-          toResolved({
-            compact: true,
-            messages: [
-              {
-                type: "text",
-                text: "continue",
-              },
-            ],
-            reminders: [],
-          }),
+          compactResolved([
+            {
+              type: "text",
+              text: "continue",
+            },
+          ]),
         threadType: "subagent" as ThreadType,
         yieldSchema: schema,
       },
@@ -228,16 +211,12 @@ describe("compaction submission ownership", () => {
     const { core: thread, mockClient } = createAgentWithMock(
       {
         resolve: async () =>
-          toResolved({
-            compact: true,
-            messages: [
-              {
-                type: "text",
-                text: "continue",
-              },
-            ],
-            reminders: [],
-          }),
+          compactResolved([
+            {
+              type: "text",
+              text: "continue",
+            },
+          ]),
       },
       uniqueThreadId("stale-compact"),
     );
@@ -478,16 +457,12 @@ it("an immediate submission supersedes a parked compaction before resolution", a
       resolve: (message) =>
         message === "@compact"
           ? Promise.resolve(
-              toResolved({
-                compact: true,
-                messages: [
-                  {
-                    type: "text",
-                    text: "continue",
-                  },
-                ],
-                reminders: [],
-              }),
+              compactResolved([
+                {
+                  type: "text",
+                  text: "continue",
+                },
+              ]),
             )
           : resolution.promise,
     },
@@ -514,7 +489,7 @@ it("an immediate submission supersedes a parked compaction before resolution", a
   expect(await sent).toEqual({ type: "aborted" });
   expect(mockClient.streams).toHaveLength(0);
   await thread.abort();
-  resolution.resolve(toResolved({ messages: [] }));
+  resolution.resolve(sendResolved([]));
   expect(await next).toEqual({ type: "aborted" });
   await thread.destroy();
 });
@@ -546,11 +521,9 @@ describe("complete submission ownership", () => {
       uniqueThreadId("deferred-during-compaction"),
       async (message) => {
         resolutions.push(message);
-        return toResolved({
-          compact: message === "@compact",
-          messages: message === "@compact" ? [] : [text(message)],
-          reminders: [],
-        });
+        return message === "@compact"
+          ? compactResolved(message === "@compact" ? [] : [text(message)])
+          : sendResolved(message === "@compact" ? [] : [text(message)]);
       },
     );
     const sent = thread.submit({
@@ -644,11 +617,9 @@ describe("complete submission ownership", () => {
       },
       uniqueThreadId("preempt-reset"),
       async (message) =>
-        toResolved({
-          compact: message === "@compact",
-          messages: [text(message)],
-          reminders: [],
-        }),
+        message === "@compact"
+          ? compactResolved([text(message)])
+          : sendResolved([text(message)]),
     );
     const oldCore = thread["core"];
     const dispose = oldCore.dispose.bind(oldCore);
@@ -710,11 +681,7 @@ describe("complete submission ownership", () => {
       uniqueThreadId("retry-compaction"),
       async (message) => {
         resolutions++;
-        return toResolved({
-          compact: false,
-          messages: [text(message)],
-          reminders: [],
-        });
+        return sendResolved([text(message)]);
       },
     );
     const first = thread.submit({

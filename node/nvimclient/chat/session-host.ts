@@ -413,5 +413,5 @@ export async function resolveSubmission(
     }
   }
   const prompt = { content, reminders };
-  return compact ? { type: "compact", next: prompt } : { type: "send", prompt };
+  return compact ? { type: "compact", prompt } : { type: "send", prompt };
 }

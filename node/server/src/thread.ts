@@ -18,7 +18,6 @@ import type {
 } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import {
-  expandedPrompt,
   parseCompact,
   type ResolvedSubmission,
   type ResolveSubmission,
@@ -634,7 +633,7 @@ export class Thread implements ThreadCoreView {
               type: "send",
               prompt: { content: input.messages, reminders: [] },
             };
-      const prompt = expandedPrompt(resolved);
+      const prompt = resolved.prompt;
       for (const text of prompt.reminders)
         this.activateReminder(
           text,
@@ -763,7 +762,7 @@ export class Thread implements ThreadCoreView {
         );
         if (signal.aborted)
           return { disposition: { type: "commit" }, value: [] };
-        if (resolved) messages.push(...expandedPrompt(resolved).content);
+        if (resolved) messages.push(...resolved.prompt.content);
       }
       return { disposition: { type: "commit" }, value: messages };
     });
@@ -819,7 +818,7 @@ export class Thread implements ThreadCoreView {
             value: { type: "messages", messages: [] },
           };
         if (!resolved) continue;
-        const { content } = expandedPrompt(resolved);
+        const { content } = resolved.prompt;
         if (resolved.type === "compact") {
           return {
             disposition: { type: "restore" },
@@ -853,7 +852,7 @@ export class Thread implements ThreadCoreView {
         signal,
       );
       if (!resolved || signal.aborted) return undefined;
-      for (const text of expandedPrompt(resolved).reminders) {
+      for (const text of resolved.prompt.reminders) {
         this.activateReminder(text, nativeMessageIdx);
       }
       return resolved;

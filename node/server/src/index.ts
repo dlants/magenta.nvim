@@ -238,7 +238,6 @@ export {
 export {
   type Delivery,
   type ExpandedPrompt,
-  expandedPrompt,
   type PendingMessage,
   parseCompact,
   parseDelivery,

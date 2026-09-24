@@ -38,12 +38,9 @@ export type ExpandedPrompt = {
 };
 export type ResolvedSubmission =
   | { type: "send"; prompt: ExpandedPrompt }
-  /** `@compact <rest>`: `next` is `<rest>` expanded; empty content means
+  /** `@compact <rest>`: `prompt` is `<rest>` expanded; empty content means
    * "continue". */
-  | { type: "compact"; next: ExpandedPrompt };
-export function expandedPrompt(resolved: ResolvedSubmission): ExpandedPrompt {
-  return resolved.type === "send" ? resolved.prompt : resolved.next;
-}
+  | { type: "compact"; prompt: ExpandedPrompt };
 export type ResolveSubmission = (
   message: PendingMessage,
 ) => Promise<ResolvedSubmission>;

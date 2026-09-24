@@ -25,7 +25,7 @@ describe("resolveSubmission", () => {
   it("expands the rest of an @compact into the compact handoff", async () => {
     expect(await resolve("@compact look at @file:foo.ts", true)).toEqual({
       type: "compact",
-      next: {
+      prompt: {
         content: [{ type: "text", text: "look at @file:foo.ts" }, fileContent],
         reminders: [],
       },

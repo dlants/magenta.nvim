@@ -98,9 +98,9 @@ export type ExpandedPrompt = {
 
 export type ResolvedSubmission =
   | { type: "send"; prompt: ExpandedPrompt }
-  /** `@compact <rest>`: `next` is `<rest>` expanded; empty content means
+  /** `@compact <rest>`: `prompt` is `<rest>` expanded; empty content means
    * "continue". */
-  | { type: "compact"; next: ExpandedPrompt };
+  | { type: "compact"; prompt: ExpandedPrompt };
 
 export type ResolveSubmission = (
   message: PendingMessage,
@@ -161,10 +161,10 @@ The compactor renders `next` for its template:
 ## Explicit prompt types
 
 Status: DONE.
-- Added `expandedPrompt(resolved)` accessor in `submission/index.ts` (exported) so Thread reads content/reminders uniformly.
+- Both `ResolvedSubmission` variants carry the payload as `prompt` (review follow-up), so Thread reads `resolved.prompt` directly; no accessor. Stage 2 keeps this: the compact variant's `prompt` is what becomes `CompactRequest.next`.
 - `@compact` in `startSubmission` and queue flushes still flatten via `joinText` into `CompactRequest.nextPrompt` (TODO stage 2).
 - `resolveSubmission` in `session-host.ts` is exported for a unit test (`nvimclient/chat/resolve-submission.test.ts`).
-- Test resolvers use `toResolved({compact, messages, reminders})` from `test-helpers.ts`.
+- Test resolvers use `sendResolved(content, reminders?)` / `compactResolved(content)` from `test-helpers.ts`.
 
 - Goal:
   - `ExpandedPrompt` and the `ResolvedSubmission` union exist.

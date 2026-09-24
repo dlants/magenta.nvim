@@ -22,9 +22,10 @@ import {
   cleanupArchive,
   cloneThread,
   compactorSlot,
+  compactResolved,
   createAgentWithMock,
   resetThread,
-  toResolved,
+  sendResolved,
   uniqueThreadId,
   userTexts,
 } from "./test-helpers.ts";
@@ -94,16 +95,12 @@ describe("deferred submissions", () => {
       (message) => {
         calls.push(fileContents);
         return Promise.resolve(
-          toResolved({
-            compact: false,
-            messages: [
-              {
-                type: "text" as const,
-                text: `${message} [${fileContents}]`,
-              },
-            ],
-            reminders: [],
-          }),
+          sendResolved([
+            {
+              type: "text" as const,
+              text: `${message} [${fileContents}]`,
+            },
+          ]),
         );
       },
     );
@@ -165,16 +162,12 @@ describe("deferred submissions", () => {
         message === "bad"
           ? Promise.reject(new Error("resolution failed"))
           : Promise.resolve(
-              toResolved({
-                compact: false,
-                messages: [
-                  {
-                    type: "text" as const,
-                    text: message,
-                  },
-                ],
-                reminders: [],
-              }),
+              sendResolved([
+                {
+                  type: "text" as const,
+                  text: message,
+                },
+              ]),
             ),
     );
     void core.submit({
@@ -226,16 +219,15 @@ describe("deferred submissions", () => {
       uniqueThreadId("deferred-reminder"),
       (message) =>
         Promise.resolve(
-          toResolved({
-            compact: false,
-            messages: [
+          sendResolved(
+            [
               {
                 type: "text" as const,
                 text: message,
               },
             ],
-            reminders: ["remember the file"],
-          }),
+            ["remember the file"],
+          ),
         ),
     );
     void core.submit({
@@ -473,18 +465,27 @@ describe("deferred submissions", () => {
       (message) => {
         const { compact, rest } = parseCompact(message);
         return Promise.resolve(
-          toResolved({
-            compact,
-            messages: rest.length
-              ? [
-                  {
-                    type: "text" as const,
-                    text: rest,
-                  },
-                ]
-              : [],
-            reminders: [],
-          }),
+          compact
+            ? compactResolved(
+                rest.length
+                  ? [
+                      {
+                        type: "text" as const,
+                        text: rest,
+                      },
+                    ]
+                  : [],
+              )
+            : sendResolved(
+                rest.length
+                  ? [
+                      {
+                        type: "text" as const,
+                        text: rest,
+                      },
+                    ]
+                  : [],
+              ),
         );
       },
     );
@@ -542,18 +543,27 @@ describe("deferred submissions", () => {
       (message) => {
         const { compact, rest } = parseCompact(message);
         return Promise.resolve(
-          toResolved({
-            compact,
-            messages: rest.length
-              ? [
-                  {
-                    type: "text" as const,
-                    text: rest,
-                  },
-                ]
-              : [],
-            reminders: [],
-          }),
+          compact
+            ? compactResolved(
+                rest.length
+                  ? [
+                      {
+                        type: "text" as const,
+                        text: rest,
+                      },
+                    ]
+                  : [],
+              )
+            : sendResolved(
+                rest.length
+                  ? [
+                      {
+                        type: "text" as const,
+                        text: rest,
+                      },
+                    ]
+                  : [],
+              ),
         );
       },
     );
@@ -595,18 +605,27 @@ describe("deferred submissions", () => {
       (message) => {
         const { compact, rest } = parseCompact(message);
         return Promise.resolve(
-          toResolved({
-            compact,
-            messages: rest.length
-              ? [
-                  {
-                    type: "text" as const,
-                    text: rest,
-                  },
-                ]
-              : [],
-            reminders: [],
-          }),
+          compact
+            ? compactResolved(
+                rest.length
+                  ? [
+                      {
+                        type: "text" as const,
+                        text: rest,
+                      },
+                    ]
+                  : [],
+              )
+            : sendResolved(
+                rest.length
+                  ? [
+                      {
+                        type: "text" as const,
+                        text: rest,
+                      },
+                    ]
+                  : [],
+              ),
         );
       },
     );
@@ -641,18 +660,27 @@ describe("deferred submissions", () => {
       (message) => {
         const { compact, rest } = parseCompact(message);
         return Promise.resolve(
-          toResolved({
-            compact,
-            messages: rest.length
-              ? [
-                  {
-                    type: "text" as const,
-                    text: rest,
-                  },
-                ]
-              : [],
-            reminders: [],
-          }),
+          compact
+            ? compactResolved(
+                rest.length
+                  ? [
+                      {
+                        type: "text" as const,
+                        text: rest,
+                      },
+                    ]
+                  : [],
+              )
+            : sendResolved(
+                rest.length
+                  ? [
+                      {
+                        type: "text" as const,
+                        text: rest,
+                      },
+                    ]
+                  : [],
+              ),
         );
       },
     );
@@ -705,16 +733,12 @@ describe("deferred submissions", () => {
       (message) => {
         calls.push(message);
         return Promise.resolve(
-          toResolved({
-            compact: false,
-            messages: [
-              {
-                type: "text" as const,
-                text: message,
-              },
-            ],
-            reminders: [],
-          }),
+          sendResolved([
+            {
+              type: "text" as const,
+              text: message,
+            },
+          ]),
         );
       },
     );
@@ -1053,16 +1077,12 @@ describe("Thread loop activity", () => {
       async (message) => {
         entered.resolve();
         await gate.promise;
-        return toResolved({
-          compact: false,
-          messages: [
-            {
-              type: "text" as const,
-              text: message,
-            },
-          ],
-          reminders: [],
-        });
+        return sendResolved([
+          {
+            type: "text" as const,
+            text: message,
+          },
+        ]);
       },
     );
     const sent = core.submit({
@@ -1108,16 +1128,15 @@ describe("Thread.abort between turns", () => {
         entered.resolve();
         await gate.promise;
         resolved.push(message);
-        return toResolved({
-          compact: false,
-          messages: [
+        return sendResolved(
+          [
             {
               type: "text" as const,
               text: message,
             },
           ],
-          reminders: ["aborted reminder"],
-        });
+          ["aborted reminder"],
+        );
       },
     );
     const sent = core.submit({
@@ -1424,9 +1443,8 @@ describe("empty send gate", () => {
       uniqueThreadId("empty-send-reminder"),
       (message) =>
         Promise.resolve(
-          toResolved({
-            compact: false,
-            messages: message
+          sendResolved(
+            message
               ? [
                   {
                     type: "text" as const,
@@ -1434,8 +1452,8 @@ describe("empty send gate", () => {
                   },
                 ]
               : [],
-            reminders: ["stay on task"],
-          }),
+            ["stay on task"],
+          ),
         ),
     );
 
@@ -1859,16 +1877,12 @@ describe("submission ownership", () => {
       async (message) => {
         entered.resolve();
         await gate.promise;
-        return toResolved({
-          compact: false,
-          messages: [
-            {
-              type: "text" as const,
-              text: message,
-            },
-          ],
-          reminders: [],
-        });
+        return sendResolved([
+          {
+            type: "text" as const,
+            text: message,
+          },
+        ]);
       },
     );
     const first = core.submit({ type: "raw", message: pendingMessage("slow") });
@@ -2043,16 +2057,15 @@ describe("stale outer submissions", () => {
       async (message) => {
         entered.resolve();
         await gate.promise;
-        return toResolved({
-          compact: false,
-          messages: [
+        return sendResolved(
+          [
             {
               type: "text" as const,
               text: message,
             },
           ],
-          reminders: ["stale reminder"],
-        });
+          ["stale reminder"],
+        );
       },
     );
     const first = core.submit({
@@ -2194,16 +2207,12 @@ describe("detached delivery batches", () => {
           entered.resolve();
           await gate.promise;
         }
-        return toResolved({
-          compact: false,
-          messages: [
-            {
-              type: "text" as const,
-              text: message,
-            },
-          ],
-          reminders: [],
-        });
+        return sendResolved([
+          {
+            type: "text" as const,
+            text: message,
+          },
+        ]);
       },
     );
     const input = (text: string) => ({
@@ -2250,11 +2259,7 @@ describe("detached delivery batches", () => {
         calls.push(message);
         entered.resolve();
         await gate.promise;
-        return toResolved({
-          compact: false,
-          messages: [],
-          reminders: ["stale reminder"],
-        });
+        return sendResolved([], ["stale reminder"]);
       },
     );
     const sent = core.submit({
@@ -2299,16 +2304,19 @@ describe("detached delivery batches", () => {
           entered.resolve();
           await gate.promise;
         }
-        return toResolved({
-          compact: message === "old",
-          messages: [
-            {
-              type: "text" as const,
-              text: message,
-            },
-          ],
-          reminders: [],
-        });
+        return message === "old"
+          ? compactResolved([
+              {
+                type: "text" as const,
+                text: message,
+              },
+            ])
+          : sendResolved([
+              {
+                type: "text" as const,
+                text: message,
+              },
+            ]);
       },
     );
     const input = (text: string) => ({
@@ -2352,16 +2360,12 @@ describe("detached delivery batches", () => {
           entered.resolve();
           await gate.promise;
         }
-        return toResolved({
-          compact: false,
-          messages: [
-            {
-              type: "text" as const,
-              text: message,
-            },
-          ],
-          reminders: [],
-        });
+        return sendResolved([
+          {
+            type: "text" as const,
+            text: message,
+          },
+        ]);
       },
     );
     const sent = core.submit({
