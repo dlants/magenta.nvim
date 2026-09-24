@@ -259,6 +259,7 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
 - Status: DONE.
   - `chat/thread-view.test.ts` → `thread-view.node.test.ts`: renders `renderStatus` via a new `renderToString(VDOMNode)` in `tea/view.ts` (concatenates text, no mount).
   - `utils/files.test.ts` → `files.node.test.ts`: reads `test/fixtures` directly; the large-file case writes to `os.tmpdir()`.
+  - Review follow-up: `files.node.test.ts` narrows `result` with a throwing guard instead of `result!.` non-null assertions.
   - `tea/util.test.ts`: `strWidthInBytes` and `calculatePosition` moved to `util.node.test.ts` (the nvim line-length cross-check replaced by `Buffer.byteLength`); the 3 `replaceBetweenPositions` buffer tests stay C.
   - Deviations (stay C): `nvim-node/logger` has no test file. `file-paste` — the paste handler is lua (`keymaps.lua`), so both cases need nvim. `openai-streaming-view` asserts rendering and the harness has no openai provider. `chat-view-adapter` tests all exercise `Chat`; the no-view turn is already covered by every harness test (no view exists there). `archive-view` list model isn't separable from its view. `docker-sync` needs the driver's docker subagent wiring end to end.
 

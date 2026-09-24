@@ -69,59 +69,59 @@ describe("detectFileType", () => {
     const textFile = path.join(cwd, "poem.txt");
     const result = await detectFileType(textFile);
 
-    expect(result).toBeDefined();
-    expect(result!.category).toBe(FileCategory.TEXT);
-    expect(result!.mimeType).toBe("text/plain");
-    expect(result!.extension).toBe(".txt");
+    if (!result) throw new Error("expected a detected file type");
+    expect(result.category).toBe(FileCategory.TEXT);
+    expect(result.mimeType).toBe("text/plain");
+    expect(result.extension).toBe(".txt");
   });
 
   it("should detect TypeScript files correctly", async () => {
     const tsFile = path.join(cwd, "test.ts");
     const result = await detectFileType(tsFile);
 
-    expect(result).toBeDefined();
-    expect(result!.category).toBe(FileCategory.TEXT);
+    if (!result) throw new Error("expected a detected file type");
+    expect(result.category).toBe(FileCategory.TEXT);
     // TypeScript files may be detected as text/plain if no magic number is found
-    expect(result!.mimeType).toMatch(/^(application\/typescript|text\/plain)$/);
-    expect(result!.extension).toBe(".ts");
+    expect(result.mimeType).toMatch(/^(application\/typescript|text\/plain)$/);
+    expect(result.extension).toBe(".ts");
   });
 
   it("should detect JSON files correctly", async () => {
     const jsonFile = path.join(cwd, "tsconfig.json");
     const result = await detectFileType(jsonFile);
 
-    expect(result).toBeDefined();
-    expect(result!.category).toBe(FileCategory.TEXT);
-    expect(result!.mimeType).toBe("application/json");
-    expect(result!.extension).toBe(".json");
+    if (!result) throw new Error("expected a detected file type");
+    expect(result.category).toBe(FileCategory.TEXT);
+    expect(result.mimeType).toBe("application/json");
+    expect(result.extension).toBe(".json");
   });
 
   it("should detect JPEG images correctly", async () => {
     const jpegFile = path.join(cwd, "test.jpg");
     const result = await detectFileType(jpegFile);
 
-    expect(result).toBeDefined();
-    expect(result!.category).toBe(FileCategory.IMAGE);
-    expect(result!.mimeType).toBe("image/jpeg");
-    expect(result!.extension).toBe(".jpg");
+    if (!result) throw new Error("expected a detected file type");
+    expect(result.category).toBe(FileCategory.IMAGE);
+    expect(result.mimeType).toBe("image/jpeg");
+    expect(result.extension).toBe(".jpg");
   });
 
   it("should detect PDF files correctly", async () => {
     const pdfFile = path.join(cwd, "test.pdf");
     const result = await detectFileType(pdfFile);
 
-    expect(result).toBeDefined();
-    expect(result!.category).toBe(FileCategory.PDF);
-    expect(result!.mimeType).toBe("application/pdf");
-    expect(result!.extension).toBe(".pdf");
+    if (!result) throw new Error("expected a detected file type");
+    expect(result.category).toBe(FileCategory.PDF);
+    expect(result.mimeType).toBe("application/pdf");
+    expect(result.extension).toBe(".pdf");
   });
 
   it("should detect binary files as unsupported", async () => {
     const binaryFile = path.join(cwd, "test.bin");
     const result = await detectFileType(binaryFile);
 
-    expect(result).toBeDefined();
-    expect(result!.category).toBe(FileCategory.UNSUPPORTED);
+    if (!result) throw new Error("expected a detected file type");
+    expect(result.category).toBe(FileCategory.UNSUPPORTED);
   });
 
   it("should return undefined for non-existent files", async () => {
