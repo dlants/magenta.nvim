@@ -126,11 +126,6 @@ export const defaultHarnessResolve: HarnessResolve = async (
 };
 
 const stubLsp = {} as LspClient;
-const emptyMcp = {
-  serverMap: {},
-  disconnect: () => Promise.resolve(),
-  getToolSpecs: () => [],
-} as unknown as MCPToolManager;
 
 /** A node-only SessionHost: the same preparation steps as `NvimSessionHost`
  * (auto-context, hierarchy discovery, system info/prompt, fork inheritance,
@@ -180,7 +175,7 @@ export class TestSessionHost implements SessionHost {
     this.luaExecutor = opts.luaExecutor;
     this.mcp = opts.mcpServers
       ? new MCPToolManager(opts.mcpServers, { logger: noopLogger })
-      : emptyMcp;
+      : new MCPToolManager({}, { logger: noopLogger });
     this.options = {
       autoCompactThreshold: 100_000,
       autoCompactPrompt: "continue",

@@ -3,22 +3,23 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import type { ThreadId } from "@magenta/server";
 import { expect, it } from "vitest";
-import type { MagentaOptions } from "../options.ts";
+import { parseOptions } from "../options.ts";
 import type { Sandbox } from "../sandbox-manager.ts";
 import { pollUntil } from "../utils/async.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import { SandboxShell } from "./sandbox-shell.ts";
-import type { SandboxViolationHandler } from "./sandbox-violation-handler.ts";
+import { SandboxViolationHandler } from "./sandbox-violation-handler.ts";
 import type { OutputLine } from "./shell.ts";
 
 /** A ready sandbox that runs commands unwrapped, so the real process
  * lifecycle (spawn, log file, termination) is exercised without nvim. */
-const passthroughSandbox = {
+const passthroughSandbox: Sandbox = {
   getState: () => ({ status: "ready" }),
   wrapWithSandbox: (command: string) => Promise.resolve(command),
   getViolationStore: () => ({
     getTotalCount: () => 0,
     getViolations: () => [],
+    addViolation: () => {},
   }),
   annotateStderrWithSandboxFailures: (_command: string, stderr: string) =>
     stderr,
@@ -30,7 +31,12 @@ const passthroughSandbox = {
   popNetworkAskTarget: () => {},
   routeNetworkAsk: () => Promise.resolve(false),
   recordSessionApprovedHost: () => {},
-} as unknown as Sandbox;
+};
+
+const options = parseOptions(
+  { profiles: [{ name: "mock", provider: "mock", model: "mock" }] },
+  { warn: () => {}, error: () => {} },
+);
 
 function createShell() {
   return new SandboxShell(
@@ -38,14 +44,11 @@ function createShell() {
       cwd: os.tmpdir() as NvimCwd,
       homeDir: os.homedir() as HomeDir,
       threadId: `shell-node-${process.pid}` as ThreadId,
-      getOptions: () =>
-        ({
-          sandbox: { requireApprovalPatterns: [] },
-        }) as unknown as MagentaOptions,
+      getOptions: () => options,
       isBypassed: () => false,
     },
     passthroughSandbox,
-    {} as SandboxViolationHandler,
+    new SandboxViolationHandler(() => {}),
   );
 }
 
