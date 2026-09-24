@@ -191,6 +191,11 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
 
 - Goal: `chat/thread.test.ts` reduced to input-buffer/rendering cases; message interleaving, `@async`/`@next` queueing, fork message preservation, thinking/redacted blocks, streaming preview state move to A (`node/server/src/thread-flow.test.ts` or extend `thread.test.ts`). `thread-abort.test.ts`: abort-during-stream/tool, error tool results, fork-without-abort → A; input-buffer recovery stays C. `supervisor-wiring.test.ts` → A entirely.
 - Tests: each moved test keeps its name and asserts the same state (message arrays, `loopState`, `request.aborted`). `@diag`/`@qf`/`@buf` expansion tests: covered by `commands/registry.test.ts` (already node-only); delete the C duplicates, keep one C test proving `@buf` reaches the thread end-to-end.
+- Status: DONE.
+  - `node/server/src/thread-flow.test.ts` (tier A, 17 tests): interleaving, queued-on-failure, partial turn + retry, fork at a message index, `@file`, thinking/redacted round-trip, `@async` (tool response / end turn / at rest), `@next`, delivery-time expansion, malformed tool_use, fork while streaming / while a tool is pending, abort-on-new-message, error tool_result on abort, server_tool_use removal. A local `type()` helper mirrors `NvimThread`'s delivery routing (`parseDelivery` + `enqueue` while busy).
+  - `node/server/src/supervisor-wiring.test.ts`: whole file ported; nvimclient copy deleted. Root/subagent budget cases were already covered by `test/harness.test.ts` and not duplicated.
+  - Harness: added `streamWithText(text)`.
+  - Deviations: snapshot assertions replaced by explicit structure/text assertions. Tool approval waits are modeled with `FakeShell` pending commands instead of the sandbox approval prompt. Streaming previews (thinking/EDL/bash) and web-search rendering stay C (they assert rendered text only). `@diff`/`@staged`/non-existent `@file` stay C (nvim registry). The thinking C test keeps only the expand/collapse rendering; "aborts tool use while executing" merged into the A error-tool_result test. Permission-clearing abort tests stay C (sandbox handler is nvim-side). Deleted `@diag`/`@diagnostics`/`@qf`/`@quickfix`/empty-qf/`@buffers`/empty-buf C tests (covered by `commands/registry.test.ts`); `@buf` kept as the end-to-end test.
 
 ## 6. Port compaction and fork
 

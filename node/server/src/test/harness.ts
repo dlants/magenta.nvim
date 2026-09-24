@@ -39,6 +39,7 @@ import type { RestResult } from "../thread-api.ts";
 import type { PreparedThreadContext } from "../thread-assembly.ts";
 import { clientToolCreator } from "../tools/create-tool.ts";
 import type { MCPToolManager } from "../tools/mcp/manager.ts";
+import { pollUntil } from "../utils/async.ts";
 import {
   detectFileTypeViaFileIO,
   type HomeDir,
@@ -324,6 +325,8 @@ export type Harness = {
   send(thread: Thread, text: string): Promise<RestResult>;
   /** The next stream issued after the last one this harness handed out. */
   nextStream(): Promise<MockStream>;
+  /** The latest live stream whose request mentions `text`. */
+  streamWithText(text: string): Promise<MockStream>;
   dispose(): Promise<void>;
 };
 
@@ -356,6 +359,15 @@ export function createHarness(options: HarnessOptions = {}): Harness {
       last = await awaitNextStream(host.mockClient, last);
       return last;
     },
+    streamWithText: (text) =>
+      pollUntil(() => {
+        const stream = host.mockClient.streams.findLast(
+          (s) => !s.aborted && JSON.stringify(s.messages).includes(text),
+        );
+        if (!stream) throw new Error(`waiting for a stream with "${text}"`);
+        last = stream;
+        return stream;
+      }),
     dispose: () => session.dispose(),
   };
 }
