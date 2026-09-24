@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
 import { ABORT_MARKER_TEXT } from "../providers/inference-shared.ts";
 import type {
+  AgentInput,
   NativeMessageIdx,
   ProviderMessage,
 } from "../providers/provider-types.ts";
@@ -22,7 +23,7 @@ import { TokenBudget } from "./token-budget.ts";
 
 const idx = 0 as NativeMessageIdx;
 
-import { splitPendingUserText } from "../thread.ts";
+import type { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import { ThreadCompactor } from "./compactor.ts";
 import type { CompactionOutcome } from "./index.ts";
 
@@ -127,10 +128,10 @@ describe("compaction submission ownership", () => {
       await aborted;
     });
     compactorSlot(thread).compactor = {
-      run: async () => ({
+      run: async (_messages, next) => ({
         type: "complete",
-        summary: "summary",
-        chunkCount: 1,
+        summary: { text: "summary", chunkCount: 1 },
+        next: [...next],
       }),
     };
 
@@ -170,10 +171,10 @@ describe("compaction submission ownership", () => {
     const originalResult = thread.result;
     const originalCore = thread["core"];
     compactorSlot(thread).compactor = {
-      run: async () => ({
+      run: async (_messages, next) => ({
         type: "complete",
-        summary: "work so far",
-        chunkCount: 1,
+        summary: { text: "work so far", chunkCount: 1 },
+        next: [...next],
       }),
     };
 
@@ -223,7 +224,7 @@ describe("compaction submission ownership", () => {
     const entered = new Defer<void>();
     const outcome = new Defer<CompactionOutcome>();
     compactorSlot(thread).compactor = {
-      run: () => {
+      run: (_messages, _next) => {
         entered.resolve();
         return outcome.promise;
       },
@@ -239,7 +240,11 @@ describe("compaction submission ownership", () => {
     else if (action === "abort") await thread.abort();
     else await thread.destroy();
     const replacement = thread["core"];
-    outcome.resolve({ type: "complete", summary: "stale", chunkCount: 1 });
+    outcome.resolve({
+      type: "complete",
+      summary: { text: "stale", chunkCount: 1 },
+      next: [],
+    });
     expect(await sent).toEqual({ type: "aborted" });
     expect(thread["core"]).toBe(replacement);
     expect(mockClient.streams).toHaveLength(0);
@@ -293,6 +298,12 @@ describe("ThreadCompactor cancellation", () => {
             },
           ],
         },
+        {
+          role: "assistant" as const,
+          content: [
+            { type: "text" as const, text: "ok", nativeMessageIdx: idx },
+          ],
+        },
       ],
       [],
       cancellation.signal,
@@ -344,6 +355,10 @@ it("a late first spawn cannot overwrite a newer compaction", async () => {
           nativeMessageIdx: idx,
         },
       ],
+    },
+    {
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text: "ok", nativeMessageIdx: idx }],
     },
   ];
   const compactor = new ThreadCompactor({
@@ -429,6 +444,10 @@ it.each([
           },
         ],
       },
+      {
+        role: "assistant" as const,
+        content: [{ type: "text" as const, text: "ok", nativeMessageIdx: idx }],
+      },
     ],
     [],
     cancellation.signal,
@@ -469,7 +488,7 @@ it("an immediate submission supersedes a parked compaction before resolution", a
     uniqueThreadId("compact-submit"),
   );
   compactorSlot(thread).compactor = {
-    run: () => {
+    run: (_messages, _next) => {
       entered.resolve();
       return outcome.promise;
     },
@@ -485,7 +504,11 @@ it("an immediate submission supersedes a parked compaction before resolution", a
     type: "raw",
     message: pendingMessage("new prompt"),
   });
-  outcome.resolve({ type: "complete", summary: "stale", chunkCount: 1 });
+  outcome.resolve({
+    type: "complete",
+    summary: { text: "stale", chunkCount: 1 },
+    next: [],
+  });
   expect(await sent).toEqual({ type: "aborted" });
   expect(mockClient.streams).toHaveLength(0);
   await thread.abort();
@@ -566,8 +589,8 @@ describe("complete submission ownership", () => {
     expect(resolutions).toEqual(["@compact"]);
     summary.resolve({
       type: "complete",
-      summary: "the summary",
-      chunkCount: 1,
+      summary: { text: "the summary", chunkCount: 1 },
+      next: [],
     });
     let stream = await mockClient.awaitStream();
     if (delivery === "next") {
@@ -607,10 +630,10 @@ describe("complete submission ownership", () => {
       {
         compaction: {
           compactor: {
-            run: async () => ({
+            run: async (_messages, next) => ({
               type: "complete",
-              summary: "old summary",
-              chunkCount: 1,
+              summary: { text: "old summary", chunkCount: 1 },
+              next: [...next],
             }),
           },
         },
@@ -663,11 +686,13 @@ describe("complete submission ownership", () => {
     const entered = new Defer<void>();
     const outcome = new Defer<CompactionOutcome>();
     let resolutions = 0;
+    let handed: AgentInput[] = [];
     const { core: thread, mockClient } = createAgentWithMock(
       {
         compaction: {
           compactor: {
-            run: () => {
+            run: (_messages, next) => {
+              handed = [...next];
               entered.resolve();
               return outcome.promise;
             },
@@ -705,8 +730,8 @@ describe("complete submission ownership", () => {
     if (cancel) await thread.abort();
     outcome.resolve({
       type: "complete",
-      summary: "retried history",
-      chunkCount: 1,
+      summary: { text: "retried history", chunkCount: 1 },
+      next: handed,
     });
     if (cancel) {
       expect(await retry).toEqual({ type: "aborted" });
@@ -877,49 +902,102 @@ describe("submission-owned compaction signal", () => {
   });
 });
 
-describe("splitPendingUserText", () => {
+describe("ThreadCompactor pending turn split", () => {
   const user = (content: unknown[]): ProviderMessage =>
     ({ role: "user", content }) as ProviderMessage;
   const assistant = {
     role: "assistant",
     content: [{ type: "text", text: "answer" }],
   } as ProviderMessage;
-  it.each([
-    [
-      "a lone user message is all there is to compact",
-      [user([{ type: "text", text: "hi" }])],
-    ],
-    [
-      "an abort marker is history, not input",
-      [assistant, user([{ type: "text", text: ABORT_MARKER_TEXT }])],
-    ],
-    [
-      "an image-only message carries no text",
-      [
-        assistant,
-        user([
-          {
-            type: "image",
-            source: { type: "base64", media_type: "image/png", data: "" },
-          },
-        ]),
-      ],
-    ],
-    [
-      "an empty text message carries no text",
-      [assistant, user([{ type: "text", text: "  " }])],
-    ],
-  ])("%s", (_name, messages) => {
-    expect(splitPendingUserText(messages)).toEqual({
-      history: messages,
-      pendingUserText: undefined,
+  const image = {
+    type: "image",
+    source: { type: "base64", media_type: "image/png", data: "IMG" },
+  } as const;
+  const handoff = { type: "text", text: "handoff" } as const;
+  async function runSplit(messages: ProviderMessage[]) {
+    const prompts: string[] = [];
+    const compactor = new ThreadCompactor({
+      parentThreadId: uniqueThreadId("compact-split"),
+      threadManager: {
+        spawnThread: async (opts) => {
+          prompts.push(
+            (opts.fileIO as InMemoryFileIO).getFileContents("/chunk.md") ?? "",
+          );
+          opts.fileIO?.writeFile("/summary.md", "S");
+          return uniqueThreadId("chunk") as ThreadId;
+        },
+        deleteThread: () => {},
+        awaitThreadResult: async () =>
+          ({
+            type: "ok",
+            value: { type: "text", text: "" },
+          }) as never,
+      },
     });
+    const outcome = await compactor.run(
+      messages,
+      [handoff],
+      new AbortController().signal,
+    );
+    return { outcome, prompts };
+  }
+
+  it("chunks everything when the log ends in an assistant turn", async () => {
+    const { outcome, prompts } = await runSplit([
+      user([{ type: "text", text: "question" }]),
+      assistant,
+    ]);
+    expect(outcome).toMatchObject({ type: "complete", next: [handoff] });
+    expect(prompts[0]).toContain("question");
   });
-  it("carries trailing user text past the compaction", () => {
-    const messages = [assistant, user([{ type: "text", text: "next" }])];
-    expect(splitPendingUserText(messages)).toEqual({
-      history: [assistant],
-      pendingUserText: "next",
+
+  it("carries a trailing user turn's text and image, dropping context", async () => {
+    const { outcome, prompts } = await runSplit([
+      user([{ type: "text", text: "question" }]),
+      assistant,
+      user([
+        { type: "context_update", text: "CTX" },
+        { type: "text", text: "pending" },
+        image,
+      ]),
+    ]);
+    expect(outcome).toMatchObject({
+      type: "complete",
+      next: [handoff, { type: "text", text: "pending" }, image],
+    });
+    expect(prompts[0]).not.toContain("pending");
+    expect(prompts[0]).not.toContain("CTX");
+  });
+
+  it("does not split a tool_result tail", async () => {
+    const { outcome } = await runSplit([
+      user([{ type: "text", text: "question" }]),
+      assistant,
+      user([
+        { type: "tool_result", id: "t", result: { status: "ok", value: [] } },
+      ]),
+    ]);
+    expect(outcome).toMatchObject({ type: "complete", next: [handoff] });
+  });
+
+  it("carries nothing for an abort marker", async () => {
+    const { outcome } = await runSplit([
+      user([{ type: "text", text: "question" }]),
+      assistant,
+      user([{ type: "text", text: ABORT_MARKER_TEXT }]),
+    ]);
+    expect(outcome).toMatchObject({ type: "complete", next: [handoff] });
+  });
+
+  it("spawns nothing when the pending turn is the whole log", async () => {
+    const { outcome, prompts } = await runSplit([
+      user([{ type: "text", text: "only" }]),
+    ]);
+    expect(prompts).toHaveLength(0);
+    expect(outcome).toEqual({
+      type: "complete",
+      summary: undefined,
+      next: [handoff, { type: "text", text: "only" }],
     });
   });
 });
@@ -946,6 +1024,12 @@ describe("ThreadCompactor chunk prompt", () => {
           {
             role: "user",
             content: [{ nativeMessageIdx: idx, type: "text", text: "history" }],
+          },
+          {
+            role: "assistant" as const,
+            content: [
+              { type: "text" as const, text: "ok", nativeMessageIdx: idx },
+            ],
           },
         ],
         [

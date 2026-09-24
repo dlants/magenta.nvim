@@ -7,7 +7,6 @@ import type { ThreadId, ThreadType } from "./chat-types.ts";
 import { type Compactor, summaryText } from "./compaction/index.ts";
 import type { TokenBudget } from "./compaction/token-budget.ts";
 import type { ThreadLoopState } from "./loop-state.ts";
-import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
 import type {
   AgentInput,
   NativeMessageIdx,
@@ -146,36 +145,6 @@ export type ThreadArchiveOptions = {
 type FlushedQueue =
   | { type: "messages"; messages: AgentInput[] }
   | { type: "compact"; next: ReadonlyArray<AgentInput> };
-
-/** A compaction that suspends a request lands after the user's message is
- * already in the log. That message has not been answered, so it is carried
- * past the compaction as prompt text — like an explicit `@compact` prompt —
- * rather than being summarized. Tool results are mid-loop, not a user turn,
- * and the abort marker is not something the user said. */
-export function splitPendingUserText(
-  messages: ReadonlyArray<ProviderMessage>,
-): {
-  history: ReadonlyArray<ProviderMessage>;
-  pendingUserText: string | undefined;
-} {
-  const last = messages.at(-1);
-  // With nothing before it, the message is all there is to compact.
-  if (
-    messages.length < 2 ||
-    last?.role !== "user" ||
-    last.content.some((block) => block.type === "tool_result")
-  )
-    return { history: messages, pendingUserText: undefined };
-  const text = last.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .filter((text) => text !== ABORT_MARKER_TEXT)
-    .join("\n")
-    .trim();
-  return text
-    ? { history: messages.slice(0, -1), pendingUserText: text }
-    : { history: messages, pendingUserText: undefined };
-}
 
 /** What the turn loop can hand back: a `yield` suspension is resolved inside
  * the loop, so the owner's suspension handling never has to consider it —
@@ -668,14 +637,8 @@ export class Thread implements ThreadCoreView {
       };
     // The signal is the compactor's cue to stop, but waiting on a run that
     // ignores it would wedge whoever is waiting for this thread to go quiet.
-    const { history, pendingUserText } = splitPendingUserText(
-      this.getProviderMessages(),
-    );
-    const next: AgentInput[] = pendingUserText
-      ? [...handoff, { type: "text", text: pendingUserText }]
-      : [...handoff];
     const outcome = await submission.step((signal) =>
-      compactor.run(history, next, signal),
+      compactor.run(this.getProviderMessages(), handoff, signal),
     );
     if (outcome.type === "aborted")
       return { type: "settle", result: { type: "aborted" } };
@@ -687,19 +650,18 @@ export class Thread implements ThreadCoreView {
           error: new Error(`Compaction failed: ${outcome.message}`),
         },
       };
+    const { summary, next } = outcome;
     await this.replaceCore({
-      archive: {
-        type: "compaction",
-        summary: outcome.summary,
-        chunkCount: outcome.chunkCount,
-      },
+      archive: summary
+        ? {
+            type: "compaction",
+            summary: summary.text,
+            chunkCount: summary.chunkCount,
+          }
+        : { type: "none" },
     });
-    this.opening = [
-      {
-        type: "text",
-        text: summaryText(outcome.summary),
-      },
-    ];
+    if (summary)
+      this.opening = [{ type: "text", text: summaryText(summary.text) }];
     submission.throwIfAborted();
     return {
       type: "continue",

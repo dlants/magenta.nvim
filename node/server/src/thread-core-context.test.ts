@@ -252,10 +252,10 @@ describe("Thread-owned context delivery", () => {
       } else {
         const previous = f.mockClient.streams.at(-1);
         compactorSlot(f.thread).compactor = {
-          run: async () => ({
+          run: async (_messages, next) => ({
             type: "complete",
-            summary: "replacement summary",
-            chunkCount: 1,
+            summary: { text: "replacement summary", chunkCount: 1 },
+            next: [...next],
           }),
         };
 
@@ -467,11 +467,11 @@ describe("Thread-owned context delivery", () => {
     const f = await fixture({
       compaction: {
         compactor: {
-          run: () =>
+          run: (_messages, next) =>
             Promise.resolve({
               type: "complete",
-              summary: "SUMMARY TEXT",
-              chunkCount: 1,
+              summary: { text: "SUMMARY TEXT", chunkCount: 1 },
+              next: [...next],
             }),
         },
         tokenBudget: TokenBudget.create({ threshold: 100, handoff: "go on" }),

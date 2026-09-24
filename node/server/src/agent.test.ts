@@ -532,16 +532,20 @@ describe("Thread submissions across a compaction handoff", () => {
   const stubCompactor = (
     outcome: CompactionOutcome = {
       type: "complete",
-      summary: "SUMMARY TEXT",
-      chunkCount: 1,
+      summary: { text: "SUMMARY TEXT", chunkCount: 1 },
+      next: [],
     },
   ): Compactor & { calls: (string | undefined)[] } => {
     const calls: (string | undefined)[] = [];
     return {
       calls,
-      run: (_messages, nextPrompt) => {
-        calls.push(nextText(nextPrompt));
-        return Promise.resolve(outcome);
+      run: (_messages, next) => {
+        calls.push(nextText(next));
+        return Promise.resolve(
+          outcome.type === "complete"
+            ? { ...outcome, next: [...next] }
+            : outcome,
+        );
       },
     };
   };
@@ -697,12 +701,12 @@ describe("Thread submissions across a compaction handoff", () => {
     try {
       const calls: (string | undefined)[] = [];
       const compactor: Compactor = {
-        run: (_messages, nextPrompt) => {
-          calls.push(nextText(nextPrompt));
+        run: (_messages, next) => {
+          calls.push(nextText(next));
           return Promise.resolve({
             type: "complete",
-            summary: `SUMMARY ${calls.length}`,
-            chunkCount: 1,
+            summary: { text: `SUMMARY ${calls.length}`, chunkCount: 1 },
+            next: [...next],
           });
         },
       };
@@ -801,7 +805,7 @@ describe("Thread submissions across a compaction handoff", () => {
     },
     {
       trigger: "a budget stop mid-submission",
-      expectedNext: ["carry on", "again"],
+      expectedNext: ["carry on"],
       start: async (core: Thread, mockClient: MockAnthropicClient) => {
         mockClient.mockInputTokenCount = 50;
         await firstTurn(core, mockClient);
@@ -876,7 +880,11 @@ describe("Thread submissions across a compaction handoff", () => {
   });
 
   it.each([
-    { pending: true, expected: "again", absent: "Please continue" },
+    {
+      pending: true,
+      expected: "Please continue from where you left off.",
+      absent: undefined,
+    },
     {
       pending: false,
       expected: "Please continue from where you left off.",
@@ -1812,13 +1820,13 @@ describe("TokenBudget integration", () => {
     const histories: ProviderMessage[][] = [];
     const release = new Defer<void>();
     compactorSlot(core).compactor = {
-      run: (history) => {
+      run: (history, next) => {
         histories.push([...history]);
         mockClient.mockInputTokenCount = 10;
         return release.promise.then(() => ({
           type: "complete" as const,
-          summary: "SUMMARY",
-          chunkCount: 1,
+          summary: { text: "SUMMARY", chunkCount: 1 },
+          next: [...next],
         }));
       },
     };
@@ -1849,7 +1857,7 @@ describe("TokenBudget integration", () => {
     mockClient.mockInputTokenCount = 50;
     const histories: ProviderMessage[][] = [];
     compactorSlot(core).compactor = {
-      run: (history) => {
+      run: (history, _next) => {
         histories.push([...history]);
         return Promise.resolve({ type: "aborted" });
       },
@@ -1920,12 +1928,12 @@ describe("TokenBudget integration", () => {
     });
     mockClient.mockInputTokenCount = 200;
     compactorSlot(core).compactor = {
-      run: () => {
+      run: (_messages, next) => {
         mockClient.mockInputTokenCount = 10;
         return Promise.resolve({
           type: "complete" as const,
-          summary: "SUMMARY",
-          chunkCount: 1,
+          summary: { text: "SUMMARY", chunkCount: 1 },
+          next: [...next],
         });
       },
     };
@@ -2182,11 +2190,9 @@ describe("TokenBudget integration", () => {
       throw new Error("waiting for compaction");
     });
     expect(compactions.prompts.length).toBe(1);
-    // The unanswered trailing user message (the injection plus the max_tokens
-    // nudge) is carried past the compaction after the explicit prompt.
-    expect(compactions.prompts[0]).toBe(
-      "carry on\n\nnote\nYour previous response was truncated due to the output token limit. Please continue where you left off.",
-    );
+    // Thread hands over only the handoff; carrying the unanswered tail is the
+    // compactor's job (see compaction/index.test.ts).
+    expect(compactions.prompts[0]).toBe("carry on");
     // Exactly once: the snapshot handed to the compaction manager is
     // `getProviderMessages()`, and nothing is left in agent-local state that
     // the swap would either drop or replay.
@@ -3912,11 +3918,11 @@ describe("Agent conversation archive", () => {
       await flushArchive(core);
 
       compactorSlot(core).compactor = {
-        run: () =>
+        run: (_messages, next) =>
           Promise.resolve({
             type: "complete",
-            summary: "SUMMARY TEXT",
-            chunkCount: 2,
+            summary: { text: "SUMMARY TEXT", chunkCount: 2 },
+            next: [...next],
           }),
       };
 
@@ -4109,11 +4115,11 @@ describe("Thread survives the compaction agent swap", () => {
   ): Promise<void> {
     const streamsBefore = mockClient.streams.length;
     compactorSlot(core).compactor = {
-      run: () =>
+      run: (_messages, next) =>
         Promise.resolve({
           type: "complete",
-          summary: "SUMMARY TEXT",
-          chunkCount: 1,
+          summary: { text: "SUMMARY TEXT", chunkCount: 1 },
+          next: [...next],
         }),
     };
 
@@ -4207,11 +4213,11 @@ describe("Thread survives the compaction agent swap", () => {
     );
     try {
       compactorSlot(core).compactor = {
-        run: () =>
+        run: (_messages, next) =>
           Promise.resolve({
             type: "complete",
-            summary: "SUMMARY TEXT",
-            chunkCount: 1,
+            summary: { text: "SUMMARY TEXT", chunkCount: 1 },
+            next: [...next],
           }),
       };
 
@@ -4245,11 +4251,11 @@ describe("Thread survives the compaction agent swap", () => {
     );
     try {
       compactorSlot(core).compactor = {
-        run: () =>
+        run: (_messages, next) =>
           Promise.resolve({
             type: "complete",
-            summary: "SUMMARY TEXT",
-            chunkCount: 1,
+            summary: { text: "SUMMARY TEXT", chunkCount: 1 },
+            next: [...next],
           }),
       };
       const compactPromise = core.submit({

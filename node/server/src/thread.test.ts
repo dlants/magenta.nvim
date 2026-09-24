@@ -730,7 +730,8 @@ describe("deferred submissions", () => {
       {
         compaction: {
           compactor: {
-            run: () => Promise.reject(new Error("replaced below")),
+            run: (_messages, _next) =>
+              Promise.reject(new Error("replaced below")),
           },
           tokenBudget: TokenBudget.create({ threshold: 100, handoff: "" }),
         },
@@ -754,8 +755,8 @@ describe("deferred submissions", () => {
       let compactedTexts: string[] = [];
       let compactNextPrompt: string | undefined;
       const compactor: Compactor = {
-        run: (messages, nextPrompt) => {
-          compactNextPrompt = nextText(nextPrompt);
+        run: (messages, next) => {
+          compactNextPrompt = nextText(next);
           compactedTexts = messages.flatMap((m) =>
             m.role === "user"
               ? m.content.flatMap((c) => (c.type === "text" ? [c.text] : []))
@@ -765,8 +766,8 @@ describe("deferred submissions", () => {
           callsAtHandoff = calls.length;
           return Promise.resolve({
             type: "complete",
-            summary: "SUMMARY TEXT",
-            chunkCount: 1,
+            summary: { text: "SUMMARY TEXT", chunkCount: 1 },
+            next: [...next],
           });
         },
       };
@@ -787,16 +788,14 @@ describe("deferred submissions", () => {
       stream.finishResponse("end_turn");
 
       // The stop flushed the queue for the request the budget then refused to
-      // issue. That content is the unanswered trailing user message, so the
-      // compaction carries it forward as the next prompt instead of
-      // summarizing it, and the continuation delivers it verbatim.
+      // issue. It is in the log Thread hands the compactor, which decides what
+      // to carry past the compaction.
       const contStream = await awaitNextStream(mockClient, stream);
       expect(queueAtHandoff).toBe(0);
       expect(callsAtHandoff).toBe(1);
-      expect(compactedTexts).not.toContain("queued");
-      expect(compactNextPrompt).toBe("queued");
+      expect(compactedTexts).toContain("queued");
+      expect(compactNextPrompt).toBeUndefined();
       expect(calls).toEqual(["queued"]);
-      expect(userTexts(core)).toContain("queued");
       expect(core.queued[queue]).toEqual([]);
       contStream.streamText("resumed");
       contStream.finishResponse("end_turn");

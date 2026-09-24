@@ -203,6 +203,13 @@ Status: DONE.
 
 ## Pending turn split out of the log
 
+Status: DONE.
+- `CompactionOutcome.complete` is `{ summary: { text, chunkCount } | undefined; next: AgentInput[] }`. `ThreadCompactor.run` splits via private `splitPendingTurn` (`compaction/compactor.ts`): trailing user messages after the last assistant; tool_result anywhere in the tail means no split; text (minus `ABORT_MARKER_TEXT`), image and document are carried, everything else dropped. Empty history → `complete` with no summary, no children.
+- Thread's `compactAndContinue` passes the whole log and the handoff, archives as `compaction` only when there is a summary (else `none`), sets the opening only with a summary, and sends `outcome.next`.
+- `splitPendingUserText` deleted; its table test replaced by "ThreadCompactor pending turn split" in `compaction/index.test.ts` (chunk content observed through the child's `/chunk.md`).
+- Test compactors return `next: [...next]` (the handoff) and so no longer carry the pending tail. Tests that asserted Thread-side carrying were retargeted: thread.test "leaves %s content flushed…" now asserts the queued content is in the log handed to the compactor; agent.test parity/blank-handoff/injection tests expect only the handoff. The end-to-end AutoCompact+image and over-threshold-first-message cases are covered at the compactor level (split tests) rather than via a real compaction in Thread.
+- Existing direct `ThreadCompactor.run` tests gained a trailing assistant message so their lone user message is still chunked.
+
 - Goal:
   - `ThreadCompactor.run` splits the log privately and returns `{ summary, next }`.
   - Thread's `compactAndContinue` sends the returned `next` and puts the summary into the opening message only when there is one.

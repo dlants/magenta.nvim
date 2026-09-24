@@ -12,6 +12,7 @@ import {
 } from "../compact-renderer.ts";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import { Emitter } from "../emitter.ts";
+import { ABORT_MARKER_TEXT } from "../providers/inference-shared.ts";
 import type {
   AgentInput,
   ProviderMessage,
@@ -101,7 +102,11 @@ export class ThreadCompactor
   ): Promise<CompactionOutcome> {
     this.discard();
 
-    const chunks = this.chunk(messages);
+    const { history, carried } = splitPendingTurn(messages);
+    next = [...next, ...carried];
+    if (history.length === 0)
+      return { type: "complete", summary: undefined, next: [...next] };
+    const chunks = this.chunk(history);
     if (chunks.length === 0) {
       return { type: "error", message: "nothing to compact" };
     }
@@ -197,7 +202,11 @@ export class ThreadCompactor
         threadIds: [...completed],
         summary,
       });
-      return { type: "complete", summary, chunkCount: chunks.length };
+      return {
+        type: "complete",
+        summary: { text: summary, chunkCount: chunks.length },
+        next: [...next],
+      };
     } catch (error) {
       const wasCurrent = this.isCurrent(id);
       this.discardRun(id);
@@ -303,6 +312,46 @@ function buildChunkPrompt({
 }
 /** The chunk prompt only needs to know what comes next, so non-text input
  * is named rather than inlined. */
+/** Input appended ahead of a budget stop is already in the log but has not
+ * been answered, so it is carried past the compaction rather than summarized.
+ * Supervisor context is re-derived by the fresh core, and the abort marker is
+ * not something the user said. A tool_result tail is mid-loop, not a turn. */
+function splitPendingTurn(messages: ReadonlyArray<ProviderMessage>): {
+  history: ReadonlyArray<ProviderMessage>;
+  carried: AgentInput[];
+} {
+  let start = messages.length;
+  while (start > 0 && messages[start - 1].role === "user") start--;
+  const tail = messages.slice(start);
+  if (
+    tail.some((message) =>
+      message.content.some((block) => block.type === "tool_result"),
+    )
+  )
+    return { history: messages, carried: [] };
+  const carried: AgentInput[] = [];
+  for (const message of tail)
+    for (const block of message.content) {
+      switch (block.type) {
+        case "text":
+          if (block.text !== ABORT_MARKER_TEXT)
+            carried.push({ type: "text", text: block.text });
+          break;
+        case "image":
+          carried.push({ type: "image", source: block.source });
+          break;
+        case "document":
+          carried.push({
+            type: "document",
+            source: block.source,
+            ...(block.title !== undefined ? { title: block.title } : {}),
+          });
+          break;
+      }
+    }
+  return { history: messages.slice(0, start), carried };
+}
+
 function renderNext(next: ReadonlyArray<AgentInput>): string {
   const parts = next.map((input) => {
     switch (input.type) {
