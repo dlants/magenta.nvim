@@ -1,10 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import { FsFileIO } from "@magenta/server";
 import { PDFDocument } from "pdf-lib";
 import { expect, test } from "vitest";
 import { withDriver } from "../test/preamble.ts";
 import type { AbsFilePath } from "./files.ts";
 import { extractPDFPage, getPDFPageCount } from "./pdf-pages.ts";
+
+const fileIO = new FsFileIO();
 
 test("getPDFPageCount returns correct page count", async () => {
   await withDriver(
@@ -33,7 +36,7 @@ test("getPDFPageCount returns correct page count", async () => {
       const cwd = await getcwd(driver.nvim);
       const testPdfPath = path.join(cwd, "test.pdf") as AbsFilePath;
 
-      const result = await getPDFPageCount(testPdfPath);
+      const result = await getPDFPageCount(testPdfPath, fileIO);
 
       expect(result.status).toBe("ok");
       if (result.status === "ok") {
@@ -67,7 +70,7 @@ test("extractPDFPage extracts valid page", async () => {
       const testPdfPath = path.join(cwd, "test.pdf") as AbsFilePath;
 
       // Extract the first page (index 0)
-      const result = await extractPDFPage(testPdfPath, 1);
+      const result = await extractPDFPage(testPdfPath, 1, fileIO);
 
       expect(result.status).toBe("ok");
       if (result.status === "ok") {
@@ -103,7 +106,7 @@ test("extractPDFPage handles invalid page index", async () => {
       const testPdfPath = path.join(cwd, "test.pdf") as AbsFilePath;
 
       // Try to extract page index 5 (out of range)
-      const result = await extractPDFPage(testPdfPath, 6);
+      const result = await extractPDFPage(testPdfPath, 6, fileIO);
 
       expect(result.status).toBe("error");
       if (result.status === "error") {
@@ -134,7 +137,7 @@ test("extractPDFPage handles negative page index", async () => {
       const testPdfPath = path.join(cwd, "test.pdf") as AbsFilePath;
 
       // Try to extract page index -1
-      const result = await extractPDFPage(testPdfPath, 0);
+      const result = await extractPDFPage(testPdfPath, 0, fileIO);
 
       expect(result.status).toBe("error");
       if (result.status === "error") {
@@ -150,13 +153,13 @@ test("functions handle non-existent file", async () => {
     const cwd = await getcwd(driver.nvim);
     const nonExistentPath = path.join(cwd, "nonexistent.pdf") as AbsFilePath;
 
-    const pageCountResult = await getPDFPageCount(nonExistentPath);
+    const pageCountResult = await getPDFPageCount(nonExistentPath, fileIO);
     expect(pageCountResult.status).toBe("error");
     if (pageCountResult.status === "error") {
       expect(pageCountResult.error).toContain("Failed to get PDF page count");
     }
 
-    const pageResult = await extractPDFPage(nonExistentPath, 1);
+    const pageResult = await extractPDFPage(nonExistentPath, 1, fileIO);
     expect(pageResult.status).toBe("error");
     if (pageResult.status === "error") {
       expect(pageResult.error).toContain("Failed to extract PDF page");
@@ -178,13 +181,13 @@ test("functions handle invalid PDF file", async () => {
       const cwd = await getcwd(driver.nvim);
       const invalidPdfPath = path.join(cwd, "invalid.pdf") as AbsFilePath;
 
-      const pageCountResult = await getPDFPageCount(invalidPdfPath);
+      const pageCountResult = await getPDFPageCount(invalidPdfPath, fileIO);
       expect(pageCountResult.status).toBe("error");
       if (pageCountResult.status === "error") {
         expect(pageCountResult.error).toContain("Failed to get PDF page count");
       }
 
-      const pageResult = await extractPDFPage(invalidPdfPath, 1);
+      const pageResult = await extractPDFPage(invalidPdfPath, 1, fileIO);
       expect(pageResult.status).toBe("error");
       if (pageResult.status === "error") {
         expect(pageResult.error).toContain("Failed to extract PDF page");

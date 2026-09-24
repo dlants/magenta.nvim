@@ -931,8 +931,10 @@ From now on, whenever any of these files are updated by the user, you will get a
           case "pdf": {
             if (!fileInfo.agentView.summary) {
               try {
-                const summaryResult =
-                  await getSummaryAsProviderContent(absFilePath);
+                const summaryResult = await getSummaryAsProviderContent(
+                  absFilePath,
+                  this.fileIO,
+                );
                 if (summaryResult.status === "ok") {
                   if (commit) {
                     fileInfo.agentView.summary = true;
@@ -976,8 +978,10 @@ From now on, whenever any of these files are updated by the user, you will get a
       } else {
         if (fileInfo.fileTypeInfo.category === FileCategory.PDF) {
           try {
-            const summaryResult =
-              await getSummaryAsProviderContent(absFilePath);
+            const summaryResult = await getSummaryAsProviderContent(
+              absFilePath,
+              this.fileIO,
+            );
             if (summaryResult.status === "ok") {
               if (commit) {
                 fileInfo.agentView = {

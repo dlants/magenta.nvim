@@ -8,6 +8,7 @@ import {
   type HomeDir,
   type NvimCwd,
   type RelFilePath,
+  type UnresolvedFilePath,
 } from "../utils/files.ts";
 import { FileSupervisor, type FileUpdates } from "./file-supervisor.ts";
 
@@ -256,5 +257,38 @@ describe("FileSupervisor conversation lifetime", () => {
     expect(clone.files[pdf].agentView).toMatchObject({ pages: [1, 2] });
     supervisor.destroy();
     clone.destroy();
+  });
+  it("addFiles detects file type through the injected FileIO", async () => {
+    const jpeg = Buffer.from([
+      0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+    ]);
+    const fileIO = new InMemoryFileIO({
+      [TEST_PATH]: "plain text",
+      [IMAGE_PATH]: jpeg,
+    });
+    const supervisor = FileSupervisor.create({
+      logger,
+      fileIO,
+      cwd: "/test" as NvimCwd,
+      homeDir: "/home" as HomeDir,
+      initialFiles: {},
+    });
+    await supervisor.addFiles([
+      TEST_PATH,
+      IMAGE_PATH,
+      "/test/missing.txt",
+    ] as UnresolvedFilePath[]);
+    expect(supervisor.files[TEST_PATH].fileTypeInfo.category).toBe(
+      FileCategory.TEXT,
+    );
+    expect(supervisor.files[IMAGE_PATH].fileTypeInfo.category).toBe(
+      FileCategory.IMAGE,
+    );
+    expect(
+      supervisor.files["/test/missing.txt" as AbsFilePath],
+    ).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("does not exist"),
+    );
   });
 });

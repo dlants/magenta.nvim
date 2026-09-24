@@ -10,11 +10,7 @@ export class InMemoryFileIO implements FileIO {
   readFile(path: string): Promise<string> {
     const content = this.files.get(path);
     if (content === undefined) {
-      const err = new Error(
-        `ENOENT: no such file or directory, open '${path}'`,
-      );
-      (err as NodeJS.ErrnoException).code = "ENOENT";
-      return Promise.reject(err);
+      return Promise.reject(enoent("open", path));
     }
     return Promise.resolve(
       typeof content === "string" ? content : content.toString("utf-8"),
@@ -107,11 +103,7 @@ export class InMemoryFileIO implements FileIO {
   readFileSync(path: string, _encoding: "utf8"): string {
     const content = this.getFileContents(path);
     if (content === undefined) {
-      const err = new Error(
-        `ENOENT: no such file or directory, open '${path}'`,
-      );
-      (err as NodeJS.ErrnoException).code = "ENOENT";
-      throw err;
+      throw enoent("open", path);
     }
     return content;
   }
@@ -123,12 +115,15 @@ export class InMemoryFileIO implements FileIO {
       k.startsWith(prefix),
     );
     if (!isFile && !isDirectory) {
-      const err = new Error(
-        `ENOENT: no such file or directory, stat '${path}'`,
-      );
-      (err as NodeJS.ErrnoException).code = "ENOENT";
-      throw err;
+      throw enoent("stat", path);
     }
     return { isFile: () => isFile, isDirectory: () => isDirectory };
   }
+}
+
+function enoent(op: string, path: string): NodeJS.ErrnoException {
+  return Object.assign(
+    new Error(`ENOENT: no such file or directory, ${op} '${path}'`),
+    { code: "ENOENT" },
+  );
 }

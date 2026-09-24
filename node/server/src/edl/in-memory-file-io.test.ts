@@ -59,4 +59,40 @@ describe("InMemoryFileIO", () => {
     expect(io.getFileContents("/test.md")).toBe("sync content");
     expect(io.getFileContents("/missing.md")).toBeUndefined();
   });
+  it("round-trips non-UTF-8 binary bytes exactly", async () => {
+    const bytes = Buffer.from([0xff, 0xd8, 0xff, 0x00, 0x80, 0xfe]);
+    const io = new InMemoryFileIO({ "/img.jpg": bytes });
+    expect((await io.readBinaryFile("/img.jpg")).equals(bytes)).toBe(true);
+    io.writeBinaryFile("/b.bin", bytes);
+    expect((await io.readBinaryFile("/b.bin")).equals(bytes)).toBe(true);
+  });
+  describe("statSync / readdirSync", () => {
+    const io = new InMemoryFileIO({
+      "/a/file.md": "x",
+      "/a/nested/deep/agent.md": "y",
+    });
+    it("detects files", () => {
+      const s = io.statSync("/a/file.md");
+      expect(s.isFile()).toBe(true);
+      expect(s.isDirectory()).toBe(false);
+    });
+    it("detects directories, including nested and trailing-slash paths", () => {
+      for (const p of ["/a", "/a/", "/a/nested", "/a/nested/deep/"]) {
+        const s = io.statSync(p);
+        expect(s.isDirectory()).toBe(true);
+        expect(s.isFile()).toBe(false);
+      }
+    });
+    it("throws ENOENT for missing paths", () => {
+      expect(() => io.statSync("/missing")).toThrow(
+        expect.objectContaining({ code: "ENOENT" }),
+      );
+      expect(() => io.statSync("/a/fil")).toThrow("ENOENT");
+    });
+    it("lists immediate children", () => {
+      expect(io.readdirSync("/a")).toEqual(["file.md", "nested"]);
+      expect(io.readdirSync("/a/nested/")).toEqual(["deep"]);
+      expect(io.readdirSync("/missing")).toEqual([]);
+    });
+  });
 });

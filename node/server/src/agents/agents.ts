@@ -43,6 +43,7 @@ export function loadAgents(context: {
   options: ProviderOptions;
   fs?: AgentsFs;
 }): AgentsMap {
+  const ctx = { ...context, fs: context.fs ?? nodeFs };
   const agents: AgentsMap = {};
 
   if (
@@ -54,11 +55,11 @@ export function loadAgents(context: {
 
   try {
     for (const agentsDir of context.options.agentsPaths) {
-      const agentFiles = findAgentFilesInDirectory(agentsDir, context);
+      const agentFiles = findAgentFilesInDirectory(agentsDir, ctx);
 
       for (const agentFile of agentFiles) {
         try {
-          const agentInfo = parseAgentFile(agentFile, context);
+          const agentInfo = parseAgentFile(agentFile, ctx);
           if (agentInfo) {
             if (agentInfo.name in agents) {
               context.logger.info(
@@ -93,10 +94,10 @@ function findAgentFilesInDirectory(
   context: {
     cwd: NvimCwd;
     logger: Logger;
-    fs?: AgentsFs;
+    fs: AgentsFs;
   },
 ): string[] {
-  const fs = context.fs ?? nodeFs;
+  const fs = context.fs;
   const agentFiles: string[] = [];
 
   try {
@@ -146,10 +147,9 @@ function findAgentFilesInDirectory(
 
 export function parseAgentFile(
   agentFile: string,
-  context: { logger: Logger; fs?: AgentsFs },
+  context: { logger: Logger; fs: AgentsFs },
 ): AgentInfo | undefined {
-  const fs = context.fs ?? nodeFs;
-  const content = fs.readFileSync(agentFile, "utf8");
+  const content = context.fs.readFileSync(agentFile, "utf8");
 
   const frontmatter = extractAgentFrontmatter(content);
 

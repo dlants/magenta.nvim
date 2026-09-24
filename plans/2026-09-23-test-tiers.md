@@ -185,6 +185,7 @@ buildSystemInfo(ctx: { cwd; neovimVersion: string; overrides? }): SystemInfo;
   - `agents/agents.ts`: `loadAgents`/`parseAgentFile` accept an optional sync `fs: AgentsFs` (defaults to `node:fs`); tests pass `InMemoryFileIO`. Builtin-agent test still reads the real builtin dir; the override test seeds builtin files into memory.
   - `thread-core-context.test.ts`: already used a fake git client (no real repo), so no B split was needed; converted wholesale to `InMemoryFileIO` + `FakeGitClient`.
   - Deviation: `providers/codex-auth.test.ts` stays tier B — it tests the atomic rename + `0o600` permissions of `auth.json`, which is real-fs behavior.
+  - Review follow-up: `pdf-pages` functions now require `fileIO` (no node:fs fallback; `FileSupervisor` PDF summaries pass `this.fileIO`, nvimclient `pdf-pages.test.ts` passes `FsFileIO`). `loadAgents` resolves `fs ?? node:fs` once; internal helpers and `parseAgentFile` require `fs`. `InMemoryFileIO` builds ENOENT via a typed `enoent()` helper. Added unit tests for `statSync`/`readdirSync` branches and exact binary round-trip, and a `FileSupervisor.addFiles` test detecting text/JPEG/missing via `InMemoryFileIO`.
 
 ## 5. Port chat/thread, thread-abort, supervisor-wiring
 
