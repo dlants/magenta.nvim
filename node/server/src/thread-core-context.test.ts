@@ -17,12 +17,14 @@ import {
   compactResolved,
   createAgentWithMock,
   getContextDeliveries,
+  noopLogger,
   resetThread,
   type TestContextOverrides,
   uniqueThreadId,
 } from "./test-helpers.ts";
 import type { Thread } from "./thread.ts";
 import { flushArchive } from "./thread-logger.ts";
+import { pollUntil } from "./utils/async.ts";
 import {
   type AbsFilePath,
   FileCategory,
@@ -459,6 +461,38 @@ describe("Thread-owned context delivery", () => {
     }
   });
 
+  it("an aborted preflight count skips the budget check without warning", async () => {
+    const warn = vi.fn();
+    const check = vi.fn();
+    const budget = TokenBudget.create({ threshold: 100, handoff: "go on" });
+    budget.check = check;
+    const f = await fixture({
+      logger: { ...noopLogger, warn },
+      compaction: {
+        compactor: {
+          run: () => Promise.reject(new Error("unexpected compaction")),
+        },
+        tokenBudget: budget,
+      },
+    });
+    try {
+      f.mockClient.countTokensGate = new Promise(() => {});
+      const sent = f.thread.submit({
+        type: "resolved",
+        messages: [{ type: "text", text: "start" }],
+      });
+      await pollUntil(() => {
+        if (f.mockClient.countTokensCalls === 0) throw new Error("not yet");
+      });
+      await f.thread.abort();
+      expect(await sent).toEqual({ type: "aborted" });
+      expect(check).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+      expect(f.mockClient.streams).toHaveLength(0);
+    } finally {
+      await f.cleanup();
+    }
+  });
   it("context injected into a budget-stopped request is re-delivered by the fresh core", async () => {
     const f = await fixture({
       compaction: {

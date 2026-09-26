@@ -2168,3 +2168,24 @@ File context here
     });
   });
 });
+describe("countTokens task", () => {
+  it("resolves aborted when aborted mid-count", async () => {
+    const mockClient = new MockAnthropicClient();
+    mockClient.countTokensGate = new Promise(() => {});
+    const agent = createAgent(mockClient);
+    const counting = agent.manager.countTokens();
+    counting.abort();
+    expect(await counting.promise).toEqual({ type: "aborted" });
+  });
+  it("resolves counted and rejects on real failures", async () => {
+    const mockClient = new MockAnthropicClient();
+    mockClient.mockInputTokenCount = 42;
+    const agent = createAgent(mockClient);
+    expect(await agent.manager.countTokens().promise).toEqual({
+      type: "counted",
+      tokens: 42,
+    });
+    mockClient.countTokensError = new Error("boom");
+    await expect(agent.manager.countTokens().promise).rejects.toThrow("boom");
+  });
+});

@@ -89,4 +89,29 @@ describe("runToolLoop abort handle", () => {
     expect(turn.aborting).toBe(false);
     expect(agent.getProviderMessages()).toEqual(messages);
   });
+  it("aborts while onBeforeRequest is pending without issuing a request", async () => {
+    const entered = new Defer<void>();
+    const injections = new Defer<[]>();
+    const { agent, mockClient } = createTestAgent({
+      onBeforeRequest: () => {
+        entered.resolve();
+        return injections.promise;
+      },
+    });
+    const turn = agent.send([{ type: "text", text: "go" }]);
+    await entered.promise;
+    turn.abort();
+    injections.resolve([]);
+    expect(await turn.promise).toEqual({ type: "aborted" });
+    expect(mockClient.streams).toHaveLength(0);
+  });
+  it("aborts mid-stream and reports aborting before settle", async () => {
+    const { agent, mockClient } = createTestAgent();
+    const turn = agent.send([{ type: "text", text: "go" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("partial");
+    turn.abort();
+    expect(turn.aborting).toBe(true);
+    expect(await turn.promise).toEqual({ type: "aborted" });
+  });
 });

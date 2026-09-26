@@ -14,6 +14,7 @@ import type {
   Provider,
   ProviderMessageContent,
   ProviderToolSpec,
+  TokenCount,
 } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import {
@@ -382,13 +383,13 @@ export class ThreadCore {
   }
   private async decideBudget(
     budget: TokenBudget,
-    counting: Promise<number | { type: "aborted" }>,
+    counting: Promise<TokenCount>,
   ): Promise<BudgetDecision | { type: "aborted" }> {
     let count: number;
     try {
       const counted = await counting;
-      if (typeof counted !== "number") return counted;
-      count = counted;
+      if (counted.type === "aborted") return counted;
+      count = counted.tokens;
     } catch (error) {
       this.context.logger.warn(
         `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,

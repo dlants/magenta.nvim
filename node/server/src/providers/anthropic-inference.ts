@@ -43,6 +43,7 @@ import type {
   RequestedTool,
   RequestResult,
   StreamStopReason,
+  TokenCount,
   ToolResults,
   Usage,
 } from "./provider-types.ts";
@@ -659,9 +660,12 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
 
   /** The conversation as it would be sent right now. Preflight and awaited:
    * whoever asked for it is deciding about this request. */
-  countTokens(): Task<number | { type: "aborted" }> {
+  countTokens(): Task<TokenCount> {
     const controller = new AbortController();
-    const promise = this.requestTokenCount(controller.signal).catch(
+    const promise: Promise<TokenCount> = this.requestTokenCount(
+      controller.signal,
+    ).then(
+      (tokens) => ({ type: "counted" as const, tokens }),
       (error: unknown) => {
         if (controller.signal.aborted) return { type: "aborted" as const };
         throw error;

@@ -344,6 +344,10 @@ export type StreamEvent =
 
 export type OnStreamEvent = (event: StreamEvent) => void;
 
+export type TokenCount =
+  | { type: "counted"; tokens: number }
+  | { type: "aborted" };
+
 export interface NativeInferenceManager {
   readonly log: AgentLog;
   appendUserMessage(content: AgentInput[]): void;
@@ -370,7 +374,7 @@ export interface NativeInferenceManager {
   truncateMessages(messageIdx: NativeMessageIdx): void;
   clone(): NativeInferenceManager;
   /** Rejects on real failures; an abort resolves `aborted`. */
-  countTokens?(): Task<number | { type: "aborted" }>;
+  countTokens?(): Task<TokenCount>;
   /** Aborting the returned task aborts this request and nothing else. */
   sendRequest(onEvent: OnStreamEvent): Task<RequestResult>;
 }

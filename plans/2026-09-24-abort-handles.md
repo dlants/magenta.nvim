@@ -200,6 +200,7 @@ private pending = new Map<ThreadId, { abort(): void; aborted: boolean }>();
   - [x] Temporary shim in `Thread.runLoop` forwards `submission.abortSignal` to the loop's `abort()`.
   - [x] `TestAgent.send` returns the loop itself. Added `uninterruptible(value)` in `test-helpers.ts` for test executors/budget checks without an abort.
   - [x] New tests: `tool-loop.test.ts` (abort during checkBudget, abort during tool execution, abort after settle), `tool-executor.test.ts` (abort landing between `createTool` calls).
+  - [x] Review follow-ups: `countTokens` now returns `Task<TokenCount>` (`{type:"counted"; tokens} | {type:"aborted"}`, exported from `provider-types.ts`). The mock client's `countTokens` honors the SDK `signal` while gated. Added tests: anthropic `countTokens` abort/counted/real-failure branches; ThreadCore aborted preflight skips `budget.check` without warning; tool-loop abort while `onBeforeRequest` is pending and abort mid-stream (`aborting` flips before settle). The shim's already-aborted branch is left untested since the shim is removed in stage 2.
 
 ## Submission handle
 

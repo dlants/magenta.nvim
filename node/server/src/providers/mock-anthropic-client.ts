@@ -527,6 +527,7 @@ export class MockAnthropicClient {
     },
     countTokens: (
       params: Anthropic.Messages.MessageCountTokensParams,
+      options?: { signal?: AbortSignal },
     ): Promise<{ input_tokens: number }> => {
       this.countTokensCalls++;
       this.countTokensRequests.push(params);
@@ -536,9 +537,14 @@ export class MockAnthropicClient {
       const answer = () => ({
         input_tokens: once ?? this.mockInputTokenCount ?? 0,
       });
-      return this.countTokensGate
-        ? this.countTokensGate.then(answer)
-        : Promise.resolve(answer());
+      if (!this.countTokensGate) return Promise.resolve(answer());
+      const gate = this.countTokensGate;
+      return new Promise((resolve, reject) => {
+        options?.signal?.addEventListener("abort", () =>
+          reject(new Error("Request was aborted.")),
+        );
+        gate.then(() => resolve(answer()), reject);
+      });
     },
   };
 
