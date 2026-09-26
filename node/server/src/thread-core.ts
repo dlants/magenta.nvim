@@ -37,6 +37,7 @@ import { executeToolBatch } from "./tool-executor.ts";
 import { runToolLoop, type ToolLoop, type ToolOutcome } from "./tool-loop.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
+import type { Task } from "./utils/async.ts";
 import type { HomeDir, NvimCwd } from "./utils/files.ts";
 
 export interface ThreadCoreContext {
@@ -305,18 +306,20 @@ export class ThreadCore {
   private executeTools(
     requests: NonEmptyRequestedTools,
     publishTools: (tools: ToolInvocationState) => void,
-    abortSignal: AbortSignal,
-  ): Promise<ToolOutcome> {
+  ): Task<ToolOutcome> {
     this.resultMessageIdx = this.manager.getPendingResultMessageIdx(requests);
-    return executeToolBatch(requests, {
+    const batch = executeToolBatch(requests, {
       createTool: this.createTool,
       completedTools: this.completedTools,
       publishTools,
       onUpdate: () => this.handleUpdate(),
-      abortSignal: abortSignal,
-    }).finally(() => {
-      this.resultMessageIdx = undefined;
     });
+    return {
+      promise: batch.promise.finally(() => {
+        this.resultMessageIdx = undefined;
+      }),
+      abort: () => batch.abort(),
+    };
   }
   get lastAssistantMessage():
     | ReadonlyArray<ProviderMessageContent>
@@ -367,16 +370,26 @@ export class ThreadCore {
 
   /** Counts the log exactly as it will be sent: injections and input are
    * already appended. */
-  private async checkBudget(
-    abortSignal: AbortSignal,
-  ): Promise<BudgetDecision | { type: "aborted" }> {
+  private checkBudget(): Task<BudgetDecision | { type: "aborted" }> {
     const budget = this.context.tokenBudget;
-    if (!budget || !this.manager.countTokens) return { type: "proceed" };
+    if (!budget || !this.manager.countTokens)
+      return { promise: Promise.resolve({ type: "proceed" }), abort: () => {} };
+    const counting = this.manager.countTokens();
+    return {
+      promise: this.decideBudget(budget, counting.promise),
+      abort: () => counting.abort(),
+    };
+  }
+  private async decideBudget(
+    budget: TokenBudget,
+    counting: Promise<number | { type: "aborted" }>,
+  ): Promise<BudgetDecision | { type: "aborted" }> {
     let count: number;
     try {
-      count = await this.manager.countTokens(abortSignal);
+      const counted = await counting;
+      if (typeof counted !== "number") return counted;
+      count = counted;
     } catch (error) {
-      if (abortSignal.aborted) return { type: "aborted" };
       this.context.logger.warn(
         `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -388,27 +401,35 @@ export class ThreadCore {
     return budget.check(count);
   }
 
-  async runToolLoop(
-    messages: AgentInput[],
-    abortSignal: AbortSignal,
-  ): Promise<ToolLoopResult> {
+  runToolLoop(messages: AgentInput[]): ToolLoop {
     const turn = runToolLoop(
       {
         logger: this.context.logger,
         manager: this.manager,
-        executeTools: (requests, publishTools, abortSignal) =>
-          this.executeTools(requests, publishTools, abortSignal),
+        executeTools: (requests, publishTools) =>
+          this.executeTools(requests, publishTools),
         onBeforeRequest: () => this.beforeRequest(),
-        checkBudget: (abortSignal) => this.checkBudget(abortSignal),
+        checkBudget: () => this.checkBudget(),
         onToolResults: (results, idx) =>
           this.callbacks.supervisor.onToolResults(results, idx),
         onUpdate: () => this.handleUpdate(),
       },
       messages,
-      abortSignal,
     );
     this.toolLoop = turn;
     this.handleUpdate();
+    return {
+      get activity() {
+        return turn.activity;
+      },
+      get aborting() {
+        return turn.aborting;
+      },
+      abort: () => turn.abort(),
+      promise: this.settleToolLoop(turn),
+    };
+  }
+  private async settleToolLoop(turn: ToolLoop): Promise<ToolLoopResult> {
     try {
       const result = await turn.promise;
       if (result.type === "failed") {

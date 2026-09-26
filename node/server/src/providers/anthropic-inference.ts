@@ -4,7 +4,7 @@ import type { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream.mjs";
 import type { Logger } from "../logger.ts";
 import type { ToolName, ToolRequestId, ValidateInput } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { abortableDelay } from "../utils/async.ts";
+import { abortableDelay, type Task } from "../utils/async.ts";
 import {
   stripTrailingThinkingBlocks,
   withCacheControl,
@@ -27,7 +27,6 @@ import {
   assertCompleteToolResults,
   getRetryDelay,
   MAX_RETRY_DURATION,
-  withAbort,
   wrapStreamAbortSignalWithTimeout,
 } from "./inference-shared.ts";
 import type {
@@ -395,7 +394,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     return (this.messages.length - 1) as NativeMessageIdx;
   }
 
-  abort(): void {
+  private abort(): void {
     if (!this.requestInFlight) return;
     // Cancel a pending retry wait and/or the in-flight request. Whether the
     // turn unwinds is `Agent`'s business, not ours.
@@ -436,11 +435,8 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   /** One provider request: everything from placing it to accumulating its
    * stream, including the retry budget. Retries are invisible to the caller
    * apart from the `retry` updates. */
-  sendRequest(
-    onEvent: OnStreamEvent,
-    abortSignal: AbortSignal,
-  ): Promise<RequestResult> {
-    return withAbort(this.runRequest(onEvent), abortSignal, () => this.abort());
+  sendRequest(onEvent: OnStreamEvent): Task<RequestResult> {
+    return { promise: this.runRequest(onEvent), abort: () => this.abort() };
   }
 
   private async runRequest(onEvent: OnStreamEvent): Promise<RequestResult> {
@@ -663,7 +659,17 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
 
   /** The conversation as it would be sent right now. Preflight and awaited:
    * whoever asked for it is deciding about this request. */
-  async countTokens(abortSignal: AbortSignal): Promise<number> {
+  countTokens(): Task<number | { type: "aborted" }> {
+    const controller = new AbortController();
+    const promise = this.requestTokenCount(controller.signal).catch(
+      (error: unknown) => {
+        if (controller.signal.aborted) return { type: "aborted" as const };
+        throw error;
+      },
+    );
+    return { promise, abort: () => controller.abort() };
+  }
+  private async requestTokenCount(abortSignal: AbortSignal): Promise<number> {
     const messagesWithCache = withCacheControl(
       stripTrailingThinkingBlocks(this.messages),
     );

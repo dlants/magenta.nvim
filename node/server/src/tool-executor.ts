@@ -14,6 +14,7 @@ import type {
   ToolRequest,
   ToolRequestId,
 } from "./tool-types.ts";
+import type { Task } from "./utils/async.ts";
 
 export type ToolExecutorDeps = {
   createTool: (request: ToolRequest) => ExecutingToolInvocation;
@@ -21,16 +22,17 @@ export type ToolExecutorDeps = {
   /** Where the invocations are, for whoever renders them. */
   publishTools: (tools: ToolInvocationState) => void;
   onUpdate: () => void;
-  abortSignal: AbortSignal;
 };
 
 export function executeToolBatch(
   requests: NonEmptyRequestedTools,
   deps: ToolExecutorDeps,
-): Promise<ToolOutcome> {
-  const { abortSignal } = deps;
+): Task<ToolOutcome> {
+  let aborted = false;
   let live = new Map<ToolRequestId, ActiveToolEntry>();
   const abort = () => {
+    if (aborted) return;
+    aborted = true;
     for (const entry of live.values()) entry.handle.abort();
   };
 
@@ -59,6 +61,9 @@ export function executeToolBatch(
 
   async function runBatch(): Promise<ToolOutcome> {
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
+    // Invocations join `live` as they are created, so an abort landing
+    // between `createTool` calls reaches the ones already running.
+    live = activeTools;
     const results = new Map<ToolRequestId, ToolResultValue>();
 
     for (const requested of requests) {
@@ -85,6 +90,7 @@ export function executeToolBatch(
         results.set(requested.id, result.result);
         continue;
       }
+      if (aborted) invocation.abort();
       activeTools.set(request.id, {
         handle: invocation,
         progress: "progress" in invocation ? invocation.progress : undefined,
@@ -93,8 +99,6 @@ export function executeToolBatch(
       });
     }
 
-    live = activeTools;
-    if (abortSignal.aborted) abort();
     deps.publishTools({ type: "running", activeTools });
 
     const settled = await Promise.all(
@@ -128,11 +132,10 @@ export function executeToolBatch(
     live = new Map();
     deps.publishTools({ type: "settled" });
 
-    return { type: abortSignal.aborted ? "aborted" : "continue", results };
+    return { type: aborted ? "aborted" : "continue", results };
   }
 
-  abortSignal.addEventListener("abort", abort, { once: true });
-  return runBatch().finally(() =>
-    abortSignal.removeEventListener("abort", abort),
-  );
+  // Started after the handle is returned, so an abort that lands while tools
+  // are being created (e.g. re-entrantly from `createTool`) reaches the batch.
+  return { promise: Promise.resolve().then(runBatch), abort };
 }

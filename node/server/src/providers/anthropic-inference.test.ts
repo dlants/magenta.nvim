@@ -7,6 +7,7 @@ import {
   flatLoop,
   noopLogger,
   type TestAgent,
+  uninterruptible,
 } from "../test-helpers.ts";
 import type { ToolLoopResult } from "../thread-api.ts";
 import type { ToolExecutor, ToolOutcome } from "../tool-loop.ts";
@@ -79,7 +80,7 @@ function trackUpdates(): Tracked {
 
 /** Default executor: no test reaches it unless it streams a tool_use. */
 const rejectingExecutor: ToolExecutor = () =>
-  Promise.resolve(Promise.reject(new Error("unexpected tool execution")));
+  uninterruptible(Promise.reject(new Error("unexpected tool execution")));
 
 type CreateOptions = {
   model?: string;
@@ -364,7 +365,7 @@ describe("tool execution", () => {
     const agent = createAgent(mockClient, {
       executeTools: (requests) => {
         seen = requests;
-        return Promise.resolve(
+        return uninterruptible(
           Promise.resolve({
             type: "continue" as const,
             results: okResults(requests),
@@ -399,7 +400,7 @@ describe("tool execution", () => {
     const toolUseId = "tool-omitted" as ToolRequestId;
     const agent = createAgent(mockClient, {
       executeTools: () =>
-        Promise.resolve({ type: "continue" as const, results: new Map() }),
+        uninterruptible({ type: "continue" as const, results: new Map() }),
     });
 
     const turn = agent.runToolLoop("Hello");
@@ -426,7 +427,7 @@ describe("tool execution", () => {
     const toolUseId = "tool-reject" as ToolRequestId;
     const agent = createAgent(mockClient, {
       executeTools: () =>
-        Promise.resolve(Promise.reject(new Error("executor blew up"))),
+        uninterruptible(Promise.reject(new Error("executor blew up"))),
     });
 
     const turn = agent.runToolLoop("Hello");
@@ -515,8 +516,8 @@ describe("hung stream abort", () => {
         text: "Hello",
       },
     ]);
-    const controller = new AbortController();
-    const request = manager.sendRequest(() => {}, controller.signal);
+    const task = manager.sendRequest(() => {});
+    const request = task.promise;
     const stream = mockClient.streams[0];
     if (!stream) throw new Error("stream was not created");
     stream.ignoreAbort();
@@ -525,7 +526,7 @@ describe("hung stream abort", () => {
     void request.then(() => {
       settled = true;
     });
-    controller.abort();
+    task.abort();
     await vi.advanceTimersByTimeAsync(ABORT_GRACE_PERIOD_MS - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
@@ -536,7 +537,7 @@ describe("hung stream abort", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(manager.log.messages).toEqual(messagesAfterAbort);
 
-    const second = manager.sendRequest(() => {}, new AbortController().signal);
+    const second = manager.sendRequest(() => {}).promise;
     const secondStream = mockClient.streams[1];
     if (!secondStream) throw new Error("second stream was not created");
     secondStream.finishResponse("end_turn");
@@ -984,7 +985,7 @@ describe("streaming block", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient, {
       executeTools: (requests) =>
-        Promise.resolve({
+        uninterruptible({
           type: "continue" as const,
           results: okResults(requests),
         }),
@@ -1466,7 +1467,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
-          Promise.resolve({
+          uninterruptible({
             type: "continue" as const,
             results: okResults(requests),
           }),
@@ -1500,7 +1501,7 @@ describe("web search result preservation", () => {
       const toolUseId = "tool-malformed" as ToolRequestId;
       const agent = createAgent(mockClient, {
         executeTools: () =>
-          Promise.resolve({
+          uninterruptible({
             type: "continue" as const,
             results: new Map([
               [
@@ -1719,7 +1720,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
-          Promise.resolve({
+          uninterruptible({
             type: "continue" as const,
             results: okResults(requests),
           }),
@@ -1815,7 +1816,7 @@ File context here
       const agent = createAgent(mockClient, {
         executeTools: (requests) => {
           onCalled();
-          return Promise.resolve(
+          return uninterruptible(
             new Promise<ToolOutcome>((resolve) => {
               releaseTools = () =>
                 resolve({ type: "continue", results: okResults(requests) });
@@ -2018,7 +2019,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
-          Promise.resolve({
+          uninterruptible({
             type: "continue" as const,
             results: okResults(requests, "file contents"),
           }),
@@ -2062,7 +2063,7 @@ File context here
       const agent = createAgent(mockClient, {
         executeTools: () => {
           onCalled();
-          return Promise.resolve(
+          return uninterruptible(
             new Promise<ToolOutcome>((resolve) => {
               releaseTools = () =>
                 resolve({ type: "aborted", results: new Map() });
@@ -2110,7 +2111,7 @@ File context here
       const agent = createAgent(mockClient, {
         executeTools: () => {
           onCalled();
-          return Promise.resolve(
+          return uninterruptible(
             new Promise<ToolOutcome>((resolve) => {
               releaseTools = () =>
                 resolve({ type: "aborted", results: new Map() });

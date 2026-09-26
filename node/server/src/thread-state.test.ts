@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { awaitNextStream, createTestAgent } from "./test-helpers.ts";
+import {
+  awaitNextStream,
+  createTestAgent,
+  uninterruptible,
+} from "./test-helpers.ts";
 import type { ToolInvocationState } from "./thread-api.ts";
 import { activityLabel, streamingBlock } from "./thread-state.ts";
 import type { ToolOutcome } from "./tool-loop.ts";
@@ -15,7 +19,7 @@ describe("ToolLoop lifecycle and progress", () => {
       executeTools: (_requests, publishTools) => {
         publish = publishTools;
         entered.resolve();
-        return tools.promise;
+        return uninterruptible(tools.promise);
       },
     });
     const turn = agent.send([
@@ -87,10 +91,9 @@ describe("ToolLoop lifecycle and progress", () => {
     const tools = new Defer<ToolOutcome>();
     const abort = vi.fn();
     const { agent, mockClient } = createTestAgent({
-      executeTools: (_requests, _publish, abortSignal) => {
-        abortSignal.addEventListener("abort", abort);
+      executeTools: () => {
         entered.resolve();
-        return tools.promise;
+        return { promise: tools.promise, abort };
       },
     });
     const first = agent.send([

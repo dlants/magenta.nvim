@@ -7,6 +7,7 @@ import {
   createTestOpenAIAgent,
   flatLoop,
   type TestAgent,
+  uninterruptible,
 } from "../test-helpers.ts";
 import type { ToolLoopResult } from "../thread-api.ts";
 import type { ToolLoopDeps } from "../tool-loop.ts";
@@ -168,16 +169,14 @@ function autoCompact() {
 describe("onBeforeRequest", () => {
   /** The runner fills a result for every requested tool it isn't handed. */
   const emptyResults = () =>
-    Promise.resolve(
-      Promise.resolve({ type: "continue" as const, results: new Map() }),
-    );
+    uninterruptible({ type: "continue" as const, results: new Map() });
 
   /** The budget is checked on the opening request too; this one stops the
    * continuation that would carry the tool results. */
   const holdSecond =
     (bump: () => number): ToolLoopDeps["checkBudget"] =>
     () =>
-      Promise.resolve(bump() === 1 ? { type: "proceed" } : { type: "stop" });
+      uninterruptible(bump() === 1 ? { type: "proceed" } : { type: "stop" });
 
   it("stops the anthropic turn without issuing the continuation", async () => {
     let calls = 0;
@@ -301,12 +300,7 @@ describe("preflight token count parity", () => {
     });
 
     mockClient.mockInputTokenCount = 100;
-    expect(
-      await agent["core"].runToolLoop(
-        [text("go")],
-        new AbortController().signal,
-      ),
-    ).toEqual({
+    expect(await agent["core"].runToolLoop([text("go")]).promise).toEqual({
       type: "completed",
       stopReason: "context_budget",
     });
@@ -322,15 +316,12 @@ describe("preflight token count parity", () => {
       },
     });
 
-    const sendPromise = openaiThread["core"].runToolLoop(
-      [
-        {
-          type: "text",
-          text: "go",
-        },
-      ],
-      new AbortController().signal,
-    );
+    const sendPromise = openaiThread["core"].runToolLoop([
+      {
+        type: "text",
+        text: "go",
+      },
+    ]).promise;
     const stream = await openai.mockClient.awaitStream();
     stream.finishResponse("end_turn", { inputTokens: 100, outputTokens: 1 });
     expect(await sendPromise).toEqual({

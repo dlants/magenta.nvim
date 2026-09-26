@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import type * as ToolManager from "../tool-types.ts";
 import type { ToolName, ToolRequest } from "../tool-types.ts";
+import type { Task } from "../utils/async.ts";
 import type { Result } from "../utils/result.ts";
 
 export const PROVIDER_NAMES = [
@@ -368,12 +369,10 @@ export interface NativeInferenceManager {
   getNativeMessageIdx(): NativeMessageIdx;
   truncateMessages(messageIdx: NativeMessageIdx): void;
   clone(): NativeInferenceManager;
-  countTokens?(abortSignal: AbortSignal): Promise<number>;
-  /** Aborting `abortSignal` aborts this request and nothing else. */
-  sendRequest(
-    onEvent: OnStreamEvent,
-    abortSignal: AbortSignal,
-  ): Promise<RequestResult>;
+  /** Rejects on real failures; an abort resolves `aborted`. */
+  countTokens?(): Task<number | { type: "aborted" }>;
+  /** Aborting the returned task aborts this request and nothing else. */
+  sendRequest(onEvent: OnStreamEvent): Task<RequestResult>;
 }
 
 export type FinalizeReason =

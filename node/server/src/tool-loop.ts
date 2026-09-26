@@ -21,6 +21,7 @@ import type {
 } from "./thread-api.ts";
 import * as YieldToParent from "./tools/yield-to-parent.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
+import type { Task } from "./utils/async.ts";
 
 export type ToolOutcome =
   | { type: "continue"; results: ToolResults }
@@ -29,8 +30,7 @@ export type ToolOutcome =
 export type ToolExecutor = (
   requests: NonEmptyRequestedTools,
   publishTools: (tools: ToolInvocationState) => void,
-  abortSignal: AbortSignal,
-) => Promise<ToolOutcome>;
+) => Task<ToolOutcome>;
 
 export type ToolLoopActivity =
   | { type: "preparing" }
@@ -47,9 +47,9 @@ export type ToolLoopActivity =
       tools: ToolInvocationState;
     };
 
-export type ToolLoop = {
+export type ToolLoop = Task<ToolLoopResult> & {
   readonly activity: ToolLoopActivity;
-  promise: Promise<ToolLoopResult>;
+  readonly aborting: boolean;
 };
 
 export type ToolLoopDeps = {
@@ -57,25 +57,29 @@ export type ToolLoopDeps = {
   manager: NativeInferenceManager;
   onUpdate?: () => void;
   executeTools: ToolExecutor;
-  onBeforeRequest: (abortSignal: AbortSignal) => Promise<AgentInput[]>;
+  onBeforeRequest: () => Promise<AgentInput[]>;
   /** After injections and input are in the log, before the request. */
-  checkBudget: (
-    abortSignal: AbortSignal,
-  ) => Promise<BudgetDecision | { type: "aborted" }>;
+  checkBudget: () => Task<BudgetDecision | { type: "aborted" }>;
   onToolResults: ToolResultsHook;
 };
 
 /** One tool loop - iterating through tool invocations until the agent decides to stop.
  */
-export function runToolLoop(
-  deps: ToolLoopDeps,
-  input: AgentInput[],
-  abortSignal: AbortSignal,
-): ToolLoop {
+export function runToolLoop(deps: ToolLoopDeps, input: AgentInput[]): ToolLoop {
   const { logger, manager } = deps;
   let activity: ToolLoopActivity = { type: "preparing" };
-  const onAbort = () => deps.onUpdate?.();
-  abortSignal.addEventListener("abort", onAbort, { once: true });
+  let aborted = false;
+  let settled = false;
+  // Installed synchronously when a child starts, cleared once it settles.
+  let current: Task<unknown> | undefined;
+  const run = async <T>(child: Task<T>): Promise<T> => {
+    current = child;
+    try {
+      return await child.promise;
+    } finally {
+      current = undefined;
+    }
+  };
   const updateLoopState = (next: ToolLoopActivity) => {
     activity = next;
     deps.onUpdate?.();
@@ -84,12 +88,12 @@ export function runToolLoop(
   const runLoop = async (): Promise<ToolLoopResult> => {
     let initialInputPending = true;
     // The loop learns of an abort from its children's results. It checks its
-    // own signal only in the gaps, before starting the next child.
+    // own flag only in the gaps, before starting the next child.
     while (true) {
-      if (abortSignal.aborted) return { type: "aborted" };
+      if (aborted) return { type: "aborted" };
       updateLoopState({ type: "preparing" });
       // Injections always land, so a budget stop hands them to compaction.
-      const injections = await deps.onBeforeRequest(abortSignal);
+      const injections = await deps.onBeforeRequest();
       if (injections.length > 0) {
         manager.appendUserMessage(injections);
       }
@@ -98,37 +102,38 @@ export function runToolLoop(
         initialInputPending = false;
       }
 
-      if (abortSignal.aborted) return { type: "aborted" };
-      const budget = await deps.checkBudget(abortSignal);
-      if (budget.type === "aborted" || abortSignal.aborted)
-        return { type: "aborted" };
+      if (aborted) return { type: "aborted" };
+      const budget = await run(deps.checkBudget());
+      if (budget.type === "aborted" || aborted) return { type: "aborted" };
       if (budget.type === "stop") {
         return { type: "completed", stopReason: "context_budget" };
       }
 
-      const request = manager.sendRequest((event) => {
-        if (activity.type !== "streaming") return;
-        activity.lastEventTime = new Date();
-        switch (event.type) {
-          case "streaming-block":
-            activity.block = event.streamingBlock;
-            break;
-          case "block-finished":
-            activity.block = undefined;
-            break;
-          case "retry-scheduled":
-            activity.retry = event.retry;
-            activity.block = undefined;
-            break;
-          case "attempt-started":
-            activity.retry = undefined;
-            activity.block = undefined;
-            break;
-          default:
-            assertUnreachable(event);
-        }
-        deps.onUpdate?.();
-      }, abortSignal);
+      const request = run(
+        manager.sendRequest((event) => {
+          if (activity.type !== "streaming") return;
+          activity.lastEventTime = new Date();
+          switch (event.type) {
+            case "streaming-block":
+              activity.block = event.streamingBlock;
+              break;
+            case "block-finished":
+              activity.block = undefined;
+              break;
+            case "retry-scheduled":
+              activity.retry = event.retry;
+              activity.block = undefined;
+              break;
+            case "attempt-started":
+              activity.retry = undefined;
+              activity.block = undefined;
+              break;
+            default:
+              assertUnreachable(event);
+          }
+          deps.onUpdate?.();
+        }),
+      );
       const now = new Date();
       updateLoopState({
         type: "streaming",
@@ -152,16 +157,14 @@ export function runToolLoop(
       let publishingTools = true;
       let toolState: ToolInvocationState = { type: "pending" };
       try {
-        const execution = deps.executeTools(
-          requested,
-          (tools) => {
+        const execution = run(
+          deps.executeTools(requested, (tools) => {
             toolState = tools;
             if (publishingTools && activity.type === "running_tools") {
               activity.tools = tools;
               deps.onUpdate?.();
             }
-          },
-          abortSignal,
+          }),
         );
         updateLoopState({
           type: "running_tools",
@@ -221,13 +224,24 @@ export function runToolLoop(
         error: error instanceof Error ? error : new Error(String(error)),
       };
     })
-    .finally(() => abortSignal.removeEventListener("abort", onAbort));
+    .finally(() => {
+      settled = true;
+    });
 
   return {
     get activity() {
       return activity;
     },
+    get aborting() {
+      return aborted;
+    },
     promise,
+    abort() {
+      if (aborted || settled) return;
+      aborted = true;
+      current?.abort();
+      deps.onUpdate?.();
+    },
   };
 }
 

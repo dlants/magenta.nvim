@@ -869,9 +869,17 @@ export class Thread implements ThreadCoreView {
       try {
         notify("onToolLoopStart", core.manager.getPendingUserMessageIdx());
         this.toolLoopSubmission = submission;
-        const result = await submission.settled(() =>
-          core.runToolLoop(input, submission.abortSignal),
-        );
+        // Temporary shim until ActiveSubmission joins Tasks directly.
+        const result = await submission.settled(() => {
+          const loop = core.runToolLoop(input);
+          const signal = submission.abortSignal;
+          const abort = () => loop.abort();
+          if (signal.aborted) abort();
+          signal.addEventListener("abort", abort, { once: true });
+          return loop.promise.finally(() =>
+            signal.removeEventListener("abort", abort),
+          );
+        });
         return result === ABORTED ? { type: "aborted" } : result;
       } finally {
         if (this.toolLoopSubmission === submission)

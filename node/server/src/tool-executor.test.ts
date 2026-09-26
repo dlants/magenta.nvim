@@ -52,12 +52,11 @@ describe("executeToolBatch", () => {
       },
       publishTools: () => {},
       onUpdate: () => {},
-      abortSignal: new AbortController().signal,
     };
     const outcome = await executeToolBatch(
       [{ id: request.id, request: { status: "ok", value: request } }],
       deps,
-    );
+    ).promise;
     const completed = completedTools.get(request.id);
     expect(completed).toBeDefined();
     expect(completed?.request).toBe(request);
@@ -88,9 +87,7 @@ describe("executeToolBatch", () => {
       abort,
     };
     const completedTools = new Map<ToolRequestId, CompletedToolInfo>();
-    const controller = new AbortController();
     const deps = {
-      abortSignal: controller.signal,
       completedTools,
       createTool: () => invocation,
       publishTools: () => {},
@@ -106,8 +103,8 @@ describe("executeToolBatch", () => {
     ];
 
     const execution = executeToolBatch(requests, deps);
-    controller.abort();
-    const outcome = await execution;
+    execution.abort();
+    const outcome = await execution.promise;
     expect(abort).toHaveBeenCalled();
     expect(outcome.type).toBe("aborted");
     expect(outcome.results.get(request.id)).toEqual({
@@ -119,5 +116,56 @@ describe("executeToolBatch", () => {
       result: { result: { status: "error", error: "aborted" } },
       structuredResult: undefined,
     });
+  });
+  it("aborts invocations created after an abort lands mid-batch", async () => {
+    const aborts: string[] = [];
+    let execution!: ReturnType<typeof executeToolBatch>;
+    const requestFor = (id: string): ToolRequest =>
+      ({
+        id: id as ToolRequestId,
+        toolName: "get_files" as ToolName,
+        input: { files: [{ filePath: "/tmp/a.txt" }] },
+      }) as ToolRequest;
+    const deps = {
+      completedTools: new Map<ToolRequestId, CompletedToolInfo>(),
+      createTool: (request: ToolRequest): ToolInvocation => {
+        let settle!: () => void;
+        const promise = new Promise<ExecutedToolResult>((resolve) => {
+          settle = () =>
+            resolve({
+              type: "tool_result",
+              id: request.id,
+              result: { status: "error", error: "aborted" },
+            });
+        });
+        // The first creation aborts the batch before the second is created.
+        if (request.id === "tool-1") execution.abort();
+        return {
+          promise,
+          abort: () => {
+            aborts.push(request.id);
+            settle();
+          },
+        };
+      },
+      publishTools: () => {},
+      onUpdate: () => {},
+    };
+    const requests: NonEmptyRequestedTools = [
+      {
+        id: "tool-1" as ToolRequestId,
+        request: { status: "ok", value: requestFor("tool-1") },
+      },
+      {
+        id: "tool-2" as ToolRequestId,
+        request: { status: "ok", value: requestFor("tool-2") },
+      },
+    ];
+    execution = executeToolBatch(requests, deps);
+    const outcome = await execution.promise;
+    expect(outcome.type).toBe("aborted");
+    expect(aborts.sort()).toEqual(["tool-1", "tool-2"]);
+    execution.abort();
+    expect(aborts).toHaveLength(2);
   });
 });

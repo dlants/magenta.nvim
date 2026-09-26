@@ -4,7 +4,7 @@ import type { Logger } from "../logger.ts";
 import type { ReasoningEffort, ReasoningSummary } from "../provider-options.ts";
 import type { ToolName, ToolRequestId, ValidateInput } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { abortableDelay } from "../utils/async.ts";
+import { abortableDelay, type Task } from "../utils/async.ts";
 import {
   describeError,
   flattenError,
@@ -16,7 +16,6 @@ import {
   assertCompleteToolResults,
   getRetryDelay,
   MAX_RETRY_DURATION,
-  withAbort,
   wrapStreamAbortSignalWithTimeout,
 } from "./inference-shared.ts";
 import {
@@ -464,7 +463,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     return this.request.type === "running" && this.request.aborted;
   }
 
-  abort(): void {
+  private abort(): void {
     if (this.request.type !== "running") return;
     this.request.aborted = true;
     this.requestAbortController?.abort();
@@ -511,11 +510,8 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       .map((block) => ({ id: block.id, request: block.request }));
   }
 
-  sendRequest(
-    onEvent: OnStreamEvent,
-    abortSignal: AbortSignal,
-  ): Promise<RequestResult> {
-    return withAbort(this.runRequest(onEvent), abortSignal, () => this.abort());
+  sendRequest(onEvent: OnStreamEvent): Task<RequestResult> {
+    return { promise: this.runRequest(onEvent), abort: () => this.abort() };
   }
 
   /** One provider request, including the retry/backoff budget. */

@@ -62,7 +62,7 @@ import { clientToolCreator } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
-import { pollUntil } from "./utils/async.ts";
+import { pollUntil, type Task } from "./utils/async.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
 export const TEST_ARCHIVE_DIR = path.join(os.tmpdir(), "magenta-test-archive");
 
@@ -108,11 +108,12 @@ function restResult(
 }
 /** The bare-agent harness's stand-in for the thread: it owns the loop state
  * the same way, so what a test observes is what production observes. */
-/** A tool loop plus the abort that production owners hold as a abortSignal. */
-export type TestToolLoop = ToolLoop & {
-  abort(): void;
-  readonly aborting: boolean;
-};
+export type TestToolLoop = ToolLoop;
+
+/** A task over work that cannot be interrupted: `abort` is a no-op. */
+export function uninterruptible<T>(value: T | Promise<T>): Task<T> {
+  return { promise: Promise.resolve(value), abort: () => {} };
+}
 
 export class TestAgent {
   readonly manager: NativeInferenceManager;
@@ -136,18 +137,8 @@ export class TestAgent {
   }
 
   send(messages: AgentInput[] = []): TestToolLoop {
-    const controller = new AbortController();
-    const turn = runToolLoop(this.deps, messages, controller.signal);
-    const handle: TestToolLoop = {
-      get activity() {
-        return turn.activity;
-      },
-      abort: () => controller.abort(),
-      get aborting() {
-        return controller.signal.aborted;
-      },
-      promise: turn.promise,
-    };
+    const turn = runToolLoop(this.deps, messages);
+    const handle: TestToolLoop = turn;
     this.turn = handle;
     const promise = turn.promise.then(
       (result) => {
@@ -182,9 +173,9 @@ export class TestAgent {
       get activity() {
         return turn.activity;
       },
-      abort: () => controller.abort(),
+      abort: () => turn.abort(),
       get aborting() {
-        return controller.signal.aborted;
+        return turn.aborting;
       },
       promise,
     };
@@ -415,15 +406,19 @@ function buildTestAgent(
   };
   const executeTools: ToolExecutor =
     opts.executeTools ??
-    ((requests, publishTools, abortSignal) =>
-      executeToolBatch(requests, { ...deps, publishTools, abortSignal }));
+    ((requests, publishTools) =>
+      executeToolBatch(requests, { ...deps, publishTools }));
   const agent = new TestAgent({
     logger: context.logger,
     manager,
     executeTools,
     onBeforeRequest: opts.onBeforeRequest ?? (() => Promise.resolve([])),
     checkBudget:
-      opts.checkBudget ?? (() => Promise.resolve({ type: "proceed" })),
+      opts.checkBudget ??
+      (() => ({
+        promise: Promise.resolve({ type: "proceed" }),
+        abort: () => {},
+      })),
     onToolResults: opts.onToolResults ?? (() => undefined),
     onUpdate: opts.onUpdate ?? (() => {}),
   });

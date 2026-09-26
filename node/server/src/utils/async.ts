@@ -138,3 +138,7 @@ export function withTimeout<T>(
     }),
   ]);
 }
+
+/** A cancellable unit of our own work. `abort` only interrupts; the result,
+ * including its aborted variant, arrives on `promise`. */
+export type Task<T> = { readonly promise: Promise<T>; abort(): void };
