@@ -4,6 +4,7 @@ import type { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream.mjs";
 import type { Logger } from "../logger.ts";
 import type { ToolName, ToolRequestId, ValidateInput } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
+import { abortableDelay } from "../utils/async.ts";
 import {
   stripTrailingThinkingBlocks,
   withCacheControl,
@@ -437,9 +438,9 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
    * apart from the `retry` updates. */
   sendRequest(
     onEvent: OnStreamEvent,
-    signal: AbortSignal,
+    abortSignal: AbortSignal,
   ): Promise<RequestResult> {
-    return withAbort(this.runRequest(onEvent), signal, () => this.abort());
+    return withAbort(this.runRequest(onEvent), abortSignal, () => this.abort());
   }
 
   private async runRequest(onEvent: OnStreamEvent): Promise<RequestResult> {
@@ -535,8 +536,8 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       const messagesWithCache = withCacheControl(
         stripTrailingThinkingBlocks(this.messages),
       );
-      const signal = this.requestAbortController?.signal;
-      if (!signal) return { type: "aborted" };
+      const abortSignal = this.requestAbortController?.signal;
+      if (!abortSignal) return { type: "aborted" };
       const request = this.client.messages.stream({
         ...this.params,
         messages: messagesWithCache,
@@ -571,14 +572,14 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       try {
         const result = await wrapStreamAbortSignalWithTimeout(
           request.finalMessage(),
-          signal,
+          abortSignal,
         );
-        if (result === ABORT_TIMED_OUT || signal.aborted) {
+        if (result === ABORT_TIMED_OUT || abortSignal.aborted) {
           return { type: "aborted" };
         }
         return { type: "completed", response: result };
       } catch (error) {
-        if (signal.aborted || request.controller.signal.aborted) {
+        if (abortSignal.aborted || request.controller.signal.aborted) {
           return { type: "aborted" };
         }
         return {
@@ -653,30 +654,16 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       // Wait for the delay, but allow abort to cancel
       this.retryAbortController = new AbortController();
       const abortSignal = this.retryAbortController.signal;
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(resolve, delay);
-          abortSignal.addEventListener(
-            "abort",
-            () => {
-              clearTimeout(timer);
-              reject(new DOMException("Aborted", "AbortError"));
-            },
-            { once: true },
-          );
-        });
-      } catch {
-        this.retryAbortController = undefined;
-        return { type: "aborted" };
-      }
+      const waited = await abortableDelay(delay, abortSignal);
       this.retryAbortController = undefined;
+      if (waited === "aborted") return { type: "aborted" };
       attempt++;
     }
   }
 
   /** The conversation as it would be sent right now. Preflight and awaited:
    * whoever asked for it is deciding about this request. */
-  async countTokens(signal: AbortSignal): Promise<number> {
+  async countTokens(abortSignal: AbortSignal): Promise<number> {
     const messagesWithCache = withCacheControl(
       stripTrailingThinkingBlocks(this.messages),
     );
@@ -690,7 +677,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       countParams.tool_choice = this.params.tool_choice;
     if (this.params.thinking) countParams.thinking = this.params.thinking;
     const result = await this.client.messages.countTokens(countParams, {
-      signal,
+      signal: abortSignal,
     });
     return result.input_tokens;
   }

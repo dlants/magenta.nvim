@@ -52,7 +52,7 @@ describe("executeToolBatch", () => {
       },
       publishTools: () => {},
       onUpdate: () => {},
-      signal: new AbortController().signal,
+      abortSignal: new AbortController().signal,
     };
     const outcome = await executeToolBatch(
       [{ id: request.id, request: { status: "ok", value: request } }],
@@ -90,7 +90,7 @@ describe("executeToolBatch", () => {
     const completedTools = new Map<ToolRequestId, CompletedToolInfo>();
     const controller = new AbortController();
     const deps = {
-      signal: controller.signal,
+      abortSignal: controller.signal,
       completedTools,
       createTool: () => invocation,
       publishTools: () => {},

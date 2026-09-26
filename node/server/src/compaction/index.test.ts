@@ -89,7 +89,7 @@ describe("compaction submission ownership", () => {
       message: pendingMessage("@compact"),
     });
     await Promise.resolve();
-    expect(thread.loopState).toMatchObject({ type: "running" });
+    expect(thread.state).toMatchObject({ type: "running" });
     await thread.abort();
     probe.resolve(true);
     expect(await previous).toEqual({ type: "aborted" });
@@ -232,16 +232,21 @@ describe("compaction submission ownership", () => {
       message: pendingMessage("@compact"),
     });
     await entered.promise;
-    if (action === "reset")
-      await resetThread(thread, { archive: { type: "none" } });
-    else if (action === "abort") await thread.abort();
-    else await thread.destroy();
-    const replacement = thread["core"];
+    // The compaction run is joined, so the action settles only once the run
+    // has; the run ignores its signal and completes with a stale summary.
+    const acting =
+      action === "reset"
+        ? resetThread(thread, { archive: { type: "none" } })
+        : action === "abort"
+          ? thread.abort()
+          : thread.destroy();
     outcome.resolve({
       type: "complete",
       summary: { text: "stale", chunkCount: 1 },
       next: [],
     });
+    await acting;
+    const replacement = thread["core"];
     expect(await sent).toEqual({ type: "aborted" });
     expect(thread["core"]).toBe(replacement);
     expect(mockClient.streams).toHaveLength(0);
@@ -281,7 +286,7 @@ describe("ThreadCompactor cancellation", () => {
       threadManager: thread["context"].threadManager,
     });
     // A submission's compaction is cancelled through the submission's own
-    // signal; driving the compactor directly, the test owns that signal.
+    // abortSignal; driving the compactor directly, the test owns that abortSignal.
     const cancellation = new AbortController();
     const run = compactor.run(
       [
@@ -323,7 +328,7 @@ describe("ThreadCompactor cancellation", () => {
 
 it("a late first spawn cannot overwrite a newer compaction", async () => {
   const firstSpawn = new Defer<ThreadId>();
-  const childResult = new Defer<import("../thread-api.ts").ThreadResult>();
+  const childResult = new Defer<import("../thread-api.ts").ThreadOutcome>();
   const deleted: ThreadId[] = [];
   let spawnCount = 0;
   const newerChild = "newer-child" as ThreadId;
@@ -384,7 +389,7 @@ it.each([
   "reset",
   "destroy-after-yield",
 ] as const)("%s deletes the compactor child and settles a parked run", async (action) => {
-  const childResult = new Defer<import("../thread-api.ts").ThreadResult>();
+  const childResult = new Defer<import("../thread-api.ts").ThreadOutcome>();
   const waiting = new Defer<void>();
   const deleted: ThreadId[] = [];
   const child = "parked-child" as ThreadId;
@@ -531,8 +536,8 @@ describe("complete submission ownership", () => {
       {
         compaction: {
           compactor: {
-            run: (_messages, _prompt, signal) => {
-              entered.resolve(signal);
+            run: (_messages, _prompt, abortSignal) => {
+              entered.resolve(abortSignal);
               return summary.promise;
             },
           },
@@ -550,8 +555,8 @@ describe("complete submission ownership", () => {
       type: "raw",
       message: pendingMessage("@compact"),
     });
-    const signal = await entered.promise;
-    expect(thread.loopState).toMatchObject({
+    const abortSignal = await entered.promise;
+    expect(thread.state).toMatchObject({
       type: "running",
       activity: { type: "preparing" },
     });
@@ -582,7 +587,7 @@ describe("complete submission ownership", () => {
       },
       delivery,
     );
-    expect(signal.aborted).toBe(false);
+    expect(abortSignal.aborted).toBe(false);
     expect(resolutions).toEqual(["@compact"]);
     summary.resolve({
       type: "complete",
@@ -723,12 +728,13 @@ describe("complete submission ownership", () => {
         .flatMap((m) => m.content)
         .filter((c) => c.type === "text" && c.text === "original content"),
     ).toHaveLength(1);
-    if (cancel) await thread.abort();
+    const aborting = cancel ? thread.abort() : undefined;
     outcome.resolve({
       type: "complete",
       summary: { text: "retried history", chunkCount: 1 },
       next: handed,
     });
+    await aborting;
     if (cancel) {
       expect(await retry).toEqual({ type: "aborted" });
       expect(mockClient.streams).toHaveLength(1);
@@ -799,15 +805,22 @@ describe("complete submission ownership", () => {
     });
     await spawning.promise;
     let replacement: ReturnType<typeof thread.submit> | undefined;
-    if (action === "abort") await thread.abort();
-    else if (action === "destroy") await thread.destroy();
-    else
+    // The spawn cannot be interrupted, and the run that owns it is joined:
+    // the action settles once the late child has been cleaned up.
+    const acting =
+      action === "abort"
+        ? thread.abort()
+        : action === "destroy"
+          ? thread.destroy()
+          : undefined;
+    if (action === "supersede")
       replacement = thread.submit({
         type: "resolved",
         messages: [text("replacement")],
       });
     const child = "late-public-child" as ThreadId;
     spawn.resolve(child);
+    await acting;
     expect(await sent).toEqual({ type: "aborted" });
     expect(deleted).toEqual([child]);
     if (replacement) {
@@ -822,7 +835,7 @@ describe("complete submission ownership", () => {
     await thread.destroy();
   });
 });
-describe("submission-owned compaction signal", () => {
+describe("submission-owned compaction abortSignal", () => {
   const text = (value: string) => ({
     type: "text" as const,
     text: value,
@@ -830,13 +843,13 @@ describe("submission-owned compaction signal", () => {
   const startCompactingThread = (id: string) => {
     const entered = new Defer<void>();
     const outcome = new Defer<CompactionOutcome>();
-    let signal: AbortSignal | undefined;
+    let abortSignal: AbortSignal | undefined;
     const { core: thread, mockClient } = createAgentWithMock(
       {
         compaction: {
           compactor: {
             run: (_messages, _prompt, runSignal) => {
-              signal = runSignal;
+              abortSignal = runSignal;
               entered.resolve();
               return outcome.promise;
             },
@@ -856,25 +869,26 @@ describe("submission-owned compaction signal", () => {
       sent,
       entered,
       outcome,
-      signalOf: () => signal,
+      signalOf: () => abortSignal,
     };
   };
-  it("abort cancels the signal handed to the compactor", async () => {
+  it("abort cancels the abortSignal handed to the compactor", async () => {
     const { thread, sent, entered, outcome, signalOf } = startCompactingThread(
-      "compaction-signal-abort",
+      "compaction-abortSignal-abort",
     );
     await entered.promise;
     expect(signalOf()?.aborted).toBe(false);
-    await thread.abort();
+    const aborting = thread.abort();
     expect(signalOf()?.aborted).toBe(true);
     outcome.resolve({ type: "aborted" });
+    await aborting;
     expect(await sent).toEqual({ type: "aborted" });
     expect(thread.isBusy).toBe(false);
     await thread.destroy();
   });
   it("a reset during compaction cancels it and leaves the thread at rest", async () => {
     const { thread, sent, entered, outcome, signalOf } = startCompactingThread(
-      "compaction-signal-reset",
+      "compaction-abortSignal-reset",
     );
     await entered.promise;
     await resetThread(thread, { archive: { type: "none" } });

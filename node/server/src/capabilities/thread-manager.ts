@@ -1,5 +1,5 @@
 import type { SubagentConfig, ThreadId, ThreadType } from "../chat-types.ts";
-import type { ThreadResult } from "../thread-api.ts";
+import type { Aborted, ThreadOutcome } from "../thread-api.ts";
 import type { NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
 import type { FileIO } from "./file-io.ts";
 
@@ -25,7 +25,7 @@ export interface ThreadManager {
     /** Seeds the thread's title, so it is identifiable in the thread tree
      * before it has said anything. */
     label?: string;
-  }): Promise<ThreadId>;
+  }): Promise<ThreadId | Aborted>;
 
   /** Delete a thread and its descendants. Any `awaitThreadResult` on them
    * settles `aborted`. */
@@ -34,5 +34,5 @@ export interface ThreadManager {
   /** Resolves when the thread finishes — an accepted yield, or a teardown
    * that beat it. A promise rather than a poll plus a callback registry, so
    * the "did I miss the edge" guard every consumer used to need is gone. */
-  awaitThreadResult(threadId: ThreadId): Promise<ThreadResult>;
+  awaitThreadResult(threadId: ThreadId): Promise<ThreadOutcome>;
 }

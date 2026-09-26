@@ -10,6 +10,7 @@ import type {
   ValidateInput,
 } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
+import { abortableDelay } from "../utils/async.ts";
 import { extendError, type Result } from "../utils/result.ts";
 import { withCacheControl } from "./anthropic-cache.ts";
 import {
@@ -393,22 +394,9 @@ export class AnthropicProvider implements Provider {
           }
           const delay = getRetryDelay(attempt);
           retryAbortController = new AbortController();
-          const signal = retryAbortController.signal;
-          try {
-            await new Promise<void>((resolve, reject) => {
-              const timer = setTimeout(resolve, delay);
-              signal.addEventListener(
-                "abort",
-                () => {
-                  clearTimeout(timer);
-                  reject(new DOMException("Aborted", "AbortError"));
-                },
-                { once: true },
-              );
-            });
-          } catch {
+          const abortSignal = retryAbortController.signal;
+          if ((await abortableDelay(delay, abortSignal)) === "aborted")
             throw error;
-          }
           retryAbortController = undefined;
           attempt++;
           currentRequest = this.client.messages.stream(streamParams);

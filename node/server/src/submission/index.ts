@@ -3,7 +3,7 @@ import type { QueueEntry } from "./mailbox.ts";
 
 /** When a parsed submission is delivered.
  * - `now`: abort whatever is running and send immediately
- * - `async`: inject into the current turn at the earliest opportunity (@async)
+ * - `async`: inject into the current tool loop at the earliest opportunity (@async)
  * - `next`: wait until the agent next stops (@next) */
 export type Delivery = "now" | "async" | "next";
 

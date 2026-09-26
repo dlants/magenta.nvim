@@ -7,7 +7,6 @@ import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { Compactor } from "./compaction/index.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
-import type { ThreadLoopState } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import { anthropicInferenceOptions } from "./providers/anthropic.ts";
 import {
@@ -42,14 +41,20 @@ import {
 } from "./submission/index.ts";
 import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { type ContextDelivery, Thread, type ThreadContext } from "./thread.ts";
-import type { RestResult, ToolLoopResult, YieldValue } from "./thread-api.ts";
+import type {
+  SubmissionResult,
+  ToolLoopResult,
+  YieldValue,
+} from "./thread-api.ts";
+import { ABORTED, type Aborted } from "./thread-api.ts";
 import { archiveThread } from "./thread-logger.ts";
+import type { ThreadState } from "./thread-state.ts";
 import { executeToolBatch } from "./tool-executor.ts";
 import {
-  type LoopState,
   runToolLoop,
   type ToolExecutor,
   type ToolLoop,
+  type ToolLoopActivity,
   type ToolLoopDeps,
 } from "./tool-loop.ts";
 import type { ClientToolContext } from "./tools/create-tool.ts";
@@ -82,16 +87,16 @@ export const defaultAnthropicOptions: AnthropicInferenceOptions = {
  * submission ended is dropped: this is "what is the loop doing", and
  * `lastResult` is asserted on its own. */
 export function flatLoop(owner: {
-  loopState: ThreadLoopState;
-}): LoopState | { type: "idle" } {
-  const state = owner.loopState;
+  state: ThreadState;
+}): ToolLoopActivity | { type: "idle" } {
+  const state = owner.state;
   return state.type === "running" ? state.activity : { type: "idle" };
 }
 
 /** A loop `yield` is Thread's to resolve and has no rest-shaped form here. */
 function restResult(
   result: ToolLoopResult | undefined,
-): RestResult | undefined {
+): SubmissionResult | undefined {
   if (result?.type === "completed") {
     const { stopReason } = result;
     return stopReason === "context_budget"
@@ -103,8 +108,11 @@ function restResult(
 }
 /** The bare-agent harness's stand-in for the thread: it owns the loop state
  * the same way, so what a test observes is what production observes. */
-/** A turn plus the abort that production owners hold as a signal. */
-export type TestTurn = ToolLoop & { abort(): void; readonly aborting: boolean };
+/** A tool loop plus the abort that production owners hold as a abortSignal. */
+export type TestToolLoop = ToolLoop & {
+  abort(): void;
+  readonly aborting: boolean;
+};
 
 export class TestAgent {
   readonly manager: NativeInferenceManager;
@@ -113,11 +121,11 @@ export class TestAgent {
     this.manager = deps.manager;
   }
 
-  get loopState(): ThreadLoopState {
+  get state(): ThreadState {
     return this.turn
       ? {
           type: "running",
-          activity: this.turn.loopState,
+          activity: this.turn.activity,
           aborting: this.turn.aborting,
         }
       : { type: "idle", lastResult: restResult(this.lastResult) };
@@ -127,12 +135,12 @@ export class TestAgent {
     return this.manager.log.messages;
   }
 
-  send(messages: AgentInput[] = []): TestTurn {
+  send(messages: AgentInput[] = []): TestToolLoop {
     const controller = new AbortController();
     const turn = runToolLoop(this.deps, messages, controller.signal);
-    const handle: TestTurn = {
-      get loopState() {
-        return turn.loopState;
+    const handle: TestToolLoop = {
+      get activity() {
+        return turn.activity;
       },
       abort: () => controller.abort(),
       get aborting() {
@@ -143,7 +151,7 @@ export class TestAgent {
     this.turn = handle;
     const promise = turn.promise.then(
       (result) => {
-        // Mirrors ThreadCore's abort bookkeeping around the turn.
+        // Mirrors ThreadCore's abort bookkeeping around the tool loop.
         if (result.type === "aborted") {
           this.manager.appendUserMessage([
             {
@@ -171,8 +179,8 @@ export class TestAgent {
       },
     );
     return {
-      get loopState() {
-        return turn.loopState;
+      get activity() {
+        return turn.activity;
       },
       abort: () => controller.abort(),
       get aborting() {
@@ -182,11 +190,11 @@ export class TestAgent {
     };
   }
 
-  private turn: TestTurn | undefined;
+  private turn: TestToolLoop | undefined;
   private lastResult: ToolLoopResult | undefined;
 
   /** What `Thread.abort` does, for the tests that drive an agent without one:
-   * mark the loop and wind the turn down through its handle. */
+   * mark the loop and wind the tool loop down through its handle. */
   async abortAndWait(): Promise<void> {
     const turn = this.turn;
     if (!turn) return;
@@ -407,8 +415,8 @@ function buildTestAgent(
   };
   const executeTools: ToolExecutor =
     opts.executeTools ??
-    ((requests, publishTools, signal) =>
-      executeToolBatch(requests, { ...deps, publishTools, signal }));
+    ((requests, publishTools, abortSignal) =>
+      executeToolBatch(requests, { ...deps, publishTools, abortSignal }));
   const agent = new TestAgent({
     logger: context.logger,
     manager,
@@ -423,7 +431,7 @@ function buildTestAgent(
 }
 
 /** An `Agent` on a mock anthropic client, with no thread around it: the
- * harness for the turn loop itself. */
+ * harness for the tool loop itself. */
 export function createTestAgent(
   opts?: TestAgentOpts & {
     anthropicOptions?: Partial<AnthropicInferenceOptions>;
@@ -489,12 +497,12 @@ export function createTestOpenAIAgent(
   };
 }
 
-/** One turn's worth of user input. */
+/** One submission's worth of user input. */
 export const userInput = (text: string): AgentInput[] => [
   { type: "text", text },
 ];
 
-/** Drive one turn through the agent's only entry point. */
+/** Drive one tool loop through the agent's only entry point. */
 export const sendText = (
   agent: TestAgent,
   text: string,
@@ -520,6 +528,14 @@ export const userTexts = (thread: Thread): string[] =>
             .map((c) => (c as { text: string }).text),
     );
 
+/** Unwrap a thread creation that the test expects to succeed. */
+export async function created(
+  creation: Promise<ThreadId | Aborted>,
+): Promise<ThreadId> {
+  const id = await creation;
+  if (id === ABORTED) throw new Error("thread creation was aborted");
+  return id;
+}
 export function uniqueThreadId(prefix: string): ThreadId {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}` as ThreadId;
 }

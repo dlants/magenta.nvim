@@ -7,14 +7,14 @@ import type {
 } from "@magenta/server";
 import {
   type AgentInput,
+  activeTools,
   type CompactionRunId,
   type ContextFiles,
-  loopActiveTools,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
-  type RestResult,
   renderPending,
   type Submission,
+  type SubmissionResult,
   type Thread,
   type ThreadCompactor,
   type ThreadId,
@@ -161,7 +161,7 @@ export type Msg =
       type: "animation-tick";
     }
   | {
-      type: "turn-ended";
+      type: "submission-ended";
     }
   | {
       type: "toggle-compaction-record";
@@ -359,7 +359,7 @@ export class NvimThread {
   }
 
   /** Observe one complete submission for UI completion and error presentation. */
-  private observeSubmission(start: () => Promise<RestResult>): void {
+  private observeSubmission(start: () => Promise<SubmissionResult>): void {
     start().then(
       (result) => this.handleSendResult(result),
       (e: Error) => this.context.nvim.logger.error(e),
@@ -370,12 +370,12 @@ export class NvimThread {
     this.submission = { type: "in-flight", text };
   }
 
-  private handleSendResult(result: RestResult): void {
-    this.myDispatch({ type: "turn-ended" });
+  private handleSendResult(result: SubmissionResult): void {
+    this.myDispatch({ type: "submission-ended" });
     if (result.type === "completed" || result.type === "failed") {
       notifyUser(
         { nvim: this.context.nvim, options: this.context.options },
-        "thread-turn-end",
+        "thread-submission-end",
       );
     }
     const submission = this.submission;
@@ -407,7 +407,7 @@ export class NvimThread {
     // submitted back to the agent (e.g. mid tool_use turn while other tools
     // are still running). The rendering layer needs these to display custom
     // result summaries as soon as the tool completes.
-    const active = loopActiveTools(this.thread.loopState);
+    const active = activeTools(this.thread.state);
     if (active) {
       for (const entry of active.values()) {
         if (entry.result && !next.has(entry.request.id)) {
@@ -449,7 +449,7 @@ export class NvimThread {
     }
   }
 
-  /** A send that preempts the turn in flight also drops that turn's pending
+  /** A send that preempts the tool loop in flight also drops that loop's pending
    * sandbox approvals: they belong to the work being abandoned. */
   private rejectPendingSandboxApprovals(): void {
     if (this.thread.isBusy) {
@@ -501,8 +501,7 @@ export class NvimThread {
         return;
       }
       case "abort": {
-        for (const entry of loopActiveTools(this.thread.loopState)?.values() ??
-          []) {
+        for (const entry of activeTools(this.thread.state)?.values() ?? []) {
           entry.handle.abort();
         }
         this.abortAndWait().catch((e: Error) => {
@@ -672,7 +671,7 @@ export class NvimThread {
         }
         return;
 
-      case "turn-ended":
+      case "submission-ended":
         return;
 
       case "toggle-compaction-record": {

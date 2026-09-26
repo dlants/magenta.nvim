@@ -22,10 +22,6 @@ import type {
 import * as YieldToParent from "./tools/yield-to-parent.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 
-export interface AgentContext {
-  logger: Logger;
-}
-
 export type ToolOutcome =
   | { type: "continue"; results: ToolResults }
   | { type: "aborted"; results: ToolResults };
@@ -33,10 +29,10 @@ export type ToolOutcome =
 export type ToolExecutor = (
   requests: NonEmptyRequestedTools,
   publishTools: (tools: ToolInvocationState) => void,
-  signal: AbortSignal,
+  abortSignal: AbortSignal,
 ) => Promise<ToolOutcome>;
 
-export type LoopState =
+export type ToolLoopActivity =
   | { type: "preparing" }
   | {
       type: "streaming";
@@ -52,43 +48,48 @@ export type LoopState =
     };
 
 export type ToolLoop = {
-  readonly loopState: LoopState;
+  readonly activity: ToolLoopActivity;
   promise: Promise<ToolLoopResult>;
 };
 
-export type ToolLoopDeps = AgentContext & {
+export type ToolLoopDeps = {
+  logger: Logger;
   manager: NativeInferenceManager;
   onUpdate?: () => void;
   executeTools: ToolExecutor;
-  onBeforeRequest: (signal: AbortSignal) => Promise<AgentInput[]>;
+  onBeforeRequest: (abortSignal: AbortSignal) => Promise<AgentInput[]>;
   /** After injections and input are in the log, before the request. */
-  checkBudget: (signal: AbortSignal) => Promise<BudgetDecision>;
+  checkBudget: (
+    abortSignal: AbortSignal,
+  ) => Promise<BudgetDecision | { type: "aborted" }>;
   onToolResults: ToolResultsHook;
 };
 
-/** One full assistant turn - iterating through tool invocations until the agent decides to stop.
+/** One tool loop - iterating through tool invocations until the agent decides to stop.
  */
 export function runToolLoop(
   deps: ToolLoopDeps,
   input: AgentInput[],
-  signal: AbortSignal,
+  abortSignal: AbortSignal,
 ): ToolLoop {
   const { logger, manager } = deps;
-  let loopState: LoopState = { type: "preparing" };
+  let activity: ToolLoopActivity = { type: "preparing" };
   const onAbort = () => deps.onUpdate?.();
-  signal.addEventListener("abort", onAbort, { once: true });
-  const updateLoopState = (next: LoopState) => {
-    loopState = next;
+  abortSignal.addEventListener("abort", onAbort, { once: true });
+  const updateLoopState = (next: ToolLoopActivity) => {
+    activity = next;
     deps.onUpdate?.();
   };
 
   const runLoop = async (): Promise<ToolLoopResult> => {
     let initialInputPending = true;
+    // The loop learns of an abort from its children's results. It checks its
+    // own signal only in the gaps, before starting the next child.
     while (true) {
-      signal.throwIfAborted();
+      if (abortSignal.aborted) return { type: "aborted" };
       updateLoopState({ type: "preparing" });
       // Injections always land, so a budget stop hands them to compaction.
-      const injections = await deps.onBeforeRequest(signal);
+      const injections = await deps.onBeforeRequest(abortSignal);
       if (injections.length > 0) {
         manager.appendUserMessage(injections);
       }
@@ -97,36 +98,37 @@ export function runToolLoop(
         initialInputPending = false;
       }
 
-      signal.throwIfAborted();
-      const budget = await deps.checkBudget(signal);
-      signal.throwIfAborted();
+      if (abortSignal.aborted) return { type: "aborted" };
+      const budget = await deps.checkBudget(abortSignal);
+      if (budget.type === "aborted" || abortSignal.aborted)
+        return { type: "aborted" };
       if (budget.type === "stop") {
         return { type: "completed", stopReason: "context_budget" };
       }
 
       const request = manager.sendRequest((event) => {
-        if (loopState.type !== "streaming") return;
-        loopState.lastEventTime = new Date();
+        if (activity.type !== "streaming") return;
+        activity.lastEventTime = new Date();
         switch (event.type) {
           case "streaming-block":
-            loopState.block = event.streamingBlock;
+            activity.block = event.streamingBlock;
             break;
           case "block-finished":
-            loopState.block = undefined;
+            activity.block = undefined;
             break;
           case "retry-scheduled":
-            loopState.retry = event.retry;
-            loopState.block = undefined;
+            activity.retry = event.retry;
+            activity.block = undefined;
             break;
           case "attempt-started":
-            loopState.retry = undefined;
-            loopState.block = undefined;
+            activity.retry = undefined;
+            activity.block = undefined;
             break;
           default:
             assertUnreachable(event);
         }
         deps.onUpdate?.();
-      }, signal);
+      }, abortSignal);
       const now = new Date();
       updateLoopState({
         type: "streaming",
@@ -136,9 +138,8 @@ export function runToolLoop(
         retry: undefined,
       });
       const outcome = await request;
-      loopState = { type: "preparing" };
+      activity = { type: "preparing" };
 
-      signal.throwIfAborted();
       if (outcome.type === "aborted") return { type: "aborted" };
       if (outcome.type === "error")
         return { type: "failed", error: outcome.error };
@@ -155,12 +156,12 @@ export function runToolLoop(
           requested,
           (tools) => {
             toolState = tools;
-            if (publishingTools && loopState.type === "running_tools") {
-              loopState.tools = tools;
+            if (publishingTools && activity.type === "running_tools") {
+              activity.tools = tools;
               deps.onUpdate?.();
             }
           },
-          signal,
+          abortSignal,
         );
         updateLoopState({
           type: "running_tools",
@@ -169,7 +170,7 @@ export function runToolLoop(
         });
         toolOutcome = await execution;
       } catch (error) {
-        // A rejecting executor is still a turn that must leave every tool_use
+        // A rejecting executor is still a tool loop that must leave every tool_use
         // answered, so fall through with no results and let the fill do it.
         logger.error(
           `executeTools rejected: ${error instanceof Error ? error.message : String(error)}`,
@@ -177,7 +178,7 @@ export function runToolLoop(
         toolOutcome = { type: "continue", results: new Map() };
       } finally {
         publishingTools = false;
-        loopState = { type: "preparing" };
+        activity = { type: "preparing" };
       }
 
       // Fixed before the append: a batch can write more than its result
@@ -202,7 +203,6 @@ export function runToolLoop(
         logger.error(`onToolResults callback threw: ${(err as Error).message}`);
       }
 
-      signal.throwIfAborted();
       if (toolOutcome.type === "aborted") return { type: "aborted" };
 
       const yielded = findYield(requested, toolOutcome.results);
@@ -216,17 +216,16 @@ export function runToolLoop(
   const promise = Promise.resolve()
     .then(runLoop)
     .catch((error: unknown): ToolLoopResult => {
-      if (signal.aborted) return { type: "aborted" };
       return {
         type: "failed",
         error: error instanceof Error ? error : new Error(String(error)),
       };
     })
-    .finally(() => signal.removeEventListener("abort", onAbort));
+    .finally(() => abortSignal.removeEventListener("abort", onAbort));
 
   return {
-    get loopState() {
-      return loopState;
+    get activity() {
+      return activity;
     },
     promise,
   };

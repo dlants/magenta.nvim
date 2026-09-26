@@ -368,11 +368,11 @@ export interface NativeInferenceManager {
   getNativeMessageIdx(): NativeMessageIdx;
   truncateMessages(messageIdx: NativeMessageIdx): void;
   clone(): NativeInferenceManager;
-  countTokens?(signal: AbortSignal): Promise<number>;
-  /** Aborting `signal` aborts this request and nothing else. */
+  countTokens?(abortSignal: AbortSignal): Promise<number>;
+  /** Aborting `abortSignal` aborts this request and nothing else. */
   sendRequest(
     onEvent: OnStreamEvent,
-    signal: AbortSignal,
+    abortSignal: AbortSignal,
   ): Promise<RequestResult>;
 }
 

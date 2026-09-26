@@ -8,7 +8,6 @@ import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { CompactionOutcome, Compactor } from "./compaction/index.ts";
 import { TokenBudget } from "./compaction/token-budget.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
-import { loopActiveTools, loopLabel } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import { anthropicInferenceOptions } from "./providers/anthropic.ts";
 import { AnthropicInferenceManager } from "./providers/anthropic-inference.ts";
@@ -46,14 +45,15 @@ import {
   userInput,
 } from "./test-helpers.ts";
 import type { Thread, ThreadContext } from "./thread.ts";
-import type { RestResult } from "./thread-api.ts";
+import type { SubmissionResult } from "./thread-api.ts";
 import { flushArchive } from "./thread-logger.ts";
+import { activeTools, activityLabel } from "./thread-state.ts";
 import {
   injectText,
   MaxTokensSupervisor,
   SubagentSupervisor,
+  type SubmissionSupervisor,
   type ToolLoopSupervisor,
-  type TurnSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 import type {
@@ -68,10 +68,10 @@ import { threadConversationLogPath } from "./utils/files.ts";
 
 function autoCompactSupervisors(
   opts: Parameters<typeof TokenBudget.create>[0],
-  turnBefore: TurnSupervisor[] = [],
+  turnBefore: SubmissionSupervisor[] = [],
 ) {
   return {
-    turnSupervisors: turnBefore,
+    submissionSupervisors: turnBefore,
     compaction: {
       compactor: {
         run: () => Promise.reject(new Error("unexpected compaction")),
@@ -81,10 +81,10 @@ function autoCompactSupervisors(
   };
 }
 
-describe("Thread.loopState", () => {
+describe("Thread.state", () => {
   it("is idle with no result before anything is sent", () => {
     const { core } = createAgentWithMock();
-    expect(core.loopState).toEqual({ type: "idle" });
+    expect(core.state).toEqual({ type: "idle" });
     expect(core.lastResult()).toBeUndefined();
   });
   it("is running/streaming during a turn and idle/completed after it", async () => {
@@ -100,19 +100,19 @@ describe("Thread.loopState", () => {
     });
     const stream = await mockClient.awaitStream();
     await pollUntil(() => {
-      if (core.loopState.type === "running") return true;
-      throw new Error(`waiting for running, currently: ${core.loopState.type}`);
+      if (core.state.type === "running") return true;
+      throw new Error(`waiting for running, currently: ${core.state.type}`);
     });
-    const running = core.loopState;
+    const running = core.state;
     if (running.type !== "running") throw new Error("expected running");
     expect(running.activity.type).toBe("streaming");
     stream.streamText("hi");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.loopState.type === "idle") return true;
-      throw new Error(`waiting for idle, currently: ${core.loopState.type}`);
+      if (core.state.type === "idle") return true;
+      throw new Error(`waiting for idle, currently: ${core.state.type}`);
     });
-    expect(core.loopState.type).toBe("idle");
+    expect(core.state.type).toBe("idle");
     expect(core.lastResult()).toEqual({
       type: "completed",
       stopReason: "end_turn",
@@ -132,10 +132,10 @@ describe("Thread.loopState", () => {
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
-      if (core.loopState.type === "idle") return true;
-      throw new Error(`waiting for idle, currently: ${core.loopState.type}`);
+      if (core.state.type === "idle") return true;
+      throw new Error(`waiting for idle, currently: ${core.state.type}`);
     });
-    expect(core.loopState.type).toBe("idle");
+    expect(core.state.type).toBe("idle");
     const lastResult = core.lastResult();
     if (lastResult?.type !== "failed") throw new Error("expected failed");
     expect(lastResult.error.message).toBe("provider failure");
@@ -156,10 +156,10 @@ describe("Thread.loopState", () => {
     stream.streamText("partial");
     await core.abort();
     await pollUntil(() => {
-      if (core.loopState.type === "idle") return true;
-      throw new Error(`waiting for idle, currently: ${core.loopState.type}`);
+      if (core.state.type === "idle") return true;
+      throw new Error(`waiting for idle, currently: ${core.state.type}`);
     });
-    expect(core.loopState).toEqual({
+    expect(core.state).toEqual({
       type: "idle",
       lastResult: { type: "aborted" },
     });
@@ -279,7 +279,7 @@ describe("Thread.submit result", () => {
     { result: '{"count":3}', type: "text", text: "not a wrapper" },
   ])("passes custom input unchanged to hooks and consumers: %j", async (input) => {
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [
+      submissionSupervisors: [
         {
           onYield: async (value) => {
             expect(value).toEqual(input);
@@ -481,7 +481,7 @@ describe("Thread turn loop", () => {
   });
   it("keeps the submitted message in the log when a continuation fails", async () => {
     const { core, mockClient } = createAgentWithMock(
-      { turnSupervisors: [MaxTokensSupervisor.create()] },
+      { submissionSupervisors: [MaxTokensSupervisor.create()] },
       uniqueThreadId("continuation-failure"),
     );
 
@@ -571,7 +571,7 @@ describe("Thread submissions across a compaction handoff", () => {
     try {
       const compactor = stubCompactor();
       const oldAgent = core["core"].manager;
-      let settled: RestResult | undefined;
+      let settled: SubmissionResult | undefined;
       compactorSlot(core).compactor = compactor;
       const result = core.submit({
         type: "resolved",
@@ -754,7 +754,7 @@ describe("Thread submissions across a compaction handoff", () => {
           });
         },
       };
-      let settled: RestResult | undefined;
+      let settled: SubmissionResult | undefined;
       compactorSlot(core).compactor = compactor;
       const result = core.submit({
         type: "resolved",
@@ -1186,7 +1186,7 @@ describe("Agent.handleProviderStopped", () => {
     await pollUntil(() => {
       if (core.yielded) return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${loopLabel(core.loopState)}`,
+        `waiting for yielded mode, currently: ${activityLabel(core.state)}`,
       );
     });
 
@@ -1225,7 +1225,7 @@ describe("Agent.handleProviderStopped", () => {
     await pollUntil(() => {
       if (core.yielded) return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${loopLabel(core.loopState)}`,
+        `waiting for yielded mode, currently: ${activityLabel(core.state)}`,
       );
     });
 
@@ -1324,7 +1324,7 @@ describe("MaxTokensSupervisor", () => {
 
   it("continues a truncated text-only response", async () => {
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [MaxTokensSupervisor.create()],
+      submissionSupervisors: [MaxTokensSupervisor.create()],
     });
 
     void core.submit({
@@ -1347,7 +1347,7 @@ describe("MaxTokensSupervisor", () => {
   it("is the only supervisor to speak on max_tokens, and spends no restart", async () => {
     const unsupervised = UnsupervisedSupervisor.create();
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [MaxTokensSupervisor.create(), unsupervised],
+      submissionSupervisors: [MaxTokensSupervisor.create(), unsupervised],
     });
 
     void core.submit({
@@ -1377,7 +1377,7 @@ describe("MaxTokensSupervisor", () => {
   });
   it("takes precedence over a subagent's yield-tag nudge", async () => {
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [
+      submissionSupervisors: [
         MaxTokensSupervisor.create(),
         SubagentSupervisor.create(),
       ],
@@ -1568,7 +1568,7 @@ describe("Agent.abort on yielded thread", () => {
     await pollUntil(() => {
       if (core.yielded) return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${loopLabel(core.loopState)}`,
+        `waiting for yielded mode, currently: ${activityLabel(core.state)}`,
       );
     });
 
@@ -1608,7 +1608,7 @@ describe("Agent.abort on yielded thread", () => {
     await pollUntil(() => {
       if (core.yielded) return true;
       throw new Error(
-        `waiting for yielded, currently: ${loopLabel(core.loopState)}`,
+        `waiting for yielded, currently: ${activityLabel(core.state)}`,
       );
     });
     // `abort()` short-circuits on a yielded agent, but the preempting-send path
@@ -1695,9 +1695,9 @@ describe("Agent.abort appends user abort message", () => {
 
     // Wait for tool_use mode
     await pollUntil(() => {
-      if (loopLabel(core.loopState) === "running_tools") return true;
+      if (activityLabel(core.state) === "running_tools") return true;
       throw new Error(
-        `waiting for tool_use mode, currently: ${loopLabel(core.loopState)}`,
+        `waiting for tool_use mode, currently: ${activityLabel(core.state)}`,
       );
     });
 
@@ -1734,7 +1734,7 @@ describe("Agent.abort appends user abort message", () => {
 describe("SubagentSupervisor yield tag detection", () => {
   it("nudges agent when it writes a <yield_to_parent> XML tag instead of calling the tool", async () => {
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [SubagentSupervisor.create()],
+      submissionSupervisors: [SubagentSupervisor.create()],
       threadType: "subagent" as ThreadType,
     });
 
@@ -1776,7 +1776,7 @@ describe("SubagentSupervisor yield tag detection", () => {
 
   it("does not intervene when agent stops without a yield tag", async () => {
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [SubagentSupervisor.create()],
+      submissionSupervisors: [SubagentSupervisor.create()],
       threadType: "subagent" as ThreadType,
     });
 
@@ -1963,7 +1963,7 @@ describe("TokenBudget integration", () => {
     const { core, mockClient } = createAgentWithMock({
       ...autoCompactSupervisors({ threshold: 100, handoff: "go" }, [
         {
-          onEndTurnWithoutYield: (ctx) => {
+          onToolLoopEnd: (ctx) => {
             seen.push(ctx.stopReason);
             return { type: "none" };
           },
@@ -2329,7 +2329,7 @@ describe("TokenBudget integration", () => {
     const stream2 = await awaitNextStream(mockClient, stream);
     stream2.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
-      if (core.loopState.type === "idle") return true;
+      if (core.state.type === "idle") return true;
       throw new Error("waiting for idle");
     });
     expect(
@@ -2392,7 +2392,7 @@ describe("TokenBudget integration", () => {
     stream2.streamText("partial");
     await core.abort();
     await pollUntil(() => {
-      if (core.loopState.type === "idle") return true;
+      if (core.state.type === "idle") return true;
       throw new Error("waiting for idle");
     });
     expect(
@@ -2414,22 +2414,22 @@ describe("TokenBudget integration", () => {
   });
 
   it("consults all supervisors in order and joins their nudges", async () => {
-    const first: TurnSupervisor = {
-      onEndTurnWithoutYield: () => {
+    const first: SubmissionSupervisor = {
+      onToolLoopEnd: () => {
         calls.push("first");
         return { type: "none" };
       },
     };
-    const second: TurnSupervisor = {
-      onEndTurnWithoutYield: () => {
+    const second: SubmissionSupervisor = {
+      onToolLoopEnd: () => {
         calls.push("second");
         return calls.length > 3
           ? { type: "none" }
           : { type: "send-message", text: "go" };
       },
     };
-    const third: TurnSupervisor = {
-      onEndTurnWithoutYield: () => {
+    const third: SubmissionSupervisor = {
+      onToolLoopEnd: () => {
         calls.push("third");
         return calls.length > 3
           ? { type: "none" }
@@ -2437,7 +2437,7 @@ describe("TokenBudget integration", () => {
       },
     };
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [first, second, third],
+      submissionSupervisors: [first, second, third],
     });
     const calls: string[] = [];
 
@@ -2505,7 +2505,7 @@ describe("TokenBudget integration", () => {
 
   it("consults onBeforeRequest exactly once per request across a handoff", async () => {
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [MaxTokensSupervisor.create()],
+      submissionSupervisors: [MaxTokensSupervisor.create()],
       toolLoopSupervisors: [
         {
           onBeforeRequest: () => {
@@ -2692,9 +2692,9 @@ describe("TokenBudget integration", () => {
     });
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (loopLabel(core.loopState) === "running_tools") return true;
+      if (activityLabel(core.state) === "running_tools") return true;
       throw new Error(
-        `waiting for tool_use mode, currently: ${loopLabel(core.loopState)}`,
+        `waiting for tool_use mode, currently: ${activityLabel(core.state)}`,
       );
     });
     const abortPromise = core.abort();
@@ -2740,7 +2740,7 @@ describe("TokenBudget integration", () => {
     await pollUntil(() => {
       if (core.yielded) return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${loopLabel(core.loopState)}`,
+        `waiting for yielded mode, currently: ${activityLabel(core.state)}`,
       );
     });
     expect(events).toEqual(["request", "results:1"]);
@@ -3740,7 +3740,7 @@ describe("Agent failure", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    const settled: RestResult[] = [];
+    const settled: SubmissionResult[] = [];
     void core
       .submit({
         type: "resolved",
@@ -3751,7 +3751,7 @@ describe("Agent failure", () => {
           },
         ],
       })
-      .then((r) => settled.push(r as RestResult));
+      .then((r) => settled.push(r as SubmissionResult));
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
@@ -4578,7 +4578,7 @@ describe("Agent turn loop", () => {
     const { agent, mockClient } = createTestAgent({
       onUpdate: () => {
         snapshots.push({
-          hasActive: loopActiveTools(agent.loopState) !== undefined,
+          hasActive: activeTools(agent.state) !== undefined,
           results: agent
             .getProviderMessages()
             .flatMap((m) => m.content)
@@ -4640,7 +4640,7 @@ describe("Agent turn loop", () => {
     });
     stream.finishResponse("tool_use");
     const active = await pollUntil(() => {
-      const tools = loopActiveTools(agent.loopState);
+      const tools = activeTools(agent.state);
       if (!tools?.size) throw new Error("waiting for live invocations");
       return tools;
     });

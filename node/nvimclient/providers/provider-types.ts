@@ -38,7 +38,7 @@ export type {
   StreamEvent,
   StreamingBlock,
   StreamStopReason,
-  ThreadLoopState,
+  ThreadState,
   ToolExecutor,
   ToolOutcome,
   ToolResultContent,

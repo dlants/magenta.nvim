@@ -3,11 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { ThreadType } from "./chat-types.ts";
 import type { Compactor } from "./compaction/index.ts";
 import { TokenBudget } from "./compaction/token-budget.ts";
-import {
-  loopActiveTools,
-  loopLabel,
-  loopStreamingBlock,
-} from "./loop-state.ts";
 import type {
   AgentInput,
   NativeMessageIdx,
@@ -31,6 +26,7 @@ import {
 } from "./test-helpers.ts";
 import type { Thread, ThreadContext } from "./thread.ts";
 import type { QueuedMessage } from "./thread-api.ts";
+import { activeTools, activityLabel, streamingBlock } from "./thread-state.ts";
 import { injectText } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
@@ -362,8 +358,8 @@ describe("deferred submissions", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (loopLabel(core.loopState) === "running_tools") return true;
-      throw new Error(`waiting for tool_use, got ${loopLabel(core.loopState)}`);
+      if (activityLabel(core.state) === "running_tools") return true;
+      throw new Error(`waiting for tool_use, got ${activityLabel(core.state)}`);
     });
     core.enqueue(
       { type: "raw", message: pendingMessage("also check this") },
@@ -402,7 +398,7 @@ describe("deferred submissions", () => {
   it("does not drain the async queue into an agent-internal submission", async () => {
     const { core, mockClient } = createAgentWithMock(
       {
-        turnSupervisors: [
+        submissionSupervisors: [
           {
             onYield: async () => {
               if (rejected) return { type: "none" as const };
@@ -506,8 +502,8 @@ describe("deferred submissions", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (loopLabel(core.loopState) === "running_tools") return true;
-      throw new Error(`waiting for tool_use, got ${loopLabel(core.loopState)}`);
+      if (activityLabel(core.state) === "running_tools") return true;
+      throw new Error(`waiting for tool_use, got ${activityLabel(core.state)}`);
     });
     core.enqueue(
       { type: "raw", message: pendingMessage("@compact wrap it up") },
@@ -891,7 +887,7 @@ describe("Thread aborts the tools it owns", () => {
     });
     stream.finishResponse("tool_use");
     const active = await pollUntil(() => {
-      const tools = loopActiveTools(core.loopState);
+      const tools = activeTools(core.state);
       if (!tools?.size) throw new Error("waiting for live invocations");
       return tools;
     });
@@ -965,7 +961,7 @@ describe("Thread aborts the tools it owns", () => {
     const aborting = core.abort();
     // An aborting thread is still running its tools, and the view still has
     // to show that.
-    expect(core.loopState).toMatchObject({
+    expect(core.state).toMatchObject({
       type: "running",
       aborting: true,
       activity: { type: "running_tools" },
@@ -993,7 +989,7 @@ describe("Thread aborts the tools it owns", () => {
     await sent;
     // The new loop owns a new turn, so its tools are not silently aborted.
     await pollUntil(() => {
-      const state = core.loopState;
+      const state = core.state;
       if (state.type !== "running" || state.aborting) {
         throw new Error("waiting for a clean loop");
       }
@@ -1019,7 +1015,7 @@ describe("Thread loop activity", () => {
       uniqueThreadId("loop-activity"),
       undefined,
       () => {
-        const label = loopLabel(core.loopState);
+        const label = activityLabel(core.state);
         if (labels[labels.length - 1] !== label) labels.push(label);
       },
     );
@@ -1043,7 +1039,7 @@ describe("Thread loop activity", () => {
     expect(core.lastResult()).toBeUndefined();
     // The block in flight is visible for the duration of the streaming
     // activity.
-    expect(loopStreamingBlock(core.loopState)).toEqual({
+    expect(streamingBlock(core.state)).toEqual({
       type: "text",
       text: "looking",
     });
@@ -1109,7 +1105,7 @@ describe("Thread loop activity", () => {
     // The agent has settled, but the loop has not: it is deciding what
     // follows the stop, and the thread is still busy.
     await entered.promise;
-    expect(core.loopState).toMatchObject({
+    expect(core.state).toMatchObject({
       type: "running",
       activity: { type: "preparing" },
     });
@@ -1118,7 +1114,7 @@ describe("Thread loop activity", () => {
     const second = await awaitNextStream(mockClient, stream);
     second.finishResponse("end_turn");
     await sent;
-    expect(core.loopState.type).toBe("idle");
+    expect(core.state.type).toBe("idle");
   });
 });
 describe("Thread.abort between turns", () => {
@@ -1184,7 +1180,7 @@ describe("Thread.abort between turns", () => {
       ],
     });
     const freshStream = await awaitNextStream(mockClient, stream);
-    expect(core.loopState).toMatchObject({ type: "running", aborting: false });
+    expect(core.state).toMatchObject({ type: "running", aborting: false });
     freshStream.streamText("done");
     freshStream.finishResponse("end_turn");
     expect(await fresh).toEqual({ type: "completed", stopReason: "end_turn" });
@@ -1228,7 +1224,7 @@ describe("Thread.abort between turns", () => {
     // reports it — the loop must take that at face value rather than
     // treating the stop as a turn boundary to continue from.
     onUpdate = () => {
-      const state = core.loopState;
+      const state = core.state;
       // The agent has settled and handed the thread back to the loop: the
       // window in which the loop is deciding what follows the stop.
       if (
@@ -1566,7 +1562,7 @@ describe("thread status", () => {
     stream.finishResponse("tool_use");
     await pollUntil(() => {
       if (core.yielded) return true;
-      throw new Error(`waiting for the yield: ${loopLabel(core.loopState)}`);
+      throw new Error(`waiting for the yield: ${activityLabel(core.state)}`);
     });
     // Nobody accepted the yield, so the thread can still be sent to. While
     // that submission runs the thread is running, not yielded.
@@ -1580,7 +1576,7 @@ describe("thread status", () => {
       ],
     });
     const resumed = await awaitNextStream(mockClient, stream);
-    expect(core.loopState.type).toBe("running");
+    expect(core.state.type).toBe("running");
     expect(core.yielded).toBeUndefined();
     expect(core.lastResult()).toBeUndefined();
     resumed.streamText("ok");
@@ -1597,7 +1593,7 @@ describe("thread status", () => {
   it("keeps the teardown guard when the accepting submission never settles", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
-      turnSupervisors: [
+      submissionSupervisors: [
         { onYield: () => Promise.resolve({ type: "accept" as const }) },
       ],
     });
@@ -1619,7 +1615,7 @@ describe("thread status", () => {
     stream.finishResponse("tool_use");
     await pollUntil(() => {
       if (core.tornDown) return true;
-      throw new Error(`waiting for the teardown: ${loopLabel(core.loopState)}`);
+      throw new Error(`waiting for the teardown: ${activityLabel(core.state)}`);
     });
     // Teardown is terminal and lives outside `status`: a submission preempted
     // or aborted between the accept hook and the settle cannot resurrect the
@@ -1722,7 +1718,7 @@ describe("replaceable conversation core", () => {
     "destroy",
   ] as const)("%s invalidates a pending yield decision", async (action) => {
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [
+      submissionSupervisors: [
         {
           onYield: () => {
             entered.resolve();
@@ -2089,7 +2085,7 @@ describe("stale outer submissions", () => {
     stream.streamText("ok");
     stream.finishResponse("end_turn");
     await entered.promise;
-    expect(loopLabel(core.loopState)).toBe("preparing");
+    expect(activityLabel(core.state)).toBe("preparing");
     if (action === "reset")
       await resetThread(core, { archive: { type: "none" } });
     const second = core.submit({
@@ -2133,7 +2129,7 @@ describe("stale outer submissions", () => {
     const gate = new Defer<typeof decision>();
     let yields = 0;
     const { core, mockClient } = createAgentWithMock({
-      turnSupervisors: [
+      submissionSupervisors: [
         {
           onYield: () => {
             if (yields++ > 0) return Promise.resolve({ type: "none" as const });

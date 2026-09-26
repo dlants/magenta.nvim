@@ -4,6 +4,26 @@ export function delay(ms: number) {
   });
 }
 
+/** Wait `ms`, or less if `abortSignal` fires first. Resolves with whether the
+ * wait completed: an abort is a value, not a rejection. */
+export function abortableDelay(
+  ms: number,
+  abortSignal: AbortSignal,
+): Promise<"elapsed" | "aborted"> {
+  if (abortSignal.aborted) return Promise.resolve("aborted");
+  return new Promise((resolve) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve("aborted");
+    };
+    const timer = setTimeout(() => {
+      abortSignal.removeEventListener("abort", onAbort);
+      resolve("elapsed");
+    }, ms);
+    abortSignal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export class Defer<T> {
   public promise: Promise<T>;
   public resolve: (val: T) => void;
@@ -35,26 +55,26 @@ export class Defer<T> {
   }
 }
 
-/** Await work that has no way to be cancelled, but no longer than the signal.
- * Resolves `undefined` if the signal fires first: the work is abandoned, not
+/** Await work that has no way to be cancelled, but no longer than the abortSignal.
+ * Resolves `undefined` if the abortSignal fires first: the work is abandoned, not
  * cancelled, so this is only sound where its effects are applied by the
  * caller and dropping the result drops them. What it buys is a bounded wait
  * for whoever needs the awaiting body to unwind. */
 export function untilAborted<T>(
   promise: Promise<T>,
-  signal: AbortSignal,
+  abortSignal: AbortSignal,
 ): Promise<T | undefined> {
-  if (signal.aborted) return Promise.resolve(undefined);
+  if (abortSignal.aborted) return Promise.resolve(undefined);
   return new Promise((resolve, reject) => {
     const onAbort = () => resolve(undefined);
-    signal.addEventListener("abort", onAbort, { once: true });
+    abortSignal.addEventListener("abort", onAbort, { once: true });
     promise.then(
       (value) => {
-        signal.removeEventListener("abort", onAbort);
+        abortSignal.removeEventListener("abort", onAbort);
         resolve(value);
       },
       (error: unknown) => {
-        signal.removeEventListener("abort", onAbort);
+        abortSignal.removeEventListener("abort", onAbort);
         reject(error instanceof Error ? error : new Error(String(error)));
       },
     );

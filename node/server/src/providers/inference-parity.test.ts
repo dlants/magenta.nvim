@@ -54,15 +54,15 @@ const noExecutor = () => {
  *
  * Both sides are driven by the one loop in `Agent`, so this compares two
  * managers under one driver rather than two drivers. */
-type TurnSnapshot = {
+type ToolLoopSnapshot = {
   messages: ProviderMessage[];
-  phaseDuringTurn: string;
-  phaseAfterTurn: string;
+  phaseDuringToolLoop: string;
+  phaseAfterToolLoop: string;
   turnResult: ToolLoopResult;
   executorCalls: number;
 };
 
-async function anthropicContent(): Promise<TurnSnapshot> {
+async function anthropicContent(): Promise<ToolLoopSnapshot> {
   let executorCalls = 0;
   const { agent, mockClient } = createTestAgent({
     executeTools: () => {
@@ -76,20 +76,20 @@ async function anthropicContent(): Promise<TurnSnapshot> {
   agent.manager.appendUserMessage(input);
   const turn = agent.send();
   const stream = await mockClient.awaitStream();
-  const phaseDuringTurn = flatLoop(agent).type;
+  const phaseDuringToolLoop = flatLoop(agent).type;
   const messages = snapshot(agent.getProviderMessages());
   stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
   const turnResult = await turn.promise;
   return {
     messages,
-    phaseDuringTurn,
-    phaseAfterTurn: flatLoop(agent).type,
+    phaseDuringToolLoop,
+    phaseAfterToolLoop: flatLoop(agent).type,
     turnResult,
     executorCalls,
   };
 }
 
-async function openaiContent(): Promise<TurnSnapshot> {
+async function openaiContent(): Promise<ToolLoopSnapshot> {
   let executorCalls = 0;
   const { agent, mockClient } = createTestOpenAIAgent({
     executeTools: () => {
@@ -100,14 +100,14 @@ async function openaiContent(): Promise<TurnSnapshot> {
   agent.manager.appendUserMessage(input);
   const turn = agent.send();
   const stream = await mockClient.awaitStream();
-  const phaseDuringTurn = flatLoop(agent).type;
+  const phaseDuringToolLoop = flatLoop(agent).type;
   const messages = snapshot(agent.manager.log.messages);
   stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
   const turnResult = await turn.promise;
   return {
     messages,
-    phaseDuringTurn,
-    phaseAfterTurn: flatLoop(agent).type,
+    phaseDuringToolLoop,
+    phaseAfterToolLoop: flatLoop(agent).type,
     turnResult,
     executorCalls,
   };
@@ -134,8 +134,8 @@ describe("agent parity for tagged user input", () => {
     const openai = await openaiContent();
 
     for (const snap of [anthropic, openai]) {
-      expect(snap.phaseDuringTurn).toBe("streaming");
-      expect(snap.phaseAfterTurn).toBe("idle");
+      expect(snap.phaseDuringToolLoop).toBe("streaming");
+      expect(snap.phaseAfterToolLoop).toBe("idle");
       expect(snap.turnResult).toEqual({
         type: "completed",
         stopReason: "end_turn",
@@ -257,7 +257,7 @@ describe("abort parity", () => {
     const last = messages[messages.length - 1];
     return {
       result,
-      phaseAfterTurn: flatLoop(agent).type,
+      phaseAfterToolLoop: flatLoop(agent).type,
       lastRole: last.role,
       lastText: JSON.stringify(last.content),
     };
@@ -283,7 +283,7 @@ describe("abort parity", () => {
 
     for (const snap of [anthropic, openai]) {
       expect(snap.result).toEqual({ type: "aborted" });
-      expect(snap.phaseAfterTurn).toBe("idle");
+      expect(snap.phaseAfterToolLoop).toBe("idle");
       expect(snap.lastRole).toBe("user");
       expect(snap.lastText).toContain(ABORT_MARKER_TEXT);
     }

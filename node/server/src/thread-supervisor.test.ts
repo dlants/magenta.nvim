@@ -6,12 +6,12 @@ import type { SystemInfo } from "./providers/system-prompt.ts";
 import { createAgentWithMock, noopLogger, userInput } from "./test-helpers.ts";
 import {
   EditedFilesSupervisor,
-  type EndTurnContext,
   injectText,
   type RequestContext,
+  type SubmissionSupervisor,
+  SubmissionSupervisorChain,
   SystemInfoSupervisor,
-  type TurnSupervisor,
-  TurnSupervisorChain,
+  type ToolLoopEndContext,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
@@ -106,7 +106,7 @@ describe("Thread supervisor arbitration", () => {
   it("lets a rejecting yield gate win over one whose hook throws", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
-      turnSupervisors: [
+      submissionSupervisors: [
         {
           onYield: () => {
             throw new Error("boom");
@@ -141,7 +141,7 @@ describe("Thread supervisor arbitration", () => {
   it("accepts the yield when the only yield hook throws", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
-      turnSupervisors: [
+      submissionSupervisors: [
         {
           onYield: () => {
             throw new Error("boom");
@@ -203,7 +203,7 @@ describe("Thread supervisor arbitration", () => {
         },
         { onBeforeRequest: () => Promise.resolve(injectText("survivor")) },
       ],
-      turnSupervisors: [{ onEndTurnWithoutYield: boom }],
+      submissionSupervisors: [{ onToolLoopEnd: boom }],
     });
     const turn = core.submit({
       type: "resolved",
@@ -353,28 +353,28 @@ describe("SystemInfoSupervisor", () => {
 describe("UnsupervisedSupervisor", () => {
   it("clones the restart count and configuration independently", () => {
     const source = UnsupervisedSupervisor.create({ maxRestarts: 2 });
-    const endTurnContext: EndTurnContext = {
+    const endTurnContext: ToolLoopEndContext = {
       stopReason: "end_turn",
       inputTokenCount: undefined,
       lastAssistantMessage: undefined,
       nativeMessageIdx: 0 as NativeMessageIdx,
     };
 
-    expect(source.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+    expect(source.onToolLoopEnd(endTurnContext)).toMatchObject({
       type: "send-message",
       text: expect.stringContaining("1/2"),
     });
 
     const clone = UnsupervisedSupervisor.clone({ source });
-    expect(clone.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+    expect(clone.onToolLoopEnd(endTurnContext)).toMatchObject({
       type: "send-message",
       text: expect.stringContaining("2/2"),
     });
-    expect(source.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+    expect(source.onToolLoopEnd(endTurnContext)).toMatchObject({
       type: "send-message",
       text: expect.stringContaining("2/2"),
     });
-    expect(clone.onEndTurnWithoutYield(endTurnContext)).toEqual({
+    expect(clone.onToolLoopEnd(endTurnContext)).toEqual({
       type: "none",
     });
   });
@@ -382,15 +382,15 @@ describe("UnsupervisedSupervisor", () => {
 
 describe("SupervisorChain onSubmission", () => {
   function chain(
-    members: TurnSupervisor[],
+    members: SubmissionSupervisor[],
     args: { live: boolean; errors: string[] },
   ) {
-    return new TurnSupervisorChain(() => members, {
+    return new SubmissionSupervisorChain(() => members, {
       logger: {
         ...noopLogger,
         error: (message: string) => args.errors.push(message),
       } as Logger,
-      signal: () => {
+      abortSignal: () => {
         const controller = new AbortController();
         if (!args.live) controller.abort();
         return controller.signal;

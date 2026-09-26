@@ -3,13 +3,13 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
 import type { Logger } from "../logger.ts";
-import { loopLabel } from "../loop-state.ts";
 import type { OpenAIAuth } from "../openai-auth.ts";
 import type { ProviderProfile } from "../provider-options.ts";
 import { resolveAsText } from "../submission/index.ts";
 import type { ThreadContext } from "../thread.ts";
 import { Thread } from "../thread.ts";
 import { archiveThread } from "../thread-logger.ts";
+import { activityLabel } from "../thread-state.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import type { ClientToolContext } from "../tools/create-tool.ts";
 import { clientToolCreator } from "../tools/create-tool.ts";
@@ -189,7 +189,7 @@ describe("OpenAI provider wiring", () => {
 
     await pollUntil(() => {
       if (core.yielded) return true;
-      throw new Error(`waiting for yielded, got ${loopLabel(core.loopState)}`);
+      throw new Error(`waiting for yielded, got ${activityLabel(core.state)}`);
     });
     expect(core.yielded?.value.result).toBe("all done");
   });
@@ -250,7 +250,7 @@ describe("OpenAI provider wiring", () => {
         },
         login: (options?: {
           onOutput?: (chunk: string) => void;
-          signal?: AbortSignal | undefined;
+          abortSignal?: AbortSignal | undefined;
         }) => {
           auth.loginCalls.push(options ?? {});
           options?.onOutput?.("open https://auth.example");

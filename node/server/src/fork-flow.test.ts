@@ -3,6 +3,7 @@ import { expect, it, vi } from "vitest";
 import type { MockStream } from "./providers/mock-anthropic-client.ts";
 import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import { type Harness, withHarness } from "./test/harness.ts";
+import { created } from "./test-helpers.ts";
 import type { Thread } from "./thread.ts";
 import { TitleSupervisor } from "./thread-assembly.ts";
 import { MaxTokensSupervisor } from "./thread-supervisor.ts";
@@ -34,7 +35,7 @@ it("no <context_update> on first turn after fork when files unchanged", () =>
     const { id, thread } = await h.createRoot();
     await exchange(h, thread, "Read @file:poem.txt", "I read the poem.");
     const fork = h.thread(
-      await h.session.forkThread(id, thread.nativeMessageIdx),
+      await created(h.session.forkThread(id, thread.nativeMessageIdx)),
     );
     void h.send(fork, "Continue the conversation");
     expect(lastUserHasContextUpdate(await h.nextStream())).toBe(false);
@@ -45,7 +46,7 @@ it("<context_update> IS sent if a tracked file changes after fork", () =>
     const { id, thread } = await h.createRoot();
     await exchange(h, thread, "Read @file:poem.txt", "I read the poem.");
     const fork = h.thread(
-      await h.session.forkThread(id, thread.nativeMessageIdx),
+      await created(h.session.forkThread(id, thread.nativeMessageIdx)),
     );
     await h.fileIO.writeFile("/project/poem.txt", "completely different\n");
     void h.send(fork, "Continue the conversation");
@@ -59,7 +60,7 @@ it("truncated fork reseeds context delivered only after the fork point", () =>
     const forkPoint = thread.nativeMessageIdx;
     await exchange(h, thread, "Now read @file:poem.txt", "Read it.");
     expect(thread.nativeMessageIdx).toBeGreaterThan(forkPoint);
-    const fork = h.thread(await h.session.forkThread(id, forkPoint));
+    const fork = h.thread(await created(h.session.forkThread(id, forkPoint)));
     void h.send(fork, "Continue from the earlier point");
     expect(lastUserHasContextUpdate(await h.nextStream())).toBe(true);
   }));
@@ -89,7 +90,7 @@ it("tool result map survives the fork", () =>
     });
     await done;
     const fork = h.thread(
-      await h.session.forkThread(id, thread.nativeMessageIdx),
+      await created(h.session.forkThread(id, thread.nativeMessageIdx)),
     );
     expect(fork.completedTools.has("get-file-1" as ToolRequestId)).toBe(true);
   }));
@@ -100,14 +101,16 @@ it("source agent is unaffected by clone", () =>
     await exchange(h, thread, "hello", "hi");
     await exchange(h, thread, "again", "hi again");
     const messagesBefore = thread.getProviderMessages().length;
-    const statusBefore = thread.loopState.type;
+    const statusBefore = thread.state.type;
     const resultBefore = thread.lastResult();
-    await h.session.forkThread(
-      id,
-      (thread.nativeMessageIdx - 1) as NativeMessageIdx,
+    await created(
+      h.session.forkThread(
+        id,
+        (thread.nativeMessageIdx - 1) as NativeMessageIdx,
+      ),
     );
     expect(thread.getProviderMessages()).toHaveLength(messagesBefore);
-    expect(thread.loopState.type).toBe(statusBefore);
+    expect(thread.state.type).toBe(statusBefore);
     expect(thread.lastResult()).toEqual(resultBefore);
   }));
 
@@ -116,7 +119,7 @@ it("fork appends an id-free fork_notification merged with the next message", () 
     const { id, thread } = await h.createRoot();
     await exchange(h, thread, "hello", "hi");
     const fork = h.thread(
-      await h.session.forkThread(id, thread.nativeMessageIdx),
+      await created(h.session.forkThread(id, thread.nativeMessageIdx)),
     );
     await exchange(h, fork, "continue", "sure");
     const messages = fork.getProviderMessages();
@@ -143,7 +146,7 @@ it("agent clone happens exactly once", () =>
     const { id, thread } = await h.createRoot();
     await exchange(h, thread, "hello", "hi");
     const cloneSpy = vi.spyOn(thread["core"].manager, "clone");
-    await h.session.forkThread(id, thread.nativeMessageIdx);
+    await created(h.session.forkThread(id, thread.nativeMessageIdx));
     expect(cloneSpy).toHaveBeenCalledTimes(1);
   }));
 
@@ -154,13 +157,15 @@ it("fresh and forked threads resolve their first command with equivalent executi
     expect(Object.keys(thread.contextFiles.files)).toContain(
       "/project/poem.txt",
     );
-    const forkId = await h.session.forkThread(id, thread.nativeMessageIdx);
+    const forkId = await created(
+      h.session.forkThread(id, thread.nativeMessageIdx),
+    );
     const fork = h.thread(forkId);
     expect(fork.toolSpecs).toEqual(thread.toolSpecs);
     expect(fork["context"].getScriptRunner?.()).toBe(
       thread["context"].getScriptRunner?.(),
     );
-    expect(fork.turnSupervisors.map((p) => p.constructor)).toEqual([
+    expect(fork.submissionSupervisors.map((p) => p.constructor)).toEqual([
       MaxTokensSupervisor,
       TitleSupervisor,
     ]);

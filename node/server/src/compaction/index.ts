@@ -25,7 +25,7 @@ export interface Compactor {
   run(
     messages: ReadonlyArray<ProviderMessage>,
     next: ReadonlyArray<AgentInput>,
-    signal: AbortSignal,
+    abortSignal: AbortSignal,
   ): Promise<CompactionOutcome>;
 }
 

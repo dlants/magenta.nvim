@@ -22,7 +22,7 @@ import type {
   Provider,
 } from "./providers/provider-types.ts";
 import type { EnvironmentConfig, Thread, ThreadCallbacks } from "./thread.ts";
-import type { ThreadResult } from "./thread-api.ts";
+import { ABORTED, type Aborted, type ThreadOutcome } from "./thread-api.ts";
 import {
   assembleThread,
   type ChatThreadPolicy,
@@ -88,8 +88,8 @@ export interface SessionHost {
   prepareThread(
     request: ThreadPreparation,
     session: Session,
-    signal: AbortSignal,
-  ): Promise<PreparedThread>;
+    abortSignal: AbortSignal,
+  ): Promise<PreparedThread | Aborted>;
 }
 
 export type SessionThread = {
@@ -124,7 +124,7 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
   private records = new Map<ThreadId, SessionThread>();
   /** Retained for known ids (including deleted ones) until disposal, so a late
    * `awaitThreadResult` settles instead of hanging. */
-  private results = new Map<ThreadId, Defer<ThreadResult>>();
+  private results = new Map<ThreadId, Defer<ThreadOutcome>>();
   private pending = new Map<ThreadId, AbortController>();
   private releases = new Map<ThreadId, () => Promise<void>>();
   private cleanup = new Set<Promise<unknown>>();
@@ -158,7 +158,7 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     return id;
   }
 
-  /** Note activity a view observed (a submission, a finished turn, a pending
+  /** Note activity a view observed (a submission, a finished submission, a pending
    * approval). Activity time is session state; observers do not mutate it. */
   recordActivity(id: ThreadId): void {
     const record = this.records.get(id);
@@ -188,7 +188,7 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     return promise;
   }
 
-  createThread(options: SessionCreateOptions): Promise<ThreadId> {
+  createThread(options: SessionCreateOptions): Promise<ThreadId | Aborted> {
     return this.track(
       this.create({
         type: "fresh",
@@ -200,14 +200,14 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     );
   }
 
-  createRootThread(): Promise<ThreadId> {
+  createRootThread(): Promise<ThreadId | Aborted> {
     return this.createThread({
       profile: this.host.getActiveProfile(),
       threadType: "root",
     });
   }
 
-  createAgentThread(agentName: string): Promise<ThreadId> {
+  createAgentThread(agentName: string): Promise<ThreadId | Aborted> {
     const agents = this.host.getAgents?.() ?? {};
     const agent = agents[agentName];
     if (!agent) {
@@ -241,7 +241,7 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     systemReminder?: string;
     autoCompactThreshold?: number;
     autoCompactPrompt?: string;
-  }): Promise<ThreadId> {
+  }): Promise<ThreadId | Aborted> {
     const { contextFiles: _contextFiles, prompt: _prompt, ...rest } = opts;
     return this.createThread({
       ...rest,
@@ -302,7 +302,9 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     return undefined;
   }
 
-  private async create(request: ThreadPreparation): Promise<ThreadId> {
+  private async create(
+    request: ThreadPreparation,
+  ): Promise<ThreadId | Aborted> {
     const { options } = request;
     const id = options.threadId;
     if (this.disposed) throw new Error("Session disposed");
@@ -332,15 +334,43 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     let prepared: PreparedThread | undefined;
     let thread: Thread | undefined;
     let releaseRegistered = false;
+    /** Undo whatever creation got as far as. A thread that never made it into
+     * the registry (or whose record was deleted while we were finishing) must
+     * not be left running. */
+    const discard = async () => {
+      try {
+        if (
+          thread &&
+          !thread.isDestroyed &&
+          this.records.get(id)?.state !== "initialized"
+        ) {
+          await thread.destroy();
+        }
+      } finally {
+        if (releaseRegistered) {
+          const release = this.releases.get(id);
+          this.releases.delete(id);
+          await release?.();
+        } else {
+          await prepared?.release?.();
+        }
+      }
+    };
+    const cancelled = () =>
+      controller.signal.aborted || this.records.get(id) !== record;
     try {
-      prepared = await this.host.prepareThread(
+      const preparation = await this.host.prepareThread(
         request,
         this,
         controller.signal,
       );
-      if (controller.signal.aborted || this.records.get(id) !== record) {
-        throw new Error("Thread creation cancelled");
+      if (preparation === ABORTED) return ABORTED;
+      prepared = preparation;
+      if (cancelled()) {
+        await discard();
+        return ABORTED;
       }
+      const ready = preparation;
 
       const current = () =>
         !controller.signal.aborted &&
@@ -356,14 +386,14 @@ The title must be a single line (no newlines) and a few words long (ideally arou
 
       const assembled = assembleThread({
         id,
-        initialization: this.initialization(request, prepared),
-        context: { ...prepared.context, threadManager: this },
+        initialization: this.initialization(request, ready),
+        context: { ...ready.context, threadManager: this },
         callbacks,
       });
       thread = assembled.thread;
       if (options.label) thread.setTitle(options.label);
-      if (prepared.release) {
-        this.releases.set(id, prepared.release);
+      if (ready.release) {
+        this.releases.set(id, ready.release);
         releaseRegistered = true;
       }
       this.records.set(id, {
@@ -373,7 +403,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
         // not the (possibly absent) request.
         options: {
           ...options,
-          environmentConfig: prepared.context.environmentConfig,
+          environmentConfig: ready.context.environmentConfig,
         },
         thread,
         compactor: assembled.compactor,
@@ -393,7 +423,10 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       if (options.contextFiles?.length) {
         await thread.contextFiles.addFiles(options.contextFiles);
       }
-      if (!current()) throw new Error("Thread creation cancelled");
+      if (!current()) {
+        await discard();
+        return ABORTED;
+      }
 
       if (options.inputMessages) {
         void thread
@@ -405,32 +438,14 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       return id;
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
-      if (this.records.get(id) === record && !controller.signal.aborted) {
+      if (this.records.get(id) === record) {
         this.records.set(id, { ...record, state: "error", error: failure });
         this.results
           .get(id)
           ?.resolve({ type: "aborted", reason: failure.message });
         this.emit("changed", id);
       }
-      try {
-        // A thread that never made it into the registry (or whose record was
-        // deleted while we were finishing) must not be left running.
-        if (
-          thread &&
-          !thread.isDestroyed &&
-          this.records.get(id)?.state !== "initialized"
-        ) {
-          await thread.destroy();
-        }
-      } finally {
-        if (releaseRegistered) {
-          const release = this.releases.get(id);
-          this.releases.delete(id);
-          await release?.();
-        } else {
-          await prepared?.release?.();
-        }
-      }
+      await discard();
       throw failure;
     } finally {
       this.pending.delete(id);
@@ -491,7 +506,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
   forkThread(
     sourceThreadId: ThreadId,
     nativeMessageIdx?: NativeMessageIdx,
-  ): Promise<ThreadId> {
+  ): Promise<ThreadId | Aborted> {
     const source = this.records.get(sourceThreadId);
     if (source?.state !== "initialized") {
       throw new Error(`Thread ${sourceThreadId} not available for forking`);
@@ -521,7 +536,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
 
   async spawnThread(
     opts: Parameters<ThreadManager["spawnThread"]>[0],
-  ): Promise<ThreadId> {
+  ): Promise<ThreadId | Aborted> {
     const parent = this.records.get(opts.parentThreadId);
     if (parent?.state !== "initialized") {
       throw new Error(`Parent thread ${opts.parentThreadId} not available`);
@@ -628,7 +643,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     this.emit("removed", id);
   }
 
-  awaitThreadResult(id: ThreadId): Promise<ThreadResult> {
+  awaitThreadResult(id: ThreadId): Promise<ThreadOutcome> {
     const result = this.results.get(id);
     if (!result) {
       return Promise.reject(new Error(`Unknown thread ${id}`));

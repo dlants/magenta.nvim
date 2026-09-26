@@ -10,7 +10,7 @@ export type NotifyContext = {
 
 export type NotifyReason =
   | "thread-attention"
-  | "thread-turn-end"
+  | "thread-submission-end"
   | "script-finished";
 
 /** Test-observable record of every notification raised via notifyUser. */

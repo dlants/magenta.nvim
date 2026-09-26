@@ -2,9 +2,9 @@ import { teardownContainer } from "./container/teardown.ts";
 import type { TeardownResult } from "./container/types.ts";
 import type { YieldValue } from "./thread-api.ts";
 import type {
-  EndTurnAction,
-  EndTurnContext,
-  TurnSupervisor,
+  SubmissionSupervisor,
+  ToolLoopEndAction,
+  ToolLoopEndContext,
   YieldAction,
 } from "./thread-supervisor.ts";
 import { UnsupervisedSupervisor } from "./thread-supervisor.ts";
@@ -18,7 +18,7 @@ type DockerSupervisorArgs = {
 };
 type DockerTeardownConfig = Readonly<Omit<DockerSupervisorArgs, "maxRestarts">>;
 
-export class DockerSupervisor implements TurnSupervisor {
+export class DockerSupervisor implements SubmissionSupervisor {
   static create(args: DockerSupervisorArgs): DockerSupervisor {
     const teardownConfig: DockerTeardownConfig = {
       containerName: args.containerName,
@@ -53,8 +53,8 @@ export class DockerSupervisor implements TurnSupervisor {
     public teardownResult: TeardownResult | undefined,
   ) {}
 
-  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
-    return this.unsupervised.onEndTurnWithoutYield(context);
+  onToolLoopEnd(context: ToolLoopEndContext): ToolLoopEndAction {
+    return this.unsupervised.onToolLoopEnd(context);
   }
 
   async onYield(_result: YieldValue): Promise<YieldAction> {

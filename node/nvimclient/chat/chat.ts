@@ -1,11 +1,13 @@
 import type {
   NativeMessageIdx,
-  RestResult,
   ScriptRunner,
   StopReason,
+  SubmissionResult,
   ThreadId,
 } from "@magenta/server";
 import {
+  ABORTED,
+  type Aborted,
   type ArchiveEntry,
   deleteArchivedThread,
   listArchivedThreads,
@@ -152,7 +154,7 @@ export type ChatMsg = {
  * kind of result it settled on. */
 type StoppedReason =
   | StopReason
-  | Exclude<RestResult["type"], "completed" | "failed">;
+  | Exclude<SubmissionResult["type"], "completed" | "failed">;
 
 /** The view adapter over a Session: selection, expansion, viewed timestamps,
  * archive navigation and the NvimThread wrappers. The session owns identity,
@@ -318,7 +320,7 @@ export class Chat {
         this.session.recordActivity(this.getRootAncestorId(msg.id));
       }
       if (
-        msg.msg.type === "turn-ended" ||
+        msg.msg.type === "submission-ended" ||
         msg.msg.type === "permission-pending-change"
       ) {
         this.session.recordActivity(msg.id);
@@ -624,7 +626,7 @@ export class Chat {
   }
 
   /** A thread wants the user's attention if it has unviewed activity (a
-   * completed turn or a pending permission approval) and has not yielded. */
+   * completed submission or a pending permission approval) and has not yielded. */
   threadNeedsAttention(threadId: ThreadId): boolean {
     const wrapper = this.wrapper(threadId);
     if (wrapper === undefined || wrapper.state !== "initialized") return false;
@@ -632,7 +634,7 @@ export class Chat {
     // A yielded thread has finished its work; a streaming thread is actively
     // working. Neither needs the user's attention.
     if (core.yielded) return false;
-    const loopState = core.loopState;
+    const loopState = core.state;
     if (loopState.type === "running" && loopState.activity.type === "streaming")
       return false;
     return wrapper.lastActivityTime > wrapper.lastViewedTime;
@@ -1051,7 +1053,7 @@ ${rows}${loadMore}`;
   }: {
     sourceThreadId: ThreadId;
     truncateAtMessageIdx?: NativeMessageIdx;
-  }): Promise<ThreadId> {
+  }): Promise<ThreadId | Aborted> {
     const sourceWrapper = this.wrapper(sourceThreadId);
     if (!sourceWrapper || sourceWrapper.state !== "initialized") {
       throw new Error(`Thread ${sourceThreadId} not available for forking`);
@@ -1060,6 +1062,7 @@ ${rows}${loadMore}`;
     const idx = truncateAtMessageIdx ?? sourceThread.thread.nativeMessageIdx;
 
     const newThreadId = await this.session.forkThread(sourceThreadId, idx);
+    if (newThreadId === ABORTED) return ABORTED;
     const wrapper = this.wrapper(newThreadId);
     if (!wrapper || wrapper.state !== "initialized") return newThreadId;
     const thread = wrapper.thread;
@@ -1112,7 +1115,7 @@ ${rows}${loadMore}`;
     return [];
   }
 
-  /** How a resting thread stopped: the turn's stop reason, or the kind of the
+  /** How a resting thread stopped: the tool loop's stop reason, or the kind of the
    * non-completed result. `failed` is reported as an error status instead. */
   getThreadSummary(threadId: ThreadId): {
     title?: string | undefined;
@@ -1148,8 +1151,8 @@ ${rows}${loadMore}`;
 
       case "initialized": {
         const thread = threadWrapper.thread;
-        const loopState = thread.thread.loopState;
-        const lastTurnResult = thread.thread.lastResult();
+        const loopState = thread.thread.state;
+        const lastSubmissionResult = thread.thread.lastResult();
 
         const summary = {
           title: thread.thread.title,
@@ -1195,18 +1198,20 @@ ${rows}${loadMore}`;
                     return assertUnreachable(loopState.activity);
                 }
               case "idle":
-                if (lastTurnResult?.type === "failed") {
+              case "yielded":
+              case "destroyed":
+                if (lastSubmissionResult?.type === "failed") {
                   return {
                     type: "error" as const,
-                    message: lastTurnResult.error.message,
+                    message: lastSubmissionResult.error.message,
                   };
                 }
                 return {
                   type: "stopped" as const,
                   reason:
-                    lastTurnResult?.type === "completed"
-                      ? lastTurnResult.stopReason
-                      : (lastTurnResult?.type ?? "end_turn"),
+                    lastSubmissionResult?.type === "completed"
+                      ? lastSubmissionResult.stopReason
+                      : (lastSubmissionResult?.type ?? "end_turn"),
                 };
               default:
                 return assertUnreachable(loopState);

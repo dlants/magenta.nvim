@@ -389,7 +389,7 @@ export class MockStream {
   respondWithError(error: Error): void {
     this._resolved = true;
     // Push an error event that will cause finalMessage() to reject
-    // but NOT set the abort signal
+    // but NOT set the abort abortSignal
     try {
       // Throw the error into the readable stream without aborting
       this.readableController.error(error);

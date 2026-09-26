@@ -11,7 +11,7 @@ import { teardownContainer } from "./container/teardown.ts";
 import { DockerSupervisor } from "./docker-supervisor.ts";
 
 describe("DockerSupervisor", () => {
-  describe("onEndTurnWithoutYield", () => {
+  describe("onToolLoopEnd", () => {
     it("returns send-message for auto-restart", () => {
       const supervisor = DockerSupervisor.create({
         containerName: "test-container",
@@ -19,7 +19,7 @@ describe("DockerSupervisor", () => {
         hostDir: "/host/dir",
       });
 
-      const action = supervisor.onEndTurnWithoutYield({
+      const action = supervisor.onToolLoopEnd({
         stopReason: "end_turn",
         inputTokenCount: undefined,
         lastAssistantMessage: undefined,
@@ -41,7 +41,7 @@ describe("DockerSupervisor", () => {
       });
 
       expect(
-        supervisor.onEndTurnWithoutYield({
+        supervisor.onToolLoopEnd({
           stopReason: "end_turn",
           inputTokenCount: undefined,
           lastAssistantMessage: undefined,
@@ -49,7 +49,7 @@ describe("DockerSupervisor", () => {
         }).type,
       ).toBe("send-message");
       expect(
-        supervisor.onEndTurnWithoutYield({
+        supervisor.onToolLoopEnd({
           stopReason: "end_turn",
           inputTokenCount: undefined,
           lastAssistantMessage: undefined,
@@ -57,7 +57,7 @@ describe("DockerSupervisor", () => {
         }).type,
       ).toBe("send-message");
       expect(
-        supervisor.onEndTurnWithoutYield({
+        supervisor.onToolLoopEnd({
           stopReason: "end_turn",
           inputTokenCount: undefined,
           lastAssistantMessage: undefined,
@@ -73,7 +73,7 @@ describe("DockerSupervisor", () => {
         hostDir: "/host/dir",
       });
 
-      const action = supervisor.onEndTurnWithoutYield({
+      const action = supervisor.onToolLoopEnd({
         stopReason: "max_tokens",
         inputTokenCount: undefined,
         lastAssistantMessage: undefined,
@@ -106,7 +106,7 @@ describe("DockerSupervisor", () => {
     factoryArgs.hostDir = "/mutated-host";
     factoryArgs.onProgress = laterOnProgress;
 
-    expect(source.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+    expect(source.onToolLoopEnd(endTurnContext)).toMatchObject({
       type: "send-message",
       text: expect.stringContaining("1/2"),
     });
@@ -117,18 +117,18 @@ describe("DockerSupervisor", () => {
     expect(clone.teardownResult).toEqual({ syncedFiles: 5 });
     expect(clone.teardownResult).not.toBe(source.teardownResult);
 
-    expect(source.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+    expect(source.onToolLoopEnd(endTurnContext)).toMatchObject({
       type: "send-message",
       text: expect.stringContaining("2/2"),
     });
-    expect(clone.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+    expect(clone.onToolLoopEnd(endTurnContext)).toMatchObject({
       type: "send-message",
       text: expect.stringContaining("2/2"),
     });
-    expect(source.onEndTurnWithoutYield(endTurnContext)).toEqual({
+    expect(source.onToolLoopEnd(endTurnContext)).toEqual({
       type: "none",
     });
-    expect(clone.onEndTurnWithoutYield(endTurnContext)).toEqual({
+    expect(clone.onToolLoopEnd(endTurnContext)).toEqual({
       type: "none",
     });
 

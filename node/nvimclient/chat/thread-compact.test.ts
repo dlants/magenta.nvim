@@ -80,7 +80,7 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
     });
 
     await pollUntil(() => {
-      if (originalThread.thread.loopState.type !== "idle")
+      if (originalThread.thread.state.type === "running")
         throw new Error("waiting for rest");
     });
     resetNotificationLog();
@@ -212,7 +212,9 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
     expect(allText).not.toContain("What about 3+3?");
 
     expect(
-      notificationLog.filter((entry) => entry.reason === "thread-turn-end"),
+      notificationLog.filter(
+        (entry) => entry.reason === "thread-submission-end",
+      ),
     ).toHaveLength(0);
     // Respond to the continuation
     afterCompactStream.respond({
@@ -229,7 +231,9 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
     );
     await pollUntil(() => {
       expect(
-        notificationLog.filter((entry) => entry.reason === "thread-turn-end"),
+        notificationLog.filter(
+          (entry) => entry.reason === "thread-submission-end",
+        ),
       ).toHaveLength(1);
     });
     const nested = path.join(originalThread.context.cwd, "after-compact");

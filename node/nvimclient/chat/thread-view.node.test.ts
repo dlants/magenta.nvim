@@ -1,13 +1,17 @@
-import type { LoopState, RestResult, ThreadLoopState } from "@magenta/server";
+import type {
+  SubmissionResult,
+  ThreadState,
+  ToolLoopActivity,
+} from "@magenta/server";
 import { describe, expect, it } from "vitest";
 import { renderToString } from "../tea/view.ts";
 import { renderStatus } from "./thread-view.ts";
 
 function renderStatusToString(
-  state: ThreadLoopState | Extract<LoopState, { type: "streaming" }>,
-  lastTurnResult?: RestResult,
+  state: ThreadState | Extract<ToolLoopActivity, { type: "streaming" }>,
+  lastSubmissionResult?: SubmissionResult,
 ): string {
-  const loopState: ThreadLoopState =
+  const loopState: ThreadState =
     state.type === "streaming"
       ? {
           type: "running",
@@ -19,7 +23,7 @@ function renderStatusToString(
     renderStatus(
       loopState,
       undefined,
-      lastTurnResult,
+      lastSubmissionResult,
       undefined,
       () => {},
       undefined,

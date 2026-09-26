@@ -17,6 +17,7 @@ import type {
   AgentInput,
   ProviderMessage,
 } from "../providers/provider-types.ts";
+import { ABORTED } from "../thread-api.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { CompactionOutcome, Compactor } from "./index.ts";
 
@@ -98,11 +99,11 @@ export class ThreadCompactor
   async run(
     messages: ReadonlyArray<ProviderMessage>,
     next: ReadonlyArray<AgentInput>,
-    signal: AbortSignal,
+    abortSignal: AbortSignal,
   ): Promise<CompactionOutcome> {
     this.discard();
 
-    const { history, carried } = splitPendingTurn(messages);
+    const { history, carried } = splitUnansweredInput(messages);
     next = [...next, ...carried];
     if (history.length === 0) return { type: "carried", next: [...next] };
     const chunks = this.chunk(history);
@@ -112,16 +113,24 @@ export class ThreadCompactor
 
     const id = this.nextRunId++ as CompactionRunId;
     this.activeRunId = id;
-    const onAbort = () => this.discardRun(id);
-    signal.addEventListener("abort", onAbort, { once: true });
+    // Only interrupts: deleting the active child settles the
+    // `awaitThreadResult` below as aborted, and the loop cleans up the run.
+    let activeChild: ThreadId | undefined;
+    const interrupted = new Set<ThreadId>();
+    const onAbort = () => {
+      if (!activeChild) return;
+      interrupted.add(activeChild);
+      this.deps.threadManager.deleteThread(activeChild);
+    };
+    abortSignal.addEventListener("abort", onAbort, { once: true });
     const completed: ThreadId[] = [];
     let started = false;
     let summary = "";
 
     try {
       for (const [chunkIndex, chunk] of chunks.entries()) {
-        if (signal.aborted || !this.isCurrent(id)) {
-          this.discardRun(id);
+        if (abortSignal.aborted || !this.isCurrent(id)) {
+          this.discardRun(id, interrupted);
           return { type: "aborted" };
         }
 
@@ -143,10 +152,13 @@ export class ThreadCompactor
           fileIO,
           label: `compact ${chunkIndex + 1}/${chunks.length}`,
         });
-
-        if (signal.aborted || !this.isCurrent(id)) {
+        if (threadId === ABORTED) {
+          this.discardRun(id, interrupted);
+          return { type: "aborted" };
+        }
+        if (abortSignal.aborted || !this.isCurrent(id)) {
           this.deps.threadManager.deleteThread(threadId);
-          this.discardRun(id);
+          this.discardRun(id, interrupted);
           return { type: "aborted" };
         }
         const running: CompactionRunState = {
@@ -165,10 +177,14 @@ export class ThreadCompactor
         }
 
         if (!this.isCurrent(id)) return { type: "aborted" };
-        const result =
-          await this.deps.threadManager.awaitThreadResult(threadId);
-        if (signal.aborted || !this.isCurrent(id)) {
-          this.discardRun(id);
+        activeChild = threadId;
+        const result = await this.deps.threadManager
+          .awaitThreadResult(threadId)
+          .finally(() => {
+            activeChild = undefined;
+          });
+        if (abortSignal.aborted || !this.isCurrent(id)) {
+          this.discardRun(id, interrupted);
           return { type: "aborted" };
         }
         if (result.type === "aborted") {
@@ -208,8 +224,8 @@ export class ThreadCompactor
       };
     } catch (error) {
       const wasCurrent = this.isCurrent(id);
-      this.discardRun(id);
-      if (signal.aborted || !wasCurrent) {
+      this.discardRun(id, interrupted);
+      if (abortSignal.aborted || !wasCurrent) {
         return { type: "aborted" };
       }
       return {
@@ -217,13 +233,13 @@ export class ThreadCompactor
         message: error instanceof Error ? error.message : String(error),
       };
     } finally {
-      signal.removeEventListener("abort", onAbort);
+      abortSignal.removeEventListener("abort", onAbort);
     }
   }
 
   /** Abandon the run in flight, deleting the child threads it spawned. The
    * `awaitThreadResult` it is parked on settles `aborted` as a result. */
-  discard(): void {
+  discard(alreadyDeleted: ReadonlySet<ThreadId> = new Set()): void {
     this.activeRunId = undefined;
     const current = this.current;
     if (!current) return;
@@ -234,6 +250,7 @@ export class ThreadCompactor
       threadIds,
     });
     for (const threadId of threadIds) {
+      if (alreadyDeleted.has(threadId)) continue;
       this.deps.threadManager.deleteThread(threadId);
     }
   }
@@ -244,8 +261,11 @@ export class ThreadCompactor
     return this.activeRunId === id;
   }
 
-  private discardRun(id: CompactionRunId): void {
-    if (this.isCurrent(id)) this.discard();
+  private discardRun(
+    id: CompactionRunId,
+    alreadyDeleted?: ReadonlySet<ThreadId>,
+  ): void {
+    if (this.isCurrent(id)) this.discard(alreadyDeleted);
   }
 
   private update(id: CompactionRunId, next: CompactionRunState): void {
@@ -315,7 +335,7 @@ function buildChunkPrompt({
  * been answered, so it is carried past the compaction rather than summarized.
  * Supervisor context is re-derived by the fresh core, and the abort marker is
  * not something the user said. A tool_result tail is mid-loop, not a turn. */
-function splitPendingTurn(messages: ReadonlyArray<ProviderMessage>): {
+function splitUnansweredInput(messages: ReadonlyArray<ProviderMessage>): {
   history: ReadonlyArray<ProviderMessage>;
   carried: AgentInput[];
 } {

@@ -1,4 +1,6 @@
 import {
+  ABORTED,
+  type Aborted,
   type AgentInput,
   autoContextFilesToInitialFiles,
   buildSystemInfo,
@@ -161,8 +163,8 @@ export class NvimSessionHost implements SessionHost {
   async prepareThread(
     request: ThreadPreparation,
     session: Session,
-    signal: AbortSignal,
-  ): Promise<PreparedThread> {
+    abortSignal: AbortSignal,
+  ): Promise<PreparedThread | Aborted> {
     const { options } = request;
     const source = request.type === "fork" ? request.source : undefined;
     const {
@@ -175,7 +177,7 @@ export class NvimSessionHost implements SessionHost {
       yieldSchema,
       scriptName,
     } = options;
-    signal.throwIfAborted();
+    if (abortSignal.aborted) return ABORTED;
     const resolvedConfig: EnvironmentConfig = environmentConfig ?? {
       type: "local",
     };

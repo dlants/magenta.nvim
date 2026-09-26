@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SystemPrompt } from "@magenta/server";
 import {
+  activeTools,
   type CompactionRunState,
   type CompletedToolInfo,
   type ContextFileAccess,
@@ -12,14 +13,13 @@ import {
   type EditedFileGroup,
   formatToolSpec,
   formatToolSpecs,
-  type LoopState,
-  loopActiveTools,
-  loopStreamingBlock,
   type NativeMessageIdx,
   type ProviderToolSpec,
-  type RestResult,
   renderPending,
+  type SubmissionResult,
+  streamingBlock,
   type ThreadId,
+  type ToolLoopActivity,
   type ToolRequestId,
   type YieldState,
 } from "@magenta/server";
@@ -33,7 +33,7 @@ import type {
   ProviderMessage,
   ProviderMessageContent,
   StopReason,
-  ThreadLoopState,
+  ThreadState,
   ToolResultInput,
   Usage,
 } from "../providers/provider.ts";
@@ -98,9 +98,9 @@ export function renderYield(yielded: YieldState): string {
 }
 
 export const renderStatus = (
-  loopState: ThreadLoopState,
+  loopState: ThreadState,
   latestUsage: Usage | undefined,
-  lastTurnResult: RenderedResult,
+  lastSubmissionResult: RenderedResult,
   compaction: RunningCompaction | undefined,
   requestTick: () => void,
   yielded: YieldState | undefined,
@@ -133,13 +133,15 @@ export const renderStatus = (
       }
     }
     case "idle":
-      return renderTurnResult(lastTurnResult, latestUsage);
+    case "yielded":
+    case "destroyed":
+      return renderSubmissionResult(lastSubmissionResult, latestUsage);
     default:
       assertUnreachable(loopState);
   }
 };
 function renderStreaming(
-  activity: Extract<LoopState, { type: "streaming" }>,
+  activity: Extract<ToolLoopActivity, { type: "streaming" }>,
   requestTick: () => void,
 ): VDOMNode {
   requestTick();
@@ -161,8 +163,8 @@ function renderStreaming(
 
 /** How the last submission ended, as the view sees it: a suspension is a
  * handoff, never rendered. */
-type RenderedResult = RestResult | undefined;
-function renderTurnResult(
+type RenderedResult = SubmissionResult | undefined;
+function renderSubmissionResult(
   result: RenderedResult,
   usage: Usage | undefined,
 ): VDOMNode {
@@ -210,11 +212,11 @@ function renderUsage(usage: Usage): VDOMNode {
  * Helper function to determine if context manager view should be shown
  */
 const shouldShowContextFiles = (
-  loopState: ThreadLoopState,
+  loopState: ThreadState,
   fileSupervisor: ContextFileAccess,
 ): boolean => {
   return (
-    loopState.type === "idle" && Object.keys(fileSupervisor.files).length > 0
+    loopState.type !== "running" && Object.keys(fileSupervisor.files).length > 0
   );
 };
 
@@ -481,10 +483,10 @@ export const view: View<{
   );
 
   const messages = thread.thread.getProviderMessages();
-  const loopState = thread.thread.loopState;
+  const loopState = thread.thread.state;
 
   // Show logo when empty and not busy
-  const isIdle = loopState.type === "idle";
+  const isIdle = loopState.type !== "running";
   if (messages.length === 0 && isIdle && thread.submission?.type !== "failed") {
     return d`\
 ${titleView}
@@ -760,7 +762,7 @@ ${contentView}`;
     return d`${renderedBody}${editsAt(messageIdx)}${forkedToAtIdx(messageIdx)}`;
   });
 
-  const streamingBlockView = loopStreamingBlock(loopState)
+  const streamingBlockView = streamingBlock(loopState)
     ? d`\n${renderStreamingBlock(thread)}\n`
     : d``;
 
@@ -970,9 +972,7 @@ function renderMessageContentBlock(
       };
 
       // Check if tool is active (still running)
-      const activeEntry = loopActiveTools(thread.thread.loopState)?.get(
-        request.id,
-      );
+      const activeEntry = activeTools(thread.thread.state)?.get(request.id);
 
       const isActive = !!activeEntry;
       const abortBinding = isActive
@@ -1239,7 +1239,7 @@ export function findToolResult(
 }
 
 function renderStreamingBlock(thread: NvimThread): string | VDOMNode {
-  const block = loopStreamingBlock(thread.thread.loopState);
+  const block = streamingBlock(thread.thread.state);
   if (!block) return d``;
 
   switch (block.type) {

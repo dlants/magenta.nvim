@@ -3,7 +3,7 @@ import type {
   StopReason,
   ToolResults,
 } from "./providers/provider-types.ts";
-import type { RequestContext, YieldAction } from "./thread-supervisor.ts";
+import type { YieldAction } from "./thread-supervisor.ts";
 import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
 import { Defer, untilAborted } from "./utils/async.ts";
 
@@ -24,46 +24,41 @@ export type ToolInvocationState =
 
 /** `context_budget` is the tool loop's own stop: the request was too large to
  * issue. Thread absorbs it by compacting, so owners never see it. */
-export type LoopStopReason = StopReason | "context_budget";
+export type ToolLoopStopReason = StopReason | "context_budget";
 
-/** How one run of the tool loop ended. `yield` is the model's request to hand
- * back (the yield tool's result is already in the log); Thread's turn
- * supervisors decide whether it stands. */
 /** Outcomes shared by the tool loop and the submission that ran it. */
-export type TerminalLoopResult =
+export type TerminalResult =
   | { type: "aborted" }
   | { type: "failed"; error: Error };
+/** How one run of the tool loop ended. `yield` is the model's request to hand
+ * back (the yield tool's result is already in the log); Thread's submission
+ * supervisors decide whether it stands. */
 export type ToolLoopResult =
-  | { type: "completed"; stopReason: LoopStopReason }
+  | { type: "completed"; stopReason: ToolLoopStopReason }
   | { type: "yield"; value: YieldValue }
-  | TerminalLoopResult;
+  | TerminalResult;
 
 /** The complete submission outcome, after internal continuations and
  * compaction: never `context_budget`. Delivered to the submitter rather than
  * broadcast as a lifecycle result. */
-export type RestResult =
+export type SubmissionResult =
   | { type: "completed"; stopReason: StopReason }
   /** The submission settled without ever issuing a request (empty content),
-   * so there was never a turn and there is nothing to continue from. */
+   * so there was never a tool loop and there is nothing to continue from. */
   | { type: "empty" }
   | { type: "yielded"; value: YieldValue; resultPrefix?: string }
-  | TerminalLoopResult;
+  | TerminalResult;
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */
-export type ThreadResult =
+export type ThreadOutcome =
   | { type: "yielded"; value: YieldValue; resultPrefix?: string }
   /** destroyed before it ever yielded */
   | { type: "aborted"; reason: string };
 
-/** Raised out of a submission step when the submission has been aborted. The
- * submission body does not check for abort at every seam: it lets this
- * propagate to the one place that turns an abort into a result. */
-export class SubmissionAborted extends Error {
-  constructor() {
-    super("submission aborted");
-    this.name = "SubmissionAborted";
-  }
-}
+/** What a submission phase returns instead of its result once the submission
+ * has been aborted. Abort is a value, never an exception (see context.md). */
+export const ABORTED: unique symbol = Symbol("aborted");
+export type Aborted = typeof ABORTED;
 /** The submission that currently owns the thread. There is never more than
  * one: a submission that wants to take over awaits the incumbent's `abort()`
  * before installing its own, so no submission body has to ask whether it is
@@ -72,10 +67,10 @@ export class ActiveSubmission {
   private readonly controller = new AbortController();
   private readonly unwound = new Defer<void>();
   private unwinding: Promise<void> | undefined;
-  /** `stopWork` interrupts whatever the submission is blocked on (the agent
-   * turn), so that awaiting an abort cannot wedge the aborter. */
+  /** `stopWork` interrupts whatever the submission is blocked on (the tool
+   * loop), so that awaiting an abort cannot wedge the aborter. */
   constructor(private readonly stopWork: () => Promise<void>) {}
-  get signal(): AbortSignal {
+  get abortSignal(): AbortSignal {
     return this.controller.signal;
   }
   get aborted(): boolean {
@@ -92,24 +87,22 @@ export class ActiveSubmission {
     })();
     return this.unwinding;
   }
-  /** Run one interruptible phase of the submission. The signal settles the
-   * phase on abort, and `abort()` waits for the body to unwind, so a resumed
-   * loop never has to ask whether it still speaks for the thread. */
-  async step<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
-    this.throwIfAborted();
-    const result = await untilAborted(work(this.signal), this.signal);
-    this.throwIfAborted();
+  /** Run a phase whose result is abandoned on abort. Only for work whose
+   * effects the caller applies, so dropping the result drops the effects
+   * (see the cancellation invariants in context.md). */
+  async step<T>(
+    work: (abortSignal: AbortSignal) => Promise<T>,
+  ): Promise<T | Aborted> {
+    if (this.aborted) return ABORTED;
+    const result = await untilAborted(work(this.abortSignal), this.abortSignal);
+    if (this.aborted) return ABORTED;
     return result as T;
   }
-  /** A phase that must unwind on its own terms rather than be raced: the
-   * agent turn is interrupted by `stopWork` and reports its own abort. */
-  async settled<T>(work: () => Promise<T>): Promise<T> {
+  /** Join a phase that owns effects: it is awaited until it has cleaned up
+   * after an abort, and only then does the submission unwind. */
+  async settled<T>(work: () => Promise<T>): Promise<T | Aborted> {
     const result = await work();
-    this.throwIfAborted();
-    return result;
-  }
-  throwIfAborted(): void {
-    if (this.aborted) throw new SubmissionAborted();
+    return this.aborted ? ABORTED : result;
   }
   /** Called by the submission body as it unwinds. */
   settle(): void {
@@ -118,13 +111,13 @@ export class ActiveSubmission {
 }
 
 /** Where the thread is in its life. The single source of truth behind
- * `isBusy`, `loopState`, `lastResult()`, `yielded` and `isDestroyed`.
+ * `isBusy`, `state`, `lastResult()`, `yielded` and `isDestroyed`.
  *
  * `yielded` is a status rather than a sticky flag: a thread whose yield was
  * not accepted may be sent to again, and while that submission runs the thread
  * is `running`, not `yielded`. */
 export type ThreadStatus =
-  | { type: "idle"; lastResult: RestResult | undefined }
+  | { type: "idle"; lastResult: SubmissionResult | undefined }
   | { type: "running"; submission: ActiveSubmission }
   | {
       type: "yielded";
@@ -133,13 +126,10 @@ export type ThreadStatus =
     }
   /** Terminal. The last result is kept because a destroyed thread's history
    * can still be rendered. */
-  | { type: "destroyed"; lastResult: RestResult | undefined };
+  | { type: "destroyed"; lastResult: SubmissionResult | undefined };
 
 /** The accepted/settled yield, as views render it. */
 export type YieldState = Extract<ThreadStatus, { type: "yielded" }>;
-
-/** What the agent tells its owner about the request it is about to issue. */
-export type AgentRequestContext = RequestContext;
 
 /** Called once per tool batch after its results have been written to the log,
  * including aborted batches. Observe only: it cannot change the logged
@@ -154,7 +144,7 @@ export type ToolResultsHook = (
  * result. */
 export type YieldHook = (value: YieldValue) => Promise<YieldAction>;
 
-/** "Something visible moved." No payload: read `loopState`. Called at streaming
+/** "Something visible moved." No payload: read `state`. Called at streaming
  * rates and not throttled; the recipient coalesces, and its debounce must be
  * trailing-edge or the final call at rest is dropped. */
 export type OnUpdate = () => void;

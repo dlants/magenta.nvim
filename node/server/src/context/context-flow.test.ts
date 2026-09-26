@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import type { ThreadId } from "../chat-types.ts";
 import { PRE_HISTORY } from "../supervisors/history.ts";
 import { type Harness, withHarness } from "../test/harness.ts";
-import { getFileSupervisor } from "../test-helpers.ts";
+import { created, getFileSupervisor } from "../test-helpers.ts";
 import type { Thread } from "../thread.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
@@ -293,7 +293,7 @@ it("forked thread inherits parent's discovered context files", () =>
     const { id, thread } = await h.createRoot();
     await addFile(h, thread, "/project/nested/dir/file.txt");
     await waitForPaths(thread, ["nested/context.md"]);
-    const fork = h.thread(await h.session.forkThread(id));
+    const fork = h.thread(await created(h.session.forkThread(id)));
     expect(relPaths(fork)).toEqual(
       expect.arrayContaining(["nested/dir/file.txt", "nested/context.md"]),
     );

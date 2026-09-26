@@ -1,11 +1,12 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { expect, it } from "vitest";
-import { loopLabel } from "./loop-state.ts";
 import type { MockStream } from "./providers/mock-anthropic-client.ts";
 import { parseDelivery, renderPending } from "./submission/index.ts";
 import { shellResult } from "./test/fakes.ts";
 import { type Harness, withHarness } from "./test/harness.ts";
+import { created } from "./test-helpers.ts";
 import type { Thread } from "./thread.ts";
+import { activityLabel } from "./thread-state.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { pollUntil } from "./utils/async.ts";
 
@@ -172,7 +173,9 @@ it("forks a thread with multiple messages into a new thread", () =>
       "What about Germany?",
       "The capital of Germany is Berlin.",
     );
-    const fork = h.thread(await h.session.forkThread(id, forkPoint));
+    const forkId = await created(h.session.forkThread(id, forkPoint));
+    const fork = h.thread(forkId);
+
     const done = h.send(fork, "Tell me about Italy");
     const stream = await h.nextStream();
     expect(hasText(stream, "The capital of France is Paris.")).toBe(true);
@@ -402,9 +405,11 @@ it("forks a thread while streaming without aborting source", () =>
     const forkPoint = thread.nativeMessageIdx;
     void h.send(thread, "What about 3+3?");
     const streaming = await h.nextStream();
-    const fork = h.thread(await h.session.forkThread(id, forkPoint));
+    const forkId = await created(h.session.forkThread(id, forkPoint));
+    const fork = h.thread(forkId);
+
     expect(streaming.aborted).toBe(false);
-    expect(loopLabel(thread.loopState)).toBe("streaming");
+    expect(activityLabel(thread.state)).toBe("streaming");
     void h.send(fork, "Actually, tell me about 5+5");
     const forked = await h.streamWithText("Actually, tell me about 5+5");
     expect(hasText(forked, "2+2 equals 4.")).toBe(true);
@@ -422,8 +427,10 @@ it("forks a thread while waiting for tool use without aborting source", () =>
       toolRequests: [bashRequest("bash-tool", "cat .secret")],
     });
     await pendingShell(h);
-    expect(loopLabel(thread.loopState)).toBe("running_tools");
-    const fork = h.thread(await h.session.forkThread(id));
+    expect(activityLabel(thread.state)).toBe("running_tools");
+    const forkId = await created(h.session.forkThread(id));
+    const fork = h.thread(forkId);
+
     void h.send(fork, "Do something else instead");
     const forked = await h.streamWithText("Do something else instead");
     // The fork's clone turns the pending tool_use into an error tool_result.
@@ -431,7 +438,7 @@ it("forks a thread while waiting for tool use without aborting source", () =>
       .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
       .find((c) => c.type === "tool_result");
     expect(result).toMatchObject({ tool_use_id: "bash-tool", is_error: true });
-    expect(loopLabel(thread.loopState)).toBe("running_tools");
+    expect(activityLabel(thread.state)).toBe("running_tools");
   }));
 
 it("aborts request when sending new message while waiting for response", () =>

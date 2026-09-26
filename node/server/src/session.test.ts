@@ -9,10 +9,12 @@ import {
 } from "./test/harness.ts";
 import {
   awaitNextStream,
+  created,
   sendResolved,
   TEST_ARCHIVE_DIR,
   uniqueThreadId,
 } from "./test-helpers.ts";
+import { ABORTED } from "./thread-api.ts";
 import { TitleSupervisor } from "./thread-assembly.ts";
 import {
   MaxTokensSupervisor,
@@ -47,22 +49,22 @@ afterEach(async () => {
 
 it("owns construction and fork policies with no view attached", async () => {
   const { session } = fixture();
-  const id = await session.createRootThread();
+  const id = await created(session.createRootThread());
   const record = session.getThread(id);
   if (record?.state !== "initialized") throw new Error("expected initialized");
   expect(
-    record.thread.turnSupervisors.map((policy) => policy.constructor),
+    record.thread.submissionSupervisors.map((policy) => policy.constructor),
   ).toEqual([MaxTokensSupervisor, TitleSupervisor]);
   // biome-ignore lint/complexity/useLiteralKeys: verify the injected execution boundary
   expect(record.thread["context"].threadManager).toBe(session);
-  const forkId = await session.forkThread(id);
+  const forkId = await created(session.forkThread(id));
   const fork = session.getThread(forkId);
   if (fork?.state !== "initialized") throw new Error("expected fork");
   expect(fork.thread).not.toBe(record.thread);
   expect(fork.compactor).not.toBe(record.compactor);
   expect(fork.parentThreadId).toBeUndefined();
   expect(
-    fork.thread.turnSupervisors.map((policy) => policy.constructor),
+    fork.thread.submissionSupervisors.map((policy) => policy.constructor),
   ).toEqual([MaxTokensSupervisor, TitleSupervisor]);
 });
 
@@ -71,16 +73,20 @@ it("derives a child's profile and environment from the parent record", async () 
   host.contextOverrides = {
     environmentConfig: { type: "docker", container: "remote", cwd: "/work" },
   };
-  const parentId = await session.createThread({
-    profile: { ...profile, fastModel: "fast-model" },
-    threadType: "root",
-  });
-  const childId = await session.spawnThread({
-    parentThreadId: parentId,
-    prompt: "do work",
-    threadType: "subagent",
-    subagentConfig: { fastModel: true },
-  });
+  const parentId = await created(
+    session.createThread({
+      profile: { ...profile, fastModel: "fast-model" },
+      threadType: "root",
+    }),
+  );
+  const childId = await created(
+    session.spawnThread({
+      parentThreadId: parentId,
+      prompt: "do work",
+      threadType: "subagent",
+      subagentConfig: { fastModel: true },
+    }),
+  );
   const child = session.getThread(childId);
   if (child?.state !== "initialized") throw new Error("expected child");
   expect(child.parentThreadId).toBe(parentId);
@@ -127,7 +133,9 @@ it("invalidates pending construction and awaits its late release during disposal
     threadId: id,
     ...rootOptions(profile),
   });
-  const rejected = expect(creation).rejects.toThrow("cancelled");
+  const rejected = creation.then((result) => {
+    expect(result).toBe(ABORTED);
+  });
   session.deleteThread(id);
   const disposal = session.dispose();
   gate.resolve();
@@ -147,8 +155,8 @@ it("deleting a parent invalidates its in-flight child and leaves other roots alo
     if (request.options.parent) await gate.promise;
     return prepare();
   });
-  const root = await session.createRootThread();
-  const other = await session.createRootThread();
+  const root = await created(session.createRootThread());
+  const other = await created(session.createRootThread());
   const child = uniqueThreadId("session-child");
   const creation = session.createThread({
     threadId: child,
@@ -156,7 +164,9 @@ it("deleting a parent invalidates its in-flight child and leaves other roots alo
     profile,
     threadType: "compact",
   });
-  const rejected = expect(creation).rejects.toThrow("cancelled");
+  const rejected = creation.then((result) => {
+    expect(result).toBe(ABORTED);
+  });
   session.deleteThread(root);
   gate.resolve();
   await rejected;
@@ -178,7 +188,9 @@ it("aborts pending preparation and releases a late environment exactly once", as
     threadId: id,
     ...rootOptions(profile),
   });
-  const rejected = expect(creation).rejects.toThrow("cancelled");
+  const rejected = creation.then((result) => {
+    expect(result).toBe(ABORTED);
+  });
   await session.abortThread(id);
   await expect(session.awaitThreadResult(id)).resolves.toMatchObject({
     type: "aborted",
@@ -192,35 +204,39 @@ it("aborts pending preparation and releases a late environment exactly once", as
 
 it("compact children get no compactor and no auto-compaction policy", async () => {
   const { session, profile } = fixture();
-  const id = await session.createThread({
-    profile: profile,
-    threadType: "compact",
-  });
+  const id = await created(
+    session.createThread({
+      profile: profile,
+      threadType: "compact",
+    }),
+  );
   const record = session.getThread(id);
   if (record?.state !== "initialized") throw new Error("expected initialized");
   expect(record.compactor).toBeUndefined();
-  const forkId = await session.forkThread(id);
+  const forkId = await created(session.forkThread(id));
   const fork = session.getThread(forkId);
   if (fork?.state !== "initialized") throw new Error("expected fork");
   expect(fork.compactor).toBeUndefined();
   expect(
-    fork.thread.turnSupervisors.map((policy) => policy.constructor),
+    fork.thread.submissionSupervisors.map((policy) => policy.constructor),
   ).toEqual([MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor]);
 });
 
 it("runs bootstrap input and settles a yield with no dispatch involved", async () => {
   const { session, profile, mockClient } = fixture();
-  const id = await session.createThread({
-    profile: profile,
-    threadType: "subagent",
-    label: "Headless worker",
-    inputMessages: [
-      {
-        type: "text",
-        text: "work",
-      },
-    ],
-  });
+  const id = await created(
+    session.createThread({
+      profile: profile,
+      threadType: "subagent",
+      label: "Headless worker",
+      inputMessages: [
+        {
+          type: "text",
+          text: "work",
+        },
+      ],
+    }),
+  );
   const record = session.getThread(id);
   if (record?.state !== "initialized") throw new Error("expected initialized");
   expect(record.thread.title).toBe("Headless worker");
@@ -245,7 +261,7 @@ it("runs bootstrap input and settles a yield with no dispatch involved", async (
 it("rejects approvals on deletion and releases environments even when destruction fails", async () => {
   const release = vi.fn(async () => {});
   const { session, host } = fixture(withRelease(release));
-  const id = await session.createRootThread();
+  const id = await created(session.createRootThread());
   const record = session.getThread(id);
   if (record?.state !== "initialized") throw new Error("expected initialized");
   const destroy = record.thread.destroy.bind(record.thread);
@@ -268,7 +284,7 @@ it("uses the prepared environment when checking whether a fork is local", async 
       cwd: "/workspace",
     },
   };
-  const id = await session.createThread(rootOptions(profile));
+  const id = await created(session.createThread(rootOptions(profile)));
   expect(() => session.forkThread(id)).toThrow("local-source forks");
 });
 
@@ -290,7 +306,7 @@ it("freezes a fork at the requested index even if the source advances", async ()
         [message],
       ),
   };
-  const id = await session.createRootThread();
+  const id = await created(session.createRootThread());
   const record = session.getThread(id);
   if (record?.state !== "initialized") throw new Error("expected source");
   const first = record.thread.submit({
@@ -316,7 +332,7 @@ it("freezes a fork at the requested index even if the source advances", async ()
   host.options.autoCompactThreshold = 1;
   host.options.autoCompactPrompt = "changed policy";
   gate.resolve();
-  const forkId = await forkCreation;
+  const forkId = await created(forkCreation);
   const fork = session.getThread(forkId);
   if (fork?.state !== "initialized") throw new Error("expected fork");
   // The fork opens with the seam notice; everything before it is frozen.
@@ -332,17 +348,21 @@ it("freezes a fork at the requested index even if the source advances", async ()
 
 it("aborts the subtree but returns only the requested thread's unsent input", async () => {
   const { session } = fixture();
-  const root = await session.createRootThread();
-  const child = await session.spawnThread({
-    parentThreadId: root,
-    prompt: "child work",
-    threadType: "subagent",
-  });
-  const grandchild = await session.spawnThread({
-    parentThreadId: child,
-    prompt: "grandchild work",
-    threadType: "subagent",
-  });
+  const root = await created(session.createRootThread());
+  const child = await created(
+    session.spawnThread({
+      parentThreadId: root,
+      prompt: "child work",
+      threadType: "subagent",
+    }),
+  );
+  const grandchild = await created(
+    session.spawnThread({
+      parentThreadId: child,
+      prompt: "grandchild work",
+      threadType: "subagent",
+    }),
+  );
   const threadOf = (id: ThreadId) => {
     const record = session.getThread(id);
     if (record?.state !== "initialized") throw new Error("expected thread");
@@ -387,7 +407,7 @@ it("destroys and releases a thread whose record is deleted after assembly", asyn
     destroy = vi.spyOn(record.thread, "destroy");
     session.deleteThread(id);
   });
-  await expect(session.createRootThread()).rejects.toThrow("cancelled");
+  await expect(session.createRootThread()).resolves.toBe(ABORTED);
   await session.dispose();
   expect(destroy).toHaveBeenCalledTimes(1);
   expect(release).toHaveBeenCalledTimes(1);
@@ -403,7 +423,7 @@ it("refuses to reuse a thread id that is already registered", async () => {
 });
 it("records observed activity and ignores unknown ids", async () => {
   const { session } = fixture();
-  const id = await session.createRootThread();
+  const id = await created(session.createRootThread());
   const before = session.getThread(id)!.lastActivityTime;
   const changed: ThreadId[] = [];
   session.on("changed", (changedId) => changed.push(changedId));
@@ -416,14 +436,16 @@ it("records observed activity and ignores unknown ids", async () => {
 });
 it("disposal settles streaming work once, drains cleanup and rejects new work", async () => {
   const { session, mockClient, profile } = fixture();
-  const root = await session.createRootThread();
+  const root = await created(session.createRootThread());
   const record = session.getThread(root);
   if (record?.state !== "initialized") throw new Error("expected root");
-  const compactChild = await session.createThread({
-    parent: root,
-    profile: profile,
-    threadType: "compact",
-  });
+  const compactChild = await created(
+    session.createThread({
+      parent: root,
+      profile: profile,
+      threadType: "compact",
+    }),
+  );
   const submission = record.thread.submit({
     type: "raw",
     message: pendingMessage("stream something"),
@@ -453,7 +475,7 @@ it("disposal settles streaming work once, drains cleanup and rejects new work", 
 it("keeps two sessions' registries independent", async () => {
   const a = fixture();
   const b = fixture();
-  const id = await a.session.createRootThread();
+  const id = await created(a.session.createRootThread());
   expect(b.session.getThread(id)).toBeUndefined();
   await expect(b.session.awaitThreadResult(id)).rejects.toThrow(
     "Unknown thread",

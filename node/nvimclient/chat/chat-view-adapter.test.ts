@@ -1,5 +1,8 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: White-box test: the view adapter is rebuilt over an existing session.
+
 import type { ThreadId, ToolName, ToolRequestId } from "@magenta/server";
+import { ABORTED } from "@magenta/server";
+
 import { expect, it } from "vitest";
 import { withDriver } from "../test/preamble.ts";
 import { Chat } from "./chat.ts";
@@ -127,7 +130,11 @@ it("a disposed view observes no further session events", async () => {
     chat.dispose();
     expect(chat["threadViews"].size).toBe(0);
     // Session mutations after dispose must not repopulate the view cache.
-    const newId = await session.createRootThread();
+    const newIdOrAborted = await session.createRootThread();
+    if (newIdOrAborted === ABORTED)
+      throw new Error("thread creation was aborted");
+    const newId = newIdOrAborted;
+
     expect(chat["threadViews"].size).toBe(0);
     session.deleteThread(newId);
     session.deleteThread(existingId);

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { loopLabel, loopStreamingBlock } from "./loop-state.ts";
 import { awaitNextStream, createTestAgent } from "./test-helpers.ts";
 import type { ToolInvocationState } from "./thread-api.ts";
+import { activityLabel, streamingBlock } from "./thread-state.ts";
 import type { ToolOutcome } from "./tool-loop.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
@@ -25,15 +25,15 @@ describe("ToolLoop lifecycle and progress", () => {
       },
     ]);
     const stream = await mockClient.awaitStream();
-    expect(turn.loopState).toMatchObject({ type: "streaming" });
-    expect(turn.loopState).not.toHaveProperty("send");
+    expect(turn.activity).toMatchObject({ type: "streaming" });
+    expect(turn.activity).not.toHaveProperty("send");
     stream.emitEvent({
       type: "content_block_start",
       index: stream.nextBlockIndex(),
       content_block: { type: "text", text: "looking", citations: null },
     });
     await pollUntil(() => {
-      expect(loopStreamingBlock(agent.loopState)).toEqual({
+      expect(streamingBlock(agent.state)).toEqual({
         type: "text",
         text: "looking",
       });
@@ -41,7 +41,7 @@ describe("ToolLoop lifecycle and progress", () => {
     });
     stream.emitEvent({ type: "content_block_stop", index: 0 });
     await pollUntil(() => {
-      expect(loopStreamingBlock(agent.loopState)).toBeUndefined();
+      expect(streamingBlock(agent.state)).toBeUndefined();
       return true;
     });
     stream.streamToolUse("read" as ToolRequestId, "get_files" as ToolName, {
@@ -49,7 +49,7 @@ describe("ToolLoop lifecycle and progress", () => {
     });
     stream.finishResponse("tool_use");
     await entered.promise;
-    expect(turn.loopState).toMatchObject({
+    expect(turn.activity).toMatchObject({
       type: "running_tools",
       tools: { type: "pending" },
     });
@@ -58,25 +58,25 @@ describe("ToolLoop lifecycle and progress", () => {
       activeTools: new Map(),
     };
     publish(running);
-    expect(turn.loopState).toMatchObject({
+    expect(turn.activity).toMatchObject({
       type: "running_tools",
       tools: running,
     });
     tools.resolve({ type: "continue", results: new Map() });
     const continuation = await awaitNextStream(mockClient, stream);
-    expect(turn.loopState).toMatchObject({
+    expect(turn.activity).toMatchObject({
       type: "streaming",
       block: undefined,
     });
     publish(running);
-    expect(turn.loopState.type).toBe("streaming");
+    expect(turn.activity.type).toBe("streaming");
     continuation.streamText("done");
     continuation.finishResponse("end_turn");
     expect(await turn.promise).toEqual({
       type: "completed",
       stopReason: "end_turn",
     });
-    expect(agent.loopState).toEqual({
+    expect(agent.state).toEqual({
       type: "idle",
       lastResult: { type: "completed", stopReason: "end_turn" },
     });
@@ -87,8 +87,8 @@ describe("ToolLoop lifecycle and progress", () => {
     const tools = new Defer<ToolOutcome>();
     const abort = vi.fn();
     const { agent, mockClient } = createTestAgent({
-      executeTools: (_requests, _publish, signal) => {
-        signal.addEventListener("abort", abort);
+      executeTools: (_requests, _publish, abortSignal) => {
+        abortSignal.addEventListener("abort", abort);
         entered.resolve();
         return tools.promise;
       },
@@ -105,20 +105,20 @@ describe("ToolLoop lifecycle and progress", () => {
     });
     stream.finishResponse("tool_use");
     await entered.promise;
-    expect(first.loopState).toMatchObject({
+    expect(first.activity).toMatchObject({
       type: "running_tools",
     });
-    expect(first.loopState).not.toHaveProperty("send");
+    expect(first.activity).not.toHaveProperty("send");
     first.abort();
     expect(abort).toHaveBeenCalledTimes(1);
     expect(first.aborting).toBe(true);
-    expect(loopLabel(agent.loopState)).toBe("running_tools");
+    expect(activityLabel(agent.state)).toBe("running_tools");
     tools.resolve({ type: "aborted", results: new Map() });
     expect(await first.promise).toEqual({ type: "aborted" });
-    expect(first.loopState).toEqual({ type: "preparing" });
+    expect(first.activity).toEqual({ type: "preparing" });
     first.abort();
     expect(abort).toHaveBeenCalledTimes(1);
-    expect(loopLabel(agent.loopState)).toBe("idle");
+    expect(activityLabel(agent.state)).toBe("idle");
 
     const second = agent.send([
       {
@@ -175,7 +175,7 @@ describe("ToolLoop lifecycle and progress", () => {
       return true;
     });
     expect(await turn.promise).toEqual({ type: "aborted" });
-    expect(agent.loopState).toEqual({
+    expect(agent.state).toEqual({
       type: "idle",
       lastResult: { type: "aborted" },
     });

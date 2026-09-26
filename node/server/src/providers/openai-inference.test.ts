@@ -84,7 +84,7 @@ function setup(
 ) {
   const calls: RequestedTool[][] = [];
   const state = { updates: 0 };
-  const executeTools: ToolExecutor = (requests, publishTools, signal) => {
+  const executeTools: ToolExecutor = (requests, publishTools, abortSignal) => {
     calls.push([...requests]);
     return (
       options.executeTools ??
@@ -93,7 +93,7 @@ function setup(
           type: "continue" as const,
           results: okResults(reqs),
         }))
-    )(requests, publishTools, signal);
+    )(requests, publishTools, abortSignal);
   };
   const { agent, mockClient: client } = createTestOpenAIAgent({
     ...(options.client ? { mockClient: options.client } : {}),
@@ -109,7 +109,7 @@ function setup(
 
 /** Start a turn and wait for the request it issues. `awaitStream` would hand
  * back the previous, already-finished stream, so index from where we are. */
-async function startTurn(
+async function startToolLoop(
   client: MockOpenAIClient,
   agent: TestAgent,
   text = "hello",
@@ -150,7 +150,7 @@ function toolUseBlocks(agent: TestAgent) {
 describe("OpenAIInferenceManager text turns", () => {
   it("commits each completed item as it arrives, before the turn ends", async () => {
     const { client, agent } = setup({ includeWebSearch: true });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamWebSearchCall("denis lantsman");
     await stream.settle();
     // Without incremental commits the message only materializes at
@@ -169,7 +169,7 @@ describe("OpenAIInferenceManager text turns", () => {
 
   it("exposes completed blocks alongside the in-flight one mid-stream", async () => {
     const { client, agent } = setup({ includeWebSearch: true });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamReasoningSummary(["let me look that up"]);
     stream.streamWebSearchCall("denis lantsman");
     // A message item that has started but not finished: what the view shows as
@@ -211,7 +211,7 @@ describe("OpenAIInferenceManager text turns", () => {
   it("streams text, calls onUpdate, and resolves the turn with usage recorded", async () => {
     const { client, agent, state } = setup();
 
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     expect(stream.instructions).toBe("test system prompt");
 
     stream.streamText("hi there");
@@ -241,7 +241,7 @@ describe("OpenAIInferenceManager text turns", () => {
 
   it("exposes the partially accumulated text as the streaming block", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.emitEvent({
       type: "response.output_item.added",
       output_index: 0,
@@ -270,7 +270,7 @@ describe("OpenAIInferenceManager text turns", () => {
 
   it("sends one stable prompt_cache_key for every turn and its clones", async () => {
     const { client, agent } = setup();
-    const first = await startTurn(client, agent);
+    const first = await startToolLoop(client, agent);
     const key = first.stream.params.prompt_cache_key;
     expect(typeof key).toBe("string");
     first.stream.streamText("one");
@@ -278,7 +278,7 @@ describe("OpenAIInferenceManager text turns", () => {
     first.stream.finishResponse();
     await first.turn;
 
-    const second = await startTurn(client, agent, "again");
+    const second = await startToolLoop(client, agent, "again");
     expect(second.stream.params.prompt_cache_key).toBe(key);
     second.stream.finishResponse();
     await second.turn;
@@ -288,7 +288,7 @@ describe("OpenAIInferenceManager text turns", () => {
       tools: [spec],
       cloneFrom: agent.manager,
     });
-    const third = await startTurn(client, cloned, "clone");
+    const third = await startToolLoop(client, cloned, "clone");
     expect(third.stream.params.prompt_cache_key).toBe(key);
     third.stream.finishResponse();
     await third.turn;
@@ -304,7 +304,7 @@ describe("OpenAIInferenceManager tool calls", () => {
           results: okResults(requests, "file contents"),
         }),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
 
     stream.streamToolCall("call_1", "get_files", {
       files: [{ filePath: "a.ts" }],
@@ -340,7 +340,7 @@ describe("OpenAIInferenceManager tool calls", () => {
 
   it("keys parallel tool calls on output_index", async () => {
     const { client, agent, calls } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
 
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     stream.streamToolCall("call_2", "get_files", { filePath: "b.ts" });
@@ -364,7 +364,7 @@ describe("OpenAIInferenceManager tool calls", () => {
           results: okResults(requests, "yielded"),
         }),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -385,7 +385,7 @@ describe("OpenAIInferenceManager tool calls", () => {
 describe("OpenAIInferenceManager reasoning", () => {
   it("folds many summary parts into one thinking block", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
 
     stream.streamReasoningSummary(["first", "second", "third"], {
       itemId: "rs_1",
@@ -404,7 +404,7 @@ describe("OpenAIInferenceManager reasoning", () => {
       thinking: "first\n\nsecond\n\nthird",
     });
 
-    const next = await startTurn(client, agent, "more");
+    const next = await startToolLoop(client, agent, "more");
     const reasoning = next.stream.inputItemsOfType("reasoning");
     expect(reasoning).toHaveLength(1);
     expect(reasoning[0].encrypted_content).toBe("enc-1");
@@ -414,7 +414,7 @@ describe("OpenAIInferenceManager reasoning", () => {
 
   it("echoes the turn's reasoning and function_call items byte-for-byte", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamReasoningSummary(["weighing it up"], {
       itemId: "rs_wire",
       encryptedContent: "enc-wire",
@@ -439,7 +439,7 @@ describe("OpenAIInferenceManager reasoning", () => {
 
   it("round-trips an empty-summary reasoning item", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
 
     stream.streamEmptyReasoning("enc-empty", "rs_empty");
     stream.streamText("ok");
@@ -452,7 +452,7 @@ describe("OpenAIInferenceManager reasoning", () => {
     );
     expect(thinking).toMatchObject({ thinking: "" });
 
-    const next = await startTurn(client, agent, "again");
+    const next = await startToolLoop(client, agent, "again");
     expect(next.stream.inputItemsOfType("reasoning")[0]).toMatchObject({
       id: "rs_empty",
       encrypted_content: "enc-empty",
@@ -466,7 +466,7 @@ describe("OpenAIInferenceManager reasoning", () => {
 describe("OpenAIInferenceManager web search", () => {
   it("keeps the search call and its annotations across turns", async () => {
     const { client, agent } = setup({ includeWebSearch: true });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
 
     const annotation: OpenAI.Responses.ResponseOutputText.URLCitation = {
       type: "url_citation",
@@ -493,7 +493,7 @@ describe("OpenAIInferenceManager web search", () => {
       url: "https://example.com",
     });
 
-    const next = await startTurn(client, agent, "thanks");
+    const next = await startToolLoop(client, agent, "thanks");
     expect(next.stream.inputItemsOfType("web_search_call")[0]).toMatchObject({
       id: "ws_1",
     });
@@ -505,7 +505,7 @@ describe("OpenAIInferenceManager web search", () => {
 describe("OpenAIInferenceManager abort", () => {
   it("unwinds the turn when the stream just ends", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
 
     stream.emitEvent({
       type: "response.output_item.added",
@@ -542,7 +542,7 @@ describe("OpenAIInferenceManager abort", () => {
 
   it("drops a tool call that was never dispatched", async () => {
     const { client, agent, calls } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
 
@@ -556,7 +556,7 @@ describe("OpenAIInferenceManager abort", () => {
 
   it("drops the reasoning stranded by an undispatched tool call", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamReasoningSummary(["about to call a tool"], {
       itemId: "rs_1",
       encryptedContent: "enc-1",
@@ -570,7 +570,7 @@ describe("OpenAIInferenceManager abort", () => {
 
     // The backend rejects a reasoning item that is not followed by the output
     // it reasons about, so dropping the call must drop the reasoning too.
-    const next = await startTurn(client, agent, "carry on");
+    const next = await startToolLoop(client, agent, "carry on");
     expect(next.stream.inputItemsOfType("function_call")).toHaveLength(0);
     expect(next.stream.inputItemsOfType("reasoning")).toHaveLength(0);
     next.stream.finishResponse();
@@ -582,7 +582,7 @@ describe("OpenAIInferenceManager abort", () => {
       executeTools: () =>
         Promise.resolve({ type: "aborted", results: new Map() }),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -611,7 +611,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
       executeTools: () =>
         Promise.resolve({ type: "continue", results: new Map() }),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -632,7 +632,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
       executeTools: () =>
         Promise.resolve(Promise.reject(new Error("executor blew up"))),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -647,7 +647,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
 
   it("fails a second turn started while one is in flight", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
 
     expect(
       await agent.send([
@@ -675,7 +675,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
 describe("OpenAIInferenceManager clone", () => {
   it("returns an idle deep copy with history intact", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamText("original");
     await stream.settle();
     stream.finishResponse();
@@ -693,7 +693,7 @@ describe("OpenAIInferenceManager clone", () => {
       text: "original",
     });
 
-    const clonedTurn = await startTurn(client, cloned, "only in the clone");
+    const clonedTurn = await startToolLoop(client, cloned, "only in the clone");
     expect(agent.manager.log.messages).toHaveLength(2);
     expect(cloned.manager.log.messages).toHaveLength(3);
     clonedTurn.stream.finishResponse();
@@ -713,7 +713,7 @@ describe("OpenAIInferenceManager clone", () => {
         });
       },
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -767,7 +767,7 @@ describe("OpenAIInferenceManager tool result attachments", () => {
           ),
         }),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -815,7 +815,7 @@ describe("OpenAIInferenceManager tool result attachments", () => {
 describe("OpenAIInferenceManager stop info", () => {
   it("keeps an earlier turn's stop info when a later turn is pruned", async () => {
     const { client, agent } = setup();
-    const first = await startTurn(client, agent);
+    const first = await startToolLoop(client, agent);
     first.stream.streamText("first");
     await first.stream.settle();
     first.stream.finishResponse("end_turn", {
@@ -825,7 +825,7 @@ describe("OpenAIInferenceManager stop info", () => {
     });
     await first.turn;
 
-    const second = await startTurn(client, agent, "second");
+    const second = await startToolLoop(client, agent, "second");
     second.stream.streamReasoningSummary(["about to call a tool"], {
       itemId: "rs_1",
       encryptedContent: "enc-1",
@@ -848,14 +848,14 @@ describe("OpenAIInferenceManager stop info", () => {
 describe("OpenAIInferenceManager truncation", () => {
   it("keeps messages up to the given index", async () => {
     const { client, agent } = setup();
-    const first = await startTurn(client, agent);
+    const first = await startToolLoop(client, agent);
     first.stream.streamText("first");
     await first.stream.settle();
     first.stream.finishResponse();
     await first.turn;
 
     const idx = agent.manager.getNativeMessageIdx();
-    const second = await startTurn(client, agent, "second");
+    const second = await startToolLoop(client, agent, "second");
     second.stream.streamText("second answer");
     await second.stream.settle();
     second.stream.finishResponse();
@@ -869,7 +869,7 @@ describe("OpenAIInferenceManager truncation", () => {
 
   it("drops a tool_use severed from its tool_result", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startToolLoop(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -887,7 +887,7 @@ describe("OpenAIInferenceManager truncation", () => {
     agent.manager.truncateMessages(assistantIdx);
     expect(toolUseBlocks(agent)).toHaveLength(0);
 
-    const next = await startTurn(client, agent, "carry on");
+    const next = await startToolLoop(client, agent, "carry on");
     expect(next.stream.inputItemsOfType("function_call")).toHaveLength(0);
     next.stream.finishResponse();
     await next.turn;
@@ -981,7 +981,7 @@ describe("OpenAIInferenceManager pending message indices", () => {
     let agent!: TestAgent;
     const executeTools: NonNullable<
       Parameters<typeof createTestOpenAIAgent>[0]
-    >["executeTools"] = (requested, publishTools, signal) =>
+    >["executeTools"] = (requested, publishTools, abortSignal) =>
       executeToolBatch(requested, {
         completedTools: new Map(),
         createTool: (request) => ({
@@ -994,7 +994,7 @@ describe("OpenAIInferenceManager pending message indices", () => {
         }),
         publishTools,
         onUpdate: () => {},
-        signal,
+        abortSignal,
       });
     const created = createTestOpenAIAgent({
       tools: [spec],

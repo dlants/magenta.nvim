@@ -275,7 +275,7 @@ export function archiveThread<T extends Thread>(args: {
     ...callbacks,
     onUpdate: () => {
       archive?.record(
-        thread.loopState.type === "running" ? "streaming" : "at-rest",
+        thread.state.type === "running" ? "streaming" : "at-rest",
       );
       callbacks.onUpdate();
     },

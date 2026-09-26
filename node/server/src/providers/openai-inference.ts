@@ -4,6 +4,7 @@ import type { Logger } from "../logger.ts";
 import type { ReasoningEffort, ReasoningSummary } from "../provider-options.ts";
 import type { ToolName, ToolRequestId, ValidateInput } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
+import { abortableDelay } from "../utils/async.ts";
 import {
   describeError,
   flattenError,
@@ -134,8 +135,8 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
    * server supplies is free and removes the assumption. */
   private blocks = new Map<number, OpenAIStreamingBlock>();
   private openIndex: number | undefined;
-  /** Index in `items` of the first item of the turn being accumulated. */
-  private turnStartIdx = 0;
+  /** Index in `items` of the first item of the response being accumulated. */
+  private responseStartIdx = 0;
 
   private stream:
     | (AsyncIterable<ResponseStreamEvent> & { controller: AbortController })
@@ -171,7 +172,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
         // retry re-sends the same history, so drop them.
         this.blocks.clear();
         this.openIndex = undefined;
-        this.items.length = this.turnStartIdx;
+        this.items.length = this.responseStartIdx;
         this.pruneStopInfo();
         this.updateCache();
         break;
@@ -329,7 +330,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
 
   private attachStopInfo(stopReason: StreamStopReason, usage: Usage) {
     const idx = (this.items.length - 1) as NativeMessageIdx;
-    if (idx < this.turnStartIdx) return;
+    if (idx < this.responseStartIdx) return;
     this.stopInfo.set(idx, { stopReason, usage });
     this.updateCache();
   }
@@ -512,9 +513,9 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
 
   sendRequest(
     onEvent: OnStreamEvent,
-    signal: AbortSignal,
+    abortSignal: AbortSignal,
   ): Promise<RequestResult> {
-    return withAbort(this.runRequest(onEvent), signal, () => this.abort());
+    return withAbort(this.runRequest(onEvent), abortSignal, () => this.abort());
   }
 
   /** One provider request, including the retry/backoff budget. */
@@ -572,7 +573,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     const startTime = new Date();
     this.blocks.clear();
     this.openIndex = undefined;
-    this.turnStartIdx = this.items.length;
+    this.responseStartIdx = this.items.length;
 
     const attempt = async (): Promise<AttemptResult> => {
       const params = createStreamParameters({
@@ -586,11 +587,11 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       });
 
       try {
-        const signal = this.requestAbortController?.signal;
-        if (!signal) return { type: "aborted" };
+        const abortSignal = this.requestAbortController?.signal;
+        if (!abortSignal) return { type: "aborted" };
         const created = await wrapStreamAbortSignalWithTimeout(
-          this.client.responses.create(params, { signal }),
-          signal,
+          this.client.responses.create(params, { signal: abortSignal }),
+          abortSignal,
         );
         if (created === ABORT_TIMED_OUT) return { type: "aborted" };
         const stream = created;
@@ -601,7 +602,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
         while (true) {
           const next = await wrapStreamAbortSignalWithTimeout(
             iterator.next(),
-            signal,
+            abortSignal,
           );
           if (next === ABORT_TIMED_OUT) {
             void Promise.resolve(iterator.return?.()).catch(() => {});
@@ -708,24 +709,10 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       this.onStreamEvent?.({ type: "retry-scheduled", retry });
 
       this.retryAbortController = new AbortController();
-      const signal = this.retryAbortController.signal;
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(resolve, delay);
-          signal.addEventListener(
-            "abort",
-            () => {
-              clearTimeout(timer);
-              reject(new Error("aborted"));
-            },
-            { once: true },
-          );
-        });
-      } catch {
-        this.retryAbortController = undefined;
-        return { type: "aborted" };
-      }
+      const abortSignal = this.retryAbortController.signal;
+      const waited = await abortableDelay(delay, abortSignal);
       this.retryAbortController = undefined;
+      if (waited === "aborted") return { type: "aborted" };
       this.update({ type: "reset-attempt" });
       attemptNum++;
     }
@@ -738,7 +725,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     if (incompleteReason === "content_filter") return "content";
     if (
       this.items
-        .slice(this.turnStartIdx)
+        .slice(this.responseStartIdx)
         .some((item) => item.type === "function_call")
     ) {
       return "tool_use";

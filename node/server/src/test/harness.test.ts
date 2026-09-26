@@ -1,4 +1,6 @@
 import { expect, it } from "vitest";
+import { created } from "../test-helpers.ts";
+import { ABORTED } from "../thread-api.ts";
 import { TitleSupervisor } from "../thread-assembly.ts";
 import {
   MaxTokensSupervisor,
@@ -42,7 +44,9 @@ it("forks a thread with its history", () =>
     stream.streamText("answer");
     stream.finishResponse("end_turn");
     await done;
-    const fork = h.thread(await h.session.forkThread(id));
+    const forkId = await created(h.session.forkThread(id));
+    const fork = h.thread(forkId);
+
     expect(fork.getProviderMessages().slice(0, -1)).toEqual(
       thread.getProviderMessages(),
     );
@@ -68,14 +72,14 @@ it("spawns a subagent through the session", () =>
     });
     // Parity with the nvim host (chat/supervisor-wiring.test.ts).
     expect(
-      h.thread(child.id).turnSupervisors.map((s) => s.constructor),
+      h.thread(child.id).submissionSupervisors.map((s) => s.constructor),
     ).toEqual([MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor]);
   }));
 
 it("root supervisor order matches the nvim host", () =>
   withHarness({}, async (h) => {
     const { thread } = await h.createRoot();
-    expect(thread.turnSupervisors.map((s) => s.constructor)).toEqual([
+    expect(thread.submissionSupervisors.map((s) => s.constructor)).toEqual([
       MaxTokensSupervisor,
       TitleSupervisor,
     ]);
@@ -113,7 +117,9 @@ it("disposal leaves no threads behind", async () => {
     await h.createRoot();
     const pending = h.session.createRootThread();
     await h.dispose();
-    await expect(pending).rejects.toThrow();
+    const result = await pending;
+    expect(result).toBe(ABORTED);
+
     expect(h.session.listThreads()).toEqual([]);
   });
 });
@@ -184,7 +190,9 @@ it("forks keep the source's system info rather than re-reading git", () =>
     stream.finishResponse("end_turn");
     await done;
     h.git.set({ ...git, branch: "other-branch" });
-    const fork = h.thread(await h.session.forkThread(id));
+    const forkId = await created(h.session.forkThread(id));
+    const fork = h.thread(forkId);
+
     const first = JSON.stringify(fork.getProviderMessages()[0]);
     expect(first).toContain("feature-x");
     expect(first).not.toContain("other-branch");

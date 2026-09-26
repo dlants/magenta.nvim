@@ -59,7 +59,7 @@ class AgentUnderTest {
     void this.agent.abortAndWait();
   }
 
-  runTurn(text: string): Promise<ToolLoopResult> {
+  runToolLoop(text: string): Promise<ToolLoopResult> {
     return this.agent.send([{ type: "text", text }]).promise;
   }
 
@@ -183,7 +183,7 @@ describe("thinking.effort", () => {
       thinking: { enabled: true, effort: "max" },
     });
 
-    const turn = agent.runTurn("Hi");
+    const turn = agent.runToolLoop("Hi");
 
     const stream = await mockClient.awaitStream();
 
@@ -213,7 +213,7 @@ describe("thinking.effort", () => {
       logger,
     });
 
-    const turn = agent.runTurn("Hi");
+    const turn = agent.runToolLoop("Hi");
 
     const stream = await mockClient.awaitStream();
 
@@ -233,7 +233,7 @@ describe("user input", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
 
@@ -286,7 +286,7 @@ describe("user input", () => {
     const tracked = trackUpdates();
     const agent = createAgent(mockClient, undefined, tracked);
 
-    const turn = agent.runTurn("Hello, world!");
+    const turn = agent.runToolLoop("Hello, world!");
     // The loop appends the caller's content after consulting the gate,
     // so wait for the request it produced before reading the log.
     await mockClient.awaitStream();
@@ -373,7 +373,7 @@ describe("tool execution", () => {
       },
     });
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(toolUseId, "get_files" as ToolName, {
@@ -402,7 +402,7 @@ describe("tool execution", () => {
         Promise.resolve({ type: "continue" as const, results: new Map() }),
     });
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(toolUseId, "get_files" as ToolName, {
@@ -429,7 +429,7 @@ describe("tool execution", () => {
         Promise.resolve(Promise.reject(new Error("executor blew up"))),
     });
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(toolUseId, "get_files" as ToolName, {
@@ -449,15 +449,15 @@ describe("tool execution", () => {
   });
 });
 
-describe("runTurn", () => {
+describe("runToolLoop", () => {
   it("fails a turn started while one is already in flight", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
     const stream = await mockClient.awaitStream();
 
-    expect(await agent.runTurn("Again")).toMatchObject({
+    expect(await agent.runToolLoop("Again")).toMatchObject({
       type: "failed",
       error: expect.objectContaining({
         message: expect.stringContaining("already in flight"),
@@ -478,7 +478,7 @@ describe("onUpdate", () => {
     const tracked = trackUpdates();
     const agent = createAgent(mockClient, undefined, tracked);
 
-    const turn = agent.runTurn("Test");
+    const turn = agent.runToolLoop("Test");
     await delay(0);
     expect(tracked.updates).toBeGreaterThan(0);
 
@@ -559,7 +559,7 @@ describe("abort", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
     stream.streamText("Partial response");
@@ -574,7 +574,7 @@ describe("abort", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
 
@@ -616,7 +616,7 @@ describe("abort", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Search for info");
+    const turn = agent.runToolLoop("Search for info");
 
     const stream = await mockClient.awaitStream();
 
@@ -649,7 +649,7 @@ describe("abort with empty blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
 
@@ -683,7 +683,7 @@ describe("abort with empty blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
 
@@ -714,7 +714,7 @@ describe("abort with empty blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
 
@@ -751,7 +751,7 @@ describe("thinking blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
 
@@ -827,7 +827,7 @@ describe("thinking blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
 
@@ -901,7 +901,7 @@ describe("thinking blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
     stream.streamThinking("Deep thoughts here", "signature123");
@@ -932,7 +932,7 @@ describe("streaming block", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
 
@@ -990,7 +990,7 @@ describe("streaming block", () => {
         }),
     });
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
 
@@ -1053,7 +1053,7 @@ describe("streaming block", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Search");
+    const turn = agent.runToolLoop("Search");
 
     const stream = await mockClient.awaitStream();
 
@@ -1089,7 +1089,7 @@ describe("streaming block", () => {
     const tracked = trackUpdates();
     const agent = createAgent(mockClient, undefined, tracked);
 
-    const turn = agent.runTurn("Hello");
+    const turn = agent.runToolLoop("Hello");
 
     const stream = await mockClient.awaitStream();
 
@@ -1114,7 +1114,7 @@ describe("web search result preservation", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Search for Claude Shannon");
+    const turn = agent.runToolLoop("Search for Claude Shannon");
 
     const stream = await mockClient.awaitStream();
 
@@ -1189,7 +1189,7 @@ describe("web search result preservation", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const turn = agent.runTurn("Search for info");
+    const turn = agent.runToolLoop("Search for info");
 
     const stream = await mockClient.awaitStream();
 
@@ -1213,7 +1213,7 @@ describe("web search result preservation", () => {
     await delay(0);
 
     // Append a follow-up user message
-    const turn2 = agent.runTurn("Tell me more");
+    const turn2 = agent.runToolLoop("Tell me more");
 
     // Check that the native messages sent to the API contain the web search result
     const stream2 = await awaitNextStream(mockClient, 1);
@@ -1247,7 +1247,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
 
@@ -1280,7 +1280,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Search for info");
+      const turn = agent.runToolLoop("Search for info");
 
       const stream = await mockClient.awaitStream();
 
@@ -1312,7 +1312,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
       stream.streamText("Hello there!");
@@ -1341,7 +1341,7 @@ describe("web search result preservation", () => {
       const agent = createAgent(mockClient);
 
       // First request - successful
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream1 = await mockClient.awaitStream();
       stream1.streamText("Hello there!");
@@ -1360,7 +1360,7 @@ describe("web search result preservation", () => {
       });
 
       // Second request - will be aborted
-      const turn2 = agent.runTurn("Follow up");
+      const turn2 = agent.runToolLoop("Follow up");
 
       const stream2 = await awaitNextStream(mockClient, 1);
       stream2.streamText("Starting to respond...");
@@ -1383,7 +1383,7 @@ describe("web search result preservation", () => {
       const agent = createAgent(mockClient);
 
       // First request - successful
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream1 = await mockClient.awaitStream();
       stream1.streamText("Hello there!");
@@ -1404,7 +1404,7 @@ describe("web search result preservation", () => {
       });
 
       // Second request - will error
-      const turn2 = agent.runTurn("Follow up");
+      const turn2 = agent.runToolLoop("Follow up");
 
       const stream2 = await awaitNextStream(mockClient, 1);
       stream2.streamText("Starting to respond...");
@@ -1433,7 +1433,7 @@ describe("web search result preservation", () => {
       expect(agent.log.latestUsage).toBeUndefined();
 
       // First request - abort (should not set latestUsage)
-      const turn = agent.runTurn("First");
+      const turn = agent.runToolLoop("First");
       const stream1 = await mockClient.awaitStream();
       stream1.streamText("Partial...");
       agent.abort();
@@ -1442,7 +1442,7 @@ describe("web search result preservation", () => {
       expect(agent.log.latestUsage).toBeUndefined();
 
       // Second request - successful (should set latestUsage)
-      const turn2 = agent.runTurn("Second");
+      const turn2 = agent.runToolLoop("Second");
       const stream2 = await awaitNextStream(mockClient, 1);
       stream2.streamText("Complete response");
       stream2.finishResponse("end_turn", {
@@ -1472,7 +1472,7 @@ describe("web search result preservation", () => {
           }),
       });
 
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
       // Stream a tool_use with missing required field (filePath)
@@ -1514,7 +1514,7 @@ describe("web search result preservation", () => {
           }),
       });
 
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
       stream.streamToolUse(toolUseId, "get_files" as ToolName, {});
@@ -1546,7 +1546,7 @@ File \`test.ts\`
 const x = 1;
 </context_update>`;
 
-      const turn = agent.runTurn(contextUpdateText);
+      const turn = agent.runToolLoop(contextUpdateText);
 
       await mockClient.awaitStream();
       const state = agent.log;
@@ -1565,7 +1565,7 @@ const x = 1;
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Hello, this is regular text");
+      const turn = agent.runToolLoop("Hello, this is regular text");
 
       await mockClient.awaitStream();
       const state = agent.log;
@@ -1609,7 +1609,7 @@ File context here
       const agent = createAgent(mockClient, undefined, tracked);
 
       // Build up some conversation history
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
       stream.streamText("Hi there!");
@@ -1617,7 +1617,7 @@ File context here
       await stream.finalMessage();
       await delay(0);
 
-      const turn2 = agent.runTurn("How are you?");
+      const turn2 = agent.runToolLoop("How are you?");
 
       const stream2 = await awaitNextStream(mockClient, 1);
       stream2.streamText("I'm doing well!");
@@ -1653,7 +1653,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
       stream.streamText("Hi!");
@@ -1665,7 +1665,7 @@ File context here
       const cloned = agent.clone();
 
       // Add more messages to original
-      const turn2 = agent.runTurn("Another message");
+      const turn2 = agent.runToolLoop("Another message");
       await mockClient.awaitStream();
 
       // Clone should not be affected
@@ -1681,7 +1681,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
       expect(agent.activity.type).toBe("streaming");
@@ -1725,7 +1725,7 @@ File context here
           }),
       });
 
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
 
@@ -1780,7 +1780,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Search for something");
+      const turn = agent.runToolLoop("Search for something");
 
       const stream = await mockClient.awaitStream();
 
@@ -1824,7 +1824,7 @@ File context here
         },
       });
 
-      const turn = agent.runTurn("Use a tool");
+      const turn = agent.runToolLoop("Use a tool");
 
       const stream = await mockClient.awaitStream();
       stream.streamText("I'll use the tool.");
@@ -1892,7 +1892,7 @@ File context here
       const tracked = trackUpdates();
       const agent = createAgent(mockClient, undefined, tracked);
 
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
       stream.streamText("First part");
@@ -1936,7 +1936,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
       stream.streamText("Hi!");
@@ -1958,7 +1958,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Hello");
+      const turn = agent.runToolLoop("Hello");
 
       const stream = await mockClient.awaitStream();
       stream.streamText("Hi!");
@@ -1970,7 +1970,7 @@ File context here
       const cloned = agent.clone();
 
       // Start a turn on the clone; the input is appended immediately
-      const clonedTurn = cloned.runTurn("From clone");
+      const clonedTurn = cloned.runToolLoop("From clone");
       await mockClient.awaitStream();
 
       // Cloned agent has the new message
@@ -1994,13 +1994,13 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Q1");
+      const turn = agent.runToolLoop("Q1");
       let stream = await mockClient.awaitStream();
       stream.streamText("A1");
       stream.finishResponse("end_turn");
       await turn;
 
-      const turn2 = agent.runTurn("Q2");
+      const turn2 = agent.runToolLoop("Q2");
       stream = await awaitNextStream(mockClient, 1);
       stream.streamText("A2");
       stream.finishResponse("end_turn");
@@ -2024,7 +2024,7 @@ File context here
           }),
       });
 
-      const turn = agent.runTurn("Run tool");
+      const turn = agent.runToolLoop("Run tool");
       const stream = await mockClient.awaitStream();
       stream.streamText("Running...");
       stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
@@ -2071,7 +2071,7 @@ File context here
         },
       });
 
-      const turn = agent.runTurn("Run tool");
+      const turn = agent.runToolLoop("Run tool");
       const stream = await mockClient.awaitStream();
       stream.streamText("Running.");
       stream.streamToolUse(
@@ -2119,7 +2119,7 @@ File context here
         },
       });
 
-      const turn = agent.runTurn("Run tool");
+      const turn = agent.runToolLoop("Run tool");
       const stream = await mockClient.awaitStream();
       stream.streamToolUse(
         "orphan-2" as ToolRequestId,
@@ -2146,13 +2146,13 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      const turn = agent.runTurn("Q1");
+      const turn = agent.runToolLoop("Q1");
       let stream = await mockClient.awaitStream();
       stream.streamText("A1");
       stream.finishResponse("end_turn");
       await turn;
 
-      const turn2 = agent.runTurn("Q2");
+      const turn2 = agent.runToolLoop("Q2");
       stream = await awaitNextStream(mockClient, 1);
       stream.streamText("A2");
       stream.finishResponse("end_turn");

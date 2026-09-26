@@ -18,6 +18,7 @@ import type {
   ValidateInput,
 } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
+import { abortableDelay } from "../utils/async.ts";
 import type { Result } from "../utils/result.ts";
 import {
   describeError,
@@ -524,8 +525,8 @@ export class OpenAIProvider implements Provider {
       input: string | URL | Request,
       init?: RequestInit,
     ): Promise<Response> => {
-      const signal = init?.signal ?? undefined;
-      await this.ensureLoggedIn(auth, authUI, signal);
+      const abortSignal = init?.signal ?? undefined;
+      await this.ensureLoggedIn(auth, authUI, abortSignal);
       const response = await withCredentials(
         input,
         init,
@@ -533,7 +534,7 @@ export class OpenAIProvider implements Provider {
           () => auth.getCredentials(),
           auth,
           authUI,
-          signal,
+          abortSignal,
         ),
       );
       if (response.status !== 401) return response;
@@ -546,7 +547,7 @@ export class OpenAIProvider implements Provider {
           () => auth.refreshCredentials(),
           auth,
           authUI,
-          signal,
+          abortSignal,
         ),
       );
     };
@@ -561,7 +562,7 @@ export class OpenAIProvider implements Provider {
     getCredentials: () => Promise<CodexCredentials>,
     auth: OpenAIAuth,
     authUI: AuthUI | undefined,
-    signal: AbortSignal | undefined,
+    abortSignal: AbortSignal | undefined,
   ): Promise<CodexCredentials> {
     try {
       return await getCredentials();
@@ -576,7 +577,7 @@ export class OpenAIProvider implements Provider {
       this.logger.info(
         `ChatGPT credentials unusable (${error.kind}); logging in again`,
       );
-      await this.login(auth, authUI, signal);
+      await this.login(auth, authUI, abortSignal);
       return getCredentials();
     }
   }
@@ -584,16 +585,16 @@ export class OpenAIProvider implements Provider {
   private async ensureLoggedIn(
     auth: OpenAIAuth,
     authUI: AuthUI | undefined,
-    signal: AbortSignal | undefined,
+    abortSignal: AbortSignal | undefined,
   ): Promise<void> {
     if (await auth.isAuthenticated()) return;
-    await this.login(auth, authUI, signal);
+    await this.login(auth, authUI, abortSignal);
   }
 
   private async login(
     auth: OpenAIAuth,
     authUI: AuthUI | undefined,
-    signal: AbortSignal | undefined,
+    abortSignal: AbortSignal | undefined,
   ): Promise<void> {
     if (!authUI) {
       throw new Error(
@@ -604,7 +605,7 @@ export class OpenAIProvider implements Provider {
     // aborting the request that triggered it rather than by its own UI.
     await auth.login({
       onOutput: (chunk) => authUI.showLoginProgress(chunk),
-      signal,
+      abortSignal,
     });
   }
 
@@ -738,22 +739,9 @@ export class OpenAIProvider implements Provider {
 
           const delay = getRetryDelay(attempt);
           retryAbortController = new AbortController();
-          const signal = retryAbortController.signal;
-          try {
-            await new Promise<void>((resolve, reject) => {
-              const timer = setTimeout(resolve, delay);
-              signal.addEventListener(
-                "abort",
-                () => {
-                  clearTimeout(timer);
-                  reject(new DOMException("Aborted", "AbortError"));
-                },
-                { once: true },
-              );
-            });
-          } catch {
+          const abortSignal = retryAbortController.signal;
+          if ((await abortableDelay(delay, abortSignal)) === "aborted")
             throw error;
-          }
           retryAbortController = undefined;
           attempt++;
         }

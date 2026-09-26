@@ -36,7 +36,7 @@ import {
   TEST_ARCHIVE_DIR,
 } from "../test-helpers.ts";
 import type { ContextFileAccess, Thread } from "../thread.ts";
-import type { RestResult } from "../thread-api.ts";
+import { ABORTED, type Aborted, type SubmissionResult } from "../thread-api.ts";
 import type { PreparedThreadContext } from "../thread-assembly.ts";
 import { clientToolCreator } from "../tools/create-tool.ts";
 import { MCPToolManager } from "../tools/mcp/manager.ts";
@@ -200,9 +200,9 @@ export class TestSessionHost implements SessionHost {
   prepareThread(
     request: ThreadPreparation,
     session: SessionType,
-    signal: AbortSignal,
-  ): Promise<PreparedThread> {
-    signal.throwIfAborted();
+    abortSignal: AbortSignal,
+  ): Promise<PreparedThread | Aborted> {
+    if (abortSignal.aborted) return Promise.resolve(ABORTED);
     const prepare = () => this.prepare(request, session);
     return this.intercept ? this.intercept(request, prepare) : prepare();
   }
@@ -338,7 +338,7 @@ export type Harness = {
   shell: FakeShell;
   createRoot(): Promise<{ id: ThreadId; thread: Thread }>;
   thread(id: ThreadId): Thread;
-  send(thread: Thread, text: string): Promise<RestResult>;
+  send(thread: Thread, text: string): Promise<SubmissionResult>;
   /** The next stream issued after the last one this harness handed out. */
   nextStream(): Promise<MockStream>;
   /** The latest live stream whose request mentions `text`. */
@@ -366,6 +366,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     shell: host.shell,
     async createRoot() {
       const id = await session.createRootThread();
+      if (id === ABORTED) throw new Error("root thread creation was aborted");
       return { id, thread: thread(id) };
     },
     thread,

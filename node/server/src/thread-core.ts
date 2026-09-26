@@ -294,7 +294,7 @@ export class ThreadCore {
   }
 
   /** Releases conversation-local resources. The owner aborts and awaits any
-   * running turn first. */
+   * running tool loop first. */
   dispose(): void {
     this.fileSupervisor.destroy();
     if (this.gitSupervisor) this.gitSupervisor.callbacks = {};
@@ -305,7 +305,7 @@ export class ThreadCore {
   private executeTools(
     requests: NonEmptyRequestedTools,
     publishTools: (tools: ToolInvocationState) => void,
-    signal: AbortSignal,
+    abortSignal: AbortSignal,
   ): Promise<ToolOutcome> {
     this.resultMessageIdx = this.manager.getPendingResultMessageIdx(requests);
     return executeToolBatch(requests, {
@@ -313,7 +313,7 @@ export class ThreadCore {
       completedTools: this.completedTools,
       publishTools,
       onUpdate: () => this.handleUpdate(),
-      signal,
+      abortSignal: abortSignal,
     }).finally(() => {
       this.resultMessageIdx = undefined;
     });
@@ -367,14 +367,16 @@ export class ThreadCore {
 
   /** Counts the log exactly as it will be sent: injections and input are
    * already appended. */
-  private async checkBudget(signal: AbortSignal): Promise<BudgetDecision> {
+  private async checkBudget(
+    abortSignal: AbortSignal,
+  ): Promise<BudgetDecision | { type: "aborted" }> {
     const budget = this.context.tokenBudget;
     if (!budget || !this.manager.countTokens) return { type: "proceed" };
     let count: number;
     try {
-      count = await this.manager.countTokens(signal);
+      count = await this.manager.countTokens(abortSignal);
     } catch (error) {
-      if (signal.aborted) throw error;
+      if (abortSignal.aborted) return { type: "aborted" };
       this.context.logger.warn(
         `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -388,22 +390,22 @@ export class ThreadCore {
 
   async runToolLoop(
     messages: AgentInput[],
-    signal: AbortSignal,
+    abortSignal: AbortSignal,
   ): Promise<ToolLoopResult> {
     const turn = runToolLoop(
       {
         logger: this.context.logger,
         manager: this.manager,
-        executeTools: (requests, publishTools, signal) =>
-          this.executeTools(requests, publishTools, signal),
+        executeTools: (requests, publishTools, abortSignal) =>
+          this.executeTools(requests, publishTools, abortSignal),
         onBeforeRequest: () => this.beforeRequest(),
-        checkBudget: (signal) => this.checkBudget(signal),
+        checkBudget: (abortSignal) => this.checkBudget(abortSignal),
         onToolResults: (results, idx) =>
           this.callbacks.supervisor.onToolResults(results, idx),
         onUpdate: () => this.handleUpdate(),
       },
       messages,
-      signal,
+      abortSignal,
     );
     this.toolLoop = turn;
     this.handleUpdate();
@@ -428,6 +430,6 @@ export class ThreadCore {
   }
   private toolLoop: ToolLoop | undefined;
   get activity() {
-    return this.toolLoop?.loopState;
+    return this.toolLoop?.activity;
   }
 }

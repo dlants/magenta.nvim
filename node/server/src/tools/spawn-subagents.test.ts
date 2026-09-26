@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import type { ThreadId } from "../chat-types.ts";
 import type { ProvisionResult } from "../container/types.ts";
-import type { ThreadResult } from "../thread-api.ts";
+import type { ThreadOutcome } from "../thread-api.ts";
 import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
 import { Defer } from "../utils/async.ts";
 import type { NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
@@ -28,11 +28,11 @@ type MockThreadManager = ThreadManager & {
 function createMockThreadManager(
   overrides: Partial<ThreadManager> = {},
 ): MockThreadManager {
-  const defers = new Map<string, Defer<ThreadResult>>();
+  const defers = new Map<string, Defer<ThreadOutcome>>();
   const deferFor = (threadId: string) => {
     let defer = defers.get(threadId);
     if (!defer) {
-      defer = new Defer<ThreadResult>();
+      defer = new Defer<ThreadOutcome>();
       defers.set(threadId, defer);
     }
     return defer;

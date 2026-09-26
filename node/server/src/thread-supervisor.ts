@@ -19,8 +19,8 @@ import {
 import type { YieldValue } from "./thread-api.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 
-/** Action returned from the `onEndTurnWithoutYield` hook. */
-export type EndTurnAction =
+/** Action returned from the `onToolLoopEnd` hook. */
+export type ToolLoopEndAction =
   | { type: "send-message"; text: string }
   | { type: "none" };
 
@@ -48,7 +48,7 @@ export function injectText(
   return { type: "inject", content: [{ type: "text", text }] };
 }
 
-export type EndTurnContext = {
+export type ToolLoopEndContext = {
   stopReason: StopReason;
   /** The thread's input token count as of this stop, so an end-turn
    * supervisor can answer the same question `onBeforeRequest` answers. */
@@ -88,27 +88,25 @@ export interface ToolLoopSupervisor {
   onToolApplied?: OnToolAppliedHook;
 }
 
-/** Participates in turn-taking: observes what is submitted, and decides what
- * happens when a tool loop hands the turn back — rest, auto-respond, or
+/** Participates in a submission: observes what is submitted, and decides what
+ * happens when a tool loop ends — rest, auto-respond, or
  * suspend. */
-export interface TurnSupervisor {
+export interface SubmissionSupervisor {
   /** The resolved content of a submission, reported once per submission just
    * before its first tool loop. Observational only: nothing the hook returns
    * can affect the submission. */
   onSubmission?(messages: readonly AgentInput[]): void;
-  onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
+  onToolLoopEnd?(context: ToolLoopEndContext): ToolLoopEndAction;
   onYield?(result: YieldValue): Promise<YieldAction>;
 }
 
-export type RequestFacts = RequestContext;
-
 export type SupervisorChainDeps = {
   logger: Logger;
-  /** The live submission's signal, taken once at the start of a hook and
+  /** The live submission's abortSignal, taken once at the start of a hook and
    * checked between members, so an abort mid-fan-out stops the rest. Hooks
    * that record what a tool loop already did (loop start/stop, applied tools,
    * tool results) are not gated: the core stops driving them once disposed. */
-  signal: () => AbortSignal;
+  abortSignal: () => AbortSignal;
 };
 
 abstract class ChainBase<Member> {
@@ -125,11 +123,11 @@ abstract class ChainBase<Member> {
 
   protected forEach(
     hook: string,
-    signal: AbortSignal | undefined,
+    abortSignal: AbortSignal | undefined,
     visit: (supervisor: Member) => void,
   ): void {
     for (const supervisor of this.members()) {
-      if (signal?.aborted) return;
+      if (abortSignal?.aborted) return;
       try {
         visit(supervisor);
       } catch (error) {
@@ -170,7 +168,7 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
   }
 
   async hasPendingContent(): Promise<boolean> {
-    const signal = this.deps.signal();
+    const abortSignal = this.deps.abortSignal();
     for (const supervisor of this.members()) {
       if (!supervisor.hasPendingContent) continue;
       let pending: boolean;
@@ -180,17 +178,17 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
         this.logThrow("hasPendingContent", error);
         continue;
       }
-      if (signal.aborted) return false;
+      if (abortSignal.aborted) return false;
       if (pending) return true;
     }
     return false;
   }
 
-  async beforeRequest(facts: RequestFacts): Promise<AgentInput[]> {
-    const signal = this.deps.signal();
+  async beforeRequest(facts: RequestContext): Promise<AgentInput[]> {
+    const abortSignal = this.deps.abortSignal();
     const injections: AgentInput[] = [];
     for (const supervisor of this.members()) {
-      if (signal.aborted) break;
+      if (abortSignal.aborted) break;
       if (!supervisor.onBeforeRequest) continue;
       let action: SupervisorAction;
       try {
@@ -199,27 +197,27 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
         this.logThrow("onBeforeRequest", error);
         continue;
       }
-      if (signal.aborted) break;
+      if (abortSignal.aborted) break;
       if (action.type === "inject") injections.push(...action.content);
     }
     return injections;
   }
 }
 
-/** The fan-out from a thread's turn-taking to its supervisors. Combination
- * rules: end-turn texts join, first accept/reject
+/** The fan-out from a thread's submissions to its supervisors. Combination
+ * rules: auto-response texts join, first accept/reject
  * wins. */
-export class TurnSupervisorChain extends ChainBase<TurnSupervisor> {
+export class SubmissionSupervisorChain extends ChainBase<SubmissionSupervisor> {
   onSubmission(messages: readonly AgentInput[]): void {
-    this.forEach("onSubmission", this.deps.signal(), (supervisor) =>
+    this.forEach("onSubmission", this.deps.abortSignal(), (supervisor) =>
       supervisor.onSubmission?.(messages),
     );
   }
 
-  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
+  onToolLoopEnd(context: ToolLoopEndContext): ToolLoopEndAction {
     const texts: string[] = [];
-    this.forEach("onEndTurnWithoutYield", this.deps.signal(), (supervisor) => {
-      const action = supervisor.onEndTurnWithoutYield?.(context);
+    this.forEach("onToolLoopEnd", this.deps.abortSignal(), (supervisor) => {
+      const action = supervisor.onToolLoopEnd?.(context);
       if (action?.type === "send-message") texts.push(action.text);
     });
     return texts.length
@@ -402,7 +400,7 @@ export class SystemInfoSupervisor implements ToolLoopSupervisor {
  * rather than in the agent because it is a policy over a stop, and it must be
  * consulted before any other end-turn supervisor can read the stop as a
  * refusal to yield. */
-export class MaxTokensSupervisor implements TurnSupervisor {
+export class MaxTokensSupervisor implements SubmissionSupervisor {
   static create(): MaxTokensSupervisor {
     return new MaxTokensSupervisor();
   }
@@ -412,7 +410,7 @@ export class MaxTokensSupervisor implements TurnSupervisor {
   }
 
   private constructor() {}
-  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
+  onToolLoopEnd(context: ToolLoopEndContext): ToolLoopEndAction {
     if (context.stopReason !== "max_tokens") return { type: "none" };
     return {
       type: "send-message",
@@ -423,7 +421,7 @@ export class MaxTokensSupervisor implements TurnSupervisor {
 /** For regular subagents. Only intervenes when the agent writes a
  *  `<yield>` XML tag instead of calling the tool. Otherwise allows
  *  the agent to stop normally. */
-export class SubagentSupervisor implements TurnSupervisor {
+export class SubagentSupervisor implements SubmissionSupervisor {
   static create(): SubagentSupervisor {
     return new SubagentSupervisor();
   }
@@ -433,7 +431,7 @@ export class SubagentSupervisor implements TurnSupervisor {
   }
 
   private constructor() {}
-  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
+  onToolLoopEnd(context: ToolLoopEndContext): ToolLoopEndAction {
     if (context.stopReason !== "end_turn") return { type: "none" };
     if (containsYieldTag(context.lastAssistantMessage)) {
       return {
@@ -451,7 +449,7 @@ export class SubagentSupervisor implements TurnSupervisor {
 
 /** For unsupervised threads (e.g. docker_unsupervised). Always prompts
  *  the agent to resume work when it stops without yielding. */
-export class UnsupervisedSupervisor implements TurnSupervisor {
+export class UnsupervisedSupervisor implements SubmissionSupervisor {
   static create(opts?: { maxRestarts?: number }): UnsupervisedSupervisor {
     return new UnsupervisedSupervisor(opts?.maxRestarts ?? 5, 0);
   }
@@ -470,7 +468,7 @@ export class UnsupervisedSupervisor implements TurnSupervisor {
     private restartCount: number,
   ) {}
 
-  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
+  onToolLoopEnd(context: ToolLoopEndContext): ToolLoopEndAction {
     if (
       context.stopReason !== "end_turn" ||
       this.restartCount >= this.maxRestarts

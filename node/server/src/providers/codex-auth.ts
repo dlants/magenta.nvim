@@ -62,7 +62,7 @@ export type LoginOptions = {
   /** Streamed verbatim as the CLI prints it — including the auth URL. We do not
    *  parse it, so a codex CLI change can't silently break the flow. */
   onOutput?: (chunk: string) => void;
-  signal?: AbortSignal | undefined;
+  abortSignal?: AbortSignal | undefined;
 };
 
 export type CodexAuthDeps = {
@@ -162,10 +162,10 @@ export class CodexAuth {
       child.stderr?.on("data", emit);
 
       const onAbort = () => child.kill("SIGTERM");
-      options.signal?.addEventListener("abort", onAbort, { once: true });
+      options.abortSignal?.addEventListener("abort", onAbort, { once: true });
 
       child.on("error", (err: NodeJS.ErrnoException) => {
-        options.signal?.removeEventListener("abort", onAbort);
+        options.abortSignal?.removeEventListener("abort", onAbort);
         reject(
           err.code === "ENOENT"
             ? new CodexAuthError(
@@ -177,7 +177,7 @@ export class CodexAuth {
       });
 
       child.on("close", (code, signal) => {
-        options.signal?.removeEventListener("abort", onAbort);
+        options.abortSignal?.removeEventListener("abort", onAbort);
         if (code === 0) {
           resolve();
         } else {

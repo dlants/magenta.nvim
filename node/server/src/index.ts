@@ -111,12 +111,6 @@ export { parse } from "./edl/parser.ts";
 export type { FileMutationSummary } from "./edl/types.ts";
 export { Emitter, type EventMap } from "./emitter.ts";
 export type { Logger } from "./logger.ts";
-export {
-  loopActiveTools,
-  loopLabel,
-  loopStreamingBlock,
-  type ThreadLoopState,
-} from "./loop-state.ts";
 export type { OpenAIAuth } from "./openai-auth.ts";
 export type { AbsFilePath, Cwd } from "./paths.ts";
 export type {
@@ -293,13 +287,15 @@ export {
   type YieldState,
 } from "./thread.ts";
 export type {
+  Aborted,
   OnUpdate,
   QueuedMessage,
-  RestResult,
-  ThreadResult,
+  SubmissionResult,
+  ThreadOutcome,
   ToolLoopResult,
   YieldValue,
 } from "./thread-api.ts";
+export { ABORTED } from "./thread-api.ts";
 export {
   type AssembledThread,
   assembleThread,
@@ -310,15 +306,21 @@ export {
 } from "./thread-assembly.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export { flushArchive, threadArchive } from "./thread-logger.ts";
+export {
+  activeTools,
+  activityLabel,
+  streamingBlock,
+  type ThreadState,
+} from "./thread-state.ts";
 export type {
   EditedFile,
   EditedFileGroup,
-  EndTurnAction,
-  EndTurnContext,
   RequestContext,
+  SubmissionSupervisor,
   SupervisorAction,
+  ToolLoopEndAction,
+  ToolLoopEndContext,
   ToolLoopSupervisor,
-  TurnSupervisor,
   YieldAction,
 } from "./thread-supervisor.ts";
 export {
@@ -329,9 +331,9 @@ export {
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 export {
-  type LoopState,
   runToolLoop,
   type ToolExecutor,
+  type ToolLoopActivity,
   type ToolOutcome,
 } from "./tool-loop.ts";
 export type {

@@ -18,7 +18,7 @@ import { archiveThread, type ThreadLogger } from "./thread-logger.ts";
 import {
   MaxTokensSupervisor,
   SubagentSupervisor,
-  type TurnSupervisor,
+  type SubmissionSupervisor,
 } from "./thread-supervisor.ts";
 import { generateTitle } from "./tools/thread-title.ts";
 
@@ -39,7 +39,7 @@ export type ChatThreadPolicy = {
  * the compactor are assembly's job, not the host's. */
 export type PreparedThreadContext = Omit<
   ThreadContextBase,
-  "turnSupervisors" | "toolLoopSupervisors" | "compaction"
+  "submissionSupervisors" | "toolLoopSupervisors" | "compaction"
 >;
 
 export type ChatThreadType = Exclude<ThreadType, "compact">;
@@ -114,7 +114,10 @@ export function assembleThread(args: {
   const tokenBudget = buildTokenBudget(conversation);
   const base = {
     ...context,
-    turnSupervisors: [...buildTurnSupervisors(conversation, docker), titles],
+    submissionSupervisors: [
+      ...buildSubmissionSupervisors(conversation, docker),
+      titles,
+    ],
   };
 
   const build = (
@@ -194,11 +197,11 @@ function resolveConversation(
   };
 }
 
-function buildTurnSupervisors(
+function buildSubmissionSupervisors(
   conversation: Conversation,
   docker: ChatThreadPolicy["docker"],
-): TurnSupervisor[] {
-  const supervisors: TurnSupervisor[] = [MaxTokensSupervisor.create()];
+): SubmissionSupervisor[] {
+  const supervisors: SubmissionSupervisor[] = [MaxTokensSupervisor.create()];
   if (docker?.supervised) {
     supervisors.push(
       DockerSupervisor.create({
@@ -232,10 +235,10 @@ function buildTokenBudget(conversation: Conversation): TokenBudget | undefined {
 }
 
 /** Requests a title once, from the first submission that carries text. It is
- * a turn supervisor so it survives core replacement and needs no owner-facing
+ * a submission supervisor so it survives core replacement and needs no owner-facing
  * callback; a late response cannot overwrite an explicit label or a destroyed
  * thread. */
-export class TitleSupervisor implements TurnSupervisor {
+export class TitleSupervisor implements SubmissionSupervisor {
   /** The attachment and request facts are one state, so "requested but no
    * thread" is not representable. Construction invokes no hooks, so the
    * thread is always attached before the first submission is reported. */

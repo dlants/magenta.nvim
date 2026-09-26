@@ -88,7 +88,7 @@ function setup(args?: {
   const forceToolUse = vi.fn();
   const {
     threadType: _threadType,
-    turnSupervisors: _turnSupervisors,
+    submissionSupervisors: _turnSupervisors,
     toolLoopSupervisors: _toolLoopSupervisors,
     compaction: _compaction,
     ...rest
@@ -175,10 +175,9 @@ describe("assembleThread", () => {
 
   it("orders chat supervisors by conversation kind", async () => {
     const root = setup();
-    expect(root.thread.turnSupervisors.map((s) => s.constructor)).toEqual([
-      MaxTokensSupervisor,
-      TitleSupervisor,
-    ]);
+    expect(root.thread.submissionSupervisors.map((s) => s.constructor)).toEqual(
+      [MaxTokensSupervisor, TitleSupervisor],
+    );
     expect(root.compactor).toBeDefined();
     expect(root.thread.tokenBudget).toBeDefined();
 
@@ -190,11 +189,9 @@ describe("assembleThread", () => {
         policy: defaultPolicy,
       },
     });
-    expect(subagent.thread.turnSupervisors.map((s) => s.constructor)).toEqual([
-      MaxTokensSupervisor,
-      SubagentSupervisor,
-      TitleSupervisor,
-    ]);
+    expect(
+      subagent.thread.submissionSupervisors.map((s) => s.constructor),
+    ).toEqual([MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor]);
 
     const dockerRoot = setup({
       initialization: {
@@ -204,9 +201,9 @@ describe("assembleThread", () => {
         policy: defaultPolicy,
       },
     });
-    expect(dockerRoot.thread.turnSupervisors.map((s) => s.constructor)).toEqual(
-      [MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor],
-    );
+    expect(
+      dockerRoot.thread.submissionSupervisors.map((s) => s.constructor),
+    ).toEqual([MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor]);
 
     const compact = setup({
       initialization: {
@@ -215,11 +212,9 @@ describe("assembleThread", () => {
         archiveOptions: { baseDir: TEST_ARCHIVE_DIR },
       },
     });
-    expect(compact.thread.turnSupervisors.map((s) => s.constructor)).toEqual([
-      MaxTokensSupervisor,
-      SubagentSupervisor,
-      TitleSupervisor,
-    ]);
+    expect(
+      compact.thread.submissionSupervisors.map((s) => s.constructor),
+    ).toEqual([MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor]);
     expect(compact.compactor).toBeUndefined();
     expect(compact.thread.tokenBudget).toBeUndefined();
 
@@ -234,11 +229,9 @@ describe("assembleThread", () => {
         },
       }),
     });
-    expect(docker.thread.turnSupervisors.map((s) => s.constructor)).toEqual([
-      MaxTokensSupervisor,
-      DockerSupervisor,
-      TitleSupervisor,
-    ]);
+    expect(
+      docker.thread.submissionSupervisors.map((s) => s.constructor),
+    ).toEqual([MaxTokensSupervisor, DockerSupervisor, TitleSupervisor]);
 
     for (const { id, thread } of [
       root,
@@ -286,11 +279,9 @@ describe("assembleThread", () => {
     });
 
     expect(fork.thread.threadType).toEqual("subagent");
-    expect(fork.thread.turnSupervisors.map((s) => s.constructor)).toEqual([
-      MaxTokensSupervisor,
-      SubagentSupervisor,
-      TitleSupervisor,
-    ]);
+    expect(fork.thread.submissionSupervisors.map((s) => s.constructor)).toEqual(
+      [MaxTokensSupervisor, SubagentSupervisor, TitleSupervisor],
+    );
     const supervisor = fork.thread.tokenBudget;
     expect(budgetSettings(supervisor)).toEqual({
       threshold: 4321,

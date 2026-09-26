@@ -11,7 +11,7 @@ import type { SubagentConfig, ThreadId } from "../chat-types.ts";
 import { provisionContainer } from "../container/provision.ts";
 import type { ContainerConfig } from "../container/types.ts";
 import type { ProviderToolSpec } from "../providers/provider-types.ts";
-import type { ThreadResult } from "../thread-api.ts";
+import { ABORTED, type ThreadOutcome } from "../thread-api.ts";
 import type {
   ExecutedToolResult,
   ExecutingToolInvocation,
@@ -431,7 +431,7 @@ export function execute(
   };
   /** Each child's outcome, kept here because the tool result is assembled
    * after every element has finished. */
-  const threadResults = new Map<ThreadId, ThreadResult>();
+  const threadResults = new Map<ThreadId, ThreadOutcome>();
 
   const spawnEntry = async (
     element: SpawnSubagentsProgress["elements"][0],
@@ -464,7 +464,10 @@ export function execute(
         ...(resolvedCwd ? { cwd: resolvedCwd } : {}),
       });
 
-      element.state = { status: "spawned", threadId };
+      element.state =
+        threadId === ABORTED
+          ? { status: "spawn-error", error: "thread creation was aborted" }
+          : { status: "spawned", threadId };
       context.requestRender();
     } catch (e) {
       element.state = {
@@ -539,7 +542,10 @@ export function execute(
       },
     });
 
-    element.state = { status: "spawned", threadId };
+    element.state =
+      threadId === ABORTED
+        ? { status: "spawn-error", error: "thread creation was aborted" }
+        : { status: "spawned", threadId };
     ctx.requestRender();
   };
 
@@ -661,7 +667,7 @@ export function execute(
 function buildResult(
   requestId: ToolRequest["id"],
   progress: SpawnSubagentsProgress,
-  threadResults: ReadonlyMap<ThreadId, ThreadResult>,
+  threadResults: ReadonlyMap<ThreadId, ThreadOutcome>,
 ): ExecutedToolResult {
   const agents: StructuredResult["agents"] = [];
   let successCount = 0;

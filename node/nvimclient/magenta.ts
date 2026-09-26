@@ -1,6 +1,8 @@
 import * as os from "node:os";
 import type { SandboxAskCallback } from "@anthropic-ai/sandbox-runtime";
 import {
+  ABORTED,
+  type Aborted,
   isThreadId,
   type NativeMessageIdx,
   parseDelivery,
@@ -466,8 +468,9 @@ export class Magenta {
     });
   }
 
-  async createAndSwitchToNewThread(): Promise<ThreadId> {
+  async createAndSwitchToNewThread(): Promise<ThreadId | Aborted> {
     const threadId = await this.session.createRootThread();
+    if (threadId === ABORTED) return ABORTED;
     await this.bufferManager.registerThread(threadId);
     this.dispatch({
       type: "chat-msg",
@@ -477,8 +480,11 @@ export class Magenta {
     return threadId;
   }
 
-  async createAndSwitchToAgentThread(agentName: string): Promise<ThreadId> {
+  async createAndSwitchToAgentThread(
+    agentName: string,
+  ): Promise<ThreadId | Aborted> {
     const threadId = await this.session.createAgentThread(agentName);
+    if (threadId === ABORTED) return ABORTED;
     await this.bufferManager.registerThread(threadId);
     this.dispatch({
       type: "chat-msg",
@@ -488,8 +494,11 @@ export class Magenta {
     return threadId;
   }
 
-  async forkAndSwitchToThread(sourceThreadId: ThreadId): Promise<ThreadId> {
+  async forkAndSwitchToThread(
+    sourceThreadId: ThreadId,
+  ): Promise<ThreadId | Aborted> {
     const threadId = await this.chat.handleForkThread({ sourceThreadId });
+    if (threadId === ABORTED) return ABORTED;
     await this.bufferManager.registerThread(threadId);
     this.dispatch({
       type: "chat-msg",
@@ -503,11 +512,12 @@ export class Magenta {
     sourceThreadId: ThreadId,
     nativeMessageIdx: NativeMessageIdx,
     prepopulate?: string[],
-  ): Promise<ThreadId> {
+  ): Promise<ThreadId | Aborted> {
     const threadId = await this.chat.handleForkThread({
       sourceThreadId,
       truncateAtMessageIdx: nativeMessageIdx,
     });
+    if (threadId === ABORTED) return ABORTED;
     await this.bufferManager.registerThread(threadId);
     this.dispatch({
       type: "chat-msg",
@@ -1411,6 +1421,8 @@ ${lines.join("\n")}
 
     // Create the first thread eagerly so there's always an active thread
     const initialThreadId = await magenta.session.createRootThread();
+    if (initialThreadId === ABORTED)
+      throw new Error("initial thread creation was aborted");
     magenta.activeBuffers =
       await magenta.bufferManager.registerThread(initialThreadId);
     magenta.dispatch({

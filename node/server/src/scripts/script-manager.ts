@@ -15,7 +15,7 @@ import type { ScriptInvocationId, ThreadId } from "../chat-types.ts";
 import { Emitter } from "../emitter.ts";
 import type { Logger } from "../logger.ts";
 import type { Session } from "../session.ts";
-import type { ThreadResult } from "../thread-api.ts";
+import type { ThreadOutcome } from "../thread-api.ts";
 import type { HomeDir, NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
 import { expandTilde } from "../utils/files.ts";
 import { escalateToSigkill, terminateProcess } from "../utils/process.ts";
@@ -127,7 +127,7 @@ function newestSourceMtime(dir: string): number {
 
 /** A thread's outcome as the script SDK sees it. The yielded value stays
  * structured; serialization happens in the IPC channel, not here. */
-function toScriptResult(result: ThreadResult): ScriptThreadResult {
+function toScriptResult(result: ThreadOutcome): ScriptThreadResult {
   if (result.type === "aborted") {
     return { status: "error", error: result.reason };
   }

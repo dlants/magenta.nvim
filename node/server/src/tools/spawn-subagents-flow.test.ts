@@ -121,7 +121,7 @@ it("supervisor resultPrefix is prepended to yield response", () =>
     spawn(await h.nextStream(), "spawn-1", [{ prompt: "Do the task" }]);
     const subagentStream = await h.streamWithText("Do the task");
     const child = childThread(h, thread);
-    const supervisor = child.turnSupervisors.find(
+    const supervisor = child.submissionSupervisors.find(
       (s): s is SubagentSupervisor => s instanceof SubagentSupervisor,
     );
     if (!supervisor) throw new Error("expected a SubagentSupervisor");

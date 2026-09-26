@@ -7,6 +7,7 @@ import {
 import type { MockStream } from "./providers/mock-anthropic-client.ts";
 import { parseDelivery } from "./submission/index.ts";
 import { type Harness, withHarness } from "./test/harness.ts";
+import { created } from "./test-helpers.ts";
 import type { Thread } from "./thread.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { pollUntil } from "./utils/async.ts";
@@ -142,7 +143,7 @@ it("compact flow without continuation: @compact with no next prompt", () =>
       toolRequests: [],
     });
     await done;
-    expect(thread.loopState.type).toBe("idle");
+    expect(thread.state.type).toBe("idle");
     expect(thread.lastResult()).toMatchObject({
       type: "completed",
       stopReason: "end_turn",
@@ -164,7 +165,7 @@ it("lets the user rescue a chunk thread whose turn failed", () =>
     );
     const chunk = h.thread(activeChunk(h, id));
     await pollUntil(() => {
-      if (chunk.loopState.type !== "idle") throw new Error("waiting");
+      if (chunk.state.type !== "idle") throw new Error("waiting");
     });
     expect(isCompacting(h, id)).toBe(true);
     expect(finishedRuns(h, id)).toHaveLength(0);
@@ -225,7 +226,7 @@ it("forks a thread and compacts the fork in one step", () =>
     const { id, thread } = await h.createRoot();
     await exchange(h, thread, "What is 2+2?", "2+2 equals 4.");
     await exchange(h, thread, "What about 3+3?", "3+3 equals 6.");
-    const forkId = await h.session.forkThread(id);
+    const forkId = await created(h.session.forkThread(id));
     const fork = h.thread(forkId);
     const done = h.send(fork, "@compact Now help me with multiplication");
     const chunk = await h.nextStream();
@@ -328,14 +329,16 @@ it("auto-compact uses the configured next prompt from options", () =>
 
 async function scriptThread(h: Harness, autoCompactPrompt?: string) {
   h.mockClient.mockInputTokenCount = 1000;
-  const id = await h.session.spawnScriptThread({
-    scriptInvocationId: `inv-${seq++}` as ScriptInvocationId,
-    scriptName: "test-script",
-    prompt: "do the work",
-    yieldSchema: { type: "object", properties: {} },
-    autoCompactThreshold: 160_000,
-    ...(autoCompactPrompt ? { autoCompactPrompt } : {}),
-  });
+  const id = await created(
+    h.session.spawnScriptThread({
+      scriptInvocationId: `inv-${seq++}` as ScriptInvocationId,
+      scriptName: "test-script",
+      prompt: "do the work",
+      yieldSchema: { type: "object", properties: {} },
+      autoCompactThreshold: 160_000,
+      ...(autoCompactPrompt ? { autoCompactPrompt } : {}),
+    }),
+  );
   const thread = h.thread(id);
   return driveUntilCompacting(h, id, () => {
     void thread.submit({
@@ -490,7 +493,7 @@ it("deleting the compact child thread aborts the parked submission", () =>
       expect(finishedRuns(h, id).map((r) => r.type)).toEqual(["aborted"]);
     });
     expect(isCompacting(h, id)).toBe(false);
-    await pollUntil(() => expect(thread.loopState.type).toBe("idle"));
+    await pollUntil(() => expect(thread.state.type).toBe("idle"));
   }));
 
 it("fails the parked submission when the chunk thread yields an empty summary", () =>
@@ -506,7 +509,7 @@ it("fails the parked submission when the chunk thread yields an empty summary", 
       "the compaction finished but /summary.md is empty",
     );
     expect(isCompacting(h, id)).toBe(false);
-    await pollUntil(() => expect(thread.loopState.type).toBe("idle"));
+    await pollUntil(() => expect(thread.state.type).toBe("idle"));
   }));
 
 it("discards an in-flight run when a fresh @compact arrives", () =>
@@ -535,7 +538,7 @@ it("delivers @compact typed into a compact thread as ordinary text", () =>
     );
     const chunkId = activeChunk(h, id);
     const chunk = h.thread(chunkId);
-    await pollUntil(() => expect(chunk.loopState.type).toBe("idle"));
+    await pollUntil(() => expect(chunk.state.type).toBe("idle"));
     void h.send(chunk, "@compact foo");
     expect(text(await h.nextStream())).toContain("@compact foo");
     expect(initialized(h, chunkId).compactor).toBeUndefined();

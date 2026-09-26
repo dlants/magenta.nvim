@@ -48,7 +48,7 @@ export const ABORT_TIMED_OUT = Symbol("abort-timed-out");
 
 export async function wrapStreamAbortSignalWithTimeout<T>(
   promise: Promise<T>,
-  signal: AbortSignal,
+  abortSignal: AbortSignal,
 ): Promise<T | typeof ABORT_TIMED_OUT> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let onAbort: (() => void) | undefined;
@@ -59,15 +59,15 @@ export async function wrapStreamAbortSignalWithTimeout<T>(
         ABORT_GRACE_PERIOD_MS,
       );
     };
-    if (signal.aborted) onAbort();
-    else signal.addEventListener("abort", onAbort, { once: true });
+    if (abortSignal.aborted) onAbort();
+    else abortSignal.addEventListener("abort", onAbort, { once: true });
   });
 
   try {
     return await Promise.race([promise, abortTimeout]);
   } finally {
     if (timeout) clearTimeout(timeout);
-    if (onAbort) signal.removeEventListener("abort", onAbort);
+    if (onAbort) abortSignal.removeEventListener("abort", onAbort);
   }
 }
 
@@ -79,14 +79,14 @@ export function getRetryDelay(attempt: number): number {
     : RETRY_DELAYS[RETRY_DELAYS.length - 1];
 }
 
-/** Ties an already-started request to `signal`. `started` must have run
+/** Ties an already-started request to `abortSignal`. `started` must have run
  * synchronously far enough for `abort` to find the request in flight. */
 export function withAbort<T>(
   started: Promise<T>,
-  signal: AbortSignal,
+  abortSignal: AbortSignal,
   abort: () => void,
 ): Promise<T> {
-  if (signal.aborted) abort();
-  signal.addEventListener("abort", abort, { once: true });
-  return started.finally(() => signal.removeEventListener("abort", abort));
+  if (abortSignal.aborted) abort();
+  abortSignal.addEventListener("abort", abort, { once: true });
+  return started.finally(() => abortSignal.removeEventListener("abort", abort));
 }
