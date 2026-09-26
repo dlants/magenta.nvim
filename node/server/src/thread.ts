@@ -74,11 +74,10 @@ import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.t
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
-import { Defer, untilAborted } from "./utils/async.ts";
+import { Defer } from "./utils/async.ts";
 import type { NvimCwd } from "./utils/files.ts";
 export type { ContextDelivery, ThreadCoreContext, ThreadStatus, YieldState };
 /** What hooks see when no submission is running: nothing can abort them. */
-const IDLE_SIGNAL = new AbortController().signal;
 const RETIRED_CORE_SUPERVISOR: ThreadCoreCallbacks["supervisor"] = {
   onToolApplied: () => {},
   onToolResults: () => {},
@@ -269,7 +268,7 @@ export class Thread implements ThreadCoreView {
       () => this.submissionSupervisors,
       {
         logger: context.logger,
-        abortSignal: () => this.submissionSignal,
+        isAborted: () => this.liveSubmission?.aborted ?? false,
       },
     );
     this.core = fork
@@ -292,7 +291,7 @@ export class Thread implements ThreadCoreView {
     if (!chain) {
       chain = new ToolLoopSupervisorChain(() => this.orderedSupervisors(core), {
         logger: this.context.logger,
-        abortSignal: () => this.submissionSignal,
+        isAborted: () => this.liveSubmission?.aborted ?? false,
       });
       this.chains.set(core, chain);
     }
@@ -459,7 +458,7 @@ export class Thread implements ThreadCoreView {
     return {
       type: "running",
       activity: this.core.activity ?? { type: "preparing" },
-      aborting: status.submission.abortSignal.aborted,
+      aborting: status.submission.aborted,
     };
   }
   /** A render-only view of how the most recent submission ended. Nothing may
@@ -556,7 +555,7 @@ export class Thread implements ThreadCoreView {
     // anything that overtakes this one while it waits simply aborts it.
     const previous = this.inFlight;
     if (previous) this.drainQueues();
-    // The tool loop runs on the submission's abortSignal, so aborting it interrupts
+    // The tool loop is the submission's joined child, so aborting it interrupts
     // the tool loop synchronously; only the preempted submission needs help.
     const submission = new ActiveSubmission(async () => {
       await previous?.abort();
@@ -588,11 +587,11 @@ export class Thread implements ThreadCoreView {
     const aborted: SubmissionResult = { type: "aborted" };
     try {
       if (previous) {
-        const joined = await submission.settled(() => previous.abort());
+        const joined = await submission.joined(() => previous.abort());
         if (joined === ABORTED) return finish(aborted);
       }
       const reset = this.reset;
-      if (reset && (await submission.settled(() => reset)) === ABORTED)
+      if (reset && (await submission.joined(() => reset)) === ABORTED)
         return finish(aborted);
       const resolved: ResolvedSubmission | Aborted =
         input.type === "raw"
@@ -645,13 +644,18 @@ export class Thread implements ThreadCoreView {
       };
     // Joined, not abandoned: the run owns child threads and run state, which
     // it must clean up before this submission unwinds.
-    const outcome = await submission.settled(() =>
-      compactor.run(
-        this.getProviderMessages(),
-        handoff,
-        submission.abortSignal,
-      ),
-    );
+    // Temporary shim until Compactor.run returns a Task.
+    const outcome = await submission.settled(() => {
+      const controller = new AbortController();
+      return {
+        promise: compactor.run(
+          this.getProviderMessages(),
+          handoff,
+          controller.signal,
+        ),
+        abort: () => controller.abort(),
+      };
+    });
     if (outcome === ABORTED || outcome.type === "aborted")
       return { type: "settle", result: { type: "aborted" } };
     if (outcome.type === "error")
@@ -697,7 +701,7 @@ export class Thread implements ThreadCoreView {
    * entries against the message they will ride. */
   private async flushAsyncIntoRequest(
     nativeMessageIdx: NativeMessageIdx,
-    abortSignal: AbortSignal,
+    submission: ActiveSubmission | undefined,
   ): Promise<AgentInput[]> {
     return this.mailbox.deliverAsync<AgentInput[]>(async (next) => {
       const messages: AgentInput[] = [];
@@ -714,10 +718,10 @@ export class Thread implements ThreadCoreView {
         }
         const resolved = await this.resolveQueued(
           entry,
-          abortSignal,
+          submission,
           nativeMessageIdx,
         );
-        if (abortSignal.aborted)
+        if (submission?.aborted)
           return { disposition: { type: "commit" }, value: [] };
         if (resolved) messages.push(...resolved.prompt.content);
       }
@@ -728,17 +732,17 @@ export class Thread implements ThreadCoreView {
    * yet. A compaction stops the drain: it cannot share a message with the
    * content around it. */
   private async flushQueuesForNextRequest(
-    abortSignal: AbortSignal,
+    submission: ActiveSubmission,
   ): Promise<FlushedQueue> {
     const messages: AgentInput[] = [];
     for (const flush of [
       () =>
-        this.promptFlush(abortSignal, (run) => this.mailbox.deliverAsync(run)),
+        this.promptFlush(submission, (run) => this.mailbox.deliverAsync(run)),
       () =>
-        this.promptFlush(abortSignal, (run) => this.mailbox.deliverNext(run)),
+        this.promptFlush(submission, (run) => this.mailbox.deliverNext(run)),
     ]) {
       const flushed = await flush();
-      if (abortSignal.aborted) break;
+      if (submission?.aborted) break;
       if (flushed.type === "compact") {
         // Anything already flushed ahead of the compaction is spent, and the
         // log it would have ridden is about to be thrown away: it is carried
@@ -750,7 +754,7 @@ export class Thread implements ThreadCoreView {
     return { type: "messages", messages };
   }
   private async promptFlush(
-    abortSignal: AbortSignal,
+    submission: ActiveSubmission,
     deliver: (
       run: BatchRun<FlushedQueue, Disposition>,
     ) => Promise<FlushedQueue>,
@@ -762,10 +766,10 @@ export class Thread implements ThreadCoreView {
         if (entry === undefined) break;
         const resolved = await this.resolveQueued(
           entry,
-          abortSignal,
+          submission,
           this.core.manager.getPendingUserMessageIdx(),
         );
-        if (abortSignal.aborted)
+        if (submission?.aborted)
           return {
             disposition: { type: "commit" },
             value: { type: "messages", messages: [] },
@@ -791,7 +795,7 @@ export class Thread implements ThreadCoreView {
   }
   private async resolveQueued(
     entry: QueueEntry,
-    abortSignal: AbortSignal,
+    submission: ActiveSubmission | undefined,
     nativeMessageIdx: NativeMessageIdx,
   ): Promise<ResolvedSubmission | undefined> {
     if (entry.type === "resolved")
@@ -800,11 +804,11 @@ export class Thread implements ThreadCoreView {
         prompt: { content: [entry.input], reminders: [] },
       };
     try {
-      const resolved = await untilAborted(
-        this.context.resolve(entry.message),
-        abortSignal,
-      );
-      if (!resolved || abortSignal.aborted) return undefined;
+      const resolving = () => this.context.resolve(entry.message);
+      const resolved = submission
+        ? await submission.step(resolving)
+        : await resolving();
+      if (resolved === ABORTED) return undefined;
       for (const text of resolved.prompt.reminders) {
         this.activateReminder(text, nativeMessageIdx);
       }
@@ -824,7 +828,7 @@ export class Thread implements ThreadCoreView {
       type: "inject",
       content: await this.flushAsyncIntoRequest(
         ctx.nativeMessageIdx,
-        this.submissionSignal,
+        this.liveSubmission,
       ),
     };
   }
@@ -835,10 +839,8 @@ export class Thread implements ThreadCoreView {
   /** The submission whose tool loop is on the core, which can differ from
    * `inFlight` while a preempted tool loop unwinds. */
   private toolLoopSubmission: ActiveSubmission | undefined;
-  private get submissionSignal(): AbortSignal {
-    return (
-      (this.toolLoopSubmission ?? this.inFlight)?.abortSignal ?? IDLE_SIGNAL
-    );
+  private get liveSubmission(): ActiveSubmission | undefined {
+    return this.toolLoopSubmission ?? this.inFlight;
   }
   private get inFlight(): ActiveSubmission | undefined {
     return this.status.type === "running" ? this.status.submission : undefined;
@@ -869,17 +871,7 @@ export class Thread implements ThreadCoreView {
       try {
         notify("onToolLoopStart", core.manager.getPendingUserMessageIdx());
         this.toolLoopSubmission = submission;
-        // Temporary shim until ActiveSubmission joins Tasks directly.
-        const result = await submission.settled(() => {
-          const loop = core.runToolLoop(input);
-          const signal = submission.abortSignal;
-          const abort = () => loop.abort();
-          if (signal.aborted) abort();
-          signal.addEventListener("abort", abort, { once: true });
-          return loop.promise.finally(() =>
-            signal.removeEventListener("abort", abort),
-          );
-        });
+        const result = await submission.settled(() => core.runToolLoop(input));
         return result === ABORTED ? { type: "aborted" } : result;
       } finally {
         if (this.toolLoopSubmission === submission)
@@ -909,7 +901,7 @@ export class Thread implements ThreadCoreView {
         };
       }
       const stopReason = result.stopReason;
-      const next = await this.continuation(stopReason, submission.abortSignal);
+      const next = await this.continuation(stopReason, submission);
       if (submission.aborted) return { type: "aborted" };
       switch (next.type) {
         case "rest":
@@ -990,7 +982,7 @@ export class Thread implements ThreadCoreView {
 
   private async continuation(
     stopReason: StopReason,
-    abortSignal: AbortSignal,
+    submission: ActiveSubmission,
   ): Promise<
     | { type: "rest" }
     | CompactRequest
@@ -1003,8 +995,8 @@ export class Thread implements ThreadCoreView {
     }
     // Both queues are flushed in full, in insertion order: anything enqueued
     // while this resolution is running lands in the next flush.
-    const flushed = await this.flushQueuesForNextRequest(abortSignal);
-    if (abortSignal.aborted) return { type: "rest" };
+    const flushed = await this.flushQueuesForNextRequest(submission);
+    if (submission?.aborted) return { type: "rest" };
     if (flushed.type === "compact") {
       return { type: "compact", next: flushed.next };
     }

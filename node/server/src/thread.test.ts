@@ -2406,3 +2406,82 @@ function nextText(next: ReadonlyArray<AgentInput>): string | undefined {
     undefined
   );
 }
+
+describe("submission handle aborts", () => {
+  it("lets a preempted tool loop settle aborted before the next request goes out", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const order: string[] = [];
+    const first = core.submit({
+      type: "resolved",
+      messages: [{ type: "text", text: "start" }],
+    });
+    void first.then((result) => order.push(`first:${result.type}`));
+    const stream = await mockClient.awaitStream();
+    stream.streamText("working");
+    const second = core.submit({
+      type: "resolved",
+      messages: [{ type: "text", text: "take over" }],
+    });
+    const next = await awaitNextStream(mockClient, stream);
+    order.push("second request");
+    expect(order).toEqual(["first:aborted", "second request"]);
+    next.finishResponse("end_turn");
+    await second;
+  });
+
+  it("drops a queued resolution interrupted by an abort and hands back the unsent entries", async () => {
+    const resolving = new Defer<ReturnType<typeof sendResolved>>();
+    const resolve = vi.fn(() => resolving.promise);
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("abort-resolution"),
+      resolve,
+    );
+    const sent = core.submit({
+      type: "resolved",
+      messages: [{ type: "text", text: "start" }],
+    });
+    const stream = await mockClient.awaitStream();
+    core.enqueue({ type: "raw", message: pendingMessage("queued") }, "next");
+    core.enqueue({ type: "raw", message: pendingMessage("behind") }, "next");
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (!resolve.mock.calls.length) throw new Error("waiting to resolve");
+    });
+    const { unsent } = await core.abort();
+    expect(await sent).toEqual({ type: "aborted" });
+    // The entry being resolved is dropped; those behind it are handed back.
+    expect(unsent.map((q) => renderPending(q.message))).toEqual(["behind"]);
+    resolving.resolve(sendResolved([{ type: "text", text: "late" }]));
+    await Promise.resolve();
+    expect(userTexts(core)).not.toContain("late");
+  });
+
+  it("stops the before-request fan-out at an abort", async () => {
+    const gate = new Defer<{ type: "none" }>();
+    const entered = new Defer<void>();
+    const later = vi.fn(() => Promise.resolve({ type: "none" as const }));
+    const { core, mockClient } = createAgentWithMock({
+      toolLoopSupervisors: [
+        {
+          onBeforeRequest: () => {
+            entered.resolve();
+            return gate.promise;
+          },
+        },
+        { onBeforeRequest: later },
+      ],
+    });
+    const sent = core.submit({
+      type: "resolved",
+      messages: [{ type: "text", text: "start" }],
+    });
+    await entered.promise;
+    const aborting = core.abort();
+    gate.resolve({ type: "none" });
+    await aborting;
+    expect(await sent).toEqual({ type: "aborted" });
+    expect(later).not.toHaveBeenCalled();
+    expect(mockClient.streams).toHaveLength(0);
+  });
+});

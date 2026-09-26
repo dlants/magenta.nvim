@@ -216,6 +216,16 @@ private pending = new Map<ThreadId, { abort(): void; aborted: boolean }>();
   - An abort during queued-message resolution drops the resolution and leaves the unsent entries in `unsent`.
   - An abort during a supervisor's `onBeforeRequest` fan-out stops the remaining members.
 
+- Status: done.
+  - [x] `ActiveSubmission`: `aborted` flag, `current` child, `step` races an internal `abandoned` Defer, `settled(start: () => Task)`, `joined(work)`. No `AbortController`.
+  - [x] `submissionSignal`/`IDLE_SIGNAL`/runLoop shim removed; `liveSubmission` getter feeds `isAborted` and `queueFlushAction`.
+  - [x] Supervisor chains take `isAborted`; `forEach` takes a `gated` boolean instead of a signal.
+  - [x] Queue flushes/`continuation` take the submission; `flushAsyncIntoRequest`/`resolveQueued` take `ActiveSubmission | undefined` (the async flush can run with no live submission) and resolve through `submission.step`.
+  - [x] `untilAborted` deleted.
+  - Deviation: `compactAndContinue` wraps `compactor.run` in a temporary Task shim (local `AbortController`) until stage 3 changes `Compactor.run`.
+  - Note: an abort during queued resolution drops the entry being resolved (as before); only entries behind it come back in `unsent`.
+  - [x] Tests in `thread.test.ts` ("submission handle aborts"): preemption ordering, abort during queued resolution, abort during `onBeforeRequest` fan-out.
+
 ## Compactor and session creation
 
 - Goal:

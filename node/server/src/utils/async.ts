@@ -55,32 +55,6 @@ export class Defer<T> {
   }
 }
 
-/** Await work that has no way to be cancelled, but no longer than the abortSignal.
- * Resolves `undefined` if the abortSignal fires first: the work is abandoned, not
- * cancelled, so this is only sound where its effects are applied by the
- * caller and dropping the result drops them. What it buys is a bounded wait
- * for whoever needs the awaiting body to unwind. */
-export function untilAborted<T>(
-  promise: Promise<T>,
-  abortSignal: AbortSignal,
-): Promise<T | undefined> {
-  if (abortSignal.aborted) return Promise.resolve(undefined);
-  return new Promise((resolve, reject) => {
-    const onAbort = () => resolve(undefined);
-    abortSignal.addEventListener("abort", onAbort, { once: true });
-    promise.then(
-      (value) => {
-        abortSignal.removeEventListener("abort", onAbort);
-        resolve(value);
-      },
-      (error: unknown) => {
-        abortSignal.removeEventListener("abort", onAbort);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      },
-    );
-  });
-}
-
 /** poll fn until it returns.
  */
 export async function pollUntil<T>(

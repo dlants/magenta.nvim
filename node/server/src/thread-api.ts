@@ -5,7 +5,7 @@ import type {
 } from "./providers/provider-types.ts";
 import type { YieldAction } from "./thread-supervisor.ts";
 import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
-import { Defer, untilAborted } from "./utils/async.ts";
+import { Defer, type Task } from "./utils/async.ts";
 
 export type { QueuedMessage } from "./submission/mailbox.ts";
 
@@ -64,23 +64,29 @@ export type Aborted = typeof ABORTED;
  * before installing its own, so no submission body has to ask whether it is
  * still the live one — only whether it was aborted. */
 export class ActiveSubmission {
-  private readonly controller = new AbortController();
+  private abortedFlag = false;
+  /** The joined child in flight, installed synchronously when it starts. */
+  private current: Task<unknown> | undefined;
+  /** Resolved by `abort()`; abandoned steps race against it. */
+  private readonly abandoned = new Defer<Aborted>();
   private readonly unwound = new Defer<void>();
   private unwinding: Promise<void> | undefined;
-  /** `stopWork` interrupts whatever the submission is blocked on (the tool
-   * loop), so that awaiting an abort cannot wedge the aborter. */
+  /** `stopWork` interrupts whatever the submission is blocked on that is not
+   * a joined child (the preempted submission), so that awaiting an abort
+   * cannot wedge the aborter. */
   constructor(private readonly stopWork: () => Promise<void>) {}
-  get abortSignal(): AbortSignal {
-    return this.controller.signal;
-  }
   get aborted(): boolean {
-    return this.controller.signal.aborted;
+    return this.abortedFlag;
   }
   /** Cancel the submission and wait for its body to fully unwind, however it
    * ended. Never rejects: a failure belongs to the submitter, not to whoever
    * is waiting for the thread to go quiet. */
   abort(): Promise<void> {
-    this.controller.abort();
+    if (!this.abortedFlag) {
+      this.abortedFlag = true;
+      this.current?.abort();
+      this.abandoned.resolve(ABORTED);
+    }
     this.unwinding ??= (async () => {
       await this.stopWork();
       await this.unwound.promise;
@@ -90,17 +96,28 @@ export class ActiveSubmission {
   /** Run a phase whose result is abandoned on abort. Only for work whose
    * effects the caller applies, so dropping the result drops the effects
    * (see the cancellation invariants in context.md). */
-  async step<T>(
-    work: (abortSignal: AbortSignal) => Promise<T>,
-  ): Promise<T | Aborted> {
+  async step<T>(work: () => Promise<T>): Promise<T | Aborted> {
     if (this.aborted) return ABORTED;
-    const result = await untilAborted(work(this.abortSignal), this.abortSignal);
+    const result = await Promise.race([work(), this.abandoned.promise]);
     if (this.aborted) return ABORTED;
     return result as T;
   }
-  /** Join a phase that owns effects: it is awaited until it has cleaned up
-   * after an abort, and only then does the submission unwind. */
-  async settled<T>(work: () => Promise<T>): Promise<T | Aborted> {
+  /** Join a child that owns effects: it is installed as `current`, so an
+   * abort reaches it, and awaited until it has cleaned up. */
+  async settled<T>(start: () => Task<T>): Promise<T | Aborted> {
+    const task = start();
+    this.current = task;
+    if (this.aborted) task.abort();
+    try {
+      const result = await task.promise;
+      return this.aborted ? ABORTED : result;
+    } finally {
+      if (this.current === task) this.current = undefined;
+    }
+  }
+  /** Join a plain promise with no abort of its own (a preempted submission,
+   * a reset). */
+  async joined<T>(work: () => Promise<T>): Promise<T | Aborted> {
     const result = await work();
     return this.aborted ? ABORTED : result;
   }

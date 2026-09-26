@@ -102,11 +102,10 @@ export interface SubmissionSupervisor {
 
 export type SupervisorChainDeps = {
   logger: Logger;
-  /** The live submission's abortSignal, taken once at the start of a hook and
-   * checked between members, so an abort mid-fan-out stops the rest. Hooks
+  /** Whether the live submission has been aborted, checked between members, so an abort mid-fan-out stops the rest. Hooks
    * that record what a tool loop already did (loop start/stop, applied tools,
    * tool results) are not gated: the core stops driving them once disposed. */
-  abortSignal: () => AbortSignal;
+  isAborted: () => boolean;
 };
 
 abstract class ChainBase<Member> {
@@ -123,11 +122,11 @@ abstract class ChainBase<Member> {
 
   protected forEach(
     hook: string,
-    abortSignal: AbortSignal | undefined,
+    gated: boolean,
     visit: (supervisor: Member) => void,
   ): void {
     for (const supervisor of this.members()) {
-      if (abortSignal?.aborted) return;
+      if (gated && this.deps.isAborted()) return;
       try {
         visit(supervisor);
       } catch (error) {
@@ -141,19 +140,19 @@ abstract class ChainBase<Member> {
  * member order. */
 export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
   onToolLoopStart(nativeMessageIdx: NativeMessageIdx): void {
-    this.forEach("onToolLoopStart", undefined, (supervisor) =>
+    this.forEach("onToolLoopStart", false, (supervisor) =>
       supervisor.onToolLoopStart?.(nativeMessageIdx),
     );
   }
 
   onToolLoopStop(nativeMessageIdx: NativeMessageIdx): void {
-    this.forEach("onToolLoopStop", undefined, (supervisor) =>
+    this.forEach("onToolLoopStop", false, (supervisor) =>
       supervisor.onToolLoopStop?.(nativeMessageIdx),
     );
   }
 
   onToolApplied: OnToolAppliedHook = (event) => {
-    this.forEach("onToolApplied", undefined, (supervisor) =>
+    this.forEach("onToolApplied", false, (supervisor) =>
       supervisor.onToolApplied?.(event),
     );
   };
@@ -162,13 +161,12 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
     results: ToolResults,
     nativeMessageIdx: NativeMessageIdx,
   ): void {
-    this.forEach("onToolResults", undefined, (supervisor) => {
+    this.forEach("onToolResults", false, (supervisor) => {
       supervisor.onToolResults?.(results, nativeMessageIdx);
     });
   }
 
   async hasPendingContent(): Promise<boolean> {
-    const abortSignal = this.deps.abortSignal();
     for (const supervisor of this.members()) {
       if (!supervisor.hasPendingContent) continue;
       let pending: boolean;
@@ -178,17 +176,16 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
         this.logThrow("hasPendingContent", error);
         continue;
       }
-      if (abortSignal.aborted) return false;
+      if (this.deps.isAborted()) return false;
       if (pending) return true;
     }
     return false;
   }
 
   async beforeRequest(facts: RequestContext): Promise<AgentInput[]> {
-    const abortSignal = this.deps.abortSignal();
     const injections: AgentInput[] = [];
     for (const supervisor of this.members()) {
-      if (abortSignal.aborted) break;
+      if (this.deps.isAborted()) break;
       if (!supervisor.onBeforeRequest) continue;
       let action: SupervisorAction;
       try {
@@ -197,7 +194,7 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
         this.logThrow("onBeforeRequest", error);
         continue;
       }
-      if (abortSignal.aborted) break;
+      if (this.deps.isAborted()) break;
       if (action.type === "inject") injections.push(...action.content);
     }
     return injections;
@@ -209,14 +206,14 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
  * wins. */
 export class SubmissionSupervisorChain extends ChainBase<SubmissionSupervisor> {
   onSubmission(messages: readonly AgentInput[]): void {
-    this.forEach("onSubmission", this.deps.abortSignal(), (supervisor) =>
+    this.forEach("onSubmission", true, (supervisor) =>
       supervisor.onSubmission?.(messages),
     );
   }
 
   onToolLoopEnd(context: ToolLoopEndContext): ToolLoopEndAction {
     const texts: string[] = [];
-    this.forEach("onToolLoopEnd", this.deps.abortSignal(), (supervisor) => {
+    this.forEach("onToolLoopEnd", true, (supervisor) => {
       const action = supervisor.onToolLoopEnd?.(context);
       if (action?.type === "send-message") texts.push(action.text);
     });

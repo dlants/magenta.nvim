@@ -390,11 +390,7 @@ describe("SupervisorChain onSubmission", () => {
         ...noopLogger,
         error: (message: string) => args.errors.push(message),
       } as Logger,
-      abortSignal: () => {
-        const controller = new AbortController();
-        if (!args.live) controller.abort();
-        return controller.signal;
-      },
+      isAborted: () => !args.live,
     });
   }
   const messages = [
