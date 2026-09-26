@@ -247,3 +247,4 @@ private pending = new Map<ThreadId, { abort(): void; aborted: boolean }>();
   - [x] Compactor cancellation/parked-run tests ported to `run(...).abort()`; new session test: deleting a thread aborts its in-flight preparation handle.
   - [x] `abort-listeners.test.ts` forbids `addEventListener("abort"` outside `codex-auth.ts`, `inference-shared.ts`, `mock-anthropic-client.ts`, `utils/async.ts`.
   - [x] `context.md` and `node/server/src/context.md` describe handles instead of signals.
+  - [x] Review follow-ups: session test for a preparation handle arriving after its creation was deleted (abort called once, ABORTED); compactor cancellation test gains a `handle` case that aborts the run directly twice while the first spawn is pending (no active child), asserting the late child is deleted once and the outcome is aborted.

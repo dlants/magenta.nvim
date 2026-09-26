@@ -504,3 +504,20 @@ it("deleting a thread aborts its in-flight preparation handle", async () => {
   expect(abort).toHaveBeenCalledTimes(1);
   expect(await creation).toBe(ABORTED);
 });
+
+it("aborts a preparation handle that arrives after its creation was deleted", async () => {
+  const { session, profile, host } = fixture();
+  const preparation = new Defer<typeof ABORTED>();
+  const abort = vi.fn(() => preparation.resolve(ABORTED));
+  const id = uniqueThreadId("session-prepare-late-handle");
+  host.prepareThread = () => {
+    session.deleteThread(id);
+    return { promise: preparation.promise, abort };
+  };
+  const creation = session.createThread({
+    threadId: id,
+    ...rootOptions(profile),
+  });
+  expect(await creation).toBe(ABORTED);
+  expect(abort).toHaveBeenCalledTimes(1);
+});

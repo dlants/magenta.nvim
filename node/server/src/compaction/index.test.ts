@@ -261,6 +261,7 @@ describe("ThreadCompactor cancellation", () => {
     "destroy",
     "abort",
     "reset",
+    "handle",
   ] as const)("cleans up a child whose first spawn settles after %s", async (action) => {
     const spawn = new Defer<ThreadId>();
     const spawned = new Defer<void>();
@@ -314,8 +315,10 @@ describe("ThreadCompactor cancellation", () => {
     else if (action === "abort") await thread.abort();
     else if (action === "reset")
       await resetThread(thread, { archive: { type: "none" } });
-    else await thread.destroy();
+    else if (action === "destroy") await thread.destroy();
     if (action !== "discard") run.abort();
+    // A repeated abort with no active child must be a no-op.
+    if (action === "handle") run.abort();
     const child = "late-child" as ThreadId;
     spawn.resolve(child);
     expect(await run.promise).toEqual({ type: "aborted" });
