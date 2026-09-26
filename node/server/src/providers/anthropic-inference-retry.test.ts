@@ -5,6 +5,7 @@ import {
   createAgentWithMock,
   createTestAgent,
   flatLoop,
+  promiseRun,
   sendText,
   userInput,
 } from "../test-helpers.ts";
@@ -134,7 +135,9 @@ describe("Agent retry logic", () => {
     const { core, mockClient } = createAgentWithMock({
       compaction: {
         compactor: {
-          run: () => Promise.reject(new Error("unexpected compaction")),
+          run: promiseRun(() =>
+            Promise.reject(new Error("unexpected compaction")),
+          ),
         },
         tokenBudget: TokenBudget.create({
           threshold: 1_000_000,

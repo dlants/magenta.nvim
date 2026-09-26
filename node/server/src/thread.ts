@@ -645,18 +645,9 @@ export class Thread implements ThreadCoreView {
       };
     // Joined, not abandoned: the run owns child threads and run state, which
     // it must clean up before this submission unwinds.
-    // Temporary shim until Compactor.run returns a Task.
-    const outcome = await submission.settled(() => {
-      const controller = new AbortController();
-      return {
-        promise: compactor.run(
-          this.getProviderMessages(),
-          handoff,
-          controller.signal,
-        ),
-        abort: () => controller.abort(),
-      };
-    });
+    const outcome = await submission.settled(() =>
+      compactor.run(this.getProviderMessages(), handoff),
+    );
     if (outcome === ABORTED || outcome.type === "aborted")
       return { type: "settle", result: { type: "aborted" } };
     if (outcome.type === "error")

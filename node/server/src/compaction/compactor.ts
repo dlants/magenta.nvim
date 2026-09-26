@@ -19,6 +19,7 @@ import type {
 } from "../providers/provider-types.ts";
 import { ABORTED } from "../thread-api.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
+import type { Task } from "../utils/async.ts";
 import type { CompactionOutcome, Compactor } from "./index.ts";
 
 const COMPACT_PROMPT_TEMPLATE = readFileSync(
@@ -65,6 +66,12 @@ export function compactionRunChunkIndex(
   return run.completedThreadIds.length;
 }
 
+type RunControl = {
+  aborted: boolean;
+  activeChild: ThreadId | undefined;
+  interrupted: Set<ThreadId>;
+};
+
 export type ThreadCompactorDeps = {
   parentThreadId: ThreadId;
   threadManager: ThreadManager;
@@ -96,10 +103,34 @@ export class ThreadCompactor
     return last?.type === "running" ? last : undefined;
   }
 
-  async run(
+  run(
     messages: ReadonlyArray<ProviderMessage>,
     next: ReadonlyArray<AgentInput>,
-    abortSignal: AbortSignal,
+  ): Task<CompactionOutcome> {
+    const control: RunControl = {
+      aborted: false,
+      activeChild: undefined,
+      interrupted: new Set(),
+    };
+    return {
+      promise: this.runBody(messages, next, control),
+      // Only interrupts: deleting the active child settles the
+      // `awaitThreadResult` in the body as aborted, and the body cleans up.
+      abort: () => {
+        if (control.aborted) return;
+        control.aborted = true;
+        const child = control.activeChild;
+        if (!child) return;
+        control.interrupted.add(child);
+        this.deps.threadManager.deleteThread(child);
+      },
+    };
+  }
+
+  private async runBody(
+    messages: ReadonlyArray<ProviderMessage>,
+    next: ReadonlyArray<AgentInput>,
+    control: RunControl,
   ): Promise<CompactionOutcome> {
     this.discard();
 
@@ -113,23 +144,14 @@ export class ThreadCompactor
 
     const id = this.nextRunId++ as CompactionRunId;
     this.activeRunId = id;
-    // Only interrupts: deleting the active child settles the
-    // `awaitThreadResult` below as aborted, and the loop cleans up the run.
-    let activeChild: ThreadId | undefined;
-    const interrupted = new Set<ThreadId>();
-    const onAbort = () => {
-      if (!activeChild) return;
-      interrupted.add(activeChild);
-      this.deps.threadManager.deleteThread(activeChild);
-    };
-    abortSignal.addEventListener("abort", onAbort, { once: true });
+    const { interrupted } = control;
     const completed: ThreadId[] = [];
     let started = false;
     let summary = "";
 
     try {
       for (const [chunkIndex, chunk] of chunks.entries()) {
-        if (abortSignal.aborted || !this.isCurrent(id)) {
+        if (control.aborted || !this.isCurrent(id)) {
           this.discardRun(id, interrupted);
           return { type: "aborted" };
         }
@@ -156,7 +178,7 @@ export class ThreadCompactor
           this.discardRun(id, interrupted);
           return { type: "aborted" };
         }
-        if (abortSignal.aborted || !this.isCurrent(id)) {
+        if (control.aborted || !this.isCurrent(id)) {
           this.deps.threadManager.deleteThread(threadId);
           this.discardRun(id, interrupted);
           return { type: "aborted" };
@@ -177,13 +199,13 @@ export class ThreadCompactor
         }
 
         if (!this.isCurrent(id)) return { type: "aborted" };
-        activeChild = threadId;
+        control.activeChild = threadId;
         const result = await this.deps.threadManager
           .awaitThreadResult(threadId)
           .finally(() => {
-            activeChild = undefined;
+            control.activeChild = undefined;
           });
-        if (abortSignal.aborted || !this.isCurrent(id)) {
+        if (control.aborted || !this.isCurrent(id)) {
           this.discardRun(id, interrupted);
           return { type: "aborted" };
         }
@@ -225,15 +247,13 @@ export class ThreadCompactor
     } catch (error) {
       const wasCurrent = this.isCurrent(id);
       this.discardRun(id, interrupted);
-      if (abortSignal.aborted || !wasCurrent) {
+      if (control.aborted || !wasCurrent) {
         return { type: "aborted" };
       }
       return {
         type: "error",
         message: error instanceof Error ? error.message : String(error),
       };
-    } finally {
-      abortSignal.removeEventListener("abort", onAbort);
     }
   }
 

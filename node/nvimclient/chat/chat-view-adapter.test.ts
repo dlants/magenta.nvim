@@ -107,8 +107,10 @@ it("a thread that fails to construct takes the view out of thread-selected", asy
     await driver.showSidebar();
     const chat = driver.magenta.chat;
     expect(chat.state.state).toBe("thread-selected");
-    chat.host.prepareThread = () =>
-      Promise.reject(new Error("preparation exploded"));
+    chat.host.prepareThread = () => ({
+      promise: Promise.reject(new Error("preparation exploded")),
+      abort: () => {},
+    });
     await expect(chat.session.createRootThread()).rejects.toThrow(
       "preparation exploded",
     );

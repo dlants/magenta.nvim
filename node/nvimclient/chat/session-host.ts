@@ -21,6 +21,7 @@ import {
   type Session,
   type SessionHost,
   type SystemPrompt,
+  type Task,
   type ThreadId,
   type ThreadPreparation,
 } from "@magenta/server";
@@ -160,10 +161,25 @@ export class NvimSessionHost implements SessionHost {
     approve(id);
   }
 
-  async prepareThread(
+  prepareThread(
     request: ThreadPreparation,
     session: Session,
-    abortSignal: AbortSignal,
+  ): Task<PreparedThread | Aborted> {
+    let aborted = false;
+    return {
+      promise: this.prepare(request, session, () => aborted),
+      abort: () => {
+        aborted = true;
+      },
+    };
+  }
+
+  /** Aborts are only honored before any resources are acquired; after that the
+   * session discards the prepared thread and calls its `release`. */
+  private async prepare(
+    request: ThreadPreparation,
+    session: Session,
+    isAborted: () => boolean,
   ): Promise<PreparedThread | Aborted> {
     const { options } = request;
     const source = request.type === "fork" ? request.source : undefined;
@@ -177,7 +193,7 @@ export class NvimSessionHost implements SessionHost {
       yieldSchema,
       scriptName,
     } = options;
-    if (abortSignal.aborted) return ABORTED;
+    if (isAborted()) return ABORTED;
     const resolvedConfig: EnvironmentConfig = environmentConfig ?? {
       type: "local",
     };

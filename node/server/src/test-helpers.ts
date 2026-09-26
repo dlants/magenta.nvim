@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
-import type { Compactor } from "./compaction/index.ts";
+import type { CompactionOutcome, Compactor } from "./compaction/index.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -592,4 +592,15 @@ export function sendResolved(
 }
 export function compactResolved(content: AgentInput[]): ResolvedSubmission {
   return { type: "compact", prompt: { content, reminders: [] } };
+}
+
+/** Adapts a promise-returning fake compaction to `Compactor.run`, for fakes
+ * that never need to observe an abort. */
+export function promiseRun(
+  run: (
+    messages: ReadonlyArray<ProviderMessage>,
+    next: ReadonlyArray<AgentInput>,
+  ) => Promise<CompactionOutcome>,
+): Compactor["run"] {
+  return (messages, next) => uninterruptible(run(messages, next));
 }

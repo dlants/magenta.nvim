@@ -420,7 +420,13 @@ export {
 } from "./tools/toolManager.ts";
 export * as YieldToParent from "./tools/yield-to-parent.ts";
 export { assertUnreachable } from "./utils/assertUnreachable.ts";
-export { Defer, delay, pollUntil, withTimeout } from "./utils/async.ts";
+export {
+  Defer,
+  delay,
+  pollUntil,
+  type Task,
+  withTimeout,
+} from "./utils/async.ts";
 export type {
   ClipboardImageLogger,
   ClipboardProbeResult,

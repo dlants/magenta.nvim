@@ -18,6 +18,7 @@ import {
   createAgentWithMock,
   getContextDeliveries,
   noopLogger,
+  promiseRun,
   resetThread,
   type TestContextOverrides,
   uniqueThreadId,
@@ -251,11 +252,11 @@ describe("Thread-owned context delivery", () => {
       } else {
         const previous = f.mockClient.streams.at(-1);
         compactorSlot(f.thread).compactor = {
-          run: async (_messages, next) => ({
+          run: promiseRun(async (_messages, next) => ({
             type: "complete",
             summary: { text: "replacement summary", chunkCount: 1 },
             next: [...next],
-          }),
+          })),
         };
 
         const sent = f.thread.submit({
@@ -470,7 +471,9 @@ describe("Thread-owned context delivery", () => {
       logger: { ...noopLogger, warn },
       compaction: {
         compactor: {
-          run: () => Promise.reject(new Error("unexpected compaction")),
+          run: promiseRun(() =>
+            Promise.reject(new Error("unexpected compaction")),
+          ),
         },
         tokenBudget: budget,
       },
@@ -497,12 +500,13 @@ describe("Thread-owned context delivery", () => {
     const f = await fixture({
       compaction: {
         compactor: {
-          run: (_messages, next) =>
+          run: promiseRun((_messages, next) =>
             Promise.resolve({
               type: "complete",
               summary: { text: "SUMMARY TEXT", chunkCount: 1 },
               next: [...next],
             }),
+          ),
         },
         tokenBudget: TokenBudget.create({ threshold: 100, handoff: "go on" }),
       },

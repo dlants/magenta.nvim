@@ -490,3 +490,17 @@ it("keeps two sessions' registries independent", async () => {
   expect(a.session.listThreads().map((record) => record.id)).toEqual([id]);
   expect(TEST_ARCHIVE_DIR).toBeTruthy();
 });
+it("deleting a thread aborts its in-flight preparation handle", async () => {
+  const { session, profile, host } = fixture();
+  const preparation = new Defer<typeof ABORTED>();
+  const abort = vi.fn(() => preparation.resolve(ABORTED));
+  host.prepareThread = () => ({ promise: preparation.promise, abort });
+  const id = uniqueThreadId("session-prepare-abort");
+  const creation = session.createThread({
+    threadId: id,
+    ...rootOptions(profile),
+  });
+  session.deleteThread(id);
+  expect(abort).toHaveBeenCalledTimes(1);
+  expect(await creation).toBe(ABORTED);
+});

@@ -6,6 +6,7 @@ import {
   createTestAgent,
   createTestOpenAIAgent,
   flatLoop,
+  promiseRun,
   type TestAgent,
   uninterruptible,
 } from "../test-helpers.ts";
@@ -159,7 +160,9 @@ function autoCompact() {
   return {
     compaction: {
       compactor: {
-        run: () => Promise.reject(new Error("unexpected compaction")),
+        run: promiseRun(() =>
+          Promise.reject(new Error("unexpected compaction")),
+        ),
       },
       tokenBudget: TokenBudget.create({ handoff: "wrap up", threshold: 1 }),
     },

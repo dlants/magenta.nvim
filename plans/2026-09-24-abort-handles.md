@@ -238,3 +238,12 @@ private pending = new Map<ThreadId, { abort(): void; aborted: boolean }>();
   - The parked-run tests (destroy/abort/reset) still settle `aborted`.
   - Session: deleting a thread whose preparation is in flight resolves creation to `ABORTED` and calls `release` exactly once. The existing session tests cover this through `TestSessionHost.intercept` and should be ported to the new signature.
   - A grep test or lint check that `node/server/src` contains no `addEventListener("abort"` outside the allowed leaf files.
+
+- Status: done.
+  - [x] `Compactor.run` returns `Task<CompactionOutcome>`; `ThreadCompactor.run` keeps a per-run `RunControl` (`aborted`, `activeChild`, `interrupted`) whose `abort()` deletes the active child. No listeners. Thread's stage-2 shim removed.
+  - [x] Test fakes use `promiseRun(fn)` (`test-helpers.ts`) to adapt promise-returning fake compactions.
+  - [x] `SessionHost.prepareThread` returns a `Task`; `Session.pending` holds a `PendingCreation` (`aborted` flag + current preparation handle). `Task` exported from the server barrel.
+  - Deviation: `NvimSessionHost` honors `abort()` only before acquiring resources (as before); later aborts are handled by Session's `cancelled()` + `discard()`/`release`, so a prepared environment is never leaked. `TestSessionHost`'s `abort` is a no-op for the same reason.
+  - [x] Compactor cancellation/parked-run tests ported to `run(...).abort()`; new session test: deleting a thread aborts its in-flight preparation handle.
+  - [x] `abort-listeners.test.ts` forbids `addEventListener("abort"` outside `codex-auth.ts`, `inference-shared.ts`, `mock-anthropic-client.ts`, `utils/async.ts`.
+  - [x] `context.md` and `node/server/src/context.md` describe handles instead of signals.

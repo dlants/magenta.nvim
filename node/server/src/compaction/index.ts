@@ -2,6 +2,7 @@ import type {
   AgentInput,
   ProviderMessage,
 } from "../providers/provider-types.ts";
+import type { Task } from "../utils/async.ts";
 
 export type CompactionOutcome =
   | {
@@ -25,8 +26,7 @@ export interface Compactor {
   run(
     messages: ReadonlyArray<ProviderMessage>,
     next: ReadonlyArray<AgentInput>,
-    abortSignal: AbortSignal,
-  ): Promise<CompactionOutcome>;
+  ): Task<CompactionOutcome>;
 }
 
 export {

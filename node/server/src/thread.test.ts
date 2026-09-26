@@ -19,6 +19,7 @@ import {
   compactorSlot,
   compactResolved,
   createAgentWithMock,
+  promiseRun,
   resetThread,
   sendResolved,
   uniqueThreadId,
@@ -521,14 +522,12 @@ describe("deferred submissions", () => {
 
     // The next stop is the earliest point where it can take effect.
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
-    compactorSlot(core).compactor = { run: compact };
+    compactorSlot(core).compactor = { run: promiseRun(compact) };
     toolResultStream.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "aborted" });
-    expect(compact).toHaveBeenCalledWith(
-      expect.any(Array),
-      [{ type: "text", text: "wrap it up" }],
-      expect.any(AbortSignal),
-    );
+    expect(compact).toHaveBeenCalledWith(expect.any(Array), [
+      { type: "text", text: "wrap it up" },
+    ]);
     expect(core.lastResult()).toEqual({ type: "aborted" });
   });
 
@@ -577,20 +576,16 @@ describe("deferred submissions", () => {
       core.enqueue({ type: "raw", message: pendingMessage(text) }, "next");
     }
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
-    compactorSlot(core).compactor = { run: compact };
+    compactorSlot(core).compactor = { run: promiseRun(compact) };
     stream.finishResponse("end_turn");
 
     // There is no request left to carry "first", so it folds into the prompt
     // the compaction hands to the next generation.
     expect(await sent).toEqual({ type: "aborted" });
-    expect(compact).toHaveBeenCalledWith(
-      expect.any(Array),
-      [
-        { type: "text", text: "first" },
-        { type: "text", text: "wrap up" },
-      ],
-      expect.any(AbortSignal),
-    );
+    expect(compact).toHaveBeenCalledWith(expect.any(Array), [
+      { type: "text", text: "first" },
+      { type: "text", text: "wrap up" },
+    ]);
     // Everything behind the compaction keeps its place in the queue.
     expect(core.queued.next).toEqual([
       { type: "raw", message: pendingMessage("third") },
@@ -643,14 +638,12 @@ describe("deferred submissions", () => {
       "async",
     );
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
-    compactorSlot(core).compactor = { run: compact };
+    compactorSlot(core).compactor = { run: promiseRun(compact) };
     stream.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "aborted" });
-    expect(compact).toHaveBeenCalledWith(
-      expect.any(Array),
-      [{ type: "text", text: "from async" }],
-      expect.any(AbortSignal),
-    );
+    expect(compact).toHaveBeenCalledWith(expect.any(Array), [
+      { type: "text", text: "from async" },
+    ]);
   });
   it("carries async content flushed ahead of a next-queue @compact into its prompt", async () => {
     const { core, mockClient } = createAgentWithMock(
@@ -702,19 +695,15 @@ describe("deferred submissions", () => {
       "next",
     );
     const compact = vi.fn(async () => ({ type: "aborted" as const }));
-    compactorSlot(core).compactor = { run: compact };
+    compactorSlot(core).compactor = { run: promiseRun(compact) };
     stream.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "aborted" });
     // The async content is spent, and the log it would have ridden is about to
     // be thrown away: it travels on the compaction prompt rather than vanish.
-    expect(compact).toHaveBeenCalledWith(
-      expect.any(Array),
-      [
-        { type: "text", text: "async note" },
-        { type: "text", text: "wrap up" },
-      ],
-      expect.any(AbortSignal),
-    );
+    expect(compact).toHaveBeenCalledWith(expect.any(Array), [
+      { type: "text", text: "async note" },
+      { type: "text", text: "wrap up" },
+    ]);
   });
   it.each([
     "next",
@@ -726,8 +715,9 @@ describe("deferred submissions", () => {
       {
         compaction: {
           compactor: {
-            run: (_messages, _next) =>
+            run: promiseRun((_messages, _next) =>
               Promise.reject(new Error("replaced below")),
+            ),
           },
           tokenBudget: TokenBudget.create({ threshold: 100, handoff: "" }),
         },
@@ -751,7 +741,7 @@ describe("deferred submissions", () => {
       let compactedTexts: string[] = [];
       let compactNextPrompt: string | undefined;
       const compactor: Compactor = {
-        run: (messages, next) => {
+        run: promiseRun((messages, next) => {
           compactNextPrompt = nextText(next);
           compactedTexts = messages.flatMap((m) =>
             m.role === "user"
@@ -765,7 +755,7 @@ describe("deferred submissions", () => {
             summary: { text: "SUMMARY TEXT", chunkCount: 1 },
             next: [...next],
           });
-        },
+        }),
       };
 
       compactorSlot(core).compactor = compactor;

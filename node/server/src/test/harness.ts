@@ -42,7 +42,7 @@ import { clientToolCreator } from "../tools/create-tool.ts";
 import { MCPToolManager } from "../tools/mcp/manager.ts";
 import type { MCPServersConfig } from "../tools/mcp/options.ts";
 import type { ToolCapability } from "../tools/tool-registry.ts";
-import { pollUntil } from "../utils/async.ts";
+import { pollUntil, type Task } from "../utils/async.ts";
 import {
   detectFileTypeViaFileIO,
   type HomeDir,
@@ -200,11 +200,12 @@ export class TestSessionHost implements SessionHost {
   prepareThread(
     request: ThreadPreparation,
     session: SessionType,
-    abortSignal: AbortSignal,
-  ): Promise<PreparedThread | Aborted> {
-    if (abortSignal.aborted) return Promise.resolve(ABORTED);
+  ): Task<PreparedThread | Aborted> {
     const prepare = () => this.prepare(request, session);
-    return this.intercept ? this.intercept(request, prepare) : prepare();
+    return {
+      promise: this.intercept ? this.intercept(request, prepare) : prepare(),
+      abort: () => {},
+    };
   }
 
   private async prepare(

@@ -38,6 +38,7 @@ import {
   defaultAnthropicOptions,
   flatLoop,
   markTornDownYield,
+  promiseRun,
   resetThread,
   sendResolved,
   TEST_ARCHIVE_DIR,
@@ -75,7 +76,9 @@ function autoCompactSupervisors(
     submissionSupervisors: turnBefore,
     compaction: {
       compactor: {
-        run: () => Promise.reject(new Error("unexpected compaction")),
+        run: promiseRun(() =>
+          Promise.reject(new Error("unexpected compaction")),
+        ),
       },
       tokenBudget: TokenBudget.create(opts),
     },
@@ -519,10 +522,10 @@ describe("Thread turn loop", () => {
 function trackCompactions(core: Thread): { prompts: (string | undefined)[] } {
   const prompts: (string | undefined)[] = [];
   compactorSlot(core).compactor = {
-    run: async (_messages, prompt) => {
+    run: promiseRun(async (_messages, prompt) => {
       prompts.push(nextText(prompt));
       return { type: "aborted" };
-    },
+    }),
   };
   return { prompts };
 }
@@ -539,14 +542,14 @@ describe("Thread submissions across a compaction handoff", () => {
     const calls: (string | undefined)[] = [];
     return {
       calls,
-      run: (_messages, next) => {
+      run: promiseRun((_messages, next) => {
         calls.push(nextText(next));
         return Promise.resolve(
           outcome.type === "complete" || outcome.type === "carried"
             ? { ...outcome, next: [...next] }
             : outcome,
         );
-      },
+      }),
     };
   };
 
@@ -746,14 +749,14 @@ describe("Thread submissions across a compaction handoff", () => {
     try {
       const calls: (string | undefined)[] = [];
       const compactor: Compactor = {
-        run: (_messages, next) => {
+        run: promiseRun((_messages, next) => {
           calls.push(nextText(next));
           return Promise.resolve({
             type: "complete",
             summary: { text: `SUMMARY ${calls.length}`, chunkCount: 1 },
             next: [...next],
           });
-        },
+        }),
       };
       let settled: SubmissionResult | undefined;
       compactorSlot(core).compactor = compactor;
@@ -1865,7 +1868,7 @@ describe("TokenBudget integration", () => {
     const histories: ProviderMessage[][] = [];
     const release = new Defer<void>();
     compactorSlot(core).compactor = {
-      run: (history, next) => {
+      run: promiseRun((history, next) => {
         histories.push([...history]);
         mockClient.mockInputTokenCount = 10;
         return release.promise.then(() => ({
@@ -1873,7 +1876,7 @@ describe("TokenBudget integration", () => {
           summary: { text: "SUMMARY", chunkCount: 1 },
           next: [...next],
         }));
-      },
+      }),
     };
     const done = core.submit({
       type: "resolved",
@@ -1902,10 +1905,10 @@ describe("TokenBudget integration", () => {
     mockClient.mockInputTokenCount = 50;
     const histories: ProviderMessage[][] = [];
     compactorSlot(core).compactor = {
-      run: (history, _next) => {
+      run: promiseRun((history, _next) => {
         histories.push([...history]);
         return Promise.resolve({ type: "aborted" });
-      },
+      }),
     };
     void core.submit({
       type: "resolved",
@@ -1973,14 +1976,14 @@ describe("TokenBudget integration", () => {
     });
     mockClient.mockInputTokenCount = 200;
     compactorSlot(core).compactor = {
-      run: (_messages, next) => {
+      run: promiseRun((_messages, next) => {
         mockClient.mockInputTokenCount = 10;
         return Promise.resolve({
           type: "complete" as const,
           summary: { text: "SUMMARY", chunkCount: 1 },
           next: [...next],
         });
-      },
+      }),
     };
     const result = core.submit({
       type: "resolved",
@@ -3963,12 +3966,13 @@ describe("Agent conversation archive", () => {
       await flushArchive(core);
 
       compactorSlot(core).compactor = {
-        run: (_messages, next) =>
+        run: promiseRun((_messages, next) =>
           Promise.resolve({
             type: "complete",
             summary: { text: "SUMMARY TEXT", chunkCount: 2 },
             next: [...next],
           }),
+        ),
       };
 
       const compactPromise = core.submit({
@@ -4160,12 +4164,13 @@ describe("Thread survives the compaction agent swap", () => {
   ): Promise<void> {
     const streamsBefore = mockClient.streams.length;
     compactorSlot(core).compactor = {
-      run: (_messages, next) =>
+      run: promiseRun((_messages, next) =>
         Promise.resolve({
           type: "complete",
           summary: { text: "SUMMARY TEXT", chunkCount: 1 },
           next: [...next],
         }),
+      ),
     };
 
     const compactPromise = core.submit({
@@ -4258,12 +4263,13 @@ describe("Thread survives the compaction agent swap", () => {
     );
     try {
       compactorSlot(core).compactor = {
-        run: (_messages, next) =>
+        run: promiseRun((_messages, next) =>
           Promise.resolve({
             type: "complete",
             summary: { text: "SUMMARY TEXT", chunkCount: 1 },
             next: [...next],
           }),
+        ),
       };
 
       const compactPromise = core.submit({
@@ -4296,12 +4302,13 @@ describe("Thread survives the compaction agent swap", () => {
     );
     try {
       compactorSlot(core).compactor = {
-        run: (_messages, next) =>
+        run: promiseRun((_messages, next) =>
           Promise.resolve({
             type: "complete",
             summary: { text: "SUMMARY TEXT", chunkCount: 1 },
             next: [...next],
           }),
+        ),
       };
       const compactPromise = core.submit({
         type: "raw",

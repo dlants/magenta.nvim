@@ -30,7 +30,7 @@ import {
   type ThreadInitialization,
 } from "./thread-assembly.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
-import { Defer } from "./utils/async.ts";
+import { Defer, type Task } from "./utils/async.ts";
 import type { NvimCwd, UnresolvedFilePath } from "./utils/files.ts";
 
 export type SessionId = string & { __sessionId: true };
@@ -85,11 +85,12 @@ export interface SessionHost {
   getProvider?(profile: ProviderProfile): Provider;
   /** Drop approvals that belong to work being abandoned. */
   rejectApprovals?(id: ThreadId): void;
+  /** `abort` only interrupts: a preparation that has already acquired
+   * resources still resolves with them so the session can release them. */
   prepareThread(
     request: ThreadPreparation,
     session: Session,
-    abortSignal: AbortSignal,
-  ): Promise<PreparedThread | Aborted>;
+  ): Task<PreparedThread | Aborted>;
 }
 
 export type SessionThread = {
@@ -119,13 +120,36 @@ type SessionEvents = {
 /** The authoritative thread registry: identity, hierarchy, construction
  * policy, lifecycle results and teardown for one implicit session. Views are
  * observers; execution never depends on one being attached. */
+/** A creation's cancellation state and the preparation it has in flight. */
+class PendingCreation {
+  aborted = false;
+  private current: Task<PreparedThread | Aborted> | undefined;
+
+  async run(
+    preparation: Task<PreparedThread | Aborted>,
+  ): Promise<PreparedThread | Aborted> {
+    this.current = preparation;
+    if (this.aborted) preparation.abort();
+    try {
+      return await preparation.promise;
+    } finally {
+      this.current = undefined;
+    }
+  }
+
+  abort(): void {
+    this.aborted = true;
+    this.current?.abort();
+  }
+}
+
 export class Session extends Emitter<SessionEvents> implements ThreadManager {
   readonly id: SessionId = uuidv7() as SessionId;
   private records = new Map<ThreadId, SessionThread>();
   /** Retained for known ids (including deleted ones) until disposal, so a late
    * `awaitThreadResult` settles instead of hanging. */
   private results = new Map<ThreadId, Defer<ThreadOutcome>>();
-  private pending = new Map<ThreadId, AbortController>();
+  private pending = new Map<ThreadId, PendingCreation>();
   private releases = new Map<ThreadId, () => Promise<void>>();
   private cleanup = new Set<Promise<unknown>>();
   private disposed = false;
@@ -315,8 +339,8 @@ The title must be a single line (no newlines) and a few words long (ideally arou
 
     // The id and its record exist before any asynchronous preparation, so a
     // deletion that lands mid-flight has something to invalidate.
-    const controller = new AbortController();
-    this.pending.set(id, controller);
+    const pending = new PendingCreation();
+    this.pending.set(id, pending);
     const record: SessionThread = {
       id,
       state: "pending",
@@ -356,13 +380,10 @@ The title must be a single line (no newlines) and a few words long (ideally arou
         }
       }
     };
-    const cancelled = () =>
-      controller.signal.aborted || this.records.get(id) !== record;
+    const cancelled = () => pending.aborted || this.records.get(id) !== record;
     try {
-      const preparation = await this.host.prepareThread(
-        request,
-        this,
-        controller.signal,
+      const preparation = await pending.run(
+        this.host.prepareThread(request, this),
       );
       if (preparation === ABORTED) return ABORTED;
       prepared = preparation;
@@ -373,8 +394,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       const ready = preparation;
 
       const current = () =>
-        !controller.signal.aborted &&
-        this.records.get(id)?.state === "initialized";
+        !pending.aborted && this.records.get(id)?.state === "initialized";
       const callbacks: ThreadCallbacks = {
         onUpdate: () => {
           const entry = this.records.get(id);
