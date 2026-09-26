@@ -224,6 +224,7 @@ private pending = new Map<ThreadId, { abort(): void; aborted: boolean }>();
   - [x] `untilAborted` deleted.
   - Deviation: `compactAndContinue` wraps `compactor.run` in a temporary Task shim (local `AbortController`) until stage 3 changes `Compactor.run`.
   - Note: an abort during queued resolution drops the entry being resolved (as before); only entries behind it come back in `unsent`.
+  - [x] Review follow-ups: `step` narrows on `ABORTED` without a cast; `IDLE_SUBMISSION` (never aborted, exported from `thread-api.ts`) replaces the `ActiveSubmission | undefined` parameters on the queue flushes/`resolveQueued`; `forEach` takes `"gated" | "ungated"`. `thread-api.test.ts` covers `settled` after an abort, `step` abandonment, and the idle submission delivering work. The compaction abort test goes through `Thread.abort`, so it covers the stage-2 compactor shim. Abort during an async flush into the next request is covered by the existing "abort reports untouched async leftovers" test.
   - [x] Tests in `thread.test.ts` ("submission handle aborts"): preemption ordering, abort during queued resolution, abort during `onBeforeRequest` fan-out.
 
 ## Compactor and session creation

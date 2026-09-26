@@ -122,11 +122,11 @@ abstract class ChainBase<Member> {
 
   protected forEach(
     hook: string,
-    gated: boolean,
+    gating: "gated" | "ungated",
     visit: (supervisor: Member) => void,
   ): void {
     for (const supervisor of this.members()) {
-      if (gated && this.deps.isAborted()) return;
+      if (gating === "gated" && this.deps.isAborted()) return;
       try {
         visit(supervisor);
       } catch (error) {
@@ -140,19 +140,19 @@ abstract class ChainBase<Member> {
  * member order. */
 export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
   onToolLoopStart(nativeMessageIdx: NativeMessageIdx): void {
-    this.forEach("onToolLoopStart", false, (supervisor) =>
+    this.forEach("onToolLoopStart", "ungated", (supervisor) =>
       supervisor.onToolLoopStart?.(nativeMessageIdx),
     );
   }
 
   onToolLoopStop(nativeMessageIdx: NativeMessageIdx): void {
-    this.forEach("onToolLoopStop", false, (supervisor) =>
+    this.forEach("onToolLoopStop", "ungated", (supervisor) =>
       supervisor.onToolLoopStop?.(nativeMessageIdx),
     );
   }
 
   onToolApplied: OnToolAppliedHook = (event) => {
-    this.forEach("onToolApplied", false, (supervisor) =>
+    this.forEach("onToolApplied", "ungated", (supervisor) =>
       supervisor.onToolApplied?.(event),
     );
   };
@@ -161,7 +161,7 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
     results: ToolResults,
     nativeMessageIdx: NativeMessageIdx,
   ): void {
-    this.forEach("onToolResults", false, (supervisor) => {
+    this.forEach("onToolResults", "ungated", (supervisor) => {
       supervisor.onToolResults?.(results, nativeMessageIdx);
     });
   }
@@ -206,14 +206,14 @@ export class ToolLoopSupervisorChain extends ChainBase<ToolLoopSupervisor> {
  * wins. */
 export class SubmissionSupervisorChain extends ChainBase<SubmissionSupervisor> {
   onSubmission(messages: readonly AgentInput[]): void {
-    this.forEach("onSubmission", true, (supervisor) =>
+    this.forEach("onSubmission", "gated", (supervisor) =>
       supervisor.onSubmission?.(messages),
     );
   }
 
   onToolLoopEnd(context: ToolLoopEndContext): ToolLoopEndAction {
     const texts: string[] = [];
-    this.forEach("onToolLoopEnd", true, (supervisor) => {
+    this.forEach("onToolLoopEnd", "gated", (supervisor) => {
       const action = supervisor.onToolLoopEnd?.(context);
       if (action?.type === "send-message") texts.push(action.text);
     });

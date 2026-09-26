@@ -39,6 +39,7 @@ import {
   ABORTED,
   type Aborted,
   ActiveSubmission,
+  IDLE_SUBMISSION,
   type OnUpdate,
   type QueuedMessage,
   type SubmissionResult,
@@ -701,7 +702,7 @@ export class Thread implements ThreadCoreView {
    * entries against the message they will ride. */
   private async flushAsyncIntoRequest(
     nativeMessageIdx: NativeMessageIdx,
-    submission: ActiveSubmission | undefined,
+    submission: ActiveSubmission,
   ): Promise<AgentInput[]> {
     return this.mailbox.deliverAsync<AgentInput[]>(async (next) => {
       const messages: AgentInput[] = [];
@@ -721,7 +722,7 @@ export class Thread implements ThreadCoreView {
           submission,
           nativeMessageIdx,
         );
-        if (submission?.aborted)
+        if (submission.aborted)
           return { disposition: { type: "commit" }, value: [] };
         if (resolved) messages.push(...resolved.prompt.content);
       }
@@ -742,7 +743,7 @@ export class Thread implements ThreadCoreView {
         this.promptFlush(submission, (run) => this.mailbox.deliverNext(run)),
     ]) {
       const flushed = await flush();
-      if (submission?.aborted) break;
+      if (submission.aborted) break;
       if (flushed.type === "compact") {
         // Anything already flushed ahead of the compaction is spent, and the
         // log it would have ridden is about to be thrown away: it is carried
@@ -769,7 +770,7 @@ export class Thread implements ThreadCoreView {
           submission,
           this.core.manager.getPendingUserMessageIdx(),
         );
-        if (submission?.aborted)
+        if (submission.aborted)
           return {
             disposition: { type: "commit" },
             value: { type: "messages", messages: [] },
@@ -795,7 +796,7 @@ export class Thread implements ThreadCoreView {
   }
   private async resolveQueued(
     entry: QueueEntry,
-    submission: ActiveSubmission | undefined,
+    submission: ActiveSubmission,
     nativeMessageIdx: NativeMessageIdx,
   ): Promise<ResolvedSubmission | undefined> {
     if (entry.type === "resolved")
@@ -804,10 +805,9 @@ export class Thread implements ThreadCoreView {
         prompt: { content: [entry.input], reminders: [] },
       };
     try {
-      const resolving = () => this.context.resolve(entry.message);
-      const resolved = submission
-        ? await submission.step(resolving)
-        : await resolving();
+      const resolved = await submission.step(() =>
+        this.context.resolve(entry.message),
+      );
       if (resolved === ABORTED) return undefined;
       for (const text of resolved.prompt.reminders) {
         this.activateReminder(text, nativeMessageIdx);
@@ -828,7 +828,7 @@ export class Thread implements ThreadCoreView {
       type: "inject",
       content: await this.flushAsyncIntoRequest(
         ctx.nativeMessageIdx,
-        this.liveSubmission,
+        this.liveSubmission ?? IDLE_SUBMISSION,
       ),
     };
   }
@@ -996,7 +996,7 @@ export class Thread implements ThreadCoreView {
     // Both queues are flushed in full, in insertion order: anything enqueued
     // while this resolution is running lands in the next flush.
     const flushed = await this.flushQueuesForNextRequest(submission);
-    if (submission?.aborted) return { type: "rest" };
+    if (submission.aborted) return { type: "rest" };
     if (flushed.type === "compact") {
       return { type: "compact", next: flushed.next };
     }

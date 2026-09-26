@@ -99,8 +99,8 @@ export class ActiveSubmission {
   async step<T>(work: () => Promise<T>): Promise<T | Aborted> {
     if (this.aborted) return ABORTED;
     const result = await Promise.race([work(), this.abandoned.promise]);
-    if (this.aborted) return ABORTED;
-    return result as T;
+    if (result === ABORTED) return ABORTED;
+    return result;
   }
   /** Join a child that owns effects: it is installed as `current`, so an
    * abort reaches it, and awaited until it has cleaned up. */
@@ -127,6 +127,9 @@ export class ActiveSubmission {
   }
 }
 
+/** Stands in for a submission when async input is flushed into a request
+ * that no submission owns. Never aborted, so its `step` just runs the work. */
+export const IDLE_SUBMISSION = new ActiveSubmission(async () => {});
 /** Where the thread is in its life. The single source of truth behind
  * `isBusy`, `state`, `lastResult()`, `yielded` and `isDestroyed`.
  *
