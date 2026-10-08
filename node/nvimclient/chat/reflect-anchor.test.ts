@@ -135,7 +135,9 @@ it("linewise V inside one block reflects on the full line", async () => {
       sourceId,
       "reflect",
     );
-    expect(derived.origin.anchor.reflectionText).toBe("Second line here.");
+    expect(
+      (derived.origin.anchor as { reflectionText: string }).reflectionText,
+    ).toBe("Second line here.");
   });
 });
 it("highlights reflections, jumps with ]r/[r, and r on a highlight shows it", async () => {

@@ -179,7 +179,7 @@ export type Msg =
     }
   | {
       type: "reflect-selection";
-      anchor: ReflectAnchor;
+      anchor?: ReflectAnchor;
     };
 
 export type ThreadMsg = {

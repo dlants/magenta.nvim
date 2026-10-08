@@ -2,6 +2,7 @@ import * as os from "node:os";
 import {
   ABORTED,
   type Aborted,
+  isSelectionAnchor,
   isThreadId,
   type MagentaServer,
   type NativeMessageIdx,
@@ -585,16 +586,19 @@ export class Magenta {
    * mode. */
   async reflectAndSwitch(
     sourceThreadId: ThreadId,
-    anchor: ReflectAnchor,
+    anchor: ReflectAnchor | undefined,
   ): Promise<ThreadId | Aborted> {
-    const duplicate = this.chat.session
-      .listDerived(sourceThreadId, "reflect")
-      .some(
-        ({ origin }) =>
-          origin.anchor.messageIdx === anchor.messageIdx &&
-          origin.anchor.contentIdx === anchor.contentIdx &&
-          origin.anchor.reflectionText === anchor.reflectionText,
-      );
+    const duplicate =
+      anchor &&
+      this.chat.session
+        .listDerived(sourceThreadId, "reflect")
+        .some(
+          ({ origin }) =>
+            isSelectionAnchor(origin.anchor) &&
+            origin.anchor.messageIdx === anchor.messageIdx &&
+            origin.anchor.contentIdx === anchor.contentIdx &&
+            origin.anchor.reflectionText === anchor.reflectionText,
+        );
     if (duplicate) {
       await notify(this.nvim, "This selection already has a reflection.");
       return ABORTED;
@@ -602,7 +606,7 @@ export class Magenta {
     const threadId = await this.chat.createThread({
       type: "thread.reflect",
       threadId: sourceThreadId,
-      anchor,
+      ...(anchor ? { anchor } : {}),
     });
     if (threadId === ABORTED) return ABORTED;
     await this.bufferManager.registerThread(threadId);

@@ -60,13 +60,13 @@ async function lines(driver: Driver, win: number): Promise<string[]> {
   ])) as string[];
 }
 
-it("r off a highlight opens an empty overview, and - closes it", async () => {
+it("R opens an empty overview, and - closes it", async () => {
   await withDriver({}, async (driver) => {
     const source = await setupThread(driver);
     const { displayWindow } = driver.getVisibleState();
     await driver.nvim.call("nvim_set_current_win", [displayWindow.id]);
     await driver.nvim.call("nvim_win_set_cursor", [displayWindow.id, [1, 0]]);
-    await driver.nvim.call("nvim_command", ["normal r"]);
+    await driver.nvim.call("nvim_command", ["normal R"]);
     const win = await overviewWindow(driver);
     await pollUntil(async () => {
       const text = (await lines(driver, win)).join("\n");

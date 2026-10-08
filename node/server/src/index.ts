@@ -73,9 +73,11 @@ export type {
 export {
   type ContentBlockIdx,
   type DisplayBufferText,
+  isSelectionAnchor,
   isThreadId,
   type MessageIdx,
   type ReflectAnchor,
+  type ReflectionOriginAnchor,
   type Role,
   type ScriptInvocationId,
   type SubagentConfig,

@@ -18,7 +18,7 @@ export type Operation =
       threadId: ThreadId;
       nativeMessageIdx?: NativeMessageIdx;
     }
-  | { type: "thread.reflect"; threadId: ThreadId; anchor: ReflectAnchor }
+  | { type: "thread.reflect"; threadId: ThreadId; anchor?: ReflectAnchor }
   | { type: "thread.delete"; threadId: ThreadId }
   | {
       type: "thread.submit";

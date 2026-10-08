@@ -1,4 +1,7 @@
-import type { ReflectAnchor } from "../chat-types.ts";
+import {
+  isSelectionAnchor,
+  type ReflectionOriginAnchor,
+} from "../chat-types.ts";
 import {
   buildToolInfoMap,
   renderContentBlock,
@@ -21,23 +24,22 @@ const TOOL_RESULT_MAX_CHARS = 1000;
  * becomes message text. */
 export function buildReflectSeed(args: {
   history: ReadonlyArray<ProviderMessage>;
-  anchor: ReflectAnchor;
+  anchor: ReflectionOriginAnchor;
 }): AgentInput[] {
   const { history, anchor } = args;
   const rendered = renderReflectHistory(
     history.slice(0, anchor.messageIdx + 1),
   );
+  const context: AgentInput = {
+    type: "text",
+    text: `<thread-context>\n${rendered}\n</thread-context>`,
+  };
+  if (!isSelectionAnchor(anchor)) return [context];
   const quoted = anchor.reflectionText
     .split("\n")
     .map((line) => `> ${line}`)
     .join("\n");
-  return [
-    { type: "text", text: `<thread-context>\n${rendered}\n</thread-context>` },
-    {
-      type: "text",
-      text: `The user selected:\n${quoted}`,
-    },
-  ];
+  return [context, { type: "text", text: `The user selected:\n${quoted}` }];
 }
 
 type Detail = "full" | "no-tool-results";

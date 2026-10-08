@@ -37,6 +37,15 @@ export type ReflectAnchor = {
   reflectionText: DisplayBufferText;
 };
 
+/** A reflection on the whole thread, anchored to the last message that
+ * existed when it was started. */
+export type MessageAnchor = { messageIdx: MessageIdx };
+export type ReflectionOriginAnchor = ReflectAnchor | MessageAnchor;
+export function isSelectionAnchor(
+  anchor: ReflectionOriginAnchor,
+): anchor is ReflectAnchor {
+  return "reflectionText" in anchor;
+}
 /** How a thread was derived from another one it is not a subagent of. */
 export type ThreadOrigin =
   | {
@@ -44,7 +53,11 @@ export type ThreadOrigin =
       sourceThreadId: ThreadId;
       nativeMessageIdx: NativeMessageIdx;
     }
-  | { type: "reflect"; sourceThreadId: ThreadId; anchor: ReflectAnchor };
+  | {
+      type: "reflect";
+      sourceThreadId: ThreadId;
+      anchor: ReflectionOriginAnchor;
+    };
 
 export type SubagentConfig = {
   agentName?: string | undefined;

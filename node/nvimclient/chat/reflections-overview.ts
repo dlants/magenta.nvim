@@ -1,4 +1,9 @@
-import type { ThreadId, ThreadOrigin } from "@magenta/server";
+import type {
+  ReflectionOriginAnchor,
+  ThreadId,
+  ThreadOrigin,
+} from "@magenta/server";
+import { isSelectionAnchor } from "@magenta/server";
 import { NvimBuffer } from "../nvim/buffer.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
@@ -38,7 +43,8 @@ export function reflectionTree(
   ]);
 }
 
-/** The source's reflections in anchor order (creation order breaks ties). */
+/** The source's reflections in anchor order (creation order breaks ties);
+ * whole-thread reflections sort after selections in their message. */
 export function orderedReflections(
   session: Pick<SessionView, "listDerived">,
   threadId: ThreadId,
@@ -49,12 +55,16 @@ export function orderedReflections(
     .sort(
       (a, b) =>
         a.entry.origin.anchor.messageIdx - b.entry.origin.anchor.messageIdx ||
-        a.entry.origin.anchor.contentIdx - b.entry.origin.anchor.contentIdx ||
+        contentOrder(a.entry.origin.anchor) -
+          contentOrder(b.entry.origin.anchor) ||
         a.creationIdx - b.creationIdx,
     )
     .map(({ entry }) => entry);
 }
 
+function contentOrder(anchor: ReflectionOriginAnchor): number {
+  return isSelectionAnchor(anchor) ? anchor.contentIdx : Infinity;
+}
 const HEADER_LINES = 2;
 
 function truncate(text: string, max: number): string {
@@ -75,11 +85,11 @@ export function renderReflectionsOverview({
 }): VDOMNode {
   const header = d`# Reflections\n\n`;
   if (entries.length === 0) {
-    return d`${header}No reflections yet. Visually select text in the thread and press r to reflect on it.\n`;
+    return d`${header}No reflections yet. Press r in the thread to reflect on it, or visually select text first to reflect on a passage.\n`;
   }
   return d`${header}${entries.map(({ threadId, origin, depth }) =>
     withBindings(
-      d`${"  ".repeat(depth)}> ${truncate(origin.anchor.reflectionText, 60)} — ${truncate(label(threadId), 40)}\n`,
+      d`${"  ".repeat(depth)}> ${truncate(isSelectionAnchor(origin.anchor) ? origin.anchor.reflectionText : "(whole thread)", 60)} — ${truncate(label(threadId), 40)}\n`,
       {
         "<CR>": () => onOpen(threadId),
         dd: () => onDelete(threadId),

@@ -13,7 +13,9 @@ import type {
   ThreadManager,
 } from "./capabilities/thread-manager.ts";
 import type {
+  MessageIdx,
   ReflectAnchor,
+  ReflectionOriginAnchor,
   ScriptInvocationId,
   SubagentConfig,
   ThreadId,
@@ -90,7 +92,7 @@ export type ThreadPreparation =
       type: "reflect";
       options: ThreadOptions & { threadId: ThreadId; threadType: "reflect" };
       source: Thread;
-      anchor: ReflectAnchor;
+      anchor: ReflectionOriginAnchor;
       seed: AgentInput[];
       /** Source context files the reflection treats as already read: their
        * contents are covered by the seed, so only later changes are sent. */
@@ -795,18 +797,22 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     );
   }
 
-  /** Create a reflect thread on a passage of `sourceThreadId`. The seed is
+  /** Create a reflect thread on a passage of `sourceThreadId`, or without an
+   * anchor on the whole thread so far (anchored to its last message). The seed is
    * rendered now and written into the new thread's log; nothing is sent until
    * the user submits. */
   reflectThread(
     sourceThreadId: ThreadId,
-    anchor: ReflectAnchor,
+    selection?: ReflectAnchor,
   ): Promise<ThreadId | Aborted> {
     const source = this.records.get(sourceThreadId);
     if (source?.state !== "initialized") {
       throw new Error(`Thread ${sourceThreadId} not available for reflection`);
     }
     const history = source.thread.getProviderMessages();
+    const anchor: ReflectionOriginAnchor = selection ?? {
+      messageIdx: (history.length - 1) as MessageIdx,
+    };
     if (anchor.messageIdx < 0 || anchor.messageIdx >= history.length) {
       throw new Error(`Reflect anchor message ${anchor.messageIdx} not found`);
     }

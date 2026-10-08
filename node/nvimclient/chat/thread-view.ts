@@ -12,6 +12,7 @@ import {
   type EditedFileGroup,
   formatToolSpec,
   formatToolSpecs,
+  isSelectionAnchor,
   type MessageIdx,
   type NativeMessageIdx,
   type ProtocolActivity,
@@ -623,12 +624,46 @@ ${contextFilesView(contextFilesData(thread), contextViewCtx(thread), {
     reflections
       .filter(
         ({ origin }) =>
+          isSelectionAnchor(origin.anchor) &&
           origin.anchor.messageIdx === messageIdx &&
           origin.anchor.contentIdx === contentIdx,
       )
-      .map(({ threadId, origin }) =>
-        reflectionHighlight(thread, threadId, origin.anchor.reflectionText),
+      .flatMap(({ threadId, origin }) =>
+        isSelectionAnchor(origin.anchor)
+          ? [
+              reflectionHighlight(
+                thread,
+                threadId,
+                origin.anchor.reflectionText,
+              ),
+            ]
+          : [],
       );
+  const messageReflectionsAt = (messageIdx: number) => {
+    const ids = reflections
+      .filter(
+        ({ origin }) =>
+          !isSelectionAnchor(origin.anchor) &&
+          origin.anchor.messageIdx === messageIdx,
+      )
+      .map(({ threadId }) => threadId);
+    if (ids.length === 0) return d``;
+    const [only] = ids;
+    return withBindings(
+      withExtmark(
+        d`↳ ${String(ids.length)} reflection${ids.length === 1 ? "" : "s"}\n`,
+        { hl_group: "@comment" },
+      ),
+      {
+        "<CR>": () =>
+          thread.context.dispatch(
+            ids.length === 1 && only
+              ? { type: "select-thread-effect", id: only }
+              : { type: "show-reflections-overview", threadId: thread.id },
+          ),
+      },
+    );
+  };
   const forkedToAtIdx = (messageIdx: number) => {
     const forks = forkedTo.filter((fork) => fork.atMessageIdx === messageIdx);
     return forks.length > 0
@@ -784,7 +819,7 @@ ${contentView}`;
         })
       : messageBody;
 
-    return d`${renderedBody}${editsAt(messageIdx)}${forkedToAtIdx(messageIdx)}`;
+    return d`${renderedBody}${editsAt(messageIdx)}${forkedToAtIdx(messageIdx)}${messageReflectionsAt(messageIdx)}`;
   });
 
   const streamingBlockView = streamingBlock(loopState)
@@ -855,10 +890,7 @@ function renderMessageContent(
     r: (ctx) => {
       const range = ctx.selection?.range;
       if (!ctx.selection) {
-        thread.context.dispatch({
-          type: "show-reflections-overview",
-          threadId: thread.id,
-        });
+        dispatch({ type: "reflect-selection" });
         return;
       }
       if (!range) return;

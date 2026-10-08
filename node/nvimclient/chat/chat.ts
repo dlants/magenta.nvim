@@ -789,7 +789,7 @@ export class Chat {
   async createThread(
     op:
       | { type: "thread.create"; agent?: string }
-      | { type: "thread.reflect"; threadId: ThreadId; anchor: ReflectAnchor },
+      | { type: "thread.reflect"; threadId: ThreadId; anchor?: ReflectAnchor },
   ): Promise<ThreadId | Aborted> {
     const result = await this.execute(
       op.type === "thread.create" ? { ...op, sessionId: this.sessionId } : op,
@@ -1499,8 +1499,7 @@ ${rows}${loadMore}`;
           parentView = "";
         }
 
-        // Normal `r` anywhere outside a highlight or content block opens the
-        // reflection overview for this thread.
+        // Normal `r` anywhere outside a highlight reflects on the whole thread.
         return withBindings(
           d`${parentView}${threadView({
             thread,
@@ -1515,8 +1514,9 @@ ${rows}${loadMore}`;
             r: (ctx) => {
               if (ctx.selection) return;
               this.context.dispatch({
-                type: "show-reflections-overview",
-                threadId: thread.id,
+                type: "thread-msg",
+                id: thread.id,
+                msg: { type: "reflect-selection" },
               });
             },
           },
