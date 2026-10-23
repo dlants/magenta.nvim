@@ -134,6 +134,15 @@ maxConcurrentSubagents ~
 
     Maximum number of sub-agents that can run concurrently.
 
+                                                      *magenta-issuesDir*
+issuesDir ~
+    Type: `string`
+    Default: `"~/.magenta-issues"`
+
+    Git repo backing the built-in `issues` skill. It is always writable from
+    the sandbox, and bash commands see it as `$MAGENTA_ISSUES_DIR` (alongside
+    `$MAGENTA_THREAD_ID`). Initialize it with `skills/issues/scripts/iss init`.
+
                                                       *magenta-chimeVolume*
 chimeVolume ~
     Type: `number`

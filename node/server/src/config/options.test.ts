@@ -5,6 +5,7 @@ import type { Cwd } from "../utils/files.ts";
 import {
   BUILTIN_SKILLS_PATH,
   DEFAULT_SANDBOX_CONFIG,
+  effectiveSandboxConfig,
   loadProjectSettings,
   loadUserOptions,
   mergeOptions,
@@ -25,6 +26,7 @@ function makeBaseOptions(overrides?: Partial<ServerOptions>): ServerOptions {
       },
     ],
     activeProfile: "test",
+    issuesDir: "~/.magenta-issues",
     maxConcurrentSubagents: 3,
     maxConcurrentFastSubagents: 8,
     autoCompactThreshold: 300000,
@@ -506,6 +508,28 @@ describe("suppressProjectSkills", () => {
 
     expect(result).toBeDefined();
     expect(result?.suppressProjectSkills).toEqual(["plan"]);
+  });
+});
+
+describe("issuesDir", () => {
+  const logger = { warn: () => {}, error: () => {} };
+
+  it("defaults outside ~/.magenta and lets the project override it", () => {
+    const user = parseOptions({}, logger);
+    expect(user.issuesDir).toBe("~/.magenta-issues");
+    const merged = mergeOptions(
+      user,
+      parseProjectOptions({ issuesDir: "/work/issues" }, logger),
+    );
+    expect(merged.issuesDir).toBe("/work/issues");
+  });
+
+  it("is writable in the effective sandbox config", () => {
+    const options = parseOptions({ issuesDir: "/x/issues" }, logger);
+    expect(effectiveSandboxConfig(options).filesystem.allowWrite).toContain(
+      "/x/issues",
+    );
+    expect(options.sandbox.filesystem.allowWrite).not.toContain("/x/issues");
   });
 });
 

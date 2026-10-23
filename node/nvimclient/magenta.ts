@@ -2,6 +2,7 @@ import * as os from "node:os";
 import {
   ABORTED,
   type Aborted,
+  effectiveSandboxConfig,
   isSelectionAnchor,
   isThreadId,
   type MagentaServer,
@@ -1831,7 +1832,7 @@ ${lines.join("\n")}
     const sandbox =
       sandboxOverride ??
       (await startSandbox(
-        optionsStore.getOptions(threadCwd).sandbox,
+        effectiveSandboxConfig(optionsStore.getOptions(threadCwd)),
         threadCwd,
         resolvedHomeDir,
         nvim.logger,

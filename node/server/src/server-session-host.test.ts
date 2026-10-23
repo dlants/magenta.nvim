@@ -39,6 +39,7 @@ const options: ServerHostOptions = {
   profiles: [profile],
   activeProfile: "mock",
   sandbox: DEFAULT_SANDBOX_CONFIG,
+  issuesDir: "~/.magenta-issues",
   autoContext: [],
   hierarchyContextFileNames: [],
   skillsPaths: [],

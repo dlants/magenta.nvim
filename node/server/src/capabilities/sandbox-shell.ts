@@ -34,6 +34,8 @@ export class SandboxShell implements Shell {
       threadId: ThreadId;
       getSandboxConfig: () => SandboxConfig;
       isBypassed: () => boolean;
+      /** Extra variables layered over `process.env` for every command. */
+      getEnv?: () => Record<string, string>;
     },
     private sandbox: Sandbox,
     private violationHandler: SandboxViolationHandler,
@@ -115,7 +117,7 @@ export class SandboxShell implements Shell {
           const childProcess = spawn("bash", ["-c", command], {
             stdio: ["ignore", "pipe", "pipe"],
             cwd: this.context.cwd,
-            env: process.env,
+            env: { ...process.env, ...this.context.getEnv?.() },
             detached: true,
           });
           this.runningProcess = childProcess;

@@ -80,6 +80,7 @@ magenta-example-planning	magenta-subagents.txt	/*magenta-example-planning*
 magenta-input-commands	magenta-commands-keymaps.txt	/*magenta-input-commands*
 magenta-installation	magenta.txt	/*magenta-installation*
 magenta-introduction	magenta.txt	/*magenta-introduction*
+magenta-issuesDir	magenta-config.txt	/*magenta-issuesDir*
 magenta-maxConcurrentSubagents	magenta-config.txt	/*magenta-maxConcurrentSubagents*
 magenta-mcp	magenta-tools.txt	/*magenta-mcp*
 magenta-ollama	magenta-providers.txt	/*magenta-ollama*

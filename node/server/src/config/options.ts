@@ -31,6 +31,8 @@ export const BUILTIN_AGENTS_PATH = path.resolve(
 );
 export const BUILTIN_SKILLS_PATH = path.join(PLUGIN_ROOT, "skills");
 export const BUILTIN_SDK_PATH = path.join(PLUGIN_ROOT, "sdk");
+/** Outside `~/.magenta`, which the default sandbox config denies writes to. */
+export const DEFAULT_ISSUES_DIR = "~/.magenta-issues";
 // Default models by provider
 const DEFAULT_MODELS: Record<
   ProviderName,
@@ -134,6 +136,10 @@ export type ServerOptions = {
   autoCompactPrompt: string;
   mcpServers: { [serverName: ServerName]: MCPServerConfig };
   customCommands: CustomCommand[];
+  /** Root of the shared issue tracker used by the built-in `issues` skill.
+   * Always writable from the sandbox and exposed to shell commands as
+   * `MAGENTA_ISSUES_DIR`. */
+  issuesDir: string;
 };
 // Reusable parsing helpers
 function parseProfiles(
@@ -833,6 +839,7 @@ export function parseOptions(
     ],
     mcpServers: {},
     customCommands: structuredClone(DEFAULT_CUSTOM_COMMANDS),
+    issuesDir: DEFAULT_ISSUES_DIR,
   };
   if (typeof inputOptions === "object" && inputOptions != null) {
     const inputOptionsObj = inputOptions as { [key: string]: unknown };
@@ -852,6 +859,13 @@ export function parseOptions(
         options.activeProfile = profiles[0].name;
       } else {
         logger.warn("No valid profiles provided, using the default profiles");
+      }
+    }
+    if ("issuesDir" in inputOptionsObj) {
+      if (typeof inputOptionsObj.issuesDir === "string") {
+        options.issuesDir = inputOptionsObj.issuesDir;
+      } else {
+        logger.warn("issuesDir must be a string");
       }
     }
     // Parse auto context
@@ -975,6 +989,13 @@ export function parseProjectOptions(
       if (!("activeProfile" in inputOptionsObj)) {
         options.activeProfile = profiles[0].name;
       }
+    }
+  }
+  if ("issuesDir" in inputOptionsObj) {
+    if (typeof inputOptionsObj.issuesDir === "string") {
+      options.issuesDir = inputOptionsObj.issuesDir;
+    } else {
+      logger.warn("issuesDir must be a string");
     }
   }
   // Parse active profile
@@ -1203,7 +1224,25 @@ export function mergeOptions(
       ...projectSettings.customCommands,
     ];
   }
+  if (projectSettings.issuesDir !== undefined) {
+    merged.issuesDir = projectSettings.issuesDir;
+  }
   return merged;
+}
+
+/** The sandbox config actually enforced: the configured one plus write access
+ * to the issues dir, which agents manage through the `issues` skill. */
+export function effectiveSandboxConfig(options: {
+  sandbox: SandboxConfig;
+  issuesDir: string;
+}): SandboxConfig {
+  return {
+    ...options.sandbox,
+    filesystem: {
+      ...options.sandbox.filesystem,
+      allowWrite: [...options.sandbox.filesystem.allowWrite, options.issuesDir],
+    },
+  };
 }
 export function getActiveProfile(profiles: Profile[], activeProfile: string) {
   const profile = profiles.find((p) => p.name === activeProfile);

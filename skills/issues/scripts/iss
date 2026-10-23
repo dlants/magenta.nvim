@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec node --no-warnings "$(dirname "$(readlink -f "$0")")/iss.ts" "$@"

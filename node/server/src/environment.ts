@@ -58,6 +58,7 @@ export function createLocalEnvironment({
   sandbox,
   approvals,
   isBypassed,
+  getShellEnv,
   lspClient,
   luaExecutor,
   onFileWritten,
@@ -71,6 +72,7 @@ export function createLocalEnvironment({
   /** Session-owned; see `Session.approvalsFor`. */
   approvals: SandboxViolationHandler;
   isBypassed: () => boolean;
+  getShellEnv?: () => Record<string, string>;
   /** Editor-backed; the lsp tools are only offered when supplied. */
   lspClient?: LspClient | undefined;
   /** Editor-backed; the nvim tools are only offered when supplied. */
@@ -86,7 +88,14 @@ export function createLocalEnvironment({
     onFileWritten,
   );
   const sandboxShell = new SandboxShell(
-    { cwd, homeDir, threadId, getSandboxConfig, isBypassed },
+    {
+      cwd,
+      homeDir,
+      threadId,
+      getSandboxConfig,
+      isBypassed,
+      ...(getShellEnv ? { getEnv: getShellEnv } : {}),
+    },
     sandbox,
     violationHandler,
   );

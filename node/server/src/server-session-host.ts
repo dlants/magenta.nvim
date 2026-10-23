@@ -11,6 +11,7 @@ import { FsFileIO } from "./capabilities/file-io.ts";
 import type { GitState } from "./capabilities/git-client.ts";
 import { NoopLspClient } from "./capabilities/noop-lsp-client.ts";
 import type { SubagentConfig, ThreadId } from "./chat-types.ts";
+import { effectiveSandboxConfig } from "./config/options.ts";
 import {
   autoContextFilesToInitialFiles,
   discoverHierarchyContext,
@@ -56,7 +57,7 @@ import { validateInput } from "./tools/helpers.ts";
 import { MCPToolManager } from "./tools/mcp/manager.ts";
 import type { MCPServersConfig } from "./tools/mcp/options.ts";
 import { abortTaskOnSignal, type Task } from "./utils/async.ts";
-import type { Cwd, HomeDir } from "./utils/files.ts";
+import { type Cwd, expandTilde, type HomeDir } from "./utils/files.ts";
 
 /** The options the server host consumes. */
 export type ServerHostOptions = ProviderOptions & {
@@ -72,6 +73,7 @@ export type ServerHostOptions = ProviderOptions & {
   autoCompactPrompt: string;
   mcpServers: MCPServersConfig;
   customCommands: CustomCommand[];
+  issuesDir: string;
 };
 
 export type ServerSessionHostContext = {
@@ -313,7 +315,8 @@ export class ServerSessionHost implements SessionHost {
               logger,
               cwd: localCwd,
               homeDir,
-              getSandboxConfig: () => this.context.getOptions().sandbox,
+              getSandboxConfig: () =>
+                effectiveSandboxConfig(this.context.getOptions()),
               ...(editor
                 ? {
                     lspClient: clientLspClient(editor, localCwd, homeDir),
@@ -325,6 +328,13 @@ export class ServerSessionHost implements SessionHost {
               sandbox: this.context.sandbox,
               approvals: session.approvalsFor(threadId),
               isBypassed: () => session.isSandboxBypassed(threadId),
+              getShellEnv: () => ({
+                MAGENTA_ISSUES_DIR: expandTilde(
+                  this.context.getOptions().issuesDir,
+                  homeDir,
+                ),
+                MAGENTA_THREAD_ID: threadId,
+              }),
             }),
           ),
       session.scriptRunner?.discover(),
