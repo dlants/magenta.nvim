@@ -1358,6 +1358,9 @@ describe("system-info preamble", () => {
     stream.finishResponse("end_turn");
     await first;
     expect(preambles(core)).toBe(1);
+    expect(JSON.stringify(core.getProviderMessages()[0])).toContain(
+      "Use absolute file paths in all tool calls",
+    );
 
     const second = core.submit({
       type: "resolved",

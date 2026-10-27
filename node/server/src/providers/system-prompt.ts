@@ -129,7 +129,8 @@ export function formatSystemInfo(systemInfo: SystemInfo): string {
 - Current time: ${systemInfo.timestamp}
 - Operating system: ${systemInfo.platform}
 - Neovim version: ${systemInfo.neovimVersion}
-- Current working directory: ${systemInfo.cwd}
+- The user started this thread from: ${systemInfo.cwd}
+- There is no working directory: bash commands start at \`/\` and file tools require absolute paths. Use absolute file paths in all tool calls and when showing paths to the user.
 ${formatGitInfo(systemInfo.git)}
 </system-info>`;
 }

@@ -287,7 +287,7 @@ export const spec: ProviderToolSpec = {
       filePath: {
         type: "string",
         description:
-          "Path to the file containing the symbol. Prefer absolute paths. Relative paths are resolved from the project root.",
+          'Absolute path to the file containing the symbol (e.g. "/Users/name/project/src/index.ts" or "~/notes.md"). Relative paths are rejected.',
       },
       symbol: {
         type: "string",

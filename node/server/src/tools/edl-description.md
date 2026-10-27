@@ -2,7 +2,7 @@ Execute an EDL (Edit Description Language) script to perform programmatic file e
 
 ```
 # file commands
-# Prefer absolute paths. Relative paths resolve against nvim's cwd.
+# Paths must be absolute (or start with ~/). Relative paths are rejected.
 file `path` # Select a file to edit, resets the selection to the entire contents of the file.
 newfile `path` # Create a new file (must not already exist)
 
@@ -117,7 +117,7 @@ replace "cba"
 output cbadef
 
 ```
-file `src/file.test`
+file `/project/src/file.test`
 select <<END
 describe("test block", () => {
 END
@@ -128,7 +128,7 @@ delete
 ```
 
 ```
-file `src/utils.ts`
+file `/project/src/utils.ts`
 select <<END
 import { foo } from './foo';
 END
@@ -139,7 +139,7 @@ END
 
 ```
 # writing a new file
-newfile `src/newModule.ts`
+newfile `/project/src/newModule.ts`
 insert_after <<END2
 export function hello() {
   return "world";
@@ -148,7 +148,7 @@ END2
 ```
 
 ```
-file `src/config.ts`
+file `/project/src/config.ts`
 select <<END
 const DEBUG = true;
 END
@@ -158,7 +158,7 @@ delete
 You can chain multiple edits:
 
 ```
-file `src/utils.ts`
+file `/project/src/utils.ts`
 select <<END1
 const oldName = "foo";
 END1
@@ -177,7 +177,7 @@ END2
 Large heredoc blocks are fragile and wasteful. Instead match the beginning of text + extend_forward to match a block by its boundaries:
 
 ```
-file `src/app.test.ts`
+file `/project/src/app.test.ts`
 select <<END
   describe('authentication', () => {
 END
@@ -190,7 +190,7 @@ ENDFWD
 Replace all instances of an identifier in a block:
 
 ```
-file `src/handler.ts`
+file `/project/src/handler.ts`
 select <<FIND
   handleRequest(req: Request) {
 FIND
@@ -203,7 +203,7 @@ replace "request"
 ```
 
 ```
-file `src/config.ts`
+file `/project/src/config.ts`
 select <<END
 const value = "old-value";
 END
@@ -215,7 +215,7 @@ replace "\"new-value\""
 Move a block with cut and paste. `cut` stores the selection in a named register (and removes it); then reselect the destination and use the register as the text for `insert_after`:
 
 ```
-file `src/utils.ts`
+file `/project/src/utils.ts`
 select <<BLOCK
 function helper() {
 BLOCK
@@ -246,7 +246,7 @@ If a script fails because a select pattern didn't match, the replace text will b
 #   select: no matches for pattern ...
 #   Text saved to register _saved_1 (1500 chars). Use `replace _saved_1` to reference it.
 #
-file `src/component.ts`
+file `/project/src/component.ts`
 select <<END
 corrected pattern
 END

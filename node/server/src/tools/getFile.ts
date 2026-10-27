@@ -552,7 +552,7 @@ export const spec: ProviderToolSpec = {
           properties: {
             filePath: {
               type: "string",
-              description: `The path of the file. Prefer absolute paths (e.g. "/Users/name/project/src/index.ts"). Relative paths are resolved from the project root.`,
+              description: `The path of the file. Must be absolute (e.g. "/Users/name/project/src/index.ts") or start with "~/". Relative paths are rejected.`,
             },
             force: {
               type: "boolean",

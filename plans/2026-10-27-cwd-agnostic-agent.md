@@ -127,6 +127,16 @@ Decisions/deviations:
 
 ## System info and tool descriptions
 
+Status: done.
+
+- [x] `formatSystemInfo` replaces "Current working directory" with "The user started this thread from: <dir>" plus the no-working-directory / absolute-paths instruction. The system prompt is unchanged.
+- [x] get_file, hover, find_references `filePath` descriptions say absolute (or `~/`), relative rejected; `edl-description.md` says paths must be absolute and its examples use `/project/src/...`.
+- [x] Tests: `context/system-info.test.ts` (start dir + instruction; tool spec descriptions), `thread.test.ts` system-info preamble asserts the first message carries the instruction.
+
+Decisions/deviations:
+
+- `SystemInfo.cwd` field is not renamed yet (rename stage).
+
 - Goal: `<system-info>` states the directory the user started the thread from plus the absolute-path instruction; the system prompt is unchanged; tool schemas say "absolute path".
 - Tests: `formatSystemInfo` output contains the start directory and the instruction, and the first user message of a harness thread includes it; tool spec descriptions contain the requirement.
 

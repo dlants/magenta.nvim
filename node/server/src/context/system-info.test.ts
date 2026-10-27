@@ -6,6 +6,10 @@ import {
   formatSystemInfo,
 } from "../providers/system-prompt.ts";
 import { noopLogger } from "../test-helpers.ts";
+import { spec as edlSpec } from "../tools/edl.ts";
+import { spec as findReferencesSpec } from "../tools/findReferences.ts";
+import { spec as getFileSpec } from "../tools/getFile.ts";
+import { spec as hoverSpec } from "../tools/hover.ts";
 import type { Cwd, HomeDir } from "../utils/files.ts";
 import { buildSystemInfo } from "./system-info.ts";
 
@@ -30,7 +34,7 @@ it("applies systemInfoOverrides when building system info", () => {
     }),
   );
   expect(text).toContain("- Operating system: linux (docker)");
-  expect(text).toContain("- Current working directory: /workspace");
+  expect(text).toContain("- The user started this thread from: /workspace");
 });
 
 it("docker_root prompt mentions docker, syncing and yield_to_parent", async () => {
@@ -54,5 +58,16 @@ it("formats system information for the first user message", () => {
   expect(text).toContain("- Neovim version: 801");
   expect(text).toMatch(/- Operating system: (darwin|linux|win32)/);
   expect(text).toMatch(/- Current time: \w+ \w+ \d+ \d+ \d+:\d+:\d+ GMT/);
-  expect(text).toContain("- Current working directory: /project");
+  expect(text).toContain("- The user started this thread from: /project");
+  expect(text).toContain("bash commands start at `/`");
+  expect(text).toContain("Use absolute file paths in all tool calls");
+});
+
+it("file tool descriptions require absolute paths", () => {
+  for (const spec of [getFileSpec, hoverSpec, findReferencesSpec]) {
+    expect(JSON.stringify(spec.input_schema)).toContain(
+      "Relative paths are rejected",
+    );
+  }
+  expect(edlSpec.description).toContain("Paths must be absolute");
 });
