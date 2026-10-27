@@ -481,6 +481,18 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     this.updateCache();
   }
 
+  getTurnEndIdx(messageIdx: NativeMessageIdx): NativeMessageIdx {
+    if (this.items[messageIdx]?.type !== "function_call") return messageIdx;
+    let end = messageIdx;
+    while (
+      end + 1 < this.items.length &&
+      (this.items[end + 1].type === "function_call" ||
+        this.items[end + 1].type === "function_call_output")
+    )
+      end++;
+    return end as NativeMessageIdx;
+  }
+
   clone(): OpenAIInferenceManager {
     const cloned = new OpenAIInferenceManager(
       this.options,

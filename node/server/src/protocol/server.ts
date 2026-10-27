@@ -289,6 +289,10 @@ export function createInProcessServer({
       created(await session.forkThread(op.threadId, op.nativeMessageIdx)),
     "thread.reflect": async (op) =>
       created(await session.reflectThread(op.threadId, op.anchor)),
+    "thread.rewind": async (op) => {
+      await readyThread(op.threadId).rewind(op.nativeMessageIdx);
+      return ok;
+    },
     "thread.delete": (op) => {
       knownThread(op.threadId);
       session.deleteThread(op.threadId);

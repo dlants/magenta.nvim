@@ -21,6 +21,11 @@ export type Operation =
   | { type: "thread.reflect"; threadId: ThreadId; anchor?: ReflectAnchor }
   | { type: "thread.delete"; threadId: ThreadId }
   | {
+      type: "thread.rewind";
+      threadId: ThreadId;
+      nativeMessageIdx: NativeMessageIdx;
+    }
+  | {
       type: "thread.submit";
       threadId: ThreadId;
       input: SubmissionInput;
@@ -76,6 +81,7 @@ export type OperationSuccessMap = {
   "thread.fork": Created | Aborted;
   "thread.reflect": Created | Aborted;
   "thread.delete": Ok;
+  "thread.rewind": Ok;
   "thread.submit": Submitted | { type: "queued" };
   "thread.retry": Submitted;
   "thread.abort": { type: "threadAborted"; unsent: ReadonlyArray<string> };

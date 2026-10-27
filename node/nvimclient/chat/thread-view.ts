@@ -893,6 +893,11 @@ function renderMessageContent(
         nativeMessageIdx: content.nativeMessageIdx,
         ...(ctx.selection ? { prepopulate: ctx.selection.lines } : {}),
       }),
+    dd: () =>
+      dispatch({
+        type: "rewind-message",
+        nativeMessageIdx: rewindIdxFor(thread, content),
+      }),
     r: (ctx) => {
       const range = ctx.selection?.range;
       if (!ctx.selection) {
@@ -1432,6 +1437,24 @@ export function findToolResult(
     historyToolResults.set(messages, results);
   }
   return results.get(toolRequestId);
+}
+
+/** A tool row renders its result too, so `dd` on it targets the result's
+ * message: the assistant text before the tool_use survives and the tool_use
+ * is stripped along with its result. */
+function rewindIdxFor(
+  thread: NvimThread,
+  content: ProviderMessageContent,
+): NativeMessageIdx {
+  if (content.type !== "tool_use") return content.nativeMessageIdx;
+  for (const message of thread.threadState.messages) {
+    if (message.role !== "user") continue;
+    for (const block of message.content) {
+      if (block.type === "tool_result" && block.id === content.id)
+        return block.nativeMessageIdx;
+    }
+  }
+  return content.nativeMessageIdx;
 }
 
 function streamingBlock(run: ProtocolRunState) {

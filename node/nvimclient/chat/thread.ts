@@ -180,6 +180,10 @@ export type Msg =
   | {
       type: "reflect-selection";
       anchor?: ReflectAnchor;
+    }
+  | {
+      type: "rewind-message";
+      nativeMessageIdx: NativeMessageIdx;
     };
 
 export type ThreadMsg = {
@@ -705,6 +709,23 @@ export class NvimThread {
       }
       case "toggle-sandbox-bypass":
         void this.context.chat.toggleSandboxBypass(this.id);
+        return;
+
+      case "rewind-message":
+        void this.execute({
+          type: "thread.rewind",
+          threadId: this.id,
+          nativeMessageIdx: msg.nativeMessageIdx,
+        }).then((result) => {
+          if (result.type !== "ok") return;
+          // View state is keyed by display message index; drop entries for
+          // messages that no longer exist.
+          const remaining = this.threadState.messages.length;
+          for (const key of Object.keys(this.state.messageViewState)) {
+            if (Number(key) >= remaining)
+              delete this.state.messageViewState[Number(key)];
+          }
+        });
         return;
 
       case "fork-message":

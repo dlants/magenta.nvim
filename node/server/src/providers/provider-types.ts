@@ -377,7 +377,13 @@ export interface NativeInferenceManager {
     requested: NonEmptyRequestedTools,
   ): NativeMessageIdx;
   getNativeMessageIdx(): NativeMessageIdx;
+  /** Keep messages [0, messageIdx] and strip any tool_use whose results were
+   * dropped. Never extends forward. */
   truncateMessages(messageIdx: NativeMessageIdx): void;
+  /** For a tool_use message whose results follow it, the idx of the last
+   * result message; otherwise `messageIdx`. Forks cut here so that forking at
+   * a tool call keeps its results. */
+  getTurnEndIdx(messageIdx: NativeMessageIdx): NativeMessageIdx;
   clone(): NativeInferenceManager;
   /** Rejects on real failures; an abort resolves `aborted`. */
   countTokens?(): Task<TokenCount>;

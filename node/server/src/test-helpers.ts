@@ -382,7 +382,9 @@ function testManager(
     });
   const manager = cloneFrom.clone();
   manager.truncateMessages(
-    (cloneFrom.log.messages.length - 1) as NativeMessageIdx,
+    manager.getTurnEndIdx(
+      (cloneFrom.log.messages.length - 1) as NativeMessageIdx,
+    ),
   );
   return manager;
 }

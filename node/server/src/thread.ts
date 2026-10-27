@@ -167,6 +167,9 @@ export type ThreadCallbacks = {
     summary?: string;
     chunkCount: number;
   }) => void;
+  /** The conversation was rewound: messages from `nativeMessageIdx` on were
+   * dropped. Fired after the replacement core is installed. */
+  readonly onRewound?: (nativeMessageIdx: NativeMessageIdx) => void;
 };
 /** Everything Thread republishes from its replaceable core: the readers views
  * and tools ask the thread for, rather than reaching for a core that a
@@ -285,6 +288,7 @@ export class Thread implements ThreadCoreView {
         ? this.createForkedCore({
             source: initialization.source.core,
             nativeMessageIdx: initialization.nativeMessageIdx,
+            mode: "fork",
           })
         : this.createFreshCore();
     if (initialization?.type === "seed") {
@@ -404,6 +408,7 @@ export class Thread implements ThreadCoreView {
   private createForkedCore(fork: {
     source: ThreadCore;
     nativeMessageIdx: NativeMessageIdx;
+    mode: "fork" | "rewind";
   }): ThreadCore {
     const core = ThreadCore.clone(
       this.id,
@@ -1053,33 +1058,66 @@ export class Thread implements ThreadCoreView {
   /** The in-flight core replacement, if any: both the re-entrancy guard and
    * what a preempting submission waits on. */
   private reset: Promise<ThreadCore> | undefined;
+  /** Drop the message at `nativeMessageIdx` and everything after it. Whatever
+   * is running or queued was composed against the dropped future, so it is
+   * aborted and discarded first. Every supervisor and context record is cut
+   * at the same point a fork would cut it. */
+  async rewind(nativeMessageIdx: NativeMessageIdx): Promise<void> {
+    if (this.isDestroyed) throw new Error("Cannot rewind a destroyed thread");
+    if (this.threadType === "compact")
+      throw new Error("Cannot rewind a compact thread");
+    await this.abort();
+    await this.reset?.catch(() => {});
+    const source = this.core;
+    await this.replaceCore({
+      archive: { type: "rewind", nativeMessageIdx },
+      build: () =>
+        this.createForkedCore({ source, nativeMessageIdx, mode: "rewind" }),
+    });
+  }
+
   private async replaceCore({
     archive,
+    build,
   }: {
+    /** Builds the replacement from the still-live current core; defaults to
+     * a fresh core seeded with the current files. */
+    build?: () => ThreadCore;
     archive:
       | { type: "compaction"; summary: string; chunkCount: number }
+      | { type: "rewind"; nativeMessageIdx: NativeMessageIdx }
       | { type: "none" };
   }): Promise<ThreadCore> {
     // Synchronous re-entrancy guard: a second caller must not be able to
     // overwrite the in-flight reset with its own rejected promise.
     if (this.reset) throw new Error("Thread reset already in progress");
     const reset = (async () => {
-      const initialFiles = buildClonedFiles(this.contextFiles.files);
-      this.core.dispose();
-      // Disposal is irreversible: cancellation prevents the caller's follow-up,
-      // but must not leave this thread pointing at a permanently disposed core.
-      const core = this.createFreshCore(initialFiles);
+      let core: ThreadCore;
+      if (build) {
+        core = build();
+        this.core.dispose();
+      } else {
+        const initialFiles = buildClonedFiles(this.contextFiles.files);
+        this.core.dispose();
+        // Disposal is irreversible: cancellation prevents the caller's follow-up,
+        // but must not leave this thread pointing at a permanently disposed core.
+        core = this.createFreshCore(initialFiles);
+      }
       this.core = core;
       // The replaced core's opening content does not belong to the new one.
       this.opening = [];
       // The replaced core's outcome does not describe the new one.
       if (this.status.type === "idle")
         this.status = { type: "idle", lastResult: undefined };
-      this.callbacks.onCoreReplaced?.(
-        archive.type === "compaction"
-          ? { summary: archive.summary, chunkCount: archive.chunkCount }
-          : undefined,
-      );
+      if (archive.type === "rewind") {
+        this.callbacks.onRewound?.(archive.nativeMessageIdx);
+      } else {
+        this.callbacks.onCoreReplaced?.(
+          archive.type === "compaction"
+            ? { summary: archive.summary, chunkCount: archive.chunkCount }
+            : undefined,
+        );
+      }
       this.handleUpdate();
       return core;
     })();

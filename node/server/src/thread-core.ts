@@ -171,20 +171,32 @@ export class ThreadCore {
     context: ThreadCoreContext,
     callbacks: ThreadCoreCallbacks,
     completedTools: Map<ToolRequestId, CompletedToolInfo>,
-    fork: { source: ThreadCore; nativeMessageIdx: NativeMessageIdx },
+    fork: {
+      source: ThreadCore;
+      nativeMessageIdx: NativeMessageIdx;
+      /** A rewind drops the target message and everything after it, in place,
+       * with no fork notice. */
+      mode: "fork" | "rewind";
+    },
   ): ThreadCore {
     const source = fork.source;
     const manager = source.manager.clone();
-    manager.truncateMessages(fork.nativeMessageIdx);
+    manager.truncateMessages(
+      fork.mode === "rewind"
+        ? ((fork.nativeMessageIdx - 1) as NativeMessageIdx)
+        : manager.getTurnEndIdx(fork.nativeMessageIdx),
+    );
     const nativeMessageIdx = manager.getNativeMessageIdx();
-    manager.appendUserMessage([
-      {
-        type: "text",
-        text: "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
-      },
-    ]);
-
-    const forkSeamIdx = manager.getNativeMessageIdx();
+    let forkSeamIdx: NativeMessageIdx | undefined;
+    if (fork.mode === "fork") {
+      manager.appendUserMessage([
+        {
+          type: "text",
+          text: "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
+        },
+      ]);
+      forkSeamIdx = manager.getNativeMessageIdx();
+    }
     const fileSupervisor = FileSupervisor.clone({
       source: source.fileSupervisor,
       history: { type: "truncate", nativeMessageIdx },
@@ -228,7 +240,7 @@ export class ThreadCore {
           ([idx]) => idx <= nativeMessageIdx,
         ),
       ),
-      forkSeamIdx,
+      ...(forkSeamIdx !== undefined ? { forkSeamIdx } : {}),
     };
     return new ThreadCore(id, context, callbacks, completedTools, state);
   }

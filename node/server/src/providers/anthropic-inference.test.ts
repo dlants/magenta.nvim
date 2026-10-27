@@ -2041,9 +2041,9 @@ File context here
       // messages: [user Run, assistant w/tool_use, user tool_result, assistant Done]
       expect(agent.log.messages).toHaveLength(4);
 
-      // Truncate at the assistant message that contains tool_use (idx=1).
-      // Should extend to keep idx=2 (tool_result) too.
-      agent.truncateMessages(1 as never);
+      // Forks cut at the turn end of the tool_use message (idx=1), which
+      // extends to keep idx=2 (tool_result) too.
+      agent.truncateMessages(agent.manager.getTurnEndIdx(1 as never));
       expect(agent.log.messages).toHaveLength(3);
       expect(agent.log.messages[1].role).toBe("assistant");
       expect(agent.log.messages[2].role).toBe("user");
@@ -2051,6 +2051,44 @@ File context here
       // message index must read the boundary back rather than trust its own
       // request.
       expect(agent.manager.getNativeMessageIdx()).toBe(2);
+    });
+
+    it("truncating just before a tool_result strips the preceding tool_use", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient, {
+        executeTools: (requests) =>
+          uninterruptible({
+            type: "continue" as const,
+            results: okResults(requests, "file contents"),
+          }),
+      });
+
+      const turn = agent.runToolLoop("Run tool");
+      const stream = await mockClient.awaitStream();
+      stream.streamText("Running...");
+      stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
+        files: [{ filePath: "x.ts" }],
+      });
+      stream.finishResponse("tool_use");
+      const followup = await awaitNextStream(mockClient, 1);
+      followup.streamText("Done.");
+      followup.finishResponse("end_turn");
+      await turn;
+
+      // Rewind to the tool_result message (idx=2): keep [0, 1].
+      agent.truncateMessages(1 as never);
+      expect(agent.log.messages).toHaveLength(2);
+      expect(agent.log.messages[1].content).toEqual([
+        expect.objectContaining({ type: "text", text: "Running..." }),
+      ]);
+
+      const next = agent.runToolLoop("Again");
+      const nextStream = await awaitNextStream(mockClient, 2);
+      const sent = JSON.stringify(nextStream.params.messages);
+      expect(sent).not.toContain("tool-1");
+      nextStream.streamText("ok");
+      nextStream.finishResponse("end_turn");
+      await next;
     });
 
     it("drops orphan tool_use blocks when no matching tool_result follows", async () => {

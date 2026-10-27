@@ -45,6 +45,8 @@ function renderEntry(entry: ThreadLogEntry, toolInfoMap: ToolInfoMap): string {
       return `--- thread start (${entry.threadType}) ---\n`;
     case "restart":
       return `--- restart ---\n`;
+    case "rewind":
+      return `--- rewind to before message ${entry.nativeMessageIdx} ---\n`;
     case "fork":
       return `--- fork from ${entry.fromThreadId} @ message ${entry.nativeMessageIdx} ---\n`;
     case "title":

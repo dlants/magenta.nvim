@@ -708,28 +708,11 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     this.updateCachedProviderMessages();
   }
 
-  /** Decide where to cut the messages array for a truncate at `messageIdx`.
-   * If messages[messageIdx] is an assistant message containing tool_use blocks
-   * whose tool_results all appear in the consecutive following user messages,
-   * extend forward to keep those tool_result messages too.
-   * Otherwise drop orphan tool_use / server_tool_use blocks (and the message
-   * itself if it would become empty). Returns the inclusive end index, or -1
-   * to drop everything. May mutate messages[messageIdx].content in place.
-   */
-  private computeTruncateEndIdx(messageIdx: NativeMessageIdx): number {
-    if (messageIdx < 0 || messageIdx >= this.messages.length) {
-      return Math.min(messageIdx, this.messages.length - 1);
-    }
-
+  getTurnEndIdx(messageIdx: NativeMessageIdx): NativeMessageIdx {
     const target = this.messages[messageIdx];
-    if (target.role === "user") {
-      return messageIdx;
-    }
-
+    if (!target || target.role !== "assistant") return messageIdx;
     const content = target.content;
-    if (typeof content === "string") {
-      return messageIdx;
-    }
+    if (typeof content === "string") return messageIdx;
 
     const toolUseIds = new Set<string>();
     for (const block of content) {
@@ -766,32 +749,57 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       }
 
       if (allFound) {
-        return lastResultIdx;
+        return lastResultIdx as NativeMessageIdx;
+      }
+    }
+    return messageIdx;
+  }
+
+  /** Decide where to cut the messages array for a truncate at `messageIdx`.
+   * Keeps [0, messageIdx], then drops tool_use / server_tool_use blocks of the
+   * last kept assistant message whose results lie past the cut (and the
+   * message itself, with what follows it, if it would become empty). Returns
+   * the inclusive end index, or -1 to drop everything. May mutate the
+   * assistant message's content in place.
+   */
+  private computeTruncateEndIdx(messageIdx: NativeMessageIdx): number {
+    const endIdx = Math.min(messageIdx, this.messages.length - 1);
+    let assistantIdx = endIdx;
+    while (
+      assistantIdx >= 0 &&
+      this.messages[assistantIdx].role !== "assistant"
+    )
+      assistantIdx--;
+    if (assistantIdx < 0) return endIdx;
+
+    const target = this.messages[assistantIdx];
+    const content = target.content;
+    if (typeof content === "string") return endIdx;
+
+    const keptResultIds = new Set<string>();
+    for (let m = assistantIdx + 1; m <= endIdx; m++) {
+      const userContent = this.messages[m].content;
+      if (!Array.isArray(userContent)) continue;
+      for (const block of userContent) {
+        if (block.type === "tool_result") keptResultIds.add(block.tool_use_id);
       }
     }
 
-    // Drop orphan tool_use / server_tool_use blocks.
     const trimmed = content.filter((block, idx) => {
-      if (block.type === "tool_use") return false;
+      if (block.type === "tool_use") return keptResultIds.has(block.id);
       if ((block as { type: string }).type === "server_tool_use") {
         const next = content[idx + 1];
-        if (
-          next &&
+        return (
+          next !== undefined &&
           (next as { type: string }).type === "web_search_tool_result"
-        ) {
-          return true;
-        }
-        return false;
+        );
       }
       return true;
     });
 
-    if (trimmed.length === 0) {
-      return messageIdx - 1;
-    }
-
+    if (trimmed.length === 0) return assistantIdx - 1;
     target.content = trimmed;
-    return messageIdx;
+    return endIdx;
   }
 
   clone(): AnthropicInferenceManager {

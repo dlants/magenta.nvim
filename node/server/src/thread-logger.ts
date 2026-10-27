@@ -36,6 +36,7 @@ export type ThreadLogEntry =
       chunkCount: number;
     }
   | { type: "restart"; timestamp: string }
+  | { type: "rewind"; timestamp: string; nativeMessageIdx: number }
   | { type: "title"; timestamp: string; title: string };
 
 /**
@@ -198,6 +199,20 @@ export class ThreadLogger {
     });
   }
 
+  /** The kept prefix is already persisted; only what follows the marker is
+   * new. */
+  recordRewind(nativeMessageIdx: number): void {
+    this.append({
+      type: "rewind",
+      timestamp: new Date().toISOString(),
+      nativeMessageIdx,
+    });
+    this.persistedCount = Math.min(
+      this.persistedCount,
+      this.getMessages().length,
+    );
+  }
+
   resetCursor(): void {
     this.persistedCount = 0;
   }
@@ -287,6 +302,10 @@ export function archiveThread<T extends Thread>(args: {
       if (compaction) archive?.recordCompaction(compaction);
       archive?.resetCursor();
       callbacks.onCoreReplaced?.(compaction);
+    },
+    onRewound: (nativeMessageIdx) => {
+      archive?.recordRewind(nativeMessageIdx);
+      callbacks.onRewound?.(nativeMessageIdx);
     },
   });
   const { baseDir, scriptName, forkedFrom } = thread.archiveOptions;
