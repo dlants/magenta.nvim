@@ -135,7 +135,7 @@ const defaultSandboxConfig: SandboxConfig = {
 
 function createContext() {
   return {
-    cwd: "/test/cwd" as Cwd,
+    projectDir: "/test/cwd" as Cwd,
     homeDir: "/home/user" as HomeDir,
     threadId: "test-thread" as ThreadId,
     getSandboxConfig: () => defaultSandboxConfig,
@@ -196,7 +196,7 @@ describe("SandboxShell", () => {
     expect(mockSpawn).toHaveBeenCalledWith(
       "bash",
       ["-c", "sandbox-wrapped:echo hello"],
-      expect.objectContaining({ cwd: "/test/cwd" }),
+      expect.objectContaining({ cwd: "/" }),
     );
     expect(result.exitCode).toBe(0);
     expect(handler.promptForApproval).not.toHaveBeenCalled();
@@ -376,7 +376,7 @@ describe("SandboxShell", () => {
 
     expect(mockUpdateConfigIfChanged).toHaveBeenCalledWith(
       defaultSandboxConfig,
-      context.cwd,
+      context.projectDir,
       context.homeDir,
     );
   });
@@ -396,7 +396,7 @@ describe("SandboxShell", () => {
     expect(mockSpawn).toHaveBeenCalledWith(
       "bash",
       ["-c", "echo hello"],
-      expect.objectContaining({ cwd: "/test/cwd" }),
+      expect.objectContaining({ cwd: "/" }),
     );
     expect(result.exitCode).toBe(0);
     expect(handler.promptForApproval).not.toHaveBeenCalled();
@@ -442,7 +442,7 @@ describe("SandboxShell", () => {
     expect(mockSpawn).toHaveBeenCalledWith(
       "bash",
       ["-c", "echo test"],
-      expect.objectContaining({ cwd: "/test/cwd" }),
+      expect.objectContaining({ cwd: "/" }),
     );
     expect(mockWrapWithSandbox).not.toHaveBeenCalled();
     expect(result.exitCode).toBe(0);
@@ -837,7 +837,7 @@ describe("SandboxShell", () => {
       expect(mockSpawn).toHaveBeenCalledWith(
         "bash",
         ["-c", "git push origin main"],
-        expect.objectContaining({ cwd: "/test/cwd" }),
+        expect.objectContaining({ cwd: "/" }),
       );
       expect(mockWrapWithSandbox).not.toHaveBeenCalled();
       expect(result.exitCode).toBe(0);
@@ -942,7 +942,7 @@ describe("SandboxShell", () => {
       expect(mockSpawn).toHaveBeenLastCalledWith(
         "bash",
         ["-c", "cat /secret.txt"],
-        expect.objectContaining({ cwd: "/test/cwd" }),
+        expect.objectContaining({ cwd: "/" }),
       );
 
       retryProc._emit("stdout:data", Buffer.from("secret-contents"));
@@ -991,7 +991,7 @@ describe("SandboxShell", () => {
       expect(mockSpawn).toHaveBeenLastCalledWith(
         "bash",
         ["-c", "cat /secret.txt"],
-        expect.objectContaining({ cwd: "/test/cwd" }),
+        expect.objectContaining({ cwd: "/" }),
       );
       retryProc._emit("close", 0, null);
       const result = await executePromise;

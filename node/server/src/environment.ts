@@ -86,7 +86,7 @@ export function createLocalEnvironment({
     onFileWritten,
   );
   const sandboxShell = new SandboxShell(
-    { cwd, homeDir, threadId, getSandboxConfig, isBypassed },
+    { projectDir: cwd, homeDir, threadId, getSandboxConfig, isBypassed },
     sandbox,
     violationHandler,
   );
@@ -127,7 +127,7 @@ export async function createDockerEnvironment({
   ]).then((r) => r.stdout.trim());
 
   const fileIO = new DockerFileIO({ container });
-  const shell = new DockerShell({ container, cwd: resolvedCwd, threadId });
+  const shell = new DockerShell({ container, threadId });
 
   return {
     fileIO,

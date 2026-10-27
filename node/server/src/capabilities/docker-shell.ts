@@ -15,7 +15,6 @@ export class DockerShell implements Shell {
   constructor(
     private context: {
       container: string;
-      cwd: string;
       threadId: ThreadId;
     },
   ) {}
@@ -58,15 +57,7 @@ export class DockerShell implements Shell {
         }>((resolve, reject) => {
           const childProcess = spawn(
             "docker",
-            [
-              "exec",
-              "-w",
-              this.context.cwd,
-              this.context.container,
-              "bash",
-              "-c",
-              command,
-            ],
+            ["exec", "-w", "/", this.context.container, "bash", "-c", command],
             {
               stdio: ["ignore", "pipe", "pipe"],
               detached: true,

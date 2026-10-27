@@ -96,7 +96,6 @@ describe("Docker Environment", () => {
     it("supports full Shell surface", async () => {
       const shell = new DockerShell({
         container: containerId,
-        cwd: "/tmp",
         threadId: mockThreadId,
       });
 
@@ -115,11 +114,11 @@ describe("Docker Environment", () => {
       });
       expect(failResult.exitCode).toBe(42);
 
-      // cwd is respected
+      // commands start at the filesystem root
       const pwdResult = await shell.execute("pwd", {
         toolRequestId: "test-pwd",
       });
-      expect(pwdResult.output.some((l) => l.text.includes("/tmp"))).toBe(true);
+      expect(pwdResult.output.some((l) => l.text.trim() === "/")).toBe(true);
 
       // logFilePath exists on host
       expect(echoResult.logFilePath).toBeDefined();
@@ -132,7 +131,6 @@ describe("Docker Environment", () => {
     it("can terminate a running command", async () => {
       const shell = new DockerShell({
         container: containerId,
-        cwd: "/tmp",
         threadId: mockThreadId,
       });
 

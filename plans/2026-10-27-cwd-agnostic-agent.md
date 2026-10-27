@@ -109,6 +109,16 @@ Decisions/deviations:
 
 ## Shell at root
 
+Status: done.
+
+- [x] `SandboxShell` spawns bash with `cwd: "/"`; `DockerShell` runs `docker exec -w /`. `DockerShell` context has no cwd.
+- [x] Tests: `sandbox-shell.node.test.ts` "runs commands at the filesystem root" (`pwd` → `/`); docker shell test asserts `pwd` → `/`; sandbox-shell unit tests assert spawn `cwd: "/"`.
+
+Decisions/deviations:
+
+- `SandboxShell`'s context field `cwd` is renamed `projectDir` and is only used to resolve relative sandbox config paths in `sandbox.updateConfigIfChanged` (same resolution as before). It becomes the `ProjectDir` type in the rename stage.
+- `createDockerEnvironment` still takes/returns `cwd` (environment-level, used for git/docker workspace); handled in the rename stage.
+
 - Goal: sandbox/docker shell spawn at `/`; drop cwd from Shell contexts.
 - Tests:
   - Tier B: `pwd` in bash_command returns `/`.

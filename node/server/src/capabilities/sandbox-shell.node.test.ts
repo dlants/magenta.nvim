@@ -36,7 +36,7 @@ const passthroughSandbox: Sandbox = {
 function createShell() {
   return new SandboxShell(
     {
-      cwd: os.tmpdir() as Cwd,
+      projectDir: os.tmpdir() as Cwd,
       homeDir: os.homedir() as HomeDir,
       threadId: `shell-node-${process.pid}` as ThreadId,
       getSandboxConfig: () => DEFAULT_SANDBOX_CONFIG,
@@ -101,6 +101,14 @@ it("creates log file with command and output", async () => {
   expect(log).toContain("line1");
   expect(log).toContain("line2");
   expect(log).toContain("exit code 0");
+});
+
+it("runs commands at the filesystem root", async () => {
+  const result = await createShell().execute("pwd", {
+    toolRequestId: "test-pwd",
+  });
+  expect(result.exitCode).toBe(0);
+  expect(result.output.map((l) => l.text.trim())).toContain("/");
 });
 
 it("terminates process with SIGTERM", async () => {

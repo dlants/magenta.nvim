@@ -29,7 +29,8 @@ export class SandboxShell implements Shell {
 
   constructor(
     private context: {
-      cwd: Cwd;
+      /** Only used to resolve relative sandbox config paths; commands run at `/`. */
+      projectDir: Cwd;
       homeDir: HomeDir;
       threadId: ThreadId;
       getSandboxConfig: () => SandboxConfig;
@@ -114,7 +115,7 @@ export class SandboxShell implements Shell {
         }>((resolve, reject) => {
           const childProcess = spawn("bash", ["-c", command], {
             stdio: ["ignore", "pipe", "pipe"],
-            cwd: this.context.cwd,
+            cwd: "/",
             env: process.env,
             detached: true,
           });
@@ -262,7 +263,7 @@ export class SandboxShell implements Shell {
 
     this.sandbox.updateConfigIfChanged(
       sandboxConfig,
-      this.context.cwd,
+      this.context.projectDir,
       this.context.homeDir,
     );
 
