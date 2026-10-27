@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
+import type { AbsFilePath } from "../utils/files.ts";
 import { InMemoryFileIO } from "./in-memory-file-io.ts";
 import type { RunScriptResult } from "./index.ts";
 import { runScript } from "./index.ts";
@@ -27,7 +28,7 @@ function normalizePaths(
         ...result.data,
         mutations: result.data.mutations.map((m) => ({
           ...m,
-          path: m.path.replaceAll(tmpDir, "<tmpDir>"),
+          path: m.path.replaceAll(tmpDir, "<tmpDir>") as AbsFilePath,
         })),
         trace: result.data.trace.map((t) => ({
           ...t,
@@ -58,7 +59,7 @@ const run = (
   script: string,
   _fileIO?: undefined,
   edlRegisters?: Parameters<typeof runScript>[2],
-) => runScript(script, io, edlRegisters);
+) => runScript(script, io, edlRegisters, { homeDir: "/home/user" as never });
 describe("runScript", () => {
   it("rejects relative file paths when given a path context", async () => {
     const result = await runScript(

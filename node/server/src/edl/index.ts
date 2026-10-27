@@ -1,5 +1,6 @@
 import type { FileIO } from "../capabilities/file-io.ts";
 import {
+  type AbsFilePath,
   type HomeDir,
   resolveAbsPath,
   type UnresolvedFilePath,
@@ -40,7 +41,7 @@ export type EdlResultData = {
   warnings: string[];
   trace: { command: string; snippet: string }[];
   mutations: {
-    path: string;
+    path: AbsFilePath;
     summary: FileMutationSummary;
     content: string;
     previousContent: string;
@@ -229,24 +230,24 @@ function formatResult(result: ScriptResult): string {
 
 export async function runScript(
   script: string,
-  fileIO?: FileIO,
-  edlRegisters?: EdlRegisters,
-  pathContext?: { homeDir: HomeDir },
+  fileIO: FileIO | undefined,
+  edlRegisters: EdlRegisters | undefined,
+  pathContext: { homeDir: HomeDir },
 ): Promise<RunScriptResult> {
   try {
     const commands = parse(script);
-    if (pathContext) {
-      for (const cmd of commands) {
-        if (cmd.type === "file" || cmd.type === "newfile") {
-          const resolved = resolveAbsPath(
-            cmd.path as UnresolvedFilePath,
-            pathContext.homeDir,
-          );
-          if (resolved.status === "error") {
-            return { status: "error", error: resolved.error };
-          }
-          cmd.path = resolved.value;
+    const absPaths = new Map<string, AbsFilePath>();
+    for (const cmd of commands) {
+      if (cmd.type === "file" || cmd.type === "newfile") {
+        const resolved = resolveAbsPath(
+          cmd.path as UnresolvedFilePath,
+          pathContext.homeDir,
+        );
+        if (resolved.status === "error") {
+          return { status: "error", error: resolved.error };
         }
+        cmd.path = resolved.value;
+        absPaths.set(resolved.value, resolved.value);
       }
     }
     const executor = new Executor(fileIO);
@@ -264,13 +265,20 @@ export async function runScript(
         command: t.command,
         snippet: t.snippet,
       })),
-      mutations: Array.from(result.mutations.entries()).map(
-        ([path, summary]) => ({
-          path: path,
-          summary,
-          content: result.fileContents.get(path)?.content ?? "",
-          previousContent: result.fileContents.get(path)?.previousContent ?? "",
-        }),
+      mutations: Array.from(result.mutations.entries()).flatMap(
+        ([path, summary]) => {
+          const absPath = absPaths.get(path);
+          if (!absPath) return [];
+          return [
+            {
+              path: absPath,
+              summary,
+              content: result.fileContents.get(path)?.content ?? "",
+              previousContent:
+                result.fileContents.get(path)?.previousContent ?? "",
+            },
+          ];
+        },
       ),
       finalSelection: result.finalSelection
         ? {

@@ -31,7 +31,6 @@ import {
   type Cwd,
   FileCategory,
   type HomeDir,
-  type RelFilePath,
   type UnresolvedFilePath,
 } from "./utils/files.ts";
 

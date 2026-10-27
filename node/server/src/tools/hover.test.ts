@@ -238,6 +238,18 @@ describe("hover unit tests", () => {
     expect(text).toContain("not found");
   });
 
+  it("returns a tool error for a relative file path", async () => {
+    const fileIO = createMockFileIO("const foo = 42;");
+    const invocation = Hover.execute(makeRequest("foo", "test.ts"), {
+      cwd: TEST_CWD,
+      homeDir: TEST_HOME,
+      lspClient: createMockLspClient(),
+      fileIO,
+    });
+    expect(await getResultStatus(invocation)).toBe("error");
+    expect(await getResultText(invocation)).toContain("absolute path");
+    expect(fileIO.readFile).not.toHaveBeenCalled();
+  });
   it("returns error when file read fails", async () => {
     const lspClient = createMockLspClient();
     const fileIO = createMockFileIO("");

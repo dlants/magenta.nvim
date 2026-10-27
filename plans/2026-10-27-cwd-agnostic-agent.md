@@ -98,7 +98,8 @@ Decisions/deviations:
 - `resolveFilePath`, `relativePath` and `displayPath` are kept (still exported) for the remaining preparation-time callers (auto-context, harness `@file` fake, `sandbox-file-io`) and the nvim client's UI display; they get deleted in the rename/client stages.
 - Script `create-thread` `contextFiles` are resolved against the thread's directory in `scripts/script-manager.ts` `normalizeThreadRequest` (script-API convenience), since thread file tracking now only accepts absolute paths.
 - spawn_subagents `contextFiles` are not resolved; relative entries are skipped by `FileSupervisor.addFiles`. Its schema/description updates belong to the later stages.
-- `render-tools/spawn-subagents.test.ts` "handles thread hierarchy with stopped and yielded children" also fails on `main` (flaky/pre-existing).
+- `render-tools/spawn-subagents.test.ts` "handles thread hierarchy with stopped and yielded children" and `tools/spawn-subagents.test.ts` "respects maxConcurrentSubagents limit" also fail on `main` (pre-existing). Several nvim tests time out under full-suite load but pass when run on their own.
+- Review follow-ups: `runScript`'s `pathContext` is required, and `EdlResultData.mutations[].path` is `AbsFilePath` (taken from the up-front resolution map), so the edl tool doesn't cast. get_file's `PerFileResult.filePath` is `AbsFilePath | UnresolvedFilePath`, so relative-path errors report the raw input without a cast. `normalizeThreadRequest` is exported for unit tests (`scripts/script-manager.test.ts`). Added tests: `utils/files.test.ts` (`~`, normalization), hover relative path → tool error, `@file:` relative → error with no context added (registry.test.ts).
 
 - Goal: `resolveAbsPath` replaces `resolveFilePath`; tools, EDL, file supervisor, submission commands stop using cwd; display is absolute.
 - Tests:

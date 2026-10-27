@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { InMemoryFileIO } from "../../edl/in-memory-file-io.ts";
 import { noopLogger } from "../../test-helpers.ts";
 import type { ContextFileAccess } from "../../thread.ts";
-import type { Cwd, HomeDir } from "../../utils/files.ts";
+import { type Cwd, type HomeDir, resolveAbsPath } from "../../utils/files.ts";
 import { CommandRegistry } from "./registry.ts";
 import type { MessageContext } from "./types.ts";
 
@@ -163,8 +163,6 @@ describe("CommandRegistry", () => {
     const registry = new CommandRegistry();
     const context = createMockContext();
 
-    // Mock resolveAbsPath to throw error for this test
-    const { resolveAbsPath } = await import("../../utils/files.ts");
     vi.mocked(resolveAbsPath).mockImplementationOnce(() => {
       throw new Error("File not found");
     });
@@ -186,6 +184,24 @@ describe("CommandRegistry", () => {
     expect(textContent.text).toContain("Error adding file to context for");
   });
 
+  it("reports an error and adds no context for a relative @file: path", async () => {
+    const registry = new CommandRegistry();
+    const context = createMockContext();
+    const actual = await vi.importActual<typeof import("../../utils/files.ts")>(
+      "../../utils/files.ts",
+    );
+    vi.mocked(resolveAbsPath).mockImplementationOnce(actual.resolveAbsPath);
+    const result = await registry.processMessage("@file:rel.ts text", context);
+    expect(result.additionalContent).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining(
+          "Error adding file to context for rel.ts",
+        ),
+      }),
+    ]);
+    expect(context.fileSupervisor.addFileContext).not.toHaveBeenCalled();
+  });
   it("should not match custom commands ending in punctuation that are followed by non-command word characters", async () => {
     const registry = new CommandRegistry();
     registry.registerCustomCommand({

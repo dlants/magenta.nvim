@@ -156,7 +156,7 @@ type ScriptThreadRequest = {
   autoCompactPrompt?: string;
 };
 
-function normalizeThreadRequest(
+export function normalizeThreadRequest(
   msg: Extract<ScriptToMagenta, { type: "create-thread" }>,
   base: { cwd: Cwd; homeDir: HomeDir },
 ): ScriptThreadRequest {

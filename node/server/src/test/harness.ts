@@ -47,7 +47,6 @@ import {
   type Cwd,
   detectFileTypeViaFileIO,
   type HomeDir,
-  relativePath,
   resolveFilePath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";

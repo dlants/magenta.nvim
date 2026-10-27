@@ -25,8 +25,6 @@ import {
   FileCategory,
   type FileTypeInfo,
   type HomeDir,
-  type RelFilePath,
-  relativePath,
   resolveAbsPath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";

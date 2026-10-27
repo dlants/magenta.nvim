@@ -13,7 +13,6 @@ import type {
   ToolName,
 } from "../tool-types.ts";
 import {
-  type AbsFilePath,
   type Cwd,
   type HomeDir,
   resolveAbsPath,

@@ -36,7 +36,7 @@ import type { Result } from "../utils/result.ts";
 export type ToolRequest = GenericToolRequest<"get_files", Input>;
 
 export type PerFileResult = {
-  filePath: AbsFilePath;
+  filePath: AbsFilePath | UnresolvedFilePath;
   lineCount: number;
   systemReminder: string | undefined;
   isError: boolean;
@@ -155,7 +155,7 @@ type ReadOneFileOutcome =
     };
 
 function errorOutcome(
-  absFilePath: AbsFilePath,
+  filePath: AbsFilePath | UnresolvedFilePath,
   message: string,
 ): ReadOneFileOutcome {
   return {
@@ -167,7 +167,7 @@ function errorOutcome(
       },
     ],
     structured: {
-      filePath: absFilePath,
+      filePath,
       lineCount: 0,
       systemReminder: undefined,
       isError: true,
@@ -183,7 +183,7 @@ async function readOneFile(
   const filePath = fileReq.filePath;
   const resolved = resolveAbsPath(filePath, context.homeDir);
   if (resolved.status === "error") {
-    return errorOutcome(filePath as string as AbsFilePath, resolved.error);
+    return errorOutcome(filePath, resolved.error);
   }
   const absFilePath = resolved.value;
 

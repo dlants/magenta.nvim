@@ -15,12 +15,7 @@ import type {
   GenericToolRequest,
   ToolName,
 } from "../tool-types.ts";
-import {
-  type AbsFilePath,
-  type Cwd,
-  FileCategory,
-  type HomeDir,
-} from "../utils/files.ts";
+import { type Cwd, FileCategory, type HomeDir } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
 
 const EDL_DESCRIPTION = readFileSync(
@@ -88,7 +83,7 @@ export function execute(
         context.edlRegisters.nextSavedId = result.edlRegisters.nextSavedId;
 
         for (const mutation of result.data.mutations) {
-          const absFilePath = mutation.path as AbsFilePath;
+          const absFilePath = mutation.path;
           context.onToolApplied?.(
             absFilePath,
             {

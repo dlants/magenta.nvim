@@ -6,7 +6,6 @@ import type {
 } from "../providers/provider-types.ts";
 import {
   type AbsFilePath,
-  type Cwd,
   FileCategory,
   type HomeDir,
   type RelFilePath,

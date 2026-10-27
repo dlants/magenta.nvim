@@ -4,10 +4,8 @@ import type { Logger } from "../logger.ts";
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import {
   type AbsFilePath,
-  type Cwd,
   FileCategory,
   type HomeDir,
-  type RelFilePath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import {
