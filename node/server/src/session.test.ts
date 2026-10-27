@@ -603,6 +603,11 @@ it("creates a reflect thread seeded from the source without sending", async () =
   expect(session.listDerived(id, "reflect").map((d) => d.threadId)).toEqual([
     reflectId,
   ]);
+  expect(session.isSandboxBypassed(reflectId)).toBe(false);
+  session.toggleSandboxBypass(id);
+  expect(session.isSandboxBypassed(reflectId)).toBe(true);
+  session.toggleSandboxBypass(reflectId);
+  expect(session.isSandboxBypassed(id)).toBe(false);
   const reflect = session.getThread(reflectId);
   if (reflect?.state !== "initialized") throw new Error("expected reflect");
   expect(mockClient.streams.length).toBe(streamsBefore);
@@ -615,14 +620,11 @@ it("creates a reflect thread seeded from the source without sending", async () =
   ]);
   expect(reflect.thread.threadType).toBe("reflect");
   const toolNames = reflect.thread.toolSpecs.map((s) => s.name);
-  expect(toolNames).toContain("get_files");
-  for (const mutating of [
-    "edl",
-    "bash_command",
-    "spawn_subagents",
-    "nvim_lua",
-  ]) {
-    expect(toolNames).not.toContain(mutating);
+  for (const tool of ["get_files", "bash_command", "edl"]) {
+    expect(toolNames).toContain(tool);
+  }
+  for (const excluded of ["yield_to_parent", "spawn_subagents", "nvim_lua"]) {
+    expect(toolNames).not.toContain(excluded);
   }
 
   const answer = reflect.thread.submit({

@@ -368,8 +368,33 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     this.approvals.get(id)?.rejectAll();
   }
 
+  /** Reflect threads share their source's sandbox, like subagents share
+   * their parent's, though they are not its children for lifecycle. */
+  private sandboxParentOf(id: ThreadId): ThreadId | undefined {
+    const record = this.records.get(id);
+    if (!record) return undefined;
+    if (record.parentThreadId) return record.parentThreadId;
+    return record.origin?.type === "reflect"
+      ? record.origin.sourceThreadId
+      : undefined;
+  }
+
+  private getSandboxRootId(id: ThreadId): ThreadId {
+    let parent = this.sandboxParentOf(id);
+    while (parent) {
+      id = parent;
+      parent = this.sandboxParentOf(id);
+    }
+    return id;
+  }
+
   approveAllPendingInSubtree(id: ThreadId): void {
-    const children = this.buildChildrenMap();
+    const children = new Map<ThreadId, ThreadId[]>();
+    for (const childId of this.records.keys()) {
+      const parent = this.sandboxParentOf(childId);
+      if (parent)
+        children.set(parent, [...(children.get(parent) ?? []), childId]);
+    }
     const approve = (threadId: ThreadId) => {
       this.approveAll(threadId);
       for (const child of children.get(threadId) ?? []) approve(child);
@@ -380,14 +405,14 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
   /** Bypass is a property of the root of the tree, which a script invocation
    * may own. */
   isSandboxBypassed(id: ThreadId): boolean {
-    const root = this.getRootAncestorId(id);
+    const root = this.getSandboxRootId(id);
     const external = this.sandboxRoots.get(root)?.();
     if (external) return external.isSandboxBypassed;
     return this.bypassed.has(root);
   }
 
   toggleSandboxBypass(id: ThreadId): void {
-    const root = this.getRootAncestorId(id);
+    const root = this.getSandboxRootId(id);
     const external = this.sandboxRoots.get(root)?.();
     if (external) {
       external.toggle();

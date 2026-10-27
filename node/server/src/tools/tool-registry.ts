@@ -33,13 +33,6 @@ export const DOCKER_ROOT_STATIC_TOOL_NAMES: StaticToolName[] = [
   ...CHAT_STATIC_TOOL_NAMES,
   "yield_to_parent",
 ];
-/** Reflect threads explain the parent's work; they must not mutate the
- * workspace, so only read-only tools. */
-export const REFLECT_STATIC_TOOL_NAMES: StaticToolName[] = [
-  "get_files",
-  "hover",
-  "find_references",
-];
 export const SUBAGENT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "get_files",
   "hover",
@@ -48,6 +41,10 @@ export const SUBAGENT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "yield_to_parent",
   "edl",
 ];
+/** Reflect threads get an explore subagent's tools, minus yield_to_parent
+ * since they converse with the user rather than report to a parent. */
+export const REFLECT_STATIC_TOOL_NAMES: StaticToolName[] =
+  SUBAGENT_STATIC_TOOL_NAMES.filter((t) => t !== "yield_to_parent");
 
 export const TOOL_CAPABILITIES = [
   "lsp",

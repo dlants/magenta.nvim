@@ -33,7 +33,7 @@ Interpret the user's message in terms of that selection. Your job is to orient t
 - Answer at the user's level. If it is unclear what they are missing, ask.
 - Point out assumptions, risks or alternatives when they help understanding.
 
-Do not continue the agent's task and do not modify any files. You may read files, hover or find references to explain things accurately.`;
+Do not continue the agent's task and do not modify any files. You may read files, run shell commands, hover or find references to explain things accurately.`;
 
 function getBaseSystemPrompt(
   type: ThreadType,
