@@ -5,7 +5,11 @@ import type { ThreadId } from "../chat-types.ts";
 import type { SandboxConfig } from "../sandbox-config.ts";
 import type { NetworkAskTarget, Sandbox } from "../sandbox-manager.ts";
 import { withTimeout } from "../utils/async.ts";
-import { type Cwd, type HomeDir, MAGENTA_TEMP_DIR } from "../utils/files.ts";
+import {
+  type HomeDir,
+  MAGENTA_TEMP_DIR,
+  type ProjectDir,
+} from "../utils/files.ts";
 import type { SandboxViolationHandler } from "./sandbox-violation-handler.ts";
 import type { OutputLine, Shell, ShellResult } from "./shell.ts";
 import {
@@ -30,7 +34,7 @@ export class SandboxShell implements Shell {
   constructor(
     private context: {
       /** Only used to resolve relative sandbox config paths; commands run at `/`. */
-      projectDir: Cwd;
+      projectDir: ProjectDir;
       homeDir: HomeDir;
       threadId: ThreadId;
       getSandboxConfig: () => SandboxConfig;

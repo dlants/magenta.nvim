@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import { DEFAULT_SANDBOX_CONFIG } from "../sandbox-config.ts";
 import type { Sandbox } from "../sandbox-manager.ts";
 import { pollUntil } from "../utils/async.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import { SandboxShell } from "./sandbox-shell.ts";
 import { SandboxViolationHandler } from "./sandbox-violation-handler.ts";
 import type { OutputLine } from "./shell.ts";
@@ -36,7 +36,7 @@ const passthroughSandbox: Sandbox = {
 function createShell() {
   return new SandboxShell(
     {
-      projectDir: os.tmpdir() as Cwd,
+      projectDir: os.tmpdir() as ProjectDir,
       homeDir: os.homedir() as HomeDir,
       threadId: `shell-node-${process.pid}` as ThreadId,
       getSandboxConfig: () => DEFAULT_SANDBOX_CONFIG,

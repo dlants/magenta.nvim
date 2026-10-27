@@ -22,6 +22,7 @@ import {
   type HomeDir,
   toCwd,
   toHomeDir,
+  toProjectDir,
 } from "./utils/files.ts";
 export type EnvironmentConfig =
   | { type: "local"; cwd?: Cwd }
@@ -86,7 +87,13 @@ export function createLocalEnvironment({
     onFileWritten,
   );
   const sandboxShell = new SandboxShell(
-    { projectDir: cwd, homeDir, threadId, getSandboxConfig, isBypassed },
+    {
+      projectDir: toProjectDir(cwd),
+      homeDir,
+      threadId,
+      getSandboxConfig,
+      isBypassed,
+    },
     sandbox,
     violationHandler,
   );

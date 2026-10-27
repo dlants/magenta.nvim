@@ -123,6 +123,16 @@ export function toCwd(dir: string): Cwd {
   }
   return path.normalize(dir) as Cwd;
 }
+/** The directory a thread was started from. Used only at preparation time (config, sandbox
+ * path resolution, discovery); it is never a working directory for the agent.
+ */
+export type ProjectDir = AbsFilePath & { __projectDir: true };
+export function toProjectDir(dir: string): ProjectDir {
+  if (!path.isAbsolute(dir)) {
+    throw new Error(`Expected an absolute project dir, got "${dir}"`);
+  }
+  return path.normalize(dir) as ProjectDir;
+}
 
 /** The single checked entry point for the `HomeDir` brand. */
 export function toHomeDir(dir: string): HomeDir {

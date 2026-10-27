@@ -7,7 +7,7 @@ import type { SandboxConfig } from "../sandbox-config.ts";
 import type { SandboxState } from "../sandbox-manager.ts";
 import { MockSandboxManager } from "../test/mock-sandbox-manager.ts";
 import { pollUntil } from "../utils/async.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import { SandboxShell } from "./sandbox-shell.ts";
 import type { SandboxViolationHandler } from "./sandbox-violation-handler.ts";
 import type { ShellResult } from "./shell.ts";
@@ -31,7 +31,7 @@ const mockSandbox = {
   cleanupAfterCommand: () => mockCleanupAfterCommand(),
   getFsReadConfig: () => ({ denyOnly: [] }),
   getFsWriteConfig: () => ({ allowOnly: ["/"], denyWithinAllow: [] }),
-  updateConfigIfChanged: (...args: [SandboxConfig, Cwd, HomeDir]) =>
+  updateConfigIfChanged: (...args: [SandboxConfig, ProjectDir, HomeDir]) =>
     mockUpdateConfigIfChanged(...args),
   pushNetworkAskTarget: () => {},
   popNetworkAskTarget: () => {},
@@ -135,7 +135,7 @@ const defaultSandboxConfig: SandboxConfig = {
 
 function createContext() {
   return {
-    projectDir: "/test/cwd" as Cwd,
+    projectDir: "/test/cwd" as ProjectDir,
     homeDir: "/home/user" as HomeDir,
     threadId: "test-thread" as ThreadId,
     getSandboxConfig: () => defaultSandboxConfig,

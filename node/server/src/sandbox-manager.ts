@@ -11,7 +11,12 @@ import {
   StraceUnavailableError,
 } from "./capabilities/strace.ts";
 import type { SandboxConfig } from "./sandbox-config.ts";
-import type { Cwd, HomeDir } from "./utils/files.ts";
+import {
+  type Cwd,
+  type HomeDir,
+  type ProjectDir,
+  toProjectDir,
+} from "./utils/files.ts";
 
 export type SandboxState =
   | { status: "uninitialized" }
@@ -37,7 +42,7 @@ export interface Sandbox {
   getFsWriteConfig(): FsWriteConfig;
   updateConfigIfChanged(
     config: SandboxConfig,
-    cwd: Cwd,
+    projectDir: ProjectDir,
     homeDir: HomeDir,
   ): void;
   cleanupAfterCommand(): void;
@@ -56,21 +61,29 @@ export interface Sandbox {
 
 // -- Path resolution helpers --
 
-function resolvePath(p: string, cwd: Cwd, homeDir: HomeDir): string {
+function resolvePath(
+  p: string,
+  projectDir: ProjectDir,
+  homeDir: HomeDir,
+): string {
   if (p.startsWith("~/")) {
     return path.join(homeDir, p.slice(2));
   }
   if (p.startsWith("./")) {
-    return path.join(cwd, p.slice(2));
+    return path.join(projectDir, p.slice(2));
   }
   if (path.isAbsolute(p)) {
     return p;
   }
-  return path.join(cwd, p);
+  return path.join(projectDir, p);
 }
 
-function resolvePaths(paths: string[], cwd: Cwd, homeDir: HomeDir): string[] {
-  return paths.map((p) => resolvePath(p, cwd, homeDir));
+function resolvePaths(
+  paths: string[],
+  projectDir: ProjectDir,
+  homeDir: HomeDir,
+): string[] {
+  return paths.map((p) => resolvePath(p, projectDir, homeDir));
 }
 
 // Merge session-approved network hosts into the runtime allowedDomains list,
@@ -103,25 +116,29 @@ function dedup(arr: string[]): string[] {
 
 export function resolveConfigPaths(
   config: SandboxConfig,
-  cwd: Cwd,
+  projectDir: ProjectDir,
   homeDir: HomeDir,
 ): SandboxRuntimeConfig {
   return {
     filesystem: {
       allowWrite: dedup(
-        resolvePaths(config.filesystem.allowWrite, cwd, homeDir),
+        resolvePaths(config.filesystem.allowWrite, projectDir, homeDir),
       ),
-      denyWrite: dedup(resolvePaths(config.filesystem.denyWrite, cwd, homeDir)),
+      denyWrite: dedup(
+        resolvePaths(config.filesystem.denyWrite, projectDir, homeDir),
+      ),
       denyRead: filterExisting(
-        dedup(resolvePaths(config.filesystem.denyRead, cwd, homeDir)),
+        dedup(resolvePaths(config.filesystem.denyRead, projectDir, homeDir)),
       ),
-      allowRead: dedup(resolvePaths(config.filesystem.allowRead, cwd, homeDir)),
+      allowRead: dedup(
+        resolvePaths(config.filesystem.allowRead, projectDir, homeDir),
+      ),
     },
     network: {
       allowedDomains: dedup(config.network.allowedDomains),
       deniedDomains: dedup(config.network.deniedDomains),
       allowUnixSockets: dedup(
-        resolvePaths(config.network.allowUnixSockets, cwd, homeDir),
+        resolvePaths(config.network.allowUnixSockets, projectDir, homeDir),
       ),
       allowAllUnixSockets: config.network.allowAllUnixSockets,
     },
@@ -206,10 +223,10 @@ class RealSandbox implements Sandbox {
 
   updateConfigIfChanged(
     config: SandboxConfig,
-    cwd: Cwd,
+    projectDir: ProjectDir,
     homeDir: HomeDir,
   ): void {
-    const runtimeConfig = resolveConfigPaths(config, cwd, homeDir);
+    const runtimeConfig = resolveConfigPaths(config, projectDir, homeDir);
     runtimeConfig.network.allowedDomains = mergeApprovedDomains(
       runtimeConfig.network.allowedDomains,
       this.networkAskStack.getApprovedHosts(),
@@ -276,7 +293,7 @@ export async function initializeSandbox(
   // to start) if it is missing or cannot attach.
   assertStraceAvailable(process.platform);
 
-  const runtimeConfig = resolveConfigPaths(config, cwd, homeDir);
+  const runtimeConfig = resolveConfigPaths(config, toProjectDir(cwd), homeDir);
   await SandboxManager.initialize(runtimeConfig, askCallback, true);
   const lastConfigJson = JSON.stringify(runtimeConfig);
 

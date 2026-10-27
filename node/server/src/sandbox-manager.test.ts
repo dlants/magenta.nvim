@@ -9,7 +9,7 @@ import {
   type Sandbox,
   startSandbox,
 } from "./sandbox-manager.ts";
-import type { Cwd, HomeDir } from "./utils/files.ts";
+import { type Cwd, type HomeDir, toProjectDir } from "./utils/files.ts";
 
 const mockInitialize = vi.fn().mockResolvedValue(undefined);
 const mockIsSupportedPlatform = vi.fn().mockReturnValue(true);
@@ -30,6 +30,7 @@ vi.mock("@anthropic-ai/sandbox-runtime", () => ({
 }));
 
 const cwd = "/home/user/project" as Cwd;
+const projectDir = toProjectDir(cwd);
 const homeDir = "/home/user" as HomeDir;
 
 function makeConfig(overrides?: Partial<SandboxConfig>): SandboxConfig {
@@ -165,7 +166,7 @@ describe("sandbox-manager", () => {
           allowRead: [],
         },
       });
-      const resolved = resolveConfigPaths(config, cwd, homeDir);
+      const resolved = resolveConfigPaths(config, projectDir, homeDir);
       expect(resolved.filesystem.denyRead).toEqual(["/home/user/.ssh"]);
     });
 
@@ -178,7 +179,7 @@ describe("sandbox-manager", () => {
           allowRead: [],
         },
       });
-      const resolved = resolveConfigPaths(config, cwd, homeDir);
+      const resolved = resolveConfigPaths(config, projectDir, homeDir);
       expect(resolved.filesystem.allowWrite).toEqual(["/home/user/project"]);
     });
 
@@ -191,7 +192,7 @@ describe("sandbox-manager", () => {
           allowRead: [],
         },
       });
-      const resolved = resolveConfigPaths(config, cwd, homeDir);
+      const resolved = resolveConfigPaths(config, projectDir, homeDir);
       expect(resolved.filesystem.allowWrite).toEqual(["/tmp/build"]);
     });
 
@@ -204,7 +205,7 @@ describe("sandbox-manager", () => {
           allowRead: [],
         },
       });
-      const resolved = resolveConfigPaths(config, cwd, homeDir);
+      const resolved = resolveConfigPaths(config, projectDir, homeDir);
       expect(resolved.filesystem.allowWrite).toEqual([
         "/home/user/project/src/output",
       ]);
@@ -220,7 +221,7 @@ describe("sandbox-manager", () => {
           onUnknownHost: "prompt",
         },
       });
-      const resolved = resolveConfigPaths(config, cwd, homeDir);
+      const resolved = resolveConfigPaths(config, projectDir, homeDir);
       expect(resolved.network.allowedDomains).toEqual(["example.com"]);
       expect(resolved.network.deniedDomains).toEqual(["evil.com"]);
     });
@@ -238,7 +239,7 @@ describe("sandbox-manager", () => {
       );
       mockUpdateConfig.mockClear();
 
-      sandbox.updateConfigIfChanged(config, cwd, homeDir);
+      sandbox.updateConfigIfChanged(config, projectDir, homeDir);
       expect(mockUpdateConfig).not.toHaveBeenCalled();
     });
 
@@ -261,7 +262,7 @@ describe("sandbox-manager", () => {
           allowRead: [],
         },
       });
-      sandbox.updateConfigIfChanged(changedConfig, cwd, homeDir);
+      sandbox.updateConfigIfChanged(changedConfig, projectDir, homeDir);
       expect(mockUpdateConfig).toHaveBeenCalledOnce();
       const calledConfig = mockUpdateConfig.mock
         .calls[0][0] as import("@anthropic-ai/sandbox-runtime").SandboxRuntimeConfig;
@@ -278,7 +279,7 @@ describe("sandbox-manager", () => {
       );
       sandbox.recordSessionApprovedHost("approved.example.com");
       mockUpdateConfig.mockClear();
-      sandbox.updateConfigIfChanged(config, cwd, homeDir);
+      sandbox.updateConfigIfChanged(config, projectDir, homeDir);
       expect(mockUpdateConfig).toHaveBeenCalledOnce();
       const calledConfig = mockUpdateConfig.mock
         .calls[0][0] as import("@anthropic-ai/sandbox-runtime").SandboxRuntimeConfig;

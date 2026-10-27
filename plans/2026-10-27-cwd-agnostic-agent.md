@@ -117,6 +117,7 @@ Status: done.
 Decisions/deviations:
 
 - `SandboxShell`'s context field `cwd` is renamed `projectDir` and is only used to resolve relative sandbox config paths in `sandbox.updateConfigIfChanged` (same resolution as before). It becomes the `ProjectDir` type in the rename stage.
+- Review follow-up: the `ProjectDir` brand (`toProjectDir`) is introduced now in `utils/files.ts`. `SandboxShell`'s `projectDir`, `Sandbox.updateConfigIfChanged` and `resolveConfigPaths` take `ProjectDir`; `environment.ts` and `startSandbox` convert from `Cwd` with `toProjectDir` until the rename stage removes `Cwd`.
 - `createDockerEnvironment` still takes/returns `cwd` (environment-level, used for git/docker workspace); handled in the rename stage.
 
 - Goal: sandbox/docker shell spawn at `/`; drop cwd from Shell contexts.
