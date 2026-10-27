@@ -8,11 +8,7 @@ import { created, getFileSupervisor } from "../test-helpers.ts";
 import type { Thread } from "../thread.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
-import {
-  type AbsFilePath,
-  detectFileTypeViaFileIO,
-  relativePath,
-} from "../utils/files.ts";
+import { type AbsFilePath, detectFileTypeViaFileIO } from "../utils/files.ts";
 
 const JPEG = fs.readFileSync(
   path.join(import.meta.dirname, "../test/fixtures/test.jpg"),
@@ -27,16 +23,12 @@ const hierarchyOptions = { hierarchyContextFileNames: ["context.md"] };
 async function addFile(h: Harness, thread: Thread, abs: string) {
   const info = await detectFileTypeViaFileIO(abs as AbsFilePath, h.fileIO);
   if (!info) throw new Error(`no such file ${abs}`);
-  thread.contextFiles.addFileContext(
-    abs as AbsFilePath,
-    relativePath(h.host.cwd, abs as AbsFilePath, h.host.homeDir),
-    info,
-  );
+  thread.contextFiles.addFileContext(abs as AbsFilePath, info);
 }
 
 function relPaths(thread: Thread): string[] {
-  return Object.values(thread.contextFiles.files).map(
-    (f) => f.relFilePath as string,
+  return Object.keys(thread.contextFiles.files).map((abs) =>
+    path.relative("/project", abs),
   );
 }
 
@@ -103,7 +95,7 @@ it("issuing a getFile request adds the file to the context but doesn't send its 
           value: {
             id: "img_request" as ToolRequestId,
             toolName: "get_files" as ToolName,
-            input: { files: [{ filePath: "test.jpg" }] },
+            input: { files: [{ filePath: "/project/test.jpg" }] },
           },
         },
       ],
@@ -234,7 +226,7 @@ it("agent's get_file adds parent context.md", () =>
           value: {
             id: "get_leaf" as ToolRequestId,
             toolName: "get_files" as ToolName,
-            input: { files: [{ filePath: "nested/dir/file.txt" }] },
+            input: { files: [{ filePath: "/project/nested/dir/file.txt" }] },
           },
         },
       ],
@@ -259,7 +251,7 @@ it("subagent spawn triggers discovery for contextFiles", () =>
               agents: [
                 {
                   prompt: "Subagent task with leaf",
-                  contextFiles: ["nested/dir/file.txt"],
+                  contextFiles: ["/project/nested/dir/file.txt"],
                 },
               ],
             },

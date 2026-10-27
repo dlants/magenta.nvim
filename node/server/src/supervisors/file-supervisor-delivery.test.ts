@@ -39,7 +39,6 @@ function createTestFileSupervisor(files: Record<string, string>) {
   const cm = FileSupervisor.create({
     logger: mockLogger,
     fileIO,
-    cwd: "/test" as Cwd,
     homeDir: "/home" as HomeDir,
   });
 
@@ -47,7 +46,6 @@ function createTestFileSupervisor(files: Record<string, string>) {
 }
 
 const TEST_PATH = "/test/file.txt" as AbsFilePath;
-const TEST_REL = "file.txt" as RelFilePath;
 const TEXT_FILE_TYPE = {
   category: FileCategory.TEXT,
   mimeType: "text/plain",
@@ -59,7 +57,7 @@ describe("FileSupervisor unit tests", () => {
     const { cm, fileIO } = createTestFileSupervisor({
       [TEST_PATH]: "delivered content\n",
     });
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await cm.getContextUpdate(2 as NativeMessageIdx);
     await fileIO.writeFile(TEST_PATH, "not delivered yet\n");
     await cm.refreshPendingUpdates();
@@ -95,7 +93,7 @@ describe("FileSupervisor unit tests", () => {
     const { cm } = createTestFileSupervisor({
       [TEST_PATH]: "delivered content",
     });
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await cm.getContextUpdate(PRE_HISTORY);
     const clone = FileSupervisor.clone({
       source: cm,
@@ -115,7 +113,7 @@ describe("FileSupervisor unit tests", () => {
     const { cm, fileIO } = createTestFileSupervisor({
       [TEST_PATH]: "version one\n",
     });
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await cm.getContextUpdate(2 as NativeMessageIdx);
     await fileIO.writeFile(TEST_PATH, "version two\n");
     await cm.getContextUpdate(5 as NativeMessageIdx);
@@ -144,7 +142,7 @@ describe("FileSupervisor unit tests", () => {
     const { cm } = createTestFileSupervisor({
       [TEST_PATH]: "later context file",
     });
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await cm.getContextUpdate(5 as NativeMessageIdx);
 
     const clone = FileSupervisor.clone({
@@ -162,7 +160,7 @@ describe("FileSupervisor unit tests", () => {
     const { cm, fileIO } = createTestFileSupervisor({
       [TEST_PATH]: "historical content",
     });
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await cm.getContextUpdate(2 as NativeMessageIdx);
     await fileIO.writeFile(TEST_PATH, "later delivered content");
     await cm.getContextUpdate(5 as NativeMessageIdx);
@@ -198,7 +196,7 @@ describe("FileSupervisor unit tests", () => {
     const spy = vi.fn();
     cm.callbacks = { ...cm.callbacks, onFileAdded: spy };
 
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
 
     expect(cm.files[TEST_PATH].agentView).toEqual({
       type: "text",
@@ -323,7 +321,7 @@ describe("FileSupervisor unit tests", () => {
       [TEST_PATH]: originalContent,
     });
 
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await cm.getContextUpdate(PRE_HISTORY);
 
     await fileIO.writeFile(TEST_PATH, editedContent);
@@ -371,7 +369,7 @@ describe("FileSupervisor - full file and diff updates", () => {
       [TEST_PATH]: fileContent,
     });
 
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
 
     const firstUpdates = await cm.getContextUpdate(PRE_HISTORY);
     expect(firstUpdates[TEST_PATH]).toBeDefined();
@@ -391,7 +389,7 @@ describe("FileSupervisor - full file and diff updates", () => {
       (item) => item.type === "text",
     );
     expect(textBlocks).toHaveLength(2);
-    expect(textBlocks[0].text).toBe("File `file.txt`");
+    expect(textBlocks[0].text).toBe("File `/test/file.txt`");
     expect(textBlocks[1].text).toContain(
       "Moonlight whispers through the trees",
     );
@@ -407,7 +405,7 @@ describe("FileSupervisor - full file and diff updates", () => {
       [TEST_PATH]: originalContent,
     });
 
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await cm.getContextUpdate(PRE_HISTORY);
 
     const updatedContent =
@@ -432,7 +430,7 @@ describe("FileSupervisor - full file and diff updates", () => {
       [TEST_PATH]: "temporary content",
     });
 
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
 
     expect(cm.files[TEST_PATH]).toBeDefined();
 
@@ -467,7 +465,7 @@ describe("FileSupervisor - binary file handling", () => {
       [IMAGE_PATH]: binaryContent,
     });
 
-    cm.addFileContext(IMAGE_PATH, IMAGE_REL, IMAGE_FILE_TYPE);
+    cm.addFileContext(IMAGE_PATH, IMAGE_FILE_TYPE);
 
     const firstUpdates = await cm.getContextUpdate(PRE_HISTORY);
     expect(firstUpdates[IMAGE_PATH]).toBeDefined();
@@ -477,7 +475,6 @@ describe("FileSupervisor - binary file handling", () => {
     if (firstUpdate.update.status === "ok") {
       expect(firstUpdate.update.value.type).toBe("whole-file");
       expect(firstUpdate.absFilePath).toBe(IMAGE_PATH);
-      expect(firstUpdate.relFilePath).toBe(IMAGE_REL);
       const imageContent = (firstUpdate.update.value as WholeFileUpdate)
         .content[0] as ProviderImageContent;
       expect(imageContent.type).toBe("image");
@@ -497,7 +494,7 @@ describe("FileSupervisor - binary file handling", () => {
       [IMAGE_PATH]: binaryContent,
     });
 
-    cm.addFileContext(IMAGE_PATH, IMAGE_REL, IMAGE_FILE_TYPE);
+    cm.addFileContext(IMAGE_PATH, IMAGE_FILE_TYPE);
 
     const updates = await cm.getContextUpdate(PRE_HISTORY);
     const content = cm.contextUpdatesToContent(updates);
@@ -522,7 +519,7 @@ describe("FileSupervisor - binary file handling", () => {
       [IMAGE_PATH]: "fake-binary-image-data",
     });
 
-    cm.addFileContext(IMAGE_PATH, IMAGE_REL, IMAGE_FILE_TYPE);
+    cm.addFileContext(IMAGE_PATH, IMAGE_FILE_TYPE);
 
     expect(cm.files[IMAGE_PATH]).toBeDefined();
 
@@ -570,7 +567,7 @@ describe("FileSupervisor - large file summarization", () => {
       [TEST_PATH]: largeContent,
     });
 
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
 
     const updates = await cm.getContextUpdate(PRE_HISTORY);
     const update = updates[TEST_PATH];
@@ -582,7 +579,7 @@ describe("FileSupervisor - large file summarization", () => {
     const wholeFile = update.update.value as WholeFileUpdate;
     const textBlocks = wholeFile.content.filter((c) => c.type === "text");
     expect(textBlocks).toHaveLength(2);
-    expect(textBlocks[0].text).toBe("File `file.txt`");
+    expect(textBlocks[0].text).toBe("File `/test/file.txt`");
     expect(textBlocks[1].text).toContain("[File too large for full context");
     expect(textBlocks[1].text).toContain("[File summary:");
 
@@ -597,7 +594,7 @@ describe("FileSupervisor - large file summarization", () => {
       [TEST_PATH]: largeContent,
     });
 
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
 
     await cm.getContextUpdate(PRE_HISTORY);
     const secondUpdates = await cm.getContextUpdate(PRE_HISTORY);
@@ -610,7 +607,7 @@ describe("FileSupervisor - large file summarization", () => {
       [TEST_PATH]: largeContent,
     });
 
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await cm.getContextUpdate(PRE_HISTORY);
 
     await fileIO.writeFile(TEST_PATH, `${largeContent}\nappended line`);
@@ -625,7 +622,7 @@ describe("FileSupervisor - large file summarization", () => {
       [TEST_PATH]: "small content",
     });
 
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
 
     const updates = await cm.getContextUpdate(PRE_HISTORY);
     const update = updates[TEST_PATH];
@@ -644,7 +641,6 @@ describe("FileSupervisor - large file summarization", () => {
 
 describe("FileSupervisor - PDF file handling", () => {
   const PDF_PATH = "/test/doc.pdf" as AbsFilePath;
-  const PDF_REL = "doc.pdf" as RelFilePath;
   const PDF_FILE_TYPE = {
     category: FileCategory.PDF,
     mimeType: "application/pdf",
@@ -656,7 +652,7 @@ describe("FileSupervisor - PDF file handling", () => {
       [PDF_PATH]: "fake-pdf-content",
     });
 
-    cm.addFileContext(PDF_PATH, PDF_REL, PDF_FILE_TYPE);
+    cm.addFileContext(PDF_PATH, PDF_FILE_TYPE);
 
     const updates = await cm.getContextUpdate(PRE_HISTORY);
     expect(updates[PDF_PATH]).toBeDefined();
@@ -826,7 +822,6 @@ describe("FileSupervisor - background poll", () => {
       const cm = FileSupervisor.create({
         logger: mockLogger,
         fileIO,
-        cwd: "/test" as Cwd,
         homeDir: "/home" as HomeDir,
         initialFiles: {},
         pollIntervalMs: 100,
@@ -867,7 +862,6 @@ describe("FileSupervisor - background poll", () => {
       const cm = FileSupervisor.create({
         logger: mockLogger,
         fileIO,
-        cwd: "/test" as Cwd,
         homeDir: "/home" as HomeDir,
         initialFiles: {},
         pollIntervalMs: 100,
@@ -903,7 +897,7 @@ describe("FileSupervisor - background poll", () => {
 describe("FileSupervisor conversation delivery lifetime", () => {
   it("reseeded clone retains membership but clears delivered state", async () => {
     const { cm } = createTestFileSupervisor({ [TEST_PATH]: "content" });
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await cm.getContextUpdate(PRE_HISTORY);
     expect(cm.files[TEST_PATH].agentView).toBeDefined();
     const clone = FileSupervisor.clone({
@@ -927,7 +921,7 @@ describe("FileSupervisor conversation delivery lifetime", () => {
     const { cm, fileIO } = createTestFileSupervisor({
       [TEST_PATH]: "content",
     });
-    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    cm.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await cm.refreshPendingUpdates();
     let finish!: (content: string) => void;
     let started!: () => void;
@@ -992,7 +986,6 @@ describe("FileSupervisor conversation delivery lifetime", () => {
           debug: vi.fn(),
         },
         fileIO: new InMemoryFileIO({}),
-        cwd: "/test" as Cwd,
         homeDir: "/home" as HomeDir,
         initialFiles: {},
         pollIntervalMs: 100,

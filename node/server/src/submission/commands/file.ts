@@ -4,8 +4,7 @@ import {
   AT_FILE_PATTERN,
   detectFileTypeViaFileIO,
   extractFileRefPath,
-  relativePath,
-  resolveFilePath,
+  resolveAbsPath,
 } from "../../utils/files.ts";
 import type { Command } from "./types.ts";
 
@@ -15,16 +14,9 @@ export const fileCommand: Command = {
   async execute(match, context): Promise<AgentInput[]> {
     const filePath = extractFileRefPath(match) as UnresolvedFilePath;
     try {
-      const absFilePath = resolveFilePath(
-        context.cwd,
-        filePath,
-        context.homeDir,
-      );
-      const relFilePath = relativePath(
-        context.cwd,
-        absFilePath,
-        context.homeDir,
-      );
+      const resolved = resolveAbsPath(filePath, context.homeDir);
+      if (resolved.status === "error") throw new Error(resolved.error);
+      const absFilePath = resolved.value;
       const fileTypeInfo = await detectFileTypeViaFileIO(
         absFilePath,
         context.fileIO,
@@ -34,11 +26,7 @@ export const fileCommand: Command = {
         throw new Error(`File ${filePath} does not exist`);
       }
 
-      context.fileSupervisor.addFileContext(
-        absFilePath,
-        relFilePath,
-        fileTypeInfo,
-      );
+      context.fileSupervisor.addFileContext(absFilePath, fileTypeInfo);
 
       return []; // File context is handled by fileSupervisor
     } catch (error) {

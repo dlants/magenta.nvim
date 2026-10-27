@@ -128,7 +128,6 @@ export class ThreadCore {
     const fileSupervisor = FileSupervisor.create({
       logger: context.logger,
       fileIO: context.fileIO,
-      cwd: context.cwd,
       homeDir: context.homeDir,
       ...(context.discoverHierarchy
         ? { discoverHierarchy: context.discoverHierarchy }

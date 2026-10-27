@@ -37,7 +37,7 @@ const TEST_HOME = "/home/user" as HomeDir;
 
 function makeRequest(
   symbol: string,
-  filePath = "test.ts",
+  filePath = "/project/test.ts",
   context?: string,
 ): Hover.ToolRequest {
   return {
@@ -177,7 +177,7 @@ describe("hover unit tests", () => {
     const fileIO = createMockFileIO(fileContent);
 
     const invocation = Hover.execute(
-      makeRequest("res", "test.ts", "  const res = request2()"),
+      makeRequest("res", "/project/test.ts", "  const res = request2()"),
       {
         cwd: TEST_CWD,
         homeDir: TEST_HOME,
@@ -205,7 +205,7 @@ describe("hover unit tests", () => {
     const fileIO = createMockFileIO(fileContent);
 
     const invocation = Hover.execute(
-      makeRequest("foo", "test.ts", "nonexistent"),
+      makeRequest("foo", "/project/test.ts", "nonexistent"),
       {
         cwd: TEST_CWD,
         homeDir: TEST_HOME,

@@ -611,7 +611,7 @@ it("handles @file command with non-existent file", {
 });
 
 it.skip("display multiple edits to the same file, and edit details", async () => {
-  await withDriver({}, async (driver) => {
+  await withDriver({}, async (driver, dirs) => {
     await driver.showSidebar();
     await driver.inputMagentaText(`Update the poem in the file poem.txt`);
     await driver.send();
@@ -627,7 +627,7 @@ it.skip("display multiple edits to the same file, and edit details", async () =>
             id: "id1" as ToolRequestId,
             toolName: "replace" as ToolName,
             input: {
-              filePath: "poem.txt" as UnresolvedFilePath,
+              filePath: `${dirs.tmpDir}/poem.txt` as UnresolvedFilePath,
               find: `Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,
@@ -1030,7 +1030,7 @@ it("should process custom commands in messages", async () => {
 });
 
 it("renders successive tool uses with single assistant header and inline metadata", async () => {
-  await withDriver({}, async (driver) => {
+  await withDriver({}, async (driver, dirs) => {
     await driver.showSidebar();
     await driver.inputMagentaText("Read two files for me");
     await driver.send();
@@ -1047,7 +1047,11 @@ it("renders successive tool uses with single assistant header and inline metadat
           value: {
             id: "tool-1" as ToolRequestId,
             toolName: "get_files" as ToolName,
-            input: { files: [{ filePath: "poem.txt" as UnresolvedFilePath }] },
+            input: {
+              files: [
+                { filePath: `${dirs.tmpDir}/poem.txt` as UnresolvedFilePath },
+              ],
+            },
           },
         },
       ],
@@ -1068,7 +1072,11 @@ it("renders successive tool uses with single assistant header and inline metadat
           value: {
             id: "tool-2" as ToolRequestId,
             toolName: "get_files" as ToolName,
-            input: { files: [{ filePath: "poem2.txt" as UnresolvedFilePath }] },
+            input: {
+              files: [
+                { filePath: `${dirs.tmpDir}/poem2.txt` as UnresolvedFilePath },
+              ],
+            },
           },
         },
       ],
@@ -1101,7 +1109,7 @@ it("renders successive tool uses with single assistant header and inline metadat
 });
 
 it("followup user message text is visible after tool-use cycle", async () => {
-  await withDriver({}, async (driver) => {
+  await withDriver({}, async (driver, dirs) => {
     await driver.showSidebar();
 
     // Send initial message
@@ -1122,7 +1130,9 @@ it("followup user message text is visible after tool-use cycle", async () => {
             id: toolRequestId,
             toolName: "get_files" as ToolName,
             input: {
-              files: [{ filePath: "./poem.txt" as UnresolvedFilePath }],
+              files: [
+                { filePath: `${dirs.tmpDir}/poem.txt` as UnresolvedFilePath },
+              ],
             },
           },
         },

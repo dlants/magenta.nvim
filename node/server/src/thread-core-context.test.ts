@@ -63,7 +63,7 @@ async function fixture(overrides: TestContextOverrides = {}) {
     uniqueThreadId("core-context"),
   );
   const manager = thread["core"].fileSupervisor;
-  manager.addFileContext(file, "tracked.txt" as RelFilePath, {
+  manager.addFileContext(file, {
     category: FileCategory.TEXT,
     mimeType: "text/plain",
     extension: "txt",
@@ -308,7 +308,7 @@ describe("Thread-owned context delivery", () => {
       await f.request();
       const forkPoint =
         f.thread.getProviderMessages()[0].content[0].nativeMessageIdx;
-      f.manager.addFileContext(f.file, "tracked.txt" as RelFilePath, {
+      f.manager.addFileContext(f.file, {
         category: FileCategory.TEXT,
         mimeType: "text/plain",
         extension: "txt",

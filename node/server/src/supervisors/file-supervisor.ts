@@ -21,14 +21,13 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { formatSummary, summarizeFile } from "../utils/file-summary.ts";
 import {
   type AbsFilePath,
-  type Cwd,
   detectFileTypeViaFileIO,
   FileCategory,
   type FileTypeInfo,
   type HomeDir,
   type RelFilePath,
   relativePath,
-  resolveFilePath,
+  resolveAbsPath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import { getSummaryAsProviderContent } from "../utils/pdf-pages.ts";
@@ -67,7 +66,6 @@ export type FileUpdate = WholeFileUpdate | DiffUpdate | FileDeletedUpdate;
 export type FileUpdates = {
   [absFilePath: AbsFilePath]: {
     absFilePath: AbsFilePath;
-    relFilePath: RelFilePath;
     update: Result<FileUpdate>;
   };
 };
@@ -111,7 +109,6 @@ type FileViewEntry = {
 };
 
 type TrackedFile = {
-  relFilePath: RelFilePath;
   fileTypeInfo: FileTypeInfo;
   readonly agentView: TrackedFileInfo["agentView"];
   readonly lastStat: FileStat | undefined;
@@ -131,7 +128,7 @@ function historyOf(file: TrackedFile): FileViewEntry[] {
   return history;
 }
 
-type WorkingFile = Pick<TrackedFile, "relFilePath" | "fileTypeInfo"> & {
+type WorkingFile = Pick<TrackedFile, "fileTypeInfo"> & {
   agentView: TrackedFileInfo["agentView"];
 };
 
@@ -144,14 +141,12 @@ export type HierarchyDiscovery = (
 
 export type DiscoveredContextFile = {
   absFilePath: AbsFilePath;
-  relFilePath: RelFilePath;
   fileTypeInfo: FileTypeInfo;
 };
 
 export type FileSupervisorDeps = {
   logger: Logger;
   fileIO: FileIO;
-  cwd: Cwd;
   homeDir: HomeDir;
   discoverHierarchy?: HierarchyDiscovery;
   pollIntervalMs?: number;
@@ -176,7 +171,7 @@ function cloneAgentView(
 }
 
 function trackedFile(
-  file: Pick<TrackedFile, "relFilePath" | "fileTypeInfo">,
+  file: Pick<TrackedFile, "fileTypeInfo">,
   history: FileViewEntry[],
 ): TrackedFile {
   const result: TrackedFile = {
@@ -266,7 +261,7 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
 
   private trackFile(
     absFilePath: AbsFilePath,
-    file: Pick<TrackedFile, "relFilePath" | "fileTypeInfo">,
+    file: Pick<TrackedFile, "fileTypeInfo">,
   ): void {
     this.files[absFilePath] = trackedFile(file, []);
   }
@@ -300,7 +295,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
   private constructor(
     private logger: Logger,
     private fileIO: FileIO,
-    private cwd: Cwd,
     private homeDir: HomeDir,
     private discoverHierarchy: HierarchyDiscovery | undefined,
     files: Files,
@@ -316,7 +310,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
   static create({
     logger,
     fileIO,
-    cwd,
     homeDir,
     discoverHierarchy,
     initialFiles = {},
@@ -325,7 +318,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
     const supervisor = new FileSupervisor(
       logger,
       fileIO,
-      cwd,
       homeDir,
       discoverHierarchy,
       Object.fromEntries(
@@ -362,7 +354,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
     return new FileSupervisor(
       deps?.logger ?? source.logger,
       deps?.fileIO ?? source.fileIO,
-      deps?.cwd ?? source.cwd,
       deps?.homeDir ?? source.homeDir,
       deps ? deps.discoverHierarchy : source.discoverHierarchy,
       files,
@@ -425,7 +416,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
       const fileInfo = this.files[absFilePath];
       if (!fileInfo) continue;
 
-      const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
       const currentStat = await this.fileIO.stat(absFilePath);
       if (!current()) return;
 
@@ -433,7 +423,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
         stats.set(absFilePath, undefined);
         next[absFilePath] = {
           absFilePath,
-          relFilePath,
           update: {
             status: "ok",
             value: { type: "file-deleted" },
@@ -473,14 +462,10 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
     }
   }
 
-  addFileContext(
-    absFilePath: AbsFilePath,
-    relFilePath: RelFilePath,
-    fileTypeInfo: FileTypeInfo,
-  ): void {
+  addFileContext(absFilePath: AbsFilePath, fileTypeInfo: FileTypeInfo): void {
     if (fileTypeInfo.category === FileCategory.UNSUPPORTED) {
       throw new Error(
-        `Cannot add ${relFilePath} to context: ${fileTypeInfo.category} files are not supported in context (detected MIME type: ${fileTypeInfo.mimeType})`,
+        `Cannot add ${absFilePath} to context: ${fileTypeInfo.category} files are not supported in context (detected MIME type: ${fileTypeInfo.mimeType})`,
       );
     }
     if (this.files[absFilePath]) {
@@ -489,7 +474,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
     if (this.destroyed) return;
     this.revision++;
     this.trackFile(absFilePath, {
-      relFilePath,
       fileTypeInfo,
     });
     this.noteFileAdded(absFilePath);
@@ -512,14 +496,11 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
     fileTypeInfo: FileTypeInfo,
     nativeMessageIdx: HistoryIdx,
   ): void {
-    const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
-
     if (this.destroyed) return;
     this.revision++;
     const isNew = !this.files[absFilePath];
     if (isNew) {
       this.trackFile(absFilePath, {
-        relFilePath,
         fileTypeInfo,
       });
     }
@@ -537,8 +518,12 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
     filePaths: ReadonlyArray<UnresolvedFilePath | AbsFilePath>,
   ): Promise<void> {
     for (const filePath of filePaths) {
-      const absFilePath = resolveFilePath(this.cwd, filePath, this.homeDir);
-      const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
+      const resolved = resolveAbsPath(filePath, this.homeDir);
+      if (resolved.status === "error") {
+        this.logger.warn(`Skipping ${filePath}: ${resolved.error}`);
+        continue;
+      }
+      const absFilePath = resolved.value;
 
       const fileTypeInfo = await detectFileTypeViaFileIO(
         absFilePath,
@@ -563,7 +548,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
       }
 
       this.trackFile(absFilePath, {
-        relFilePath,
         fileTypeInfo,
       });
       this.noteFileAdded(absFilePath);
@@ -585,11 +569,7 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
       .then((discovered) => {
         if (this.destroyed) return;
         for (const file of discovered) {
-          this.addFileContext(
-            file.absFilePath,
-            file.relFilePath,
-            file.fileTypeInfo,
-          );
+          this.addFileContext(file.absFilePath, file.fileTypeInfo);
         }
       })
       .catch((err: Error) => {
@@ -671,16 +651,12 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
               }
             }
             if (mediaKind) {
-              filePathEntries.push(
-                `${update.relFilePath} (${mediaKind} attachment)`,
-              );
+              filePathEntries.push(`${absFilePath} (${mediaKind} attachment)`);
               textParts.push(`\
 - \`${absFilePath}\`
 ${mediaKind === "image" ? "Image" : "Document"} attached below.`);
             } else {
-              filePathEntries.push(
-                `${update.relFilePath} (${lineCount} lines)`,
-              );
+              filePathEntries.push(`${absFilePath} (${lineCount} lines)`);
             }
             break;
           }
@@ -689,7 +665,7 @@ ${mediaKind === "image" ? "Image" : "Document"} attached below.`);
             const additions = (patch.match(/^\+[^+]/gm) || []).length;
             const deletions = (patch.match(/^-[^-]/gm) || []).length;
             filePathEntries.push(
-              `${update.relFilePath} (+${additions}/-${deletions})`,
+              `${absFilePath} (+${additions}/-${deletions})`,
             );
             textParts.push(`\
 - \`${absFilePath}\`
@@ -699,7 +675,7 @@ ${update.update.value.patch}
             break;
           }
           case "file-deleted": {
-            filePathEntries.push(`${update.relFilePath} (deleted)`);
+            filePathEntries.push(`${absFilePath} (deleted)`);
             textParts.push(`\
 - \`${absFilePath}\`
 This file has been deleted and removed from context.`);
@@ -709,7 +685,7 @@ This file has been deleted and removed from context.`);
             assertUnreachable(update.update.value);
         }
       } else {
-        filePathEntries.push(`${update.relFilePath} (error)`);
+        filePathEntries.push(`${absFilePath} (error)`);
         textParts.push(`\
 - \`${absFilePath}\`
 Error fetching update: ${update.update.error}`);
@@ -747,32 +723,19 @@ From now on, whenever any of these files are updated by the user, you will get a
     const original = this.files[absFilePath];
     if (!original || !this.isCurrent(revision)) return undefined;
     const fileInfo: WorkingFile = {
-      relFilePath: original.relFilePath,
       fileTypeInfo: original.fileTypeInfo,
       agentView: cloneAgentView(original.agentView),
     };
-    const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
     let result: FileUpdates[AbsFilePath] | undefined;
     if (!(await this.fileIO.fileExists(absFilePath))) {
       result = {
         absFilePath,
-        relFilePath,
         update: { status: "ok", value: { type: "file-deleted" } },
       };
     } else if (fileInfo.fileTypeInfo.category === FileCategory.TEXT) {
-      result = await this.handleTextFileUpdate(
-        absFilePath,
-        relFilePath,
-        fileInfo,
-        commit,
-      );
+      result = await this.handleTextFileUpdate(absFilePath, fileInfo, commit);
     } else {
-      result = await this.handleBinaryFileUpdate(
-        absFilePath,
-        relFilePath,
-        fileInfo,
-        commit,
-      );
+      result = await this.handleBinaryFileUpdate(absFilePath, fileInfo, commit);
     }
     if (!this.isCurrent(revision) || this.files[absFilePath] !== original)
       return undefined;
@@ -810,7 +773,6 @@ From now on, whenever any of these files are updated by the user, you will get a
 
   private async handleTextFileUpdate(
     absFilePath: AbsFilePath,
-    relFilePath: RelFilePath,
     fileInfo: WorkingFile,
     commit: boolean,
   ): Promise<FileUpdates[keyof FileUpdates] | undefined> {
@@ -821,7 +783,6 @@ From now on, whenever any of these files are updated by the user, you will get a
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
         return {
           absFilePath,
-          relFilePath,
           update: {
             status: "ok",
             value: { type: "file-deleted" },
@@ -830,7 +791,6 @@ From now on, whenever any of these files are updated by the user, you will get a
       }
       return {
         absFilePath,
-        relFilePath,
         update: {
           status: "error",
           error: `Error reading file ${absFilePath}: ${(err as Error).message}\n${(err as Error).stack}`,
@@ -855,7 +815,6 @@ From now on, whenever any of these files are updated by the user, you will get a
 
       return {
         absFilePath,
-        relFilePath,
         update: {
           status: "ok",
           value: {
@@ -863,7 +822,7 @@ From now on, whenever any of these files are updated by the user, you will get a
             content: [
               {
                 type: "text",
-                text: `File \`${relFilePath}\``,
+                text: `File \`${absFilePath}\``,
               },
               {
                 type: "text",
@@ -890,7 +849,6 @@ From now on, whenever any of these files are updated by the user, you will get a
     if (!prevContent) {
       return {
         absFilePath,
-        relFilePath,
         update: {
           status: "ok",
           value: {
@@ -898,7 +856,7 @@ From now on, whenever any of these files are updated by the user, you will get a
             content: [
               {
                 type: "text",
-                text: `File \`${relFilePath}\``,
+                text: `File \`${absFilePath}\``,
               },
               {
                 type: "text",
@@ -915,7 +873,7 @@ From now on, whenever any of these files are updated by the user, you will get a
     }
 
     const patch = diff.createPatch(
-      relFilePath,
+      absFilePath,
       prevContent,
       currentFileContent,
       "previous",
@@ -925,7 +883,6 @@ From now on, whenever any of these files are updated by the user, you will get a
 
     return {
       absFilePath,
-      relFilePath,
       update: {
         status: "ok",
         value: { type: "diff", patch },
@@ -935,7 +892,6 @@ From now on, whenever any of these files are updated by the user, you will get a
 
   private async handleBinaryFileUpdate(
     absFilePath: AbsFilePath,
-    relFilePath: RelFilePath,
     fileInfo: WorkingFile,
     commit: boolean,
   ): Promise<FileUpdates[keyof FileUpdates] | undefined> {
@@ -965,7 +921,6 @@ From now on, whenever any of these files are updated by the user, you will get a
                   }
                   return {
                     absFilePath,
-                    relFilePath,
                     update: {
                       status: "ok",
                       value: {
@@ -978,7 +933,6 @@ From now on, whenever any of these files are updated by the user, you will get a
                 } else {
                   return {
                     absFilePath,
-                    relFilePath,
                     update: {
                       status: "error",
                       error: `Error generating PDF summary for ${absFilePath}: ${summaryResult.error}`,
@@ -988,7 +942,6 @@ From now on, whenever any of these files are updated by the user, you will get a
               } catch (err) {
                 return {
                   absFilePath,
-                  relFilePath,
                   update: {
                     status: "error",
                     error: `Error generating PDF summary for ${absFilePath}: ${(err as Error).message}`,
@@ -1017,7 +970,6 @@ From now on, whenever any of these files are updated by the user, you will get a
               }
               return {
                 absFilePath,
-                relFilePath,
                 update: {
                   status: "ok",
                   value: {
@@ -1030,7 +982,6 @@ From now on, whenever any of these files are updated by the user, you will get a
             } else {
               return {
                 absFilePath,
-                relFilePath,
                 update: {
                   status: "error",
                   error: `Error generating PDF summary for ${absFilePath}: ${summaryResult.error}`,
@@ -1040,7 +991,6 @@ From now on, whenever any of these files are updated by the user, you will get a
           } catch (err) {
             return {
               absFilePath,
-              relFilePath,
               update: {
                 status: "error",
                 error: `Error generating PDF summary for ${absFilePath}: ${(err as Error).message}`,
@@ -1055,7 +1005,6 @@ From now on, whenever any of these files are updated by the user, you will get a
             }
             return {
               absFilePath,
-              relFilePath,
               update: {
                 status: "ok",
                 value: {
@@ -1080,7 +1029,6 @@ From now on, whenever any of these files are updated by the user, you will get a
           } catch (err) {
             return {
               absFilePath,
-              relFilePath,
               update: {
                 status: "error",
                 error: `Error reading image file ${absFilePath}: ${(err as Error).message}`,
@@ -1092,7 +1040,6 @@ From now on, whenever any of these files are updated by the user, you will get a
     } catch (err) {
       return {
         absFilePath,
-        relFilePath,
         update: {
           status: "error",
           error: `Error checking file stats for ${absFilePath}: ${(err as Error).message}`,

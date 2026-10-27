@@ -31,7 +31,7 @@ async function getFile(h: Harness, filePath: string) {
         value: {
           id: `get-${filePath}` as ToolRequestId,
           toolName: "get_files" as ToolName,
-          input: { files: [{ filePath }] },
+          input: { files: [{ filePath: `/project/${filePath}` }] },
         },
       },
     ],
@@ -40,8 +40,8 @@ async function getFile(h: Harness, filePath: string) {
 
 const categories = (thread: Thread) =>
   Object.fromEntries(
-    Object.values(thread.contextFiles.files).map((f) => [
-      f.relFilePath,
+    Object.entries(thread.contextFiles.files).map(([abs, f]) => [
+      path.relative("/project", abs),
       f.fileTypeInfo.category,
     ]),
   );

@@ -60,6 +60,31 @@ const run = (
   edlRegisters?: Parameters<typeof runScript>[2],
 ) => runScript(script, io, edlRegisters);
 describe("runScript", () => {
+  it("rejects relative file paths when given a path context", async () => {
+    const result = await runScript(
+      "file `rel.txt`\nselect /x/",
+      io,
+      undefined,
+      {
+        homeDir: "/home/user" as never,
+      },
+    );
+    expect(result.status).toBe("error");
+    if (result.status === "error") {
+      expect(result.error).toContain("absolute path");
+    }
+  });
+  it("expands ~/ paths against the home directory", async () => {
+    await io.writeFile("/home/user/notes.txt", "hello\n");
+    const result = await runScript(
+      'file `~/notes.txt`\nselect /hello/\nreplace "bye"',
+      io,
+      undefined,
+      { homeDir: "/home/user" as never },
+    );
+    expect(result.status).toBe("ok");
+    expect(await io.readFile("/home/user/notes.txt")).toBe("bye\n");
+  });
   it("returns ok with trace, mutations, and final selection", async () => {
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "test.txt");

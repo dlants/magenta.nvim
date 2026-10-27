@@ -112,11 +112,7 @@ export const defaultHarnessResolve: HarnessResolve = async (
     );
     const info = await detectFileTypeViaFileIO(abs, host.fileIO);
     if (!info) continue;
-    getContextFiles().addFileContext(
-      abs,
-      relativePath(host.cwd, abs, host.homeDir),
-      info,
-    );
+    getContextFiles().addFileContext(abs, info);
   }
   const prompt = {
     content: rest.length ? [{ type: "text" as const, text: rest }] : [],

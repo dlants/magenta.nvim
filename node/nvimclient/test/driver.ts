@@ -698,10 +698,10 @@ vim.rpcnotify(${this.nvim.channelId}, "magentaKey", "${key}")
     await pollUntil(async () => {
       const tracked = leftThread(
         this.magenta.chat,
-      ).threadState.contextFiles.map((f) => f.relFilePath);
+      ).threadState.contextFiles.map((f) => f.absFilePath as string);
       for (const filePath of filePaths) {
         const normalizedPath = filePath.replace(/^\.\//, "");
-        if (!tracked.some((rel) => rel === normalizedPath)) {
+        if (!tracked.some((abs) => abs.endsWith(`/${normalizedPath}`))) {
           throw new Error(`Context file ${filePath} not yet tracked`);
         }
       }

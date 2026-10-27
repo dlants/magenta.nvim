@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import type {
   ToolName,
@@ -14,7 +15,7 @@ type ContentBlockParam = Anthropic.Messages.ContentBlockParam;
 type TextBlockParam = Anthropic.Messages.TextBlockParam;
 
 it("render the getFile tool.", async () => {
-  await withDriver({}, async (driver) => {
+  await withDriver({}, async (driver, dirs) => {
     await driver.showSidebar();
     await driver.inputMagentaText(`Try reading the file poem.txt`);
     await driver.send();
@@ -32,7 +33,10 @@ it("render the getFile tool.", async () => {
             input: {
               files: [
                 {
-                  filePath: "./poem.txt" as UnresolvedFilePath,
+                  filePath: path.join(
+                    dirs.tmpDir,
+                    "poem.txt",
+                  ) as UnresolvedFilePath,
                 },
               ],
             },
@@ -46,7 +50,7 @@ it("render the getFile tool.", async () => {
 });
 
 it("should expand get_file tool input on <CR>", async () => {
-  await withDriver({}, async (driver) => {
+  await withDriver({}, async (driver, dirs) => {
     await driver.showSidebar();
     await driver.inputMagentaText(`Try reading the file poem.txt`);
     await driver.send();
@@ -64,7 +68,10 @@ it("should expand get_file tool input on <CR>", async () => {
             input: {
               files: [
                 {
-                  filePath: "./poem.txt" as UnresolvedFilePath,
+                  filePath: path.join(
+                    dirs.tmpDir,
+                    "poem.txt",
+                  ) as UnresolvedFilePath,
                 },
               ],
             },
@@ -77,12 +84,14 @@ it("should expand get_file tool input on <CR>", async () => {
     await driver.triggerDisplayBufferKeyOnContent(`read 1 file`, "=");
 
     // Verify the JSON input is now visible (not file content, since get_file has no result detail)
-    await driver.assertDisplayBufferContains('"filePath": "./poem.txt"');
+    await driver.assertDisplayBufferContains(
+      `"filePath": "${path.join(dirs.tmpDir, "poem.txt")}"`,
+    );
   });
 });
 
 it("expands a file's sent content with = on its result line", async () => {
-  await withDriver({}, async (driver) => {
+  await withDriver({}, async (driver, dirs) => {
     await driver.showSidebar();
     await driver.inputMagentaText(`Try reading the file poem.txt`);
     await driver.send();
@@ -98,7 +107,14 @@ it("expands a file's sent content with = on its result line", async () => {
             id: "request_id" as ToolRequestId,
             toolName: "get_files" as ToolName,
             input: {
-              files: [{ filePath: "./poem.txt" as UnresolvedFilePath }],
+              files: [
+                {
+                  filePath: path.join(
+                    dirs.tmpDir,
+                    "poem.txt",
+                  ) as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
@@ -119,7 +135,7 @@ it("expands a file's sent content with = on its result line", async () => {
 });
 
 it("expands the correct file's content when reading multiple files", async () => {
-  await withDriver({}, async (driver) => {
+  await withDriver({}, async (driver, dirs) => {
     await driver.showSidebar();
     await driver.inputMagentaText(`Read poem.txt and poem 3.txt`);
     await driver.send();
@@ -136,8 +152,18 @@ it("expands the correct file's content when reading multiple files", async () =>
             toolName: "get_files" as ToolName,
             input: {
               files: [
-                { filePath: "./poem.txt" as UnresolvedFilePath },
-                { filePath: "./poem 3.txt" as UnresolvedFilePath },
+                {
+                  filePath: path.join(
+                    dirs.tmpDir,
+                    "poem.txt",
+                  ) as UnresolvedFilePath,
+                },
+                {
+                  filePath: path.join(
+                    dirs.tmpDir,
+                    "poem 3.txt",
+                  ) as UnresolvedFilePath,
+                },
               ],
             },
           },
@@ -154,7 +180,7 @@ it("expands the correct file's content when reading multiple files", async () =>
 });
 
 it("getFile reads unloaded buffer", async () => {
-  await withDriver({}, async (driver) => {
+  await withDriver({}, async (driver, dirs) => {
     // First, create a dummy buffer to avoid "cannot unload last buffer" error
     await driver.nvim.call("nvim_command", ["new"]);
 
@@ -204,7 +230,10 @@ it("getFile reads unloaded buffer", async () => {
             input: {
               files: [
                 {
-                  filePath: "./poem.txt" as UnresolvedFilePath,
+                  filePath: path.join(
+                    dirs.tmpDir,
+                    "poem.txt",
+                  ) as UnresolvedFilePath,
                 },
               ],
             },

@@ -447,7 +447,7 @@ it("compaction keeps reminders derived from files still tracked in context", () 
             value: {
               id: "tool_1" as ToolRequestId,
               toolName: "get_files" as ToolName,
-              input: { files: [{ filePath: "./transient.md" }] },
+              input: { files: [{ filePath: "/project/transient.md" }] },
             },
           },
         ],

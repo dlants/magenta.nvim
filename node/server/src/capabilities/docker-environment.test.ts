@@ -315,7 +315,6 @@ describe("Docker Environment", () => {
       const cm = FileSupervisor.create({
         logger: mockLogger,
         fileIO,
-        cwd: "/tmp" as Cwd,
         homeDir: "/root" as HomeDir,
       });
 

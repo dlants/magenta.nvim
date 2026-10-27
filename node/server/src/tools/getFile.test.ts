@@ -35,6 +35,7 @@ describe("GetFileTool unit tests", () => {
     input: Partial<GetFile.FileRequest> & { filePath: UnresolvedFilePath },
     opts: {
       contextFiles?: Record<string, unknown>;
+      relative?: boolean;
     } = {},
   ) {
     const onToolApplied = vi.fn<OnToolApplied>();
@@ -46,7 +47,16 @@ describe("GetFileTool unit tests", () => {
       {
         id: "tool_1" as ToolRequestId,
         toolName: "get_files" as const,
-        input: { files: [input as GetFile.FileRequest] },
+        input: {
+          files: [
+            {
+              ...input,
+              filePath: opts.relative
+                ? input.filePath
+                : path.resolve(tmpDir, input.filePath),
+            } as GetFile.FileRequest,
+          ],
+        },
       },
       {
         cwd: tmpDir as Cwd,
@@ -390,6 +400,28 @@ describe("GetFileTool unit tests", () => {
     }
   });
 
+  it("relative path returns an error asking for an absolute path", async () => {
+    const { invocation } = createTool(
+      { filePath: "existing.txt" as UnresolvedFilePath },
+      { relative: true },
+    );
+    const result = await getResult(invocation);
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[1] as { type: "text"; text: string })
+        .text;
+      expect(text).toContain("absolute path");
+    }
+  });
+  it("expands ~/ against the home directory", async () => {
+    await io.writeFile("/tmp/fake-home/notes.txt", "home notes");
+    const { invocation } = createTool(
+      { filePath: "~/notes.txt" as UnresolvedFilePath },
+      { relative: true },
+    );
+    const result = await getResult(invocation);
+    expect(JSON.stringify(result.result)).toContain("home notes");
+  });
   it("unsupported binary file returns error", async () => {
     const filePath = path.join(tmpDir, "data.bin");
     // Write some random binary content that is not a recognized format
@@ -770,7 +802,12 @@ describe("GetFileTool unit tests", () => {
       {
         id: "tool_1" as ToolRequestId,
         toolName: "get_files" as const,
-        input: { files: files as GetFile.FileRequest[] },
+        input: {
+          files: files.map((f) => ({
+            ...f,
+            filePath: path.resolve(tmpDir, f.filePath),
+          })) as GetFile.FileRequest[],
+        },
       },
       {
         cwd: tmpDir as Cwd,
@@ -800,9 +837,9 @@ describe("GetFileTool unit tests", () => {
         (v) => (v as { type: "text"; text: string }).text,
       );
       expect(texts).toEqual([
-        "=== a.txt ===",
+        `=== ${path.join(tmpDir, "a.txt")} ===`,
         "aaa content",
-        "=== b.txt ===",
+        `=== ${path.join(tmpDir, "b.txt")} ===`,
         "bbb content",
       ]);
       expect(result.result.structuredResult).toMatchObject({

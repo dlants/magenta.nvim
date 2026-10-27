@@ -12,14 +12,10 @@ vi.mock("../../utils/files.ts", async (importOriginal) => {
     (await importOriginal()) as typeof import("../../utils/files.ts");
   return {
     ...actual,
-    resolveFilePath: vi
-      .fn()
-      .mockImplementation((_cwd, path) => `/resolved/${path}`),
-    relativePath: vi
-      .fn()
-      .mockImplementation((_cwd, path: string) =>
-        path.replace("/resolved/", ""),
-      ),
+    resolveAbsPath: vi.fn().mockImplementation((path) => ({
+      status: "ok",
+      value: `/resolved/${path}`,
+    })),
     detectFileTypeViaFileIO: vi.fn().mockResolvedValue({ type: "file" }),
   };
 });
@@ -167,9 +163,9 @@ describe("CommandRegistry", () => {
     const registry = new CommandRegistry();
     const context = createMockContext();
 
-    // Mock resolveFilePath to throw error for this test
-    const { resolveFilePath } = await import("../../utils/files.ts");
-    vi.mocked(resolveFilePath).mockImplementationOnce(() => {
+    // Mock resolveAbsPath to throw error for this test
+    const { resolveAbsPath } = await import("../../utils/files.ts");
+    vi.mocked(resolveAbsPath).mockImplementationOnce(() => {
       throw new Error("File not found");
     });
 

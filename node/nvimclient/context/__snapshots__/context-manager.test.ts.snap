@@ -7,11 +7,11 @@ exports[`context-files end-to-end 1`] = `
       {
         "text": "<context_update>
 <file_paths>
-poem.txt (5 lines)
+/tmp/magenta-test/<test-id>/cwd/poem.txt (5 lines)
 </file_paths>
 These files are part of your context. This is the latest information about the content of each file.
 From now on, whenever any of these files are updated by the user, you will get a message letting you know.
-File \`poem.txt\`
+File \`/tmp/magenta-test/<test-id>/cwd/poem.txt\`
 Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,

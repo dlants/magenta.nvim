@@ -171,9 +171,14 @@ function normalizeThreadRequest(
       path.resolve(base.cwd, expandTilde(options.cwd, base.homeDir)),
     );
   if (Array.isArray(options.contextFiles)) {
-    request.contextFiles = options.contextFiles.filter(
-      (f): f is string => typeof f === "string",
-    ) as UnresolvedFilePath[];
+    // Thread file tracking only accepts absolute paths; scripts may pass
+    // paths relative to the thread's directory.
+    const threadDir = request.cwd ?? base.cwd;
+    request.contextFiles = options.contextFiles
+      .filter((f): f is string => typeof f === "string")
+      .map((f) =>
+        path.resolve(threadDir, expandTilde(f, base.homeDir)),
+      ) as UnresolvedFilePath[];
   }
   if (typeof options.systemReminder === "string") {
     request.systemReminder = options.systemReminder;

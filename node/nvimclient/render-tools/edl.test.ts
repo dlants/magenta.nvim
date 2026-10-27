@@ -4,14 +4,14 @@ import { pollForToolResult, withDriver } from "../test/preamble.ts";
 
 describe("node/nvimclient/render-tools/edl.ts", () => {
   it("renders each failed command when a select fails", async () => {
-    await withDriver({}, async (driver) => {
+    await withDriver({}, async (driver, dirs) => {
       await driver.showSidebar();
       await driver.inputMagentaText("edit the poem");
       await driver.send();
 
       const toolRequestId = "edl-fail" as ToolRequestId;
       const script = [
-        "file `poem.txt`",
+        `file \`${dirs.tmpDir}/poem.txt\``,
         "select /nonexistent-pattern/",
         'replace "X"',
         "delete",

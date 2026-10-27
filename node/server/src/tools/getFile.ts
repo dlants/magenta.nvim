@@ -23,7 +23,7 @@ import {
   FILE_SIZE_LIMITS,
   FileCategory,
   type HomeDir,
-  resolveFilePath,
+  resolveAbsPath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 
@@ -181,7 +181,11 @@ async function readOneFile(
 ): Promise<ReadOneFileOutcome> {
   const { isAborted } = context;
   const filePath = fileReq.filePath;
-  const absFilePath = resolveFilePath(context.cwd, filePath, context.homeDir);
+  const resolved = resolveAbsPath(filePath, context.homeDir);
+  if (resolved.status === "error") {
+    return errorOutcome(filePath as string as AbsFilePath, resolved.error);
+  }
+  const absFilePath = resolved.value;
 
   const hasLineParams =
     fileReq.startLine !== undefined || fileReq.numLines !== undefined;

@@ -16,10 +16,10 @@ import type {
   ToolName,
 } from "../tool-types.ts";
 import {
+  type AbsFilePath,
   type Cwd,
   FileCategory,
   type HomeDir,
-  resolveFilePath,
 } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
 
@@ -69,7 +69,7 @@ export function execute(
         script,
         context.fileIO,
         context.edlRegisters,
-        { cwd: context.cwd, homeDir: context.homeDir },
+        { homeDir: context.homeDir },
       );
 
       if (aborted) {
@@ -88,11 +88,7 @@ export function execute(
         context.edlRegisters.nextSavedId = result.edlRegisters.nextSavedId;
 
         for (const mutation of result.data.mutations) {
-          const absFilePath = resolveFilePath(
-            context.cwd,
-            mutation.path as Parameters<typeof resolveFilePath>[1],
-            context.homeDir,
-          );
+          const absFilePath = mutation.path as AbsFilePath;
           context.onToolApplied?.(
             absFilePath,
             {

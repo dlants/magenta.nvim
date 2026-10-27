@@ -15,9 +15,8 @@ import type {
 import {
   type AbsFilePath,
   type Cwd,
-  displayPath,
   type HomeDir,
-  resolveFilePath,
+  resolveAbsPath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
@@ -41,11 +40,15 @@ export function execute(
   const promise = (async (): Promise<ExecutedToolResult> => {
     try {
       const filePath = request.input.filePath;
-      const absFilePath = resolveFilePath(
-        context.cwd,
-        filePath,
-        context.homeDir,
-      );
+      const resolved = resolveAbsPath(filePath, context.homeDir);
+      if (resolved.status === "error") {
+        return {
+          type: "tool_result",
+          id: request.id,
+          result: { status: "error", error: resolved.error },
+        };
+      }
+      const absFilePath = resolved.value;
 
       let bufferContent: string;
       try {
@@ -204,11 +207,7 @@ export function execute(
           content += "\nDefinition locations:\n";
           for (const def of definitions) {
             const absolutePath = def.uri.replace(/^file:\/\//, "");
-            const pathForDisplay = displayPath(
-              context.cwd,
-              absolutePath as AbsFilePath,
-              context.homeDir,
-            );
+            const pathForDisplay = absolutePath;
             const line = def.range.start.line + 1;
             const char = def.range.start.character + 1;
             content += `  ${pathForDisplay}:${line}:${char}\n`;
@@ -227,11 +226,7 @@ export function execute(
           content += "\nType definition locations:\n";
           for (const typeDef of typeDefinitions) {
             const absolutePath = typeDef.uri.replace(/^file:\/\//, "");
-            const pathForDisplay = displayPath(
-              context.cwd,
-              absolutePath as AbsFilePath,
-              context.homeDir,
-            );
+            const pathForDisplay = absolutePath;
             const line = typeDef.range.start.line + 1;
             const char = typeDef.range.start.character + 1;
             content += `  ${pathForDisplay}:${line}:${char}\n`;

@@ -551,6 +551,7 @@ export {
   MAGENTA_TEMP_DIR,
   type RelFilePath,
   relativePath,
+  resolveAbsPath,
   resolveFilePath,
   shortenPath,
   threadConversationLogPath,

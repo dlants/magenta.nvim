@@ -1,5 +1,9 @@
 import type { FileIO } from "../capabilities/file-io.ts";
-import { type Cwd, type HomeDir, resolveFilePath } from "../utils/files.ts";
+import {
+  type HomeDir,
+  resolveAbsPath,
+  type UnresolvedFilePath,
+} from "../utils/files.ts";
 import { ExecutionError, Executor } from "./executor.ts";
 import { lexWithPos, ParseError, parse } from "./parser.ts";
 import type {
@@ -227,18 +231,24 @@ export async function runScript(
   script: string,
   fileIO?: FileIO,
   edlRegisters?: EdlRegisters,
-  pathContext?: { cwd: Cwd; homeDir: HomeDir },
+  pathContext?: { homeDir: HomeDir },
 ): Promise<RunScriptResult> {
-  const toDisplayPath = (p: string): string =>
-    pathContext
-      ? resolveFilePath(
-          pathContext.cwd,
-          p as Parameters<typeof resolveFilePath>[1],
-          pathContext.homeDir,
-        )
-      : p;
   try {
     const commands = parse(script);
+    if (pathContext) {
+      for (const cmd of commands) {
+        if (cmd.type === "file" || cmd.type === "newfile") {
+          const resolved = resolveAbsPath(
+            cmd.path as UnresolvedFilePath,
+            pathContext.homeDir,
+          );
+          if (resolved.status === "error") {
+            return { status: "error", error: resolved.error };
+          }
+          cmd.path = resolved.value;
+        }
+      }
+    }
     const executor = new Executor(fileIO);
     if (edlRegisters) {
       for (const [key, value] of edlRegisters.registers) {
@@ -256,7 +266,7 @@ export async function runScript(
       })),
       mutations: Array.from(result.mutations.entries()).map(
         ([path, summary]) => ({
-          path: toDisplayPath(path),
+          path: path,
           summary,
           content: result.fileContents.get(path)?.content ?? "",
           previousContent: result.fileContents.get(path)?.previousContent ?? "",
@@ -272,7 +282,7 @@ export async function runScript(
           }
         : undefined,
       fileErrors: result.fileErrors.map((fe) => ({
-        path: toDisplayPath(fe.path),
+        path: fe.path,
         error: fe.error,
         failedMutations: fe.failedMutations,
         failedCommands: fe.failedCommands,
@@ -294,12 +304,10 @@ export async function runScript(
       data,
       formatted: formatResult({
         ...result,
-        mutations: new Map(
-          Array.from(result.mutations, ([p, m]) => [toDisplayPath(p), m]),
-        ),
+        mutations: new Map(Array.from(result.mutations, ([p, m]) => [p, m])),
         fileErrors: result.fileErrors.map((fe) => ({
           ...fe,
-          path: toDisplayPath(fe.path),
+          path: fe.path,
         })),
       }),
       edlRegisters: updatedRegisters,

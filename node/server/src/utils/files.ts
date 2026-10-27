@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { fileTypeFromFile } from "file-type";
 import { lookup } from "mime-types";
 import type { ThreadId } from "../chat-types.ts";
+import type { Result } from "./result.ts";
 
 export type AbsFilePath = string & { __abs_file_path: true };
 export type RelFilePath = string & { __rel_file_path: true };
@@ -161,6 +162,23 @@ export function resolveFilePath(
     expandedPath = path.join(homeDir, expandedPath.slice(1));
   }
   return path.resolve(cwd, expandedPath) as AbsFilePath;
+}
+
+export function resolveAbsPath(
+  filePath: UnresolvedFilePath | AbsFilePath,
+  homeDir: HomeDir,
+): Result<AbsFilePath> {
+  let expandedPath = filePath as string;
+  if (expandedPath.startsWith("~/") || expandedPath === "~") {
+    expandedPath = path.join(homeDir, expandedPath.slice(1));
+  }
+  if (!path.isAbsolute(expandedPath)) {
+    return {
+      status: "error",
+      error: `Path "${filePath}" is relative. There is no working directory; use an absolute path (or one starting with ~/).`,
+    };
+  }
+  return { status: "ok", value: path.normalize(expandedPath) as AbsFilePath };
 }
 
 export function relativePath(

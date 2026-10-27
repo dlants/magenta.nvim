@@ -11,7 +11,7 @@ import type {
 import {
   type Cwd,
   type HomeDir,
-  resolveFilePath,
+  resolveAbsPath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
@@ -33,11 +33,15 @@ export function execute(
   const promise = (async (): Promise<ExecutedToolResult> => {
     try {
       const filePath = request.input.filePath;
-      const absFilePath = resolveFilePath(
-        context.cwd,
-        filePath,
-        context.homeDir,
-      );
+      const resolved = resolveAbsPath(filePath, context.homeDir);
+      if (resolved.status === "error") {
+        return {
+          type: "tool_result",
+          id: request.id,
+          result: { status: "error", error: resolved.error },
+        };
+      }
+      const absFilePath = resolved.value;
 
       let bufferContent: string;
       try {
@@ -110,11 +114,7 @@ export function execute(
             const uri = ref.uri.startsWith("file://")
               ? ref.uri.slice(7)
               : ref.uri;
-            const absRefPath = resolveFilePath(
-              context.cwd,
-              uri as UnresolvedFilePath,
-              context.homeDir,
-            );
+            const absRefPath = uri;
             content += `${absRefPath}:${ref.range.start.line + 1}:${ref.range.start.character}\n`;
           }
         }

@@ -23,7 +23,6 @@ const TEXT_FILE_TYPE = {
   extension: ".txt",
 };
 const IMAGE_PATH = "/test/test.jpg" as AbsFilePath;
-const IMAGE_REL = "test.jpg" as RelFilePath;
 const IMAGE_FILE_TYPE = {
   category: FileCategory.IMAGE,
   mimeType: "image/jpeg",
@@ -43,7 +42,6 @@ function setup(files: Record<string, string>) {
   const supervisor = FileSupervisor.create({
     logger,
     fileIO,
-    cwd: "/test" as Cwd,
     homeDir: "/home" as HomeDir,
     initialFiles: {},
   });
@@ -103,7 +101,7 @@ describe("FileSupervisor", () => {
     const { supervisor } = setup({
       [IMAGE_PATH]: "fake-binary-image-data",
     });
-    supervisor.addFileContext(IMAGE_PATH, IMAGE_REL, IMAGE_FILE_TYPE);
+    supervisor.addFileContext(IMAGE_PATH, IMAGE_FILE_TYPE);
 
     const action = await supervisor.onBeforeRequest({
       outputTokenCount: 0,
@@ -188,11 +186,7 @@ describe("FileSupervisor conversation lifetime", () => {
     const { supervisor, fileIO, onSent } = setup({
       [TEST_PATH]: "content",
     });
-    supervisor.addFileContext(
-      TEST_PATH,
-      "file.txt" as RelFilePath,
-      TEXT_FILE_TYPE,
-    );
+    supervisor.addFileContext(TEST_PATH, TEXT_FILE_TYPE);
     await supervisor.refreshPendingUpdates();
     let finish!: (text: string) => void;
     let started!: () => void;
@@ -273,7 +267,6 @@ describe("FileSupervisor conversation lifetime", () => {
     const supervisor = FileSupervisor.create({
       logger,
       fileIO,
-      cwd: "/test" as Cwd,
       homeDir: "/home" as HomeDir,
       initialFiles: {},
     });
@@ -314,7 +307,6 @@ describe("buildLoadedFiles", () => {
     const seeded = FileSupervisor.create({
       logger,
       fileIO,
-      cwd: "/test" as Cwd,
       homeDir: "/home" as HomeDir,
       initialFiles: loaded,
     });

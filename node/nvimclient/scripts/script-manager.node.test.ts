@@ -309,7 +309,7 @@ it("passes contextFiles and systemReminder through to the spawned thread", async
       project: CONTEXT_SCRIPT,
       files: { "seed.txt": "SEED_CONTENT_SENTINEL\n" },
     },
-    async ({ h, scripts }) => {
+    async ({ h, scripts, cwd }) => {
       scripts.startScript("ctx", {}, { sandboxBypassed: false });
       const stream = await h.streamWithText("SEED_CONTENT_SENTINEL");
       // The custom reminder rides the standing reminder, gated on output
@@ -323,7 +323,7 @@ it("passes contextFiles and systemReminder through to the spawned thread", async
             value: {
               id: "read-seed" as ToolRequestId,
               toolName: "get_files" as ToolName,
-              input: { files: [{ filePath: "./seed.txt" }] },
+              input: { files: [{ filePath: `${cwd}/seed.txt` }] },
             },
           },
         ],

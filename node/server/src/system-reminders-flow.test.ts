@@ -79,7 +79,7 @@ it("auto-respond messages include the reminder after the tool result", () =>
     (await h.nextStream()).respond({
       stopReason: "tool_use",
       text: "I'll use get_file",
-      toolRequests: [getFiles("tool_1", "./poem.txt")],
+      toolRequests: [getFiles("tool_1", "/project/poem.txt")],
     });
     const message = lastMessage(await h.nextStream());
     if (typeof message.content === "string") throw new Error("expected blocks");
@@ -99,7 +99,7 @@ it("auto-respond skips the reminder below the token threshold, then includes it 
     (await h.nextStream()).respond({
       stopReason: "tool_use",
       text: "first",
-      toolRequests: [getFiles("tool_1", "./poem.txt")],
+      toolRequests: [getFiles("tool_1", "/project/poem.txt")],
       usage: { inputTokens: 100, outputTokens: 100 },
     });
     const second = await h.nextStream();
@@ -107,7 +107,7 @@ it("auto-respond skips the reminder below the token threshold, then includes it 
     second.respond({
       stopReason: "tool_use",
       text: "second",
-      toolRequests: [getFiles("tool_2", "./poem.txt")],
+      toolRequests: [getFiles("tool_2", "/project/poem.txt")],
       usage: { inputTokens: 100, outputTokens: 2500 },
     });
     expect(reminders(lastMessage(await h.nextStream()))).toHaveLength(1);
@@ -184,7 +184,7 @@ it("reading a markdown file with a system_reminder block folds it into standing 
     (await h.nextStream()).respond({
       stopReason: "tool_use",
       text: "reading the skill",
-      toolRequests: [getFiles("tool_1", "./skill.md")],
+      toolRequests: [getFiles("tool_1", "/project/skill.md")],
       usage: { inputTokens: 100, outputTokens: 5000 },
     });
     const [reminder] = reminders(lastMessage(await h.nextStream()));

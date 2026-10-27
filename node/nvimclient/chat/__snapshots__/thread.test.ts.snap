@@ -209,7 +209,7 @@ exports[`followup user message text is visible with context updates > followup-w
 
 # user:
 Context Updates:
-- \`poem.txt\` [ ~39 tok ]
+- \`poem.txt\` [ ~49 tok ]
 
 🖥️  [System Info]
 📋 [System Reminder]
@@ -218,7 +218,7 @@ Help me with this poem
 I can see the poem. What would you like me to do?
 # user:
 Context Updates:
-- \`poem.txt\` [ +2 / -4, ~87 tok ]
+- \`poem.txt\` [ +2 / -4, ~118 tok ]
 
 📋 [System Reminder]
 Now make the poem longer please

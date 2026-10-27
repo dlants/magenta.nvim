@@ -30,7 +30,7 @@ describe("node/nvimclient/tools/findReferences.test.ts", () => {
               id: toolRequestId,
               toolName: "find_references" as ToolName,
               input: {
-                filePath: "test.ts" as UnresolvedFilePath,
+                filePath: `${dirs.tmpDir}/test.ts` as UnresolvedFilePath,
                 symbol: "val.a.b.c",
               },
             },

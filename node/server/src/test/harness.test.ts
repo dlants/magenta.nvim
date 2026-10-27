@@ -227,7 +227,7 @@ it("keeps a thread's cwd fixed after creation", () =>
       const done = h.send(thread, "read it");
       const stream = await h.nextStream();
       stream.streamToolUse("r-1" as ToolRequestId, "get_files" as ToolName, {
-        files: [{ filePath: "a.txt" }],
+        files: [{ filePath: "/other/a.txt" }],
       });
       stream.finishResponse("tool_use");
       const next = await h.nextStream();

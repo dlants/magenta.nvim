@@ -269,7 +269,6 @@ export function autoContextFilesToInitialFiles(
   const result: Files = {};
   for (const file of files) {
     result[file.absFilePath] = {
-      relFilePath: file.relFilePath,
       fileTypeInfo: file.fileTypeInfo,
       agentView: undefined,
       lastStat: undefined,
