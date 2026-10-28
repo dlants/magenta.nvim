@@ -43,6 +43,9 @@ export class PullRequestMentionScanner {
   private scanning = false;
   private rescanRequested = false;
   private disposed = false;
+  /** The managers replace their display array only when messages change (not
+   * on streaming deltas), so identity tells us whether there is anything new. */
+  private lastSeenMessages: ReadonlyArray<ProviderMessage> | undefined;
 
   constructor(
     private readonly getMessages: () => ReadonlyArray<ProviderMessage>,
@@ -55,6 +58,9 @@ export class PullRequestMentionScanner {
 
   schedule(): void {
     if (this.disposed) return;
+    const messages = this.getMessages();
+    if (messages === this.lastSeenMessages) return;
+    this.lastSeenMessages = messages;
     if (this.scanning) {
       this.rescanRequested = true;
       return;
@@ -74,7 +80,8 @@ export class PullRequestMentionScanner {
       this.scanning = false;
       if (this.rescanRequested) {
         this.rescanRequested = false;
-        this.schedule();
+        this.scanning = true;
+        setImmediate(() => this.scanNextMessage());
       }
       return;
     }

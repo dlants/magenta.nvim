@@ -9,7 +9,7 @@ const idx = (n: number) => n as NativeMessageIdx;
 
 describe("PullRequestMentionScanner", () => {
   it("finds links in text and tool results, skipping injected context, and scans appended blocks", async () => {
-    const messages: ProviderMessage[] = [
+    let messages: ProviderMessage[] = [
       {
         role: "user",
         content: [
@@ -35,7 +35,8 @@ describe("PullRequestMentionScanner", () => {
       ]),
     );
 
-    messages[0].content.push({
+    const appended = [...messages[0].content];
+    appended.push({
       type: "tool_result",
       id: "t1" as never,
       result: {
@@ -46,6 +47,9 @@ describe("PullRequestMentionScanner", () => {
       },
       nativeMessageIdx: idx(0),
     });
+    scanner.schedule();
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    messages = [{ role: "user", content: appended }];
     scanner.schedule();
     await vi.waitFor(() =>
       expect(scanner.mentionedPullRequests).toEqual([
