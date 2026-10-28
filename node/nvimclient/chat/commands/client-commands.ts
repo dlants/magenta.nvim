@@ -48,7 +48,9 @@ export async function expandClientCommand(
   ];
 }
 
-/** Rewrites every `@file:` ref to an absolute path against Neovim's cwd. */
+const AT_GIT_PATH_PATTERN = /@(diff|staged):(\S+)/g;
+/** Rewrites every `@file:`, `@diff:` and `@staged:` ref to an absolute path against Neovim's cwd, since the server
+ * has no working directory to resolve them against. */
 export function absolutizeFileRefs(
   text: string,
   cwd: NvimCwd,
@@ -62,5 +64,9 @@ export function absolutizeFileRefs(
     result += formatFileRef(resolveFilePath(cwd, path, homeDir));
     last = match.index + match[0].length;
   }
-  return result + text.slice(last);
+  return (result + text.slice(last)).replace(
+    AT_GIT_PATH_PATTERN,
+    (_match, kind: string, path: string) =>
+      `@${kind}:${resolveFilePath(cwd, path as UnresolvedFilePath, homeDir)}`,
+  );
 }

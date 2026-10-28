@@ -20,6 +20,13 @@ describe("absolutizeFileRefs", () => {
   });
 });
 
+describe("absolutizeFileRefs git refs", () => {
+  it("absolutizes @diff: and @staged: paths", () => {
+    expect(
+      absolutizeFileRefs("@diff:src/a.ts @staged:/abs/b.ts", cwd, homeDir),
+    ).toBe("@diff:/proj/src/a.ts @staged:/abs/b.ts");
+  });
+});
 describe("expandClientCommand", () => {
   it("rejects when the editor read fails, for the server to report", async () => {
     const nvim = {

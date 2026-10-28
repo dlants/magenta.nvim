@@ -38,6 +38,6 @@ export type NvimCwd = AbsFilePath & { __nvim_cwd: true };
 /** The one place a client path becomes a server `ProjectDir`: the client picks the directory a thread it creates will
  * operate in. The thread keeps it for life, independent of later Neovim cwd changes.
  */
-export function threadCwdFromNvimCwd(cwd: NvimCwd): ProjectDir {
+export function threadProjectDirFromNvimCwd(cwd: NvimCwd): ProjectDir {
   return toProjectDir(cwd);
 }

@@ -2,7 +2,7 @@ import path from "node:path";
 import type { AbsFilePath } from "@magenta/server";
 import { expect, it } from "vitest";
 import { withDriver } from "../test/preamble.ts";
-import { threadCwdFromNvimCwd } from "../utils/files.ts";
+import { threadProjectDirFromNvimCwd } from "../utils/files.ts";
 import { createNvimClient } from "./nvim-client.ts";
 
 it("serves lua and lsp requests through the attached client", async () => {
@@ -21,7 +21,7 @@ it("serves lua and lsp requests through the attached client", async () => {
     const hover = await client.request({
       type: "lsp",
       kind: "hover",
-      projectDir: threadCwdFromNvimCwd(cwd),
+      projectDir: threadProjectDirFromNvimCwd(cwd),
       homeDir,
       filePath: path.join(cwd, "test.ts") as AbsFilePath,
       position: { line: 3, character: 4 },

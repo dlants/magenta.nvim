@@ -192,3 +192,13 @@ Decisions/deviations:
 
 - Goal: nvimclient passes `projectDir` from nvim cwd at thread creation; `@diff:` absolutized client-side; views show `projectDir`.
 - Tests: tier A node test that a submitted `@diff:rel` arrives absolute; existing nvim sidebar tests pass.
+
+Status: done.
+
+- [x] `threadCwdFromNvimCwd` → `threadProjectDirFromNvimCwd` (magenta.ts thread creation).
+- [x] `absolutizeFileRefs` (`chat/commands/client-commands.ts`) also absolutizes `@diff:`/`@staged:` against nvim cwd; test in `client-commands.node.test.ts`.
+
+Decisions/deviations:
+
+- `DisplayContext.cwd` and nvimclient's own `NvimCwd` fields stay: they are client-side UI shortening of displayed paths, never model-facing.
+- The `@diff:` test is a unit test on `absolutizeFileRefs` (the single client conversion point) rather than a full submission test.

@@ -104,7 +104,7 @@ import {
   formatFileRef,
   type NvimCwd,
   resolveFilePath,
-  threadCwdFromNvimCwd,
+  threadProjectDirFromNvimCwd,
   type UnresolvedFilePath,
 } from "./utils/files.ts";
 import { getMarkdownExt } from "./utils/markdown.ts";
@@ -324,7 +324,7 @@ export class Magenta {
     };
     this.serverInternals = startInProcessServer({
       logger: this.nvim.logger,
-      cwd: threadCwdFromNvimCwd(this.cwd),
+      cwd: threadProjectDirFromNvimCwd(this.cwd),
       homeDir: this.homeDir,
       sandbox: this.sandbox,
       getBaseOptions: () => this.baseOptions,
@@ -435,7 +435,7 @@ export class Magenta {
    * the session. */
   private get baseOptions(): MagentaOptions {
     const serverOptions = this.optionsStore.getOptions(
-      threadCwdFromNvimCwd(this.cwd),
+      threadProjectDirFromNvimCwd(this.cwd),
     );
     return { ...serverOptions, ...this.clientOptions };
   }
@@ -1827,12 +1827,12 @@ ${lines.join("\n")}
     // Get the current working directory
     const cwd = await getcwd(nvim);
     const optionsStore = new OptionsStore(resolvedHomeDir, nvim.logger);
-    const threadCwd = threadCwdFromNvimCwd(cwd);
+    const threadProjectDir = threadProjectDirFromNvimCwd(cwd);
     const sandbox =
       sandboxOverride ??
       (await startSandbox(
-        optionsStore.getOptions(threadCwd).sandbox,
-        threadCwd,
+        optionsStore.getOptions(threadProjectDir).sandbox,
+        threadProjectDir,
         resolvedHomeDir,
         nvim.logger,
       ));
