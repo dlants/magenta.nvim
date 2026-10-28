@@ -25,7 +25,7 @@ import {
 } from "./utils/files.ts";
 export type EnvironmentConfig =
   | { type: "local"; projectDir?: ProjectDir }
-  | { type: "docker"; container: string; projectDir: string };
+  | { type: "docker"; container: string; projectDir: ProjectDir };
 
 export interface Environment {
   fileIO: FileIO;
@@ -116,14 +116,14 @@ export async function createDockerEnvironment({
   threadId,
 }: {
   container: string;
-  projectDir?: string;
+  projectDir?: ProjectDir;
   threadId: ThreadId;
 }): Promise<Environment> {
-  const resolvedCwd: string =
+  const projectDir: ProjectDir =
     cwdParam ??
-    (await execFile("docker", ["exec", container, "pwd"]).then((r) =>
-      r.stdout.trim(),
-    ));
+    toProjectDir(
+      (await execFile("docker", ["exec", container, "pwd"])).stdout.trim(),
+    );
   const resolvedHome = await execFile("docker", [
     "exec",
     container,
@@ -140,8 +140,8 @@ export async function createDockerEnvironment({
     shell,
     gitClient: new DockerGitClient(container),
     sandboxViolationHandler: undefined,
-    projectDir: toProjectDir(resolvedCwd),
+    projectDir,
     homeDir: toHomeDir(resolvedHome),
-    environmentConfig: { type: "docker", container, projectDir: resolvedCwd },
+    environmentConfig: { type: "docker", container, projectDir },
   };
 }

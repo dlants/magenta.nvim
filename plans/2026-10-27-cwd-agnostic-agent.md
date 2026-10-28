@@ -179,6 +179,7 @@ Decisions/deviations:
 
 - `DisplayContext.cwd` (server type used only by client renderers) and nvimclient's own `cwd` fields are left for the client stage. The client's LSP request field is `projectDir` (protocol).
 - The client archive buffer header prints `projectDir:`.
+- Review follow-ups (branding): `EnvironmentConfig` is defined once in `environment.ts` (re-exported from `thread.ts`) and both variants carry `ProjectDir` (docker's is the container path; `createDockerEnvironment`/`Session` brand it via `toProjectDir`). `globFiles`, `ThreadLogger`, harness options and archive `ThreadMeta`/`ArchiveEntry` use `ProjectDir`; `readThreadMeta` brands absolute values and drops non-absolute ones. The script IPC type (`scripts/protocol.ts`) keeps `projectDir?: string` as the wire form; `normalizeThreadRequest` is the single conversion point to `ProjectDir`.
 - Full nvim suite: failures under load pass individually; `render-tools/spawn-subagents.test.ts` "handles thread hierarchy…" and `tools/spawn-subagents.test.ts` "respects maxConcurrentSubagents…" fail on main too.
 
 - Goal: `ProjectDir` only in session/host/environment/config/skills/agents/auto-context/sandbox-manager/scripts/protocol; removed from `ThreadCoreContext` and tool contexts; spawn_subagents and scripts require absolute dirs; archive reads legacy `cwd`.

@@ -77,7 +77,7 @@ export async function resolveAutoContext(ctx: {
 export async function globFiles(
   fileIO: FileIO,
   pattern: string,
-  projectDir: string,
+  projectDir: ProjectDir,
 ): Promise<AbsFilePath[]> {
   const isAbs = path.isAbsolute(pattern);
   const root = isAbs ? path.parse(pattern).root : projectDir;

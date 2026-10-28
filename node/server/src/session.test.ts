@@ -31,7 +31,7 @@ import {
 } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer } from "./utils/async.ts";
-import type { AbsFilePath } from "./utils/files.ts";
+import { type AbsFilePath, toProjectDir } from "./utils/files.ts";
 
 const harnesses: Harness[] = [];
 
@@ -116,7 +116,7 @@ it("derives a child's profile and environment from the parent record", async () 
     environmentConfig: {
       type: "docker",
       container: "remote",
-      projectDir: "/work",
+      projectDir: toProjectDir("/work"),
     },
   };
   const parentId = await created(
@@ -334,7 +334,7 @@ it("uses the prepared environment when checking whether a fork is local", async 
     environmentConfig: {
       type: "docker",
       container: "remote",
-      projectDir: "/workspace",
+      projectDir: toProjectDir("/workspace"),
     },
   };
   const id = await created(session.createThread(rootOptions(profile)));

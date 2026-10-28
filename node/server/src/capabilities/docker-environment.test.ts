@@ -22,6 +22,7 @@ import {
   createDockerEnvironment,
   environmentCapabilities,
 } from "../environment.ts";
+import { toProjectDir } from "../utils/files.ts";
 import { DockerFileIO } from "./docker-file-io.ts";
 import { DockerShell } from "./docker-shell.ts";
 
@@ -165,7 +166,7 @@ describe("Docker Environment", () => {
     it("uses provided projectDir", async () => {
       const env = await createDockerEnvironment({
         container: containerId,
-        projectDir: "/tmp",
+        projectDir: toProjectDir("/tmp"),
         threadId: mockThreadId,
       });
       expect(env.projectDir).toBe("/tmp");
@@ -185,7 +186,7 @@ describe("Docker Environment", () => {
     it("stores environmentConfig", async () => {
       const env = await createDockerEnvironment({
         container: containerId,
-        projectDir: "/tmp",
+        projectDir: toProjectDir("/tmp"),
         threadId: mockThreadId,
       });
       expect(env.environmentConfig).toEqual({

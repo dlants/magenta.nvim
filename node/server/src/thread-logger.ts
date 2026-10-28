@@ -4,7 +4,11 @@ import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderMessage } from "./providers/provider-types.ts";
 import type { Thread, ThreadCallbacks } from "./thread.ts";
-import { threadConversationLogPath, threadMetaPath } from "./utils/files.ts";
+import {
+  type ProjectDir,
+  threadConversationLogPath,
+  threadMetaPath,
+} from "./utils/files.ts";
 
 export type ForkProvenance = {
   fromThreadId: ThreadId;
@@ -53,8 +57,8 @@ export type ThreadLoggerOptions = {
   forkedFrom?: ForkProvenance;
   /** Name of the magenta script that spawned this thread, if any. */
   scriptName?: string;
-  /** Working directory the thread ran in. */
-  projectDir?: string;
+  /** Directory the user started the thread from (never the agent's working directory). */
+  projectDir?: ProjectDir;
 };
 
 export class ThreadLogger {
@@ -62,7 +66,7 @@ export class ThreadLogger {
   private metaPath: string;
   private threadType: ThreadType;
   private scriptName: string | undefined;
-  private projectDir: string | undefined;
+  private projectDir: ProjectDir | undefined;
   private title: string | undefined;
   private metaChain: Promise<void> = Promise.resolve();
   private persistedCount = 0;
@@ -281,7 +285,7 @@ export async function flushArchive(thread: Thread): Promise<void> {
 export function archiveThread<T extends Thread>(args: {
   logger: Logger;
   callbacks: ThreadCallbacks;
-  projectDir?: string;
+  projectDir?: ProjectDir;
   build: (callbacks: ThreadCallbacks) => T;
 }): { thread: T; archive: ThreadLogger } {
   const { logger, callbacks, projectDir, build } = args;

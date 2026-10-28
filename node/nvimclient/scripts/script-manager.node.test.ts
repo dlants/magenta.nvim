@@ -19,7 +19,11 @@ import {
   type Harness,
 } from "@magenta/server/src/test/harness.ts";
 import { noopLogger } from "@magenta/server/src/test-helpers.ts";
-import type { HomeDir, ProjectDir } from "@magenta/server/src/utils/files.ts";
+import {
+  type HomeDir,
+  type ProjectDir,
+  toProjectDir,
+} from "@magenta/server/src/utils/files.ts";
 import { expect, it } from "vitest";
 import { BUILTIN_SDK_PATH } from "../options.ts";
 
@@ -178,7 +182,11 @@ async function withScripts(
   for (const [rel, content] of Object.entries(setup.files ?? {})) {
     files[path.join(cwd, rel)] = content;
   }
-  const h = createHarness({ projectDir: cwd, homeDir: home, files });
+  const h = createHarness({
+    projectDir: toProjectDir(cwd),
+    homeDir: home,
+    files,
+  });
   const bypassed = new Set<ThreadId>();
   const scripts = new ScriptManager({
     session: h.session,

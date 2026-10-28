@@ -6,7 +6,12 @@ import { describe, expect, it } from "vitest";
 import { FsFileIO } from "../capabilities/file-io.ts";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import { noopLogger } from "../test-helpers.ts";
-import type { AbsFilePath, HomeDir, ProjectDir } from "../utils/files.ts";
+import {
+  type AbsFilePath,
+  type HomeDir,
+  type ProjectDir,
+  toProjectDir,
+} from "../utils/files.ts";
 import {
   discoverHierarchyContext,
   globFiles,
@@ -205,7 +210,7 @@ describe("globFiles parity with the glob package", () => {
           .map((m) => path.resolve(tmp, m).toLowerCase())
           .sort();
         // glob echoes magic-less patterns verbatim; we return on-disk casing.
-        const actual = (await globFiles(fileIO, pattern, tmp))
+        const actual = (await globFiles(fileIO, pattern, toProjectDir(tmp)))
           .map((p) => p.toLowerCase())
           .sort();
         expect(actual, pattern).toEqual(expected);

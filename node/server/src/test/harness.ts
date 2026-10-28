@@ -48,6 +48,7 @@ import {
   type HomeDir,
   type ProjectDir,
   resolveFilePath,
+  toProjectDir,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import { FakeGitClient, FakeShell, type FakeShellScript } from "./fakes.ts";
@@ -79,7 +80,7 @@ export type HarnessResolve = (
 export type HarnessOptions = {
   /** abs path -> content, seeds the InMemoryFileIO. */
   files?: Record<string, string>;
-  projectDir?: string;
+  projectDir?: ProjectDir;
   homeDir?: string;
   git?: GitState | GitState[];
   shell?: FakeShellScript;
@@ -157,7 +158,7 @@ export class TestSessionHost implements SessionHost {
   readonly luaExecutor: LuaExecutor | undefined;
 
   constructor(opts: HarnessOptions = {}) {
-    this.projectDir = (opts.projectDir ?? "/project") as ProjectDir;
+    this.projectDir = opts.projectDir ?? toProjectDir("/project");
     this.homeDir = (opts.homeDir ?? "/home") as HomeDir;
     this.fileIO = new InMemoryFileIO(opts.files ?? {});
     this.git = new FakeGitClient(opts.git);

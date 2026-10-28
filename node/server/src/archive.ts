@@ -4,9 +4,15 @@ import { isThreadId, type ThreadId, type ThreadType } from "./chat-types.ts";
 import type { ThreadLogEntry } from "./thread-logger.ts";
 import {
   MAGENTA_TEMP_DIR,
+  type ProjectDir,
   threadConversationLogPath,
   threadMetaPath,
+  toProjectDir,
 } from "./utils/files.ts";
+
+function setProjectDir(meta: ThreadMeta, dir: string): void {
+  if (path.isAbsolute(dir)) meta.projectDir = toProjectDir(dir);
+}
 
 const THREAD_TYPES: ReadonlySet<ThreadType> = new Set([
   "subagent",
@@ -60,14 +66,14 @@ export type ThreadMeta = {
   title?: string;
   threadType?: ThreadType;
   scriptName?: string;
-  projectDir?: string;
+  projectDir?: ProjectDir;
 };
 
 export type ArchiveEntry = {
   id: ThreadId;
   title?: string;
   scriptName?: string;
-  projectDir?: string;
+  projectDir?: ProjectDir;
 };
 
 /** Threads that are worth showing in the archive list. Subagent threads are
@@ -130,9 +136,9 @@ export async function readThreadMeta(
     if (typeof record.scriptName === "string")
       result.scriptName = record.scriptName;
     if (typeof record.projectDir === "string")
-      result.projectDir = record.projectDir;
+      setProjectDir(result, record.projectDir);
     // Archives written before the rename stored the start directory as `cwd`.
-    else if (typeof record.cwd === "string") result.projectDir = record.cwd;
+    else if (typeof record.cwd === "string") setProjectDir(result, record.cwd);
     if (isThreadType(record.threadType)) result.threadType = record.threadType;
     return result;
   } catch {

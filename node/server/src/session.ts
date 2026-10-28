@@ -43,10 +43,11 @@ import {
 } from "./thread-assembly.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { Defer, type Task } from "./utils/async.ts";
-import type {
-  AbsFilePath,
-  ProjectDir,
-  UnresolvedFilePath,
+import {
+  type AbsFilePath,
+  type ProjectDir,
+  toProjectDir,
+  type UnresolvedFilePath,
 } from "./utils/files.ts";
 
 export type SessionId = string & { __sessionId: true };
@@ -896,7 +897,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       ? {
           type: "docker",
           container: opts.dockerSpawnConfig.containerName,
-          projectDir: opts.dockerSpawnConfig.workspacePath,
+          projectDir: toProjectDir(opts.dockerSpawnConfig.workspacePath),
         }
       : opts.projectDir
         ? { type: "local", projectDir: opts.projectDir }
