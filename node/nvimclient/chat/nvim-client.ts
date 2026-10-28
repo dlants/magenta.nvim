@@ -28,7 +28,7 @@ export async function createNvimClient({
   const authUI = new NvimAuthUI(nvim);
 
   function lspRequest(req: LspRequest) {
-    const client = new NvimLspClient(lsp, nvim, req.cwd, req.homeDir);
+    const client = new NvimLspClient(lsp, nvim, req.projectDir, req.homeDir);
     switch (req.kind) {
       case "hover":
         return client.requestHover(req.filePath, req.position);

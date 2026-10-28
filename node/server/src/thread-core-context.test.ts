@@ -28,19 +28,19 @@ import { flushArchive } from "./thread-logger.ts";
 import { pollUntil } from "./utils/async.ts";
 import {
   type AbsFilePath,
-  type Cwd,
   FileCategory,
   type HomeDir,
+  type ProjectDir,
   type UnresolvedFilePath,
 } from "./utils/files.ts";
 
 async function fixture(overrides: TestContextOverrides = {}) {
-  const cwd = "/project" as Cwd;
-  const homeDir = cwd as unknown as HomeDir;
-  const file = path.join(cwd, "tracked.txt") as AbsFilePath;
+  const projectDir = "/project" as ProjectDir;
+  const homeDir = projectDir as unknown as HomeDir;
+  const file = path.join(projectDir, "tracked.txt") as AbsFilePath;
   const fileIO = new InMemoryFileIO({ [file]: "original tracked content\n" });
   const git: GitState = {
-    repoRoot: cwd,
+    repoRoot: projectDir,
     branch: "initial-branch",
     headSha: "111111111",
     headSubject: "initial commit",
@@ -52,7 +52,6 @@ async function fixture(overrides: TestContextOverrides = {}) {
   const create = vi.spyOn(FileSupervisor, "create");
   const { core: thread, mockClient } = createAgentWithMock(
     {
-      cwd,
       homeDir,
       fileIO,
       initialGitState: git,
@@ -92,7 +91,7 @@ async function fixture(overrides: TestContextOverrides = {}) {
     return JSON.stringify(stream.messages);
   }
   return {
-    cwd,
+    projectDir,
     homeDir,
     file,
     fileIO,
@@ -132,7 +131,7 @@ describe("Thread-owned context delivery", () => {
       f.manager.callbacks.onSent?.({}, retiredIdx);
       expect(f.fileDeliveries()).toBe(0);
       expect(f.thread.getContextDelivery(retiredIdx)).toBeUndefined();
-      const added = path.join(f.cwd, "added.txt") as AbsFilePath;
+      const added = path.join(f.projectDir, "added.txt") as AbsFilePath;
       await f.fileIO.writeFile(added, "new generation content");
       await f.thread["core"].fileSupervisor.addFiles([
         added as string as UnresolvedFilePath,

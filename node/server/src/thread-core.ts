@@ -39,7 +39,7 @@ import { runToolLoop, type ToolLoop, type ToolOutcome } from "./tool-loop.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
 import type { Task } from "./utils/async.ts";
-import type { AbsFilePath, Cwd, HomeDir } from "./utils/files.ts";
+import type { AbsFilePath, HomeDir } from "./utils/files.ts";
 
 export interface ThreadCoreContext {
   logger: Logger;
@@ -48,7 +48,6 @@ export interface ThreadCoreContext {
   provider: Provider;
   subagentConfig?: SubagentConfig;
   toolSpecs: ProviderToolSpec[];
-  cwd: Cwd;
   homeDir: HomeDir;
   systemPrompt: SystemPrompt;
   systemInfo: SystemInfo;

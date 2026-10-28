@@ -4,12 +4,12 @@ import type { Logger } from "../logger.ts";
 import type { Files } from "../supervisors/file-supervisor.ts";
 import {
   type AbsFilePath,
-  type Cwd,
   detectFileTypeViaFileIO,
   expandTilde,
   FileCategory,
   type FileTypeInfo,
   type HomeDir,
+  type ProjectDir,
   type RelFilePath,
   relativePath,
 } from "../utils/files.ts";
@@ -25,11 +25,11 @@ type Match = { absFilePath: AbsFilePath; relFilePath: RelFilePath };
 export async function resolveAutoContext(ctx: {
   fileIO: FileIO;
   logger: Logger;
-  cwd: Cwd;
+  projectDir: ProjectDir;
   homeDir: HomeDir;
   globs: string[] | undefined;
 }): Promise<AutoContextFile[]> {
-  const { fileIO, logger, cwd, homeDir, globs } = ctx;
+  const { fileIO, logger, projectDir, homeDir, globs } = ctx;
   if (!globs || globs.length === 0) {
     return [];
   }
@@ -41,11 +41,11 @@ export async function resolveAutoContext(ctx: {
           const paths = await globFiles(
             fileIO,
             expandTilde(pattern, homeDir),
-            cwd,
+            projectDir,
           );
           return paths.map((absFilePath) => ({
             absFilePath,
-            relFilePath: relativePath(cwd, absFilePath, homeDir),
+            relFilePath: relativePath(projectDir, absFilePath, homeDir),
           }));
         } catch (err) {
           logger.error(
@@ -77,10 +77,10 @@ export async function resolveAutoContext(ctx: {
 export async function globFiles(
   fileIO: FileIO,
   pattern: string,
-  cwd: string,
+  projectDir: string,
 ): Promise<AbsFilePath[]> {
   const isAbs = path.isAbsolute(pattern);
-  const root = isAbs ? path.parse(pattern).root : cwd;
+  const root = isAbs ? path.parse(pattern).root : projectDir;
   const segments = pattern
     .slice(isAbs ? root.length : 0)
     .split(/[\\/]+/)
@@ -209,12 +209,12 @@ export async function discoverHierarchyContext(
   ctx: {
     fileIO: FileIO;
     logger: Logger;
-    cwd: Cwd;
+    projectDir: ProjectDir;
     homeDir: HomeDir;
     hierarchyContextFileNames: string[] | undefined;
   },
 ): Promise<AutoContextFile[]> {
-  const { fileIO, logger, cwd, homeDir } = ctx;
+  const { fileIO, logger, projectDir, homeDir } = ctx;
   const names = ctx.hierarchyContextFileNames;
   if (!names || names.length === 0) {
     return [];
@@ -246,7 +246,7 @@ export async function discoverHierarchyContext(
         }
         results.push({
           absFilePath: matchAbs,
-          relFilePath: relativePath(cwd, matchAbs, homeDir),
+          relFilePath: relativePath(projectDir, matchAbs, homeDir),
           fileTypeInfo,
         });
       } catch (err) {

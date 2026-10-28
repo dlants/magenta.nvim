@@ -135,7 +135,7 @@ const defaultSandboxConfig: SandboxConfig = {
 
 function createContext() {
   return {
-    projectDir: "/test/cwd" as ProjectDir,
+    projectDir: "/test/projectDir" as ProjectDir,
     homeDir: "/home/user" as HomeDir,
     threadId: "test-thread" as ThreadId,
     getSandboxConfig: () => defaultSandboxConfig,
@@ -322,7 +322,7 @@ describe("SandboxShell", () => {
     );
     expect(result).toBe(violationResult);
     // cleanupAfterCommand must be called even on the violation path so that
-    // bwrap mount points (e.g. ghost .env / .magenta files in cwd) get
+    // bwrap mount points (e.g. ghost .env / .magenta files in projectDir) get
     // removed instead of leaking onto the host filesystem.
     expect(mockCleanupAfterCommand).toHaveBeenCalled();
   });

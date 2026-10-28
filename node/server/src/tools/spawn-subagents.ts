@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type AgentsMap,
@@ -18,8 +18,8 @@ import type {
   GenericToolRequest,
   ToolName,
 } from "../tool-types.ts";
-import type { Cwd, UnresolvedFilePath } from "../utils/files.ts";
-import { toCwd } from "../utils/files.ts";
+import type { ProjectDir, UnresolvedFilePath } from "../utils/files.ts";
+import { toProjectDir } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
 
 const SPAWN_SUBAGENTS_BASE_DESCRIPTION = readFileSync(
@@ -374,6 +374,13 @@ export function resolveSubagentConfig(
   return { agentName: agentType ?? "subagent", tier: "leaf" as AgentTier };
 }
 
+function requireAbsoluteDirectory(directory: string): ProjectDir {
+  if (!isAbsolute(directory)) {
+    throw new Error(`directory must be an absolute path, got "${directory}"`);
+  }
+  return toProjectDir(directory);
+}
+
 export function execute(
   request: ToolRequest,
   context: {
@@ -382,7 +389,6 @@ export function execute(
     maxConcurrentSubagents: number;
     maxConcurrentFastSubagents: number;
     requestRender: () => void;
-    cwd: Cwd;
     agents: AgentsMap;
   },
 ): ExecutingToolInvocation & { progress: SpawnSubagentsProgress } {
@@ -452,9 +458,10 @@ export function execute(
 
       const subagentConfig = resolveSubagentConfig(entry, context.agents);
 
-      const resolvedCwd = entry.directory
-        ? toCwd(resolve(context.cwd, entry.directory))
-        : undefined;
+      const projectDir =
+        entry.directory !== undefined
+          ? requireAbsoluteDirectory(entry.directory)
+          : undefined;
 
       const threadId = await context.threadManager.spawnThread({
         parentThreadId: context.threadId,
@@ -462,7 +469,7 @@ export function execute(
         threadType: "subagent",
         subagentConfig,
         ...(entry.contextFiles ? { contextFiles: entry.contextFiles } : {}),
-        ...(resolvedCwd ? { cwd: resolvedCwd } : {}),
+        ...(projectDir ? { projectDir } : {}),
       });
 
       element.state =
@@ -484,7 +491,10 @@ export function execute(
     entry: SubagentEntry,
     ctx: typeof context,
   ): Promise<void> => {
-    const hostDir = resolve(ctx.cwd, entry.directory ?? ".");
+    const hostDir =
+      entry.directory !== undefined
+        ? requireAbsoluteDirectory(entry.directory)
+        : ctx.threadManager.getProjectDir(ctx.threadId);
 
     // Check if dockerfile and workspacePath are defined
     if (
@@ -782,7 +792,7 @@ const DOCKER_AGENT_PROPERTIES = {
   directory: {
     type: "string",
     description:
-      "Host directory to spawn the docker container from. Defaults to '.' (current working directory). The directory must contain a Dockerfile (at the path specified by 'dockerfile'). For host environments, sets the working directory for the sub-agent.",
+      "Host directory to spawn the docker container from. Must be an absolute path. Defaults to the directory this thread was started from. For docker environments, the directory must contain a Dockerfile (at the path specified by 'dockerfile'). For host environments, the sub-agent is started from this directory (its options, skills and agents load from there).",
   },
   dockerfile: {
     type: "string",

@@ -30,8 +30,8 @@ import type { Dispatch } from "../tea/tea.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type {
   AbsFilePath,
-  Cwd,
   HomeDir,
+  ProjectDir,
   UnresolvedFilePath,
 } from "../utils/files.ts";
 import { displayPath } from "../utils/files.ts";
@@ -216,7 +216,7 @@ export type NvimThreadContext = {
   mcpToolManager: MCPToolManagerImpl;
   profile: Profile;
   nvim: Nvim;
-  cwd: Cwd;
+  cwd: ProjectDir;
   homeDir: HomeDir;
   options: MagentaOptions;
   getDisplayWidth: () => number;

@@ -1,9 +1,9 @@
 import {
-  type Cwd,
   createInProcessServer,
   type HomeDir,
   type Logger,
   type MagentaServer,
+  type ProjectDir,
   type Sandbox,
   ScriptManager,
   type ScriptRunner,
@@ -26,7 +26,7 @@ export type InProcessServer = {
 
 export function startInProcessServer(deps: {
   logger: Logger;
-  cwd: Cwd;
+  cwd: ProjectDir;
   homeDir: HomeDir;
   sandbox: Sandbox;
   /** Options without the session's profile selection. */
@@ -35,7 +35,7 @@ export function startInProcessServer(deps: {
 }): InProcessServer {
   const host = new ServerSessionHost({
     logger: deps.logger,
-    cwd: deps.cwd,
+    projectDir: deps.cwd,
     homeDir: deps.homeDir,
     sandbox: deps.sandbox,
     getOptions: deps.getBaseOptions,
@@ -46,7 +46,7 @@ export function startInProcessServer(deps: {
   const scripts = new ScriptManager({
     session,
     logger: deps.logger,
-    cwd: deps.cwd,
+    projectDir: deps.cwd,
     homeDir: deps.homeDir,
     getScriptsPaths: deps.getScriptsPaths,
     sandbox: {

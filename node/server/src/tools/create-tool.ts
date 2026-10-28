@@ -14,7 +14,7 @@ import type { EdlRegisters } from "../edl/index.ts";
 import type { Logger } from "../logger.ts";
 import type { ExecutingToolInvocation, ToolRequest } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir } from "../utils/files.ts";
 import * as BashCommand from "./bashCommand.ts";
 import * as Edl from "./edl.ts";
 import * as FindReferences from "./findReferences.ts";
@@ -37,7 +37,6 @@ export type ClientToolContext = {
   lspClient: LspClient;
   luaExecutor?: LuaExecutor | undefined;
   mcpToolManager: MCPToolManager;
-  cwd: Cwd;
   homeDir: HomeDir;
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
@@ -116,7 +115,6 @@ export function createTool(
   switch (staticRequest.toolName) {
     case "get_files": {
       return GetFile.execute(staticRequest, {
-        cwd: context.cwd,
         homeDir: context.homeDir,
         fileIO: context.fileIO,
         contextTracker: context.contextTracker,
@@ -126,7 +124,6 @@ export function createTool(
 
     case "hover": {
       return Hover.execute(staticRequest, {
-        cwd: context.cwd,
         homeDir: context.homeDir,
         lspClient: context.lspClient,
         fileIO: context.fileIO,
@@ -135,7 +132,6 @@ export function createTool(
 
     case "find_references": {
       return FindReferences.execute(staticRequest, {
-        cwd: context.cwd,
         homeDir: context.homeDir,
         lspClient: context.lspClient,
         fileIO: context.fileIO,
@@ -160,7 +156,6 @@ export function createTool(
         maxConcurrentSubagents: context.maxConcurrentSubagents,
         maxConcurrentFastSubagents: context.maxConcurrentFastSubagents,
         requestRender: context.requestRender,
-        cwd: context.cwd,
         agents: context.getAgents(),
       });
     }
@@ -178,7 +173,6 @@ export function createTool(
 
     case "edl": {
       return Edl.execute(staticRequest, {
-        cwd: context.cwd,
         homeDir: context.homeDir,
         fileIO: context.fileIO,
         edlRegisters: context.edlRegisters,

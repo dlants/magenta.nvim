@@ -56,7 +56,7 @@ import { validateInput } from "./tools/helpers.ts";
 import { MCPToolManager } from "./tools/mcp/manager.ts";
 import type { MCPServersConfig } from "./tools/mcp/options.ts";
 import { abortTaskOnSignal, type Task } from "./utils/async.ts";
-import type { Cwd, HomeDir } from "./utils/files.ts";
+import type { HomeDir, ProjectDir } from "./utils/files.ts";
 
 /** The options the server host consumes. */
 export type ServerHostOptions = ProviderOptions & {
@@ -76,8 +76,8 @@ export type ServerHostOptions = ProviderOptions & {
 
 export type ServerSessionHostContext = {
   logger: Logger;
-  /** Default cwd for threads created without an explicit one. */
-  cwd: Cwd;
+  /** Default projectDir for threads created without an explicit one. */
+  projectDir: ProjectDir;
   homeDir: HomeDir;
   sandbox: Sandbox;
   getOptions: () => ServerHostOptions;
@@ -227,7 +227,7 @@ export class ServerSessionHost implements SessionHost {
 
   getAgents() {
     return loadAgents({
-      cwd: this.context.cwd,
+      projectDir: this.context.projectDir,
       logger: this.context.logger,
       options: this.context.getOptions(),
     });
@@ -285,8 +285,8 @@ export class ServerSessionHost implements SessionHost {
     };
     const localCwd =
       resolvedConfig.type === "local"
-        ? (resolvedConfig.cwd ?? this.context.cwd)
-        : this.context.cwd;
+        ? (resolvedConfig.projectDir ?? this.context.projectDir)
+        : this.context.projectDir;
 
     const [autoContextFiles, environment] = await Promise.all([
       // auto-context is discovered against the host filesystem, so it is
@@ -298,20 +298,20 @@ export class ServerSessionHost implements SessionHost {
         : resolveAutoContext({
             fileIO: hostFileIO,
             logger,
-            cwd: this.context.cwd,
+            projectDir: this.context.projectDir,
             homeDir,
             globs: hostOptions.autoContext,
           }),
       resolvedConfig.type === "docker"
         ? createDockerEnvironment({
             container: resolvedConfig.container,
-            cwd: resolvedConfig.cwd,
+            projectDir: resolvedConfig.projectDir,
             threadId,
           })
         : Promise.resolve(
             createLocalEnvironment({
               logger,
-              cwd: localCwd,
+              projectDir: localCwd,
               homeDir,
               getSandboxConfig: () => this.context.getOptions().sandbox,
               ...(editor
@@ -337,18 +337,18 @@ export class ServerSessionHost implements SessionHost {
 
     const initialGitState = source
       ? undefined
-      : await readGitStateAt(environment.gitClient, environment.cwd);
+      : await readGitStateAt(environment.gitClient, environment.projectDir);
 
     const systemInfo =
       source?.systemInfo ??
       buildSystemInfo({
-        cwd: environment.cwd,
+        projectDir: environment.projectDir,
         neovimVersion:
           editor?.info.neovimVersion ?? "none (no client attached)",
         overrides: {
           git: initialGitState,
           ...(resolvedConfig.type === "docker"
-            ? { platform: "linux (docker)", cwd: environment.cwd }
+            ? { platform: "linux (docker)", projectDir: environment.projectDir }
             : {}),
         },
       });
@@ -358,7 +358,7 @@ export class ServerSessionHost implements SessionHost {
       source?.systemPrompt ??
       (await createSystemPrompt(threadType, {
         logger,
-        cwd: environment.cwd,
+        projectDir: environment.projectDir,
         options: hostOptions,
         fileIO: environment.fileIO,
         homeDir: environment.homeDir,
@@ -413,13 +413,12 @@ export class ServerSessionHost implements SessionHost {
   ): PreparedThreadContext {
     const { logger } = this.context;
     const env = info.environment;
-    const { cwd, homeDir } = env;
-    const getAgents = () => loadAgents({ cwd, logger, options });
+    const { projectDir, homeDir } = env;
+    const getAgents = () => loadAgents({ projectDir, logger, options });
     const getScriptRunner = () => session.scriptRunner;
     return {
       logger,
       profile: info.profile,
-      cwd,
       homeDir,
       ...(info.initialFiles ? { initialFiles: info.initialFiles } : {}),
       ...(info.initialGitState
@@ -437,7 +436,7 @@ export class ServerSessionHost implements SessionHost {
         discoverHierarchyContext(absFilePath, {
           fileIO: hostFileIO,
           logger,
-          cwd,
+          projectDir,
           homeDir,
           hierarchyContextFileNames: options.hierarchyContextFileNames,
         }),
@@ -448,7 +447,6 @@ export class ServerSessionHost implements SessionHost {
           ? { luaExecutor: env.luaExecutor }
           : {}),
         mcpToolManager: this.mcpToolManager,
-        cwd,
         homeDir,
         maxConcurrentSubagents: options.maxConcurrentSubagents || 3,
         maxConcurrentFastSubagents: options.maxConcurrentFastSubagents || 8,
@@ -471,7 +469,7 @@ export class ServerSessionHost implements SessionHost {
           message,
           {
             awaitClient: this.context.awaitClient,
-            cwd,
+            projectDir,
             homeDir,
             fileIO: env.fileIO,
             logger: this.context.logger,

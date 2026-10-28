@@ -17,9 +17,9 @@ import {
   withMuted,
 } from "../tea/view.ts";
 import {
-  type Cwd,
   displayPath,
   type HomeDir,
+  type ProjectDir,
   resolveFilePath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
@@ -176,7 +176,7 @@ export function renderResult(
   info: CompletedToolInfo,
   context: {
     threadDispatch: Dispatch<ThreadMsg>;
-    cwd: Cwd;
+    cwd: ProjectDir;
     homeDir: HomeDir;
   },
   toolViewState: ToolViewState,

@@ -1,14 +1,17 @@
 import { $ } from "zx";
 import type { AgentInput } from "../../providers/provider-types.ts";
-import type { Cwd, UnresolvedFilePath } from "../../utils/files.ts";
+import type { ProjectDir, UnresolvedFilePath } from "../../utils/files.ts";
 import type { Command } from "./types.ts";
 
 async function getGitDiff(
   filePath: UnresolvedFilePath,
-  cwd: Cwd,
+  projectDir: ProjectDir,
 ): Promise<string> {
   try {
-    const result = await $({ cwd, quiet: true })`git diff -- ${filePath}`;
+    const result = await $({
+      cwd: projectDir,
+      quiet: true,
+    })`git diff -- ${filePath}`;
     return result.stdout || "(no unstaged changes)";
   } catch (error) {
     throw new Error(
@@ -19,11 +22,11 @@ async function getGitDiff(
 
 async function getStagedDiff(
   filePath: UnresolvedFilePath,
-  cwd: Cwd,
+  projectDir: ProjectDir,
 ): Promise<string> {
   try {
     const result = await $({
-      cwd,
+      cwd: projectDir,
       quiet: true,
     })`git diff --staged -- ${filePath}`;
     return result.stdout || "(no staged changes)";
@@ -40,7 +43,7 @@ export const diffCommand: Command = {
   async execute(match, context): Promise<AgentInput[]> {
     const filePath = match[1] as UnresolvedFilePath;
     try {
-      const diffContent = await getGitDiff(filePath, context.cwd);
+      const diffContent = await getGitDiff(filePath, context.projectDir);
       return [
         {
           type: "text",
@@ -67,7 +70,7 @@ export const stagedCommand: Command = {
   async execute(match, context): Promise<AgentInput[]> {
     const filePath = match[1] as UnresolvedFilePath;
     try {
-      const stagedContent = await getStagedDiff(filePath, context.cwd);
+      const stagedContent = await getStagedDiff(filePath, context.projectDir);
       return [
         {
           type: "text",

@@ -2,10 +2,10 @@ import type { FileIO } from "../../capabilities/file-io.ts";
 import type { Logger } from "../../logger.ts";
 import type { AgentInput } from "../../providers/provider-types.ts";
 import type { ContextFileAccess } from "../../thread.ts";
-import type { Cwd, HomeDir } from "../../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../../utils/files.ts";
 
 export interface MessageContext {
-  cwd: Cwd;
+  projectDir: ProjectDir;
   homeDir: HomeDir;
   /** The thread's (possibly sandboxed or docker) fileIO. */
   fileIO: FileIO;

@@ -54,7 +54,7 @@ export type ThreadLoggerOptions = {
   /** Name of the magenta script that spawned this thread, if any. */
   scriptName?: string;
   /** Working directory the thread ran in. */
-  cwd?: string;
+  projectDir?: string;
 };
 
 export class ThreadLogger {
@@ -62,7 +62,7 @@ export class ThreadLogger {
   private metaPath: string;
   private threadType: ThreadType;
   private scriptName: string | undefined;
-  private cwd: string | undefined;
+  private projectDir: string | undefined;
   private title: string | undefined;
   private metaChain: Promise<void> = Promise.resolve();
   private persistedCount = 0;
@@ -84,7 +84,7 @@ export class ThreadLogger {
     this.metaPath = threadMetaPath(threadId, opts.baseDir);
     this.threadType = threadType;
     this.scriptName = opts.scriptName;
-    this.cwd = opts.cwd;
+    this.projectDir = opts.projectDir;
     const dir = path.dirname(this.filePath);
     this.ready = fs.mkdir(dir, { recursive: true }).then(
       () => undefined,
@@ -179,7 +179,7 @@ export class ThreadLogger {
       ...(this.title !== undefined ? { title: this.title } : {}),
       threadType: this.threadType,
       ...(this.scriptName !== undefined ? { scriptName: this.scriptName } : {}),
-      ...(this.cwd !== undefined ? { cwd: this.cwd } : {}),
+      ...(this.projectDir !== undefined ? { projectDir: this.projectDir } : {}),
     });
     this.metaChain = this.metaChain
       .then(() => this.ready)
@@ -281,10 +281,10 @@ export async function flushArchive(thread: Thread): Promise<void> {
 export function archiveThread<T extends Thread>(args: {
   logger: Logger;
   callbacks: ThreadCallbacks;
-  cwd?: string;
+  projectDir?: string;
   build: (callbacks: ThreadCallbacks) => T;
 }): { thread: T; archive: ThreadLogger } {
-  const { logger, callbacks, cwd, build } = args;
+  const { logger, callbacks, projectDir, build } = args;
   let archive: ThreadLogger | undefined;
   const thread = build({
     ...callbacks,
@@ -318,7 +318,7 @@ export function archiveThread<T extends Thread>(args: {
       ...(baseDir !== undefined ? { baseDir } : {}),
       ...(scriptName !== undefined ? { scriptName } : {}),
       ...(forkedFrom ? { forkedFrom } : {}),
-      ...(cwd !== undefined ? { cwd } : {}),
+      ...(projectDir !== undefined ? { projectDir } : {}),
     },
   );
   archives.set(thread, archive);

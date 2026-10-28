@@ -9,7 +9,7 @@ import {
   type Sandbox,
   startSandbox,
 } from "./sandbox-manager.ts";
-import { type Cwd, type HomeDir, toProjectDir } from "./utils/files.ts";
+import { type HomeDir, type ProjectDir, toProjectDir } from "./utils/files.ts";
 
 const mockInitialize = vi.fn().mockResolvedValue(undefined);
 const mockIsSupportedPlatform = vi.fn().mockReturnValue(true);
@@ -29,8 +29,7 @@ vi.mock("@anthropic-ai/sandbox-runtime", () => ({
   },
 }));
 
-const cwd = "/home/user/project" as Cwd;
-const projectDir = toProjectDir(cwd);
+const projectDir = toProjectDir("/home/user/project");
 const homeDir = "/home/user" as HomeDir;
 
 function makeConfig(overrides?: Partial<SandboxConfig>): SandboxConfig {
@@ -76,7 +75,7 @@ describe("sandbox-manager", () => {
       const config = makeConfig();
       const sandbox = await initializeSandbox(
         config,
-        cwd,
+        projectDir,
         homeDir,
         undefined,
         logger,
@@ -97,7 +96,7 @@ describe("sandbox-manager", () => {
       const config = makeConfig();
       const sandbox = await initializeSandbox(
         config,
-        cwd,
+        projectDir,
         homeDir,
         undefined,
         logger,
@@ -120,7 +119,7 @@ describe("sandbox-manager", () => {
         ) as unknown as import("@anthropic-ai/sandbox-runtime").SandboxAskCallback;
       const sandbox = await initializeSandbox(
         config,
-        cwd,
+        projectDir,
         homeDir,
         askCallback,
         logger,
@@ -143,7 +142,7 @@ describe("sandbox-manager", () => {
       const config = makeConfig();
       const sandbox = await initializeSandbox(
         config,
-        cwd,
+        projectDir,
         homeDir,
         undefined,
         logger,
@@ -170,7 +169,7 @@ describe("sandbox-manager", () => {
       expect(resolved.filesystem.denyRead).toEqual(["/home/user/.ssh"]);
     });
 
-    it("expands ./ to cwd", () => {
+    it("expands ./ to projectDir", () => {
       const config = makeConfig({
         filesystem: {
           allowWrite: ["./"],
@@ -196,7 +195,7 @@ describe("sandbox-manager", () => {
       expect(resolved.filesystem.allowWrite).toEqual(["/tmp/build"]);
     });
 
-    it("resolves relative paths to cwd-relative", () => {
+    it("resolves relative paths to projectDir-relative", () => {
       const config = makeConfig({
         filesystem: {
           allowWrite: ["src/output"],
@@ -232,7 +231,7 @@ describe("sandbox-manager", () => {
       const config = makeConfig();
       const sandbox = await initializeSandbox(
         config,
-        cwd,
+        projectDir,
         homeDir,
         undefined,
         logger,
@@ -247,7 +246,7 @@ describe("sandbox-manager", () => {
       const config = makeConfig();
       const sandbox = await initializeSandbox(
         config,
-        cwd,
+        projectDir,
         homeDir,
         undefined,
         logger,
@@ -272,7 +271,7 @@ describe("sandbox-manager", () => {
       const config = makeConfig();
       const sandbox = await initializeSandbox(
         config,
-        cwd,
+        projectDir,
         homeDir,
         undefined,
         logger,
@@ -348,13 +347,13 @@ describe("NetworkAskStack", () => {
 
 describe("startSandbox", () => {
   const cfg = {} as SandboxConfig;
-  const cwd = "/tmp" as Cwd;
+  const projectDir = "/tmp" as ProjectDir;
   const home = "/home" as HomeDir;
   it("falls back to an unsupported sandbox when initialization fails", async () => {
     const warnings: string[] = [];
     const sandbox = await startSandbox(
       cfg,
-      cwd,
+      projectDir,
       home,
       { warn: (m) => warnings.push(m) },
       () => Promise.reject(new Error("boom")),
@@ -365,7 +364,7 @@ describe("startSandbox", () => {
   it("rethrows a missing strace", async () => {
     const err = new StraceUnavailableError("missing");
     await expect(
-      startSandbox(cfg, cwd, home, { warn: () => {} }, () =>
+      startSandbox(cfg, projectDir, home, { warn: () => {} }, () =>
         Promise.reject(err),
       ),
     ).rejects.toBe(err);
@@ -377,7 +376,7 @@ describe("startSandbox", () => {
     const routed: string[] = [];
     const sandbox = await startSandbox(
       cfg,
-      cwd,
+      projectDir,
       home,
       { warn: () => {} },
       async (_c, _w, _h, cb) => {

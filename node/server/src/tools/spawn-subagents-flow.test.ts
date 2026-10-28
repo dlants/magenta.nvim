@@ -9,11 +9,11 @@ import type { Thread } from "../thread.ts";
 import { UnsupervisedSupervisor } from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
-import type { Cwd } from "../utils/files.ts";
+import type { ProjectDir } from "../utils/files.ts";
 
 /** The built-in agent definitions shipped in the server source tree. */
 const builtinAgents = loadAgents({
-  cwd: "/project" as Cwd,
+  projectDir: "/project" as ProjectDir,
   logger: noopLogger,
   options: {
     agentsPaths: [path.join(import.meta.dirname, "../agents")],

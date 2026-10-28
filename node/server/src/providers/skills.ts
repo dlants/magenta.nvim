@@ -5,9 +5,9 @@ import type { Logger } from "../logger.ts";
 import type { ProviderOptions } from "../provider-options.ts";
 import {
   type AbsFilePath,
-  type Cwd,
   expandTilde,
   type HomeDir,
+  type ProjectDir,
 } from "../utils/files.ts";
 
 export type SkillInfo = {
@@ -26,7 +26,7 @@ type YamlFrontmatter = {
 };
 
 export async function loadSkills(context: {
-  cwd: Cwd;
+  projectDir: ProjectDir;
   logger: Logger;
   options: ProviderOptions;
   fileIO: FileIO;
@@ -94,7 +94,7 @@ function isUserLevelSkillsDir(skillsDir: string, homeDir: HomeDir): boolean {
 async function findSkillFilesInDirectory(
   skillsDir: string,
   context: {
-    cwd: Cwd;
+    projectDir: ProjectDir;
     logger: Logger;
     fileIO: FileIO;
     homeDir: HomeDir;
@@ -104,9 +104,9 @@ async function findSkillFilesInDirectory(
 
   // Build the list of directories to scan.
   // For absolute paths, scan that one directory.
-  // For relative paths, walk from filesystem root down to cwd, applying the
+  // For relative paths, walk from filesystem root down to projectDir, applying the
   // relative path at each ancestor. This way more deeply-nested directories
-  // (closer to cwd) override skills from parent directories via the override
+  // (closer to projectDir) override skills from parent directories via the override
   // logic in loadSkills.
   const directoriesToScan: string[] = [];
 
@@ -114,7 +114,7 @@ async function findSkillFilesInDirectory(
     directoriesToScan.push(expandedDir);
   } else {
     const ancestors: string[] = [];
-    let current: string = context.cwd;
+    let current: string = context.projectDir;
     while (true) {
       ancestors.push(path.join(current, expandedDir));
       const parent = path.dirname(current);
@@ -123,7 +123,7 @@ async function findSkillFilesInDirectory(
       }
       current = parent;
     }
-    // Reverse so outermost (filesystem root) is first, innermost (cwd) is last
+    // Reverse so outermost (filesystem root) is first, innermost (projectDir) is last
     directoriesToScan.push(...ancestors.reverse());
   }
 

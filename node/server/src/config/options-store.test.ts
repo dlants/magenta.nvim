@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import { OptionsStore } from "./options-store.ts";
 
 const logger = {
@@ -14,14 +14,14 @@ const logger = {
 };
 
 let root: string;
-let cwd: Cwd;
+let projectDir: ProjectDir;
 let home: HomeDir;
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "magenta-options-"));
-  cwd = path.join(root, "project") as Cwd;
+  projectDir = path.join(root, "project") as ProjectDir;
   home = path.join(root, "home") as HomeDir;
-  fs.mkdirSync(path.join(cwd, ".magenta"), { recursive: true });
+  fs.mkdirSync(path.join(projectDir, ".magenta"), { recursive: true });
   fs.mkdirSync(path.join(home, ".magenta"), { recursive: true });
 });
 
@@ -43,7 +43,7 @@ it("is fully configured by ~/.magenta/options.json alone", () => {
     sandbox: { filesystem: { denyRead: [".private"] } },
     autoContext: [],
   });
-  const options = new OptionsStore(home, logger).getOptions(cwd);
+  const options = new OptionsStore(home, logger).getOptions(projectDir);
   expect(options.profiles.map((p) => p.name)).toEqual(["only"]);
   expect(options.activeProfile).toBe("only");
   expect(options.sandbox.filesystem.denyRead).toContain(".private");
@@ -53,21 +53,29 @@ it("is fully configured by ~/.magenta/options.json alone", () => {
 
 it("uses built-in defaults when no options files exist", () => {
   fs.rmSync(path.join(home, ".magenta"), { recursive: true });
-  const options = new OptionsStore(home, logger).getOptions(cwd);
+  const options = new OptionsStore(home, logger).getOptions(projectDir);
   expect(options.profiles.length).toBeGreaterThan(0);
 });
 
 it("picks up edits to the project options.json on the next call", () => {
   const store = new OptionsStore(home, logger);
-  expect(store.getOptions(cwd).sandbox.filesystem.denyRead).not.toContain(
+  expect(
+    store.getOptions(projectDir).sandbox.filesystem.denyRead,
+  ).not.toContain(".secret");
+  write(
+    projectDir,
+    { sandbox: { filesystem: { denyRead: [".secret"] } } },
+    1000,
+  );
+  expect(store.getOptions(projectDir).sandbox.filesystem.denyRead).toContain(
     ".secret",
   );
-  write(cwd, { sandbox: { filesystem: { denyRead: [".secret"] } } }, 1000);
-  expect(store.getOptions(cwd).sandbox.filesystem.denyRead).toContain(
-    ".secret",
+  write(
+    projectDir,
+    { sandbox: { filesystem: { denyRead: [".other"] } } },
+    2000,
   );
-  write(cwd, { sandbox: { filesystem: { denyRead: [".other"] } } }, 2000);
-  const denyRead = store.getOptions(cwd).sandbox.filesystem.denyRead;
+  const denyRead = store.getOptions(projectDir).sandbox.filesystem.denyRead;
   expect(denyRead).toContain(".other");
   expect(denyRead).not.toContain(".secret");
 });
@@ -78,39 +86,49 @@ it("picks up edits and deletion of the user options.json", () => {
     { profiles: [{ name: "u1", provider: "anthropic", model: "m" }] },
     1000,
   );
-  expect(store.getOptions(cwd).profiles.map((p) => p.name)).toEqual(["u1"]);
+  expect(store.getOptions(projectDir).profiles.map((p) => p.name)).toEqual([
+    "u1",
+  ]);
   write(
     home,
     { profiles: [{ name: "u2", provider: "anthropic", model: "m" }] },
     2000,
   );
-  expect(store.getOptions(cwd).profiles.map((p) => p.name)).toEqual(["u2"]);
+  expect(store.getOptions(projectDir).profiles.map((p) => p.name)).toEqual([
+    "u2",
+  ]);
   fs.rmSync(path.join(home, ".magenta", "options.json"));
-  expect(store.getOptions(cwd).profiles.map((p) => p.name)).not.toContain("u2");
+  expect(
+    store.getOptions(projectDir).profiles.map((p) => p.name),
+  ).not.toContain("u2");
 });
 it("falls back when a cached project options.json is deleted", () => {
   const store = new OptionsStore(home, logger);
-  write(cwd, { sandbox: { filesystem: { denyRead: [".secret"] } } }, 1000);
-  expect(store.getOptions(cwd).sandbox.filesystem.denyRead).toContain(
+  write(
+    projectDir,
+    { sandbox: { filesystem: { denyRead: [".secret"] } } },
+    1000,
+  );
+  expect(store.getOptions(projectDir).sandbox.filesystem.denyRead).toContain(
     ".secret",
   );
-  fs.rmSync(path.join(cwd, ".magenta", "options.json"));
-  expect(store.getOptions(cwd).sandbox.filesystem.denyRead).not.toContain(
-    ".secret",
-  );
+  fs.rmSync(path.join(projectDir, ".magenta", "options.json"));
+  expect(
+    store.getOptions(projectDir).sandbox.filesystem.denyRead,
+  ).not.toContain(".secret");
 });
-it("keeps separate cache entries per cwd, each merged with the user file", () => {
-  const other = path.join(root, "other") as Cwd;
+it("keeps separate cache entries per projectDir, each merged with the user file", () => {
+  const other = path.join(root, "other") as ProjectDir;
   fs.mkdirSync(path.join(other, ".magenta"), { recursive: true });
   write(
     home,
     { profiles: [{ name: "u", provider: "anthropic", model: "m" }] },
     1000,
   );
-  write(cwd, { sandbox: { filesystem: { denyRead: [".a"] } } }, 1000);
+  write(projectDir, { sandbox: { filesystem: { denyRead: [".a"] } } }, 1000);
   write(other, { sandbox: { filesystem: { denyRead: [".b"] } } }, 1000);
   const store = new OptionsStore(home, logger);
-  const a = store.getOptions(cwd);
+  const a = store.getOptions(projectDir);
   const b = store.getOptions(other);
   expect(a.sandbox.filesystem.denyRead).toContain(".a");
   expect(a.sandbox.filesystem.denyRead).not.toContain(".b");
@@ -127,10 +145,10 @@ it("warns with the Settings prefix on malformed files and returns usable options
   };
   fs.writeFileSync(path.join(home, ".magenta", "options.json"), "{ not json");
   fs.writeFileSync(
-    path.join(cwd, ".magenta", "options.json"),
+    path.join(projectDir, ".magenta", "options.json"),
     JSON.stringify({ profiles: "bad" }),
   );
-  const options = new OptionsStore(home, log).getOptions(cwd);
+  const options = new OptionsStore(home, log).getOptions(projectDir);
   expect(options.profiles.length).toBeGreaterThan(0);
   expect(warnings.length).toBeGreaterThan(0);
   expect(warnings.every((w) => w.startsWith("Settings: "))).toBe(true);

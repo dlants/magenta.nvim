@@ -8,7 +8,6 @@ import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
 import type {
   AbsFilePath,
-  Cwd,
   HomeDir,
   UnresolvedFilePath,
 } from "../utils/files.ts";
@@ -59,7 +58,6 @@ describe("GetFileTool unit tests", () => {
         },
       },
       {
-        cwd: tmpDir as Cwd,
         homeDir: "/tmp/fake-home" as HomeDir,
         fileIO: io,
         contextTracker: mockContextTracker,
@@ -810,7 +808,6 @@ describe("GetFileTool unit tests", () => {
         },
       },
       {
-        cwd: tmpDir as Cwd,
         homeDir: "/tmp/fake-home" as HomeDir,
         fileIO: io,
         contextTracker: mockContextTracker,

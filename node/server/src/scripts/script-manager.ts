@@ -16,8 +16,12 @@ import { Emitter } from "../emitter.ts";
 import type { Logger } from "../logger.ts";
 import type { Session } from "../session.ts";
 import type { ThreadOutcome } from "../thread-api.ts";
-import type { Cwd, HomeDir, UnresolvedFilePath } from "../utils/files.ts";
-import { expandTilde, toCwd } from "../utils/files.ts";
+import type {
+  HomeDir,
+  ProjectDir,
+  UnresolvedFilePath,
+} from "../utils/files.ts";
+import { expandTilde, toProjectDir } from "../utils/files.ts";
 import { escalateToSigkill, terminateProcess } from "../utils/process.ts";
 import type {
   MagentaToScript,
@@ -149,7 +153,7 @@ type ScriptThreadRequest = {
   requestId: number;
   prompt: string;
   yieldSchema: JSONSchemaType;
-  cwd?: Cwd;
+  projectDir?: ProjectDir;
   contextFiles?: UnresolvedFilePath[];
   systemReminder?: string;
   autoCompactThreshold?: number;
@@ -158,7 +162,7 @@ type ScriptThreadRequest = {
 
 export function normalizeThreadRequest(
   msg: Extract<ScriptToMagenta, { type: "create-thread" }>,
-  base: { cwd: Cwd; homeDir: HomeDir },
+  base: { projectDir: ProjectDir; homeDir: HomeDir },
 ): ScriptThreadRequest {
   const options = msg.options ?? {};
   const request: ScriptThreadRequest = {
@@ -166,14 +170,19 @@ export function normalizeThreadRequest(
     prompt: msg.prompt,
     yieldSchema: msg.yieldSchema as JSONSchemaType,
   };
-  if (typeof options.cwd === "string")
-    request.cwd = toCwd(
-      path.resolve(base.cwd, expandTilde(options.cwd, base.homeDir)),
-    );
+  if (typeof options.projectDir === "string") {
+    const dir = expandTilde(options.projectDir, base.homeDir);
+    if (!path.isAbsolute(dir)) {
+      throw new Error(
+        `options.projectDir must be an absolute path, got "${options.projectDir}"`,
+      );
+    }
+    request.projectDir = toProjectDir(dir);
+  }
   if (Array.isArray(options.contextFiles)) {
     // Thread file tracking only accepts absolute paths; scripts may pass
     // paths relative to the thread's directory.
-    const threadDir = request.cwd ?? base.cwd;
+    const threadDir = request.projectDir ?? base.projectDir;
     request.contextFiles = options.contextFiles
       .filter((f): f is string => typeof f === "string")
       .map((f) =>
@@ -254,7 +263,7 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
     private context: {
       session: Session;
       logger: Logger;
-      cwd: Cwd;
+      projectDir: ProjectDir;
       homeDir: HomeDir;
       getScriptsPaths: () => string[];
       sandbox: ScriptSandboxCapability;
@@ -307,7 +316,7 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
 
   /**
    * Resolve the configured `scriptsPaths` to absolute directories, expanding
-   * `~` and resolving relative entries against the cwd. Later paths take
+   * `~` and resolving relative entries against the projectDir. Later paths take
    * precedence on name collisions (project scripts override global ones), so we
    * order earlier entries first and let `discover()` overwrite as it goes.
    */
@@ -316,7 +325,7 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
     const dirs: string[] = [];
     for (const entry of this.context.getScriptsPaths()) {
       const expanded = expandTilde(entry, this.context.homeDir);
-      const abs = path.resolve(this.context.cwd, expanded);
+      const abs = path.resolve(this.context.projectDir, expanded);
       if (seen.has(abs)) continue;
       seen.add(abs);
       dirs.push(abs);
@@ -612,7 +621,20 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
   ): void {
     const invocation = this.invocations.get(id);
     if (!invocation) return;
-    const request = normalizeThreadRequest(msg, this.context);
+    let request: ScriptThreadRequest;
+    try {
+      request = normalizeThreadRequest(msg, this.context);
+    } catch (err) {
+      this.send(id, {
+        type: "thread-result",
+        requestId: msg.requestId,
+        result: {
+          status: "error",
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+      return;
+    }
     const { requestId, ...threadRequest } = request;
     // The bypass state of a script thread belongs to its invocation, so it is
     // published against the reserved id before creation starts.

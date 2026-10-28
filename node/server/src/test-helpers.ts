@@ -63,7 +63,7 @@ import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { pollUntil, type Task } from "./utils/async.ts";
-import { threadConversationLogPath } from "./utils/files.ts";
+import { type ProjectDir, threadConversationLogPath } from "./utils/files.ts";
 export const TEST_ARCHIVE_DIR = path.join(os.tmpdir(), "magenta-test-archive");
 
 export const noopLogger: Logger = {
@@ -256,7 +256,6 @@ function baseTestContext(
       provider: "mock",
       model: "claude-3-5-sonnet-20241022",
     } as ProviderProfile,
-    cwd: "/tmp" as ThreadContext["cwd"],
     homeDir: "/home" as ThreadContext["homeDir"],
     threadType: "root" as ThreadType,
     systemPrompt: "test system prompt" as unknown as SystemPrompt,
@@ -264,7 +263,7 @@ function baseTestContext(
       timestamp: "Mon Jan 01 2024 00:00:00 GMT+0000",
       platform: "linux",
       neovimVersion: "0.10.0",
-      cwd: "/tmp" as ThreadContext["cwd"],
+      projectDir: "/tmp" as ProjectDir,
     },
     mcpToolManager: stub<MCPToolManager>({
       serverMap: {},
@@ -290,7 +289,6 @@ function baseTestContext(
     logger: context.logger,
     lspClient: stub<ClientToolContext["lspClient"]>({}),
     mcpToolManager: context.mcpToolManager,
-    cwd: context.cwd,
     homeDir: context.homeDir,
     maxConcurrentSubagents: 1,
     maxConcurrentFastSubagents: 8,

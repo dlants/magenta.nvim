@@ -76,7 +76,7 @@ import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
-import type { Cwd } from "./utils/files.ts";
+import type { ProjectDir } from "./utils/files.ts";
 export type { ContextDelivery, ThreadCoreContext, ThreadStatus, YieldState };
 /** What hooks see when no submission is running: nothing can abort them. */
 const RETIRED_CORE_SUPERVISOR: ThreadCoreCallbacks["supervisor"] = {
@@ -96,8 +96,8 @@ export type ContextFileAccess = Readonly<
 >;
 
 export type EnvironmentConfig =
-  | { type: "local"; cwd?: Cwd }
-  | { type: "docker"; container: string; cwd: string };
+  | { type: "local"; projectDir?: ProjectDir }
+  | { type: "docker"; container: string; projectDir: string };
 
 export interface ThreadContextBase
   extends Omit<

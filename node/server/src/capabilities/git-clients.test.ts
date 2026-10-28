@@ -10,11 +10,11 @@ import { LocalGitClient } from "./git-clients.ts";
 
 const execFile = promisify(execFileCb);
 
-async function git(cwd: string, args: string[]): Promise<void> {
+async function git(projectDir: string, args: string[]): Promise<void> {
   await execFile(
     "git",
     ["-c", "user.email=test@test.com", "-c", "user.name=test", ...args],
-    { cwd },
+    { cwd: projectDir },
   );
 }
 

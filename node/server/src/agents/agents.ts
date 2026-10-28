@@ -4,7 +4,7 @@ import * as path from "node:path";
 
 import type { Logger } from "../logger.ts";
 import type { ProviderOptions, ThinkingEffort } from "../provider-options.ts";
-import type { Cwd } from "../utils/files.ts";
+import type { ProjectDir } from "../utils/files.ts";
 
 export type AgentInfo = {
   name: string;
@@ -38,7 +38,7 @@ type AgentFrontmatter = {
   tier?: AgentTier;
 };
 export function loadAgents(context: {
-  cwd: Cwd;
+  projectDir: ProjectDir;
   logger: Logger;
   options: ProviderOptions;
   fs?: AgentsFs;
@@ -92,7 +92,7 @@ function expandTilde(filepath: string): string {
 function findAgentFilesInDirectory(
   agentsDir: string,
   context: {
-    cwd: Cwd;
+    projectDir: ProjectDir;
     logger: Logger;
     fs: AgentsFs;
   },
@@ -104,7 +104,7 @@ function findAgentFilesInDirectory(
     const expandedDir = expandTilde(agentsDir);
     const agentsDirPath = path.isAbsolute(expandedDir)
       ? expandedDir
-      : path.join(context.cwd, expandedDir);
+      : path.join(context.projectDir, expandedDir);
 
     try {
       const stats = fs.statSync(agentsDirPath);

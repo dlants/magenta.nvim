@@ -44,7 +44,7 @@ import type {
   ToolRequestId,
   ToolStructuredResult,
 } from "../tool-types.ts";
-import type { AbsFilePath, Cwd } from "../utils/files.ts";
+import type { AbsFilePath, ProjectDir } from "../utils/files.ts";
 import type { JsonValue } from "../utils/json.ts";
 
 export type { JsonValue };
@@ -103,7 +103,7 @@ export type ProtocolThreadState = {
   id: ThreadId;
   title?: string;
   threadType: ThreadType;
-  cwd: Cwd;
+  projectDir: ProjectDir;
   /** The single source for busy/yielded/lastResult. */
   run: ProtocolRunState;
   messages: ReadonlyArray<ProviderMessage>;
@@ -313,7 +313,7 @@ export function threadState(
     id: thread.id,
     ...(thread.title !== undefined ? { title: thread.title } : {}),
     threadType: thread.threadType,
-    cwd: thread.systemInfo.cwd,
+    projectDir: thread.systemInfo.projectDir,
     run: runState(thread.state),
     messages: thread.getProviderMessages(),
     tools: toolStates(thread),

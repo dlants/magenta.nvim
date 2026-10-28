@@ -12,10 +12,10 @@ import { d, type VDOMNode, withBindings, withInlineCode } from "../tea/view.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import {
   type AbsFilePath,
-  type Cwd,
   displayPath,
   FileCategory,
   type HomeDir,
+  type ProjectDir,
 } from "../utils/files.ts";
 import { formatTokens } from "../utils/tokens.ts";
 
@@ -31,7 +31,7 @@ export type {
 } from "@magenta/server";
 
 export type ContextViewContext = {
-  cwd: Cwd;
+  cwd: ProjectDir;
   homeDir: HomeDir;
   nvim: Nvim;
   options: MagentaOptions;

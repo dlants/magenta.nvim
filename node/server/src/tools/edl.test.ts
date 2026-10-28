@@ -4,7 +4,7 @@ import type { OnToolApplied } from "../capabilities/context-tracker.ts";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import type { EdlRegisters } from "../index.ts";
 import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir } from "../utils/files.ts";
 import * as Edl from "./edl.ts";
 
 describe("EdlTool unit tests", () => {
@@ -41,7 +41,6 @@ replace "goodbye"`;
         input,
       },
       {
-        cwd: tmpDir as Cwd,
         homeDir: "/tmp/fake-home" as HomeDir,
         fileIO: io,
         edlRegisters,
@@ -82,7 +81,6 @@ replace "goodbye"`;
         input: { script },
       },
       {
-        cwd: tmpDir as Cwd,
         homeDir: "/tmp/fake-home" as HomeDir,
         fileIO: io,
         edlRegisters,

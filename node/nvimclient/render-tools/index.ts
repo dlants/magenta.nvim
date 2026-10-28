@@ -18,7 +18,7 @@ import type { RootMsg } from "../root-msg.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { d, type VDOMNode } from "../tea/view.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import { formatTokens } from "../utils/tokens.ts";
 import * as BashCommandRender from "./bashCommand.ts";
 import * as EdlRender from "./edl.ts";
@@ -38,7 +38,7 @@ export type RenderContext = {
   /** Called while rendering time-dependent content, to keep it animating. */
   requestTick: () => void;
   nvim: Nvim;
-  cwd: Cwd;
+  cwd: ProjectDir;
   homeDir: HomeDir;
   options: MagentaOptions;
   dispatch: Dispatch<RootMsg>;

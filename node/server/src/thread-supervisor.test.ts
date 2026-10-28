@@ -316,7 +316,7 @@ describe("SystemInfoSupervisor", () => {
     timestamp: "now",
     platform: "darwin",
     neovimVersion: "801",
-    cwd: "/tmp" as SystemInfo["cwd"],
+    projectDir: "/tmp" as SystemInfo["projectDir"],
     git: undefined,
   };
   it("injects once", async () => {

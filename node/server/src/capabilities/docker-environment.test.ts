@@ -3,7 +3,6 @@ import * as fs from "node:fs";
 import { promisify } from "node:util";
 import type {
   AbsFilePath,
-  Cwd,
   HomeDir,
   MCPToolManager,
   ThreadId,
@@ -151,25 +150,25 @@ describe("Docker Environment", () => {
   });
 
   describe("createDockerEnvironment", () => {
-    it("resolves cwd and homeDir from container", async () => {
+    it("resolves projectDir and homeDir from container", async () => {
       const env = await createDockerEnvironment({
         container: containerId,
         threadId: mockThreadId,
       });
-      // cwd and homeDir should be non-empty paths
-      expect(env.cwd).toBeTruthy();
+      // projectDir and homeDir should be non-empty paths
+      expect(env.projectDir).toBeTruthy();
       expect(env.homeDir).toBeTruthy();
-      expect(env.cwd.startsWith("/")).toBe(true);
+      expect(env.projectDir.startsWith("/")).toBe(true);
       expect(env.homeDir.startsWith("/")).toBe(true);
     });
 
-    it("uses provided cwd", async () => {
+    it("uses provided projectDir", async () => {
       const env = await createDockerEnvironment({
         container: containerId,
-        cwd: "/tmp",
+        projectDir: "/tmp",
         threadId: mockThreadId,
       });
-      expect(env.cwd).toBe("/tmp");
+      expect(env.projectDir).toBe("/tmp");
     });
 
     it("has correct capabilities", async () => {
@@ -186,13 +185,13 @@ describe("Docker Environment", () => {
     it("stores environmentConfig", async () => {
       const env = await createDockerEnvironment({
         container: containerId,
-        cwd: "/tmp",
+        projectDir: "/tmp",
         threadId: mockThreadId,
       });
       expect(env.environmentConfig).toEqual({
         type: "docker",
         container: containerId,
-        cwd: "/tmp",
+        projectDir: "/tmp",
       });
     });
 
@@ -270,7 +269,6 @@ describe("Docker Environment", () => {
         };
 
         const invocation = GetFile.execute(request, {
-          cwd: "/tmp" as Cwd,
           homeDir: "/root" as HomeDir,
           fileIO,
           contextTracker: { files: {} },

@@ -8,7 +8,7 @@ import {
 } from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
-import type { AbsFilePath, Cwd } from "../utils/files.ts";
+import type { AbsFilePath, ProjectDir } from "../utils/files.ts";
 import { FakeShell, shellResult } from "./fakes.ts";
 import { withHarness } from "./harness.ts";
 
@@ -211,19 +211,22 @@ it("seeds autoContext files from the in-memory fs", () =>
       ]);
     },
   ));
-it("keeps a thread's cwd fixed after creation", () =>
+it("keeps a thread's projectDir fixed after creation", () =>
   withHarness(
     { files: { "/other/a.txt": "in other", "/project/a.txt": "in project" } },
     async (h) => {
       const id = await h.session.createThread({
         profile: h.host.profile,
         threadType: "root",
-        environmentConfig: { type: "local", cwd: "/other" as Cwd },
+        environmentConfig: {
+          type: "local",
+          projectDir: "/other" as ProjectDir,
+        },
       });
       if (id === ABORTED) throw new Error("aborted");
       const thread = h.thread(id);
-      h.host.cwd = "/moved" as Cwd;
-      expect(thread.systemInfo.cwd).toBe("/other");
+      h.host.projectDir = "/moved" as ProjectDir;
+      expect(thread.systemInfo.projectDir).toBe("/other");
       const done = h.send(thread, "read it");
       const stream = await h.nextStream();
       stream.streamToolUse("r-1" as ToolRequestId, "get_files" as ToolName, {

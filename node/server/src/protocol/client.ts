@@ -5,7 +5,7 @@ import type {
   LspReferencesResponse,
 } from "../capabilities/lsp-client.ts";
 import type { AgentInput } from "../providers/provider-types.ts";
-import type { AbsFilePath, Cwd, HomeDir } from "../utils/files.ts";
+import type { AbsFilePath, HomeDir, ProjectDir } from "../utils/files.ts";
 import type { JsonValue } from "../utils/json.ts";
 
 /** Derived by `createClientEffectHandler` from the handlers a client serves. */
@@ -24,7 +24,7 @@ export type LspRequestKind =
 export type LspRequest = {
   type: "lsp";
   kind: LspRequestKind;
-  cwd: Cwd;
+  projectDir: ProjectDir;
   homeDir: HomeDir;
   filePath: AbsFilePath;
   position: { line: number; character: number };

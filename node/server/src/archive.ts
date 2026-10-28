@@ -60,14 +60,14 @@ export type ThreadMeta = {
   title?: string;
   threadType?: ThreadType;
   scriptName?: string;
-  cwd?: string;
+  projectDir?: string;
 };
 
 export type ArchiveEntry = {
   id: ThreadId;
   title?: string;
   scriptName?: string;
-  cwd?: string;
+  projectDir?: string;
 };
 
 /** Threads that are worth showing in the archive list. Subagent threads are
@@ -104,7 +104,9 @@ export async function listArchivedThreads(
         ...(meta.scriptName !== undefined
           ? { scriptName: meta.scriptName }
           : {}),
-        ...(meta.cwd !== undefined ? { cwd: meta.cwd } : {}),
+        ...(meta.projectDir !== undefined
+          ? { projectDir: meta.projectDir }
+          : {}),
       });
     }
   }
@@ -127,7 +129,10 @@ export async function readThreadMeta(
     if (typeof record.title === "string") result.title = record.title;
     if (typeof record.scriptName === "string")
       result.scriptName = record.scriptName;
-    if (typeof record.cwd === "string") result.cwd = record.cwd;
+    if (typeof record.projectDir === "string")
+      result.projectDir = record.projectDir;
+    // Archives written before the rename stored the start directory as `cwd`.
+    else if (typeof record.cwd === "string") result.projectDir = record.cwd;
     if (isThreadType(record.threadType)) result.threadType = record.threadType;
     return result;
   } catch {

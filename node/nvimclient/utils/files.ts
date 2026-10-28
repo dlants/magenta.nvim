@@ -1,9 +1,12 @@
-import { type AbsFilePath, type Cwd, toCwd } from "@magenta/server";
+import {
+  type AbsFilePath,
+  type ProjectDir,
+  toProjectDir,
+} from "@magenta/server";
 
 export {
   type AbsFilePath,
   AT_FILE_PATTERN,
-  type Cwd,
   categorizeFileType,
   type DisplayPath,
   detectFileType,
@@ -18,22 +21,23 @@ export {
   type HomeDir,
   isLikelyTextFile,
   MAGENTA_TEMP_DIR,
+  type ProjectDir,
   type RelFilePath,
   relativePath,
   resolveFilePath,
   shortenPath,
-  toCwd,
+  toProjectDir,
   type UnresolvedFilePath,
   unescapeFenceBody,
   validateFileSize,
 } from "@magenta/server";
 
-/** Neovim's cwd. Client-only: used to resolve editor-selected paths and shorten displayed paths. Server code uses `Cwd`. */
+/** Neovim's cwd. Client-only: used to resolve editor-selected paths and shorten displayed paths. Server code uses `ProjectDir`. */
 export type NvimCwd = AbsFilePath & { __nvim_cwd: true };
 
-/** The one place a client path becomes a server `Cwd`: the client picks the directory a thread it creates will
+/** The one place a client path becomes a server `ProjectDir`: the client picks the directory a thread it creates will
  * operate in. The thread keeps it for life, independent of later Neovim cwd changes.
  */
-export function threadCwdFromNvimCwd(cwd: NvimCwd): Cwd {
-  return toCwd(cwd);
+export function threadCwdFromNvimCwd(cwd: NvimCwd): ProjectDir {
+  return toProjectDir(cwd);
 }

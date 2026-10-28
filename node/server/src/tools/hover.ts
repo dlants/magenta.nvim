@@ -13,7 +13,6 @@ import type {
   ToolName,
 } from "../tool-types.ts";
 import {
-  type Cwd,
   type HomeDir,
   resolveAbsPath,
   type UnresolvedFilePath,
@@ -28,7 +27,6 @@ export type StructuredResult = { toolName: "hover" };
 export function execute(
   request: ToolRequest,
   context: {
-    cwd: Cwd;
     homeDir: HomeDir;
     lspClient: LspClient;
     fileIO: FileIO;

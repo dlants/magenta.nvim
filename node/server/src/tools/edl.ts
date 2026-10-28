@@ -15,7 +15,7 @@ import type {
   GenericToolRequest,
   ToolName,
 } from "../tool-types.ts";
-import { type Cwd, FileCategory, type HomeDir } from "../utils/files.ts";
+import { FileCategory, type HomeDir } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
 
 const EDL_DESCRIPTION = readFileSync(
@@ -48,7 +48,6 @@ export type ToolRequest = GenericToolRequest<"edl", Input>;
 export function execute(
   request: ToolRequest,
   context: {
-    cwd: Cwd;
     homeDir: HomeDir;
     fileIO: FileIO;
     edlRegisters: EdlRegisters;

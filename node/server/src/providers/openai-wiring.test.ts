@@ -16,6 +16,7 @@ import { clientToolCreator } from "../tools/create-tool.ts";
 import { validateInput } from "../tools/helpers.ts";
 import type { MCPToolManager } from "../tools/mcp/manager.ts";
 import { pollUntil } from "../utils/async.ts";
+import type { ProjectDir } from "../utils/files.ts";
 import { CodexAuthError } from "./codex-auth.ts";
 import { MockOpenAIClient, mockResponse } from "./mock-openai-client.ts";
 import { OpenAIProvider, openaiInferenceOptions } from "./openai.ts";
@@ -51,7 +52,6 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
       provider: "openai",
       model: "gpt-5.4",
     } as ProviderProfile,
-    cwd: "/tmp" as ThreadContext["cwd"],
     homeDir: "/home" as ThreadContext["homeDir"],
     threadType: "subagent" as ThreadType,
     systemPrompt: "test system prompt" as unknown as SystemPrompt,
@@ -59,7 +59,7 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
       timestamp: "Mon Jan 01 2024 00:00:00 GMT+0000",
       platform: "linux",
       neovimVersion: "0.10.0",
-      cwd: "/tmp" as ThreadContext["cwd"],
+      projectDir: "/tmp" as ProjectDir,
     },
     mcpToolManager: {
       serverMap: {},
@@ -86,7 +86,6 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
         serverMap: {},
         getToolSpecs: () => [],
       } as unknown as ClientToolContext["mcpToolManager"],
-      cwd: "/tmp" as ThreadContext["cwd"],
       homeDir: "/home" as ThreadContext["homeDir"],
       maxConcurrentSubagents: 1,
       maxConcurrentFastSubagents: 8,

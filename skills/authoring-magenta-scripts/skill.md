@@ -60,7 +60,7 @@ The runner receives:
   `options` may include:
   - `contextFiles`: absolute paths to seed into the thread's context.
   - `systemReminder`: a recurring system reminder injected into the thread.
-  - `cwd`, `profile`, `model`, `tools`.
+  - `projectDir` (absolute or `~/`), `profile`, `model`, `tools`.
 - `log(message)`: reports progress; surfaced in the magenta Scripts section.
 
 ## Minimal end-to-end example

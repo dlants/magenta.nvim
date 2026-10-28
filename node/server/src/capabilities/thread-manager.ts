@@ -1,6 +1,6 @@
 import type { SubagentConfig, ThreadId, ThreadType } from "../chat-types.ts";
 import type { Aborted, ThreadOutcome } from "../thread-api.ts";
-import type { Cwd, UnresolvedFilePath } from "../utils/files.ts";
+import type { ProjectDir, UnresolvedFilePath } from "../utils/files.ts";
 import type { FileIO } from "./file-io.ts";
 
 export type DockerSpawnConfig = {
@@ -19,7 +19,7 @@ export interface ThreadManager {
     subagentConfig?: SubagentConfig;
     contextFiles?: UnresolvedFilePath[];
     dockerSpawnConfig?: DockerSpawnConfig;
-    cwd?: Cwd;
+    projectDir?: ProjectDir;
     /** Sandboxes the thread's file tools to an in-memory world (compaction). */
     fileIO?: FileIO;
     /** Seeds the thread's title, so it is identifiable in the thread tree
@@ -27,6 +27,9 @@ export interface ThreadManager {
     label?: string;
   }): Promise<ThreadId | Aborted>;
 
+  /** The directory the thread was started from (session metadata, never a
+   * working directory of the agent). */
+  getProjectDir(threadId: ThreadId): ProjectDir;
   /** Delete a thread and its descendants. Any `awaitThreadResult` on them
    * settles `aborted`. */
   deleteThread(threadId: ThreadId): void;

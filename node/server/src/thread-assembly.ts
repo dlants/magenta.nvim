@@ -134,7 +134,7 @@ export function assembleThread(args: {
     archiveThread({
       logger: context.logger,
       callbacks,
-      ...(context.cwd !== undefined ? { cwd: context.cwd } : {}),
+      projectDir: context.systemInfo.projectDir,
       build: (threadCallbacks) => {
         const thread =
           initialization.type === "fork"

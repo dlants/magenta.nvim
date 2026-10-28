@@ -3,7 +3,7 @@ import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import type { Logger } from "../logger.ts";
 import { type Harness, withHarness } from "../test/harness.ts";
 import { noopLogger } from "../test-helpers.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import { loadSkills } from "./skills.ts";
 
 const SKILLS = "/project/.claude/skills";
@@ -118,7 +118,7 @@ it("logs when a skill overrides one with a duplicate name", async () => {
     info: (msg) => infos.push(String(msg)),
   };
   const skills = await loadSkills({
-    cwd: "/project" as Cwd,
+    projectDir: "/project" as ProjectDir,
     homeDir: "/home" as HomeDir,
     logger,
     fileIO: new InMemoryFileIO({

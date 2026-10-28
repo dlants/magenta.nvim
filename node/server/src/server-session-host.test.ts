@@ -26,7 +26,7 @@ import type { Thread } from "./thread.ts";
 import { ABORTED } from "./thread-api.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer } from "./utils/async.ts";
-import type { AbsFilePath, Cwd, HomeDir } from "./utils/files.ts";
+import type { AbsFilePath, HomeDir, ProjectDir } from "./utils/files.ts";
 
 const profile: ProviderProfile = {
   name: "mock",
@@ -64,7 +64,7 @@ beforeEach(async () => {
   fileIO = new InMemoryFileIO({ [path.join(dir, "a.txt")]: "hello" });
   host = new ServerSessionHost({
     logger: noopLogger,
-    cwd: dir as Cwd,
+    projectDir: dir as ProjectDir,
     homeDir: dir as HomeDir,
     sandbox: new MockSandboxManager(),
     getOptions: () => options,
@@ -127,7 +127,7 @@ it("keeps a running submission going when the editor detaches", async () => {
   await expect(done).resolves.toMatchObject({ type: "completed" });
 });
 
-it("wires editor capabilities into threads with the thread's cwd", async () => {
+it("wires editor capabilities into threads with the thread's projectDir", async () => {
   const threadCwd = path.join(dir, "sub");
   await mkdir(threadCwd);
   const file = path.join(threadCwd, "b.txt");
@@ -146,7 +146,7 @@ it("wires editor capabilities into threads with the thread's cwd", async () => {
     const id = await session.createThread({
       profile,
       threadType: "root",
-      environmentConfig: { type: "local", cwd: threadCwd as Cwd },
+      environmentConfig: { type: "local", projectDir: threadCwd as ProjectDir },
     });
     if (id === ABORTED) throw new Error("aborted");
     const record = session.getThread(id);
@@ -182,7 +182,7 @@ it("wires editor capabilities into threads with the thread's cwd", async () => {
   expect(lspRequest).toEqual({
     type: "lsp",
     kind: "hover",
-    cwd: threadCwd,
+    projectDir: threadCwd,
     homeDir: dir,
     filePath: file,
     position: { line: 0, character: 1 },
@@ -291,7 +291,7 @@ describe("auth UI", () => {
   function makeAuthSession(logger = noopLogger) {
     const authHost: ServerSessionHost = new ServerSessionHost({
       logger,
-      cwd: dir as Cwd,
+      projectDir: dir as ProjectDir,
       homeDir: dir as HomeDir,
       sandbox: new MockSandboxManager(),
       getOptions: () => options,
@@ -445,7 +445,7 @@ describe("active profile", () => {
     const provider = createMockProvider(mockClient);
     profileHost = new ServerSessionHost({
       logger: noopLogger,
-      cwd: dir as Cwd,
+      projectDir: dir as ProjectDir,
       homeDir: dir as HomeDir,
       sandbox: new MockSandboxManager(),
       getOptions: () => currentOptions,

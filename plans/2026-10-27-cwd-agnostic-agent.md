@@ -165,6 +165,22 @@ Decisions/deviations:
 
 ## Rename and confine Cwd → ProjectDir
 
+Status: done.
+
+- [x] `Cwd`/`toCwd` deleted; everything uses `ProjectDir`/`toProjectDir`, and server fields named `cwd` are now `projectDir` (host/session/environment/config/skills/agents/auto-context/sandbox/scripts/protocol/system info/archive). Node API `cwd` options (spawn, execFile, zx `$`, glob) are untouched.
+- [x] `projectDir` removed from `ThreadCoreContext`, `ClientToolContext` and the get_file/hover/find_references/edl/spawn_subagents tool contexts. Archive metadata uses `context.systemInfo.projectDir` in `thread-assembly.ts`.
+- [x] spawn_subagents `directory` must be absolute (relative → `spawn-error`); the default (docker host dir) comes from the new `ThreadManager.getProjectDir(threadId)` (Session reads the parent's `systemInfo.projectDir`).
+- [x] Scripts: `create-thread` `options.cwd` → `options.projectDir`, absolute or `~/`; relative values send an error `thread-result` back to the script. Skill doc updated.
+- [x] Archive: `readThreadMeta` falls back to legacy `cwd`; new meta is written as `projectDir`.
+- [x] Boundary test `node/server/src/project-dir-boundary.test.ts`: no `ProjectDir`/`projectDir`/`Cwd`/`cwd` in `tools/`, `edl/`, `supervisors/`, `thread-core.ts` (allowlist: `tools/spawn-subagents.ts`, which hands a directory to the session).
+- [x] Tests: spawn_subagents relative directory rejected / absolute passed through / default from `getProjectDir`; `normalizeThreadRequest` projectDir absolute/`~`/relative; archive legacy `cwd`.
+
+Decisions/deviations:
+
+- `DisplayContext.cwd` (server type used only by client renderers) and nvimclient's own `cwd` fields are left for the client stage. The client's LSP request field is `projectDir` (protocol).
+- The client archive buffer header prints `projectDir:`.
+- Full nvim suite: failures under load pass individually; `render-tools/spawn-subagents.test.ts` "handles thread hierarchy…" and `tools/spawn-subagents.test.ts` "respects maxConcurrentSubagents…" fail on main too.
+
 - Goal: `ProjectDir` only in session/host/environment/config/skills/agents/auto-context/sandbox-manager/scripts/protocol; removed from `ThreadCoreContext` and tool contexts; spawn_subagents and scripts require absolute dirs; archive reads legacy `cwd`.
 - Tests:
   - Boundary test described in Invariants.

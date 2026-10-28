@@ -11,7 +11,7 @@ import {
   uniqueThreadId,
 } from "../test-helpers.ts";
 import type { ContextFileAccess } from "../thread.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import { pendingMessage } from "./index.ts";
 import { resolveSubmission } from "./resolve.ts";
 
@@ -41,7 +41,7 @@ function setup() {
       resolveSubmission(
         message,
         {
-          cwd: "/proj" as Cwd,
+          projectDir: "/proj" as ProjectDir,
           homeDir: "/home" as HomeDir,
           fileIO: new InMemoryFileIO({}),
           logger: noopLogger,

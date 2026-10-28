@@ -8,7 +8,7 @@ import type { ProvisionResult } from "../container/types.ts";
 import type { ThreadOutcome } from "../thread-api.ts";
 import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
 import { Defer } from "../utils/async.ts";
-import type { Cwd, UnresolvedFilePath } from "../utils/files.ts";
+import type { ProjectDir, UnresolvedFilePath } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
 
 vi.mock("../container/provision.ts", () => ({
@@ -39,6 +39,7 @@ function createMockThreadManager(
   };
   const manager: MockThreadManager = {
     spawnThread: vi.fn().mockResolvedValue("thread-1" as ThreadId),
+    getProjectDir: vi.fn(() => "/test" as ProjectDir),
     deleteThread: vi.fn(),
     awaitThreadResult: vi.fn(
       (threadId: ThreadId) => deferFor(threadId).promise,
@@ -85,7 +86,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -114,7 +114,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -142,7 +141,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -177,7 +175,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -208,7 +205,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       });
 
@@ -241,7 +237,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -283,7 +278,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -335,7 +329,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 2,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -403,7 +396,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 1,
         maxConcurrentFastSubagents: 1,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {
           fast: {
             name: "fast",
@@ -482,7 +474,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 2,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -538,7 +529,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -577,7 +567,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -598,7 +587,7 @@ describe("spawn-subagents unit tests", () => {
     );
   });
 
-  it("passes resolved cwd to spawnThread when directory is provided", async () => {
+  it("passes an absolute directory to spawnThread as projectDir", async () => {
     const spawnThread = vi.fn(() => Promise.resolve("thread_1" as ThreadId));
     const threadManager = createMockThreadManager({
       spawnThread,
@@ -609,7 +598,7 @@ describe("spawn-subagents unit tests", () => {
         agents: [
           {
             prompt: "task 1",
-            directory: "some/subdir",
+            directory: "/project/root/some/subdir",
           },
         ],
       }),
@@ -619,7 +608,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/project/root" as Cwd,
         agents: {},
       },
     );
@@ -635,12 +623,33 @@ describe("spawn-subagents unit tests", () => {
     await invocation.promise;
     expect(spawnThread).toHaveBeenCalledWith(
       expect.objectContaining({
-        cwd: path.resolve("/project/root", "some/subdir"),
+        projectDir: "/project/root/some/subdir",
       }),
     );
   });
 
-  it("does not pass cwd to spawnThread when directory is not provided", async () => {
+  it("rejects a relative directory without spawning", async () => {
+    const spawnThread = vi.fn(() => Promise.resolve("thread_1" as ThreadId));
+    const threadManager = createMockThreadManager({ spawnThread });
+    const invocation = SpawnSubagents.execute(
+      makeRequest({ agents: [{ prompt: "task 1", directory: "some/subdir" }] }),
+      {
+        threadManager,
+        threadId: "parent_thread" as ThreadId,
+        maxConcurrentSubagents: 10,
+        maxConcurrentFastSubagents: 10,
+        requestRender: vi.fn(),
+        agents: {},
+      },
+    );
+    await invocation.promise;
+    expect(spawnThread).not.toHaveBeenCalled();
+    expect(invocation.progress.elements[0].state).toEqual({
+      status: "spawn-error",
+      error: 'directory must be an absolute path, got "some/subdir"',
+    });
+  });
+  it("does not pass projectDir to spawnThread when directory is not provided", async () => {
     const spawnThread = vi.fn(() => Promise.resolve("thread_1" as ThreadId));
     const threadManager = createMockThreadManager({
       spawnThread,
@@ -660,7 +669,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/project/root" as Cwd,
         agents: {},
       },
     );
@@ -676,7 +684,7 @@ describe("spawn-subagents unit tests", () => {
     await invocation.promise;
     expect(spawnThread).toHaveBeenCalledWith(
       expect.not.objectContaining({
-        cwd: expect.anything(),
+        projectDir: expect.anything(),
       }),
     );
   });
@@ -755,7 +763,6 @@ describe("spawn-subagents unit tests", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -822,7 +829,6 @@ describe("spawn-subagents docker provisioning", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -866,7 +872,6 @@ describe("spawn-subagents docker provisioning", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -898,7 +903,6 @@ describe("spawn-subagents docker provisioning", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -946,7 +950,6 @@ describe("spawn-subagents docker provisioning", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -986,7 +989,6 @@ describe("spawn-subagents docker provisioning", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -1020,7 +1022,6 @@ describe("spawn-subagents docker provisioning", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -1060,8 +1061,10 @@ describe("spawn-subagents docker provisioning", () => {
     );
   });
 
-  it("defaults directory to cwd when not specified", async () => {
-    const threadManager = createMockThreadManager();
+  it("defaults directory to projectDir when not specified", async () => {
+    const threadManager = createMockThreadManager({
+      getProjectDir: () => tempDir as ProjectDir,
+    });
 
     SpawnSubagents.execute(
       makeRequest({
@@ -1080,7 +1083,6 @@ describe("spawn-subagents docker provisioning", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: tempDir as Cwd,
         agents: {},
       },
     );
@@ -1122,7 +1124,6 @@ describe("spawn-subagents docker provisioning", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -1161,7 +1162,6 @@ describe("sharedPrompt and sharedContextFiles", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -1203,7 +1203,6 @@ describe("sharedPrompt and sharedContextFiles", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -1246,7 +1245,6 @@ describe("sharedPrompt and sharedContextFiles", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -1283,7 +1281,6 @@ describe("sharedPrompt and sharedContextFiles", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -1320,7 +1317,6 @@ describe("environment routing", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );
@@ -1356,7 +1352,6 @@ describe("environment routing", () => {
         maxConcurrentSubagents: 10,
         maxConcurrentFastSubagents: 10,
         requestRender: vi.fn(),
-        cwd: "/test" as Cwd,
         agents: {},
       },
     );

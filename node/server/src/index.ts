@@ -145,7 +145,7 @@ export { Emitter, type EventMap } from "./emitter.ts";
 export * from "./environment.ts";
 export type { Logger } from "./logger.ts";
 export type { OpenAIAuth } from "./openai-auth.ts";
-export type { AbsFilePath, Cwd } from "./paths.ts";
+export type { AbsFilePath, ProjectDir } from "./paths.ts";
 export type {
   ClientEffectHandler,
   ClientInfo,
@@ -556,7 +556,7 @@ export {
   shortenPath,
   threadConversationLogPath,
   threadMetaPath,
-  toCwd,
+  toProjectDir,
   type UnresolvedFilePath,
   unescapeFenceBody,
   validateFileSize,

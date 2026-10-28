@@ -7,8 +7,8 @@ import type { Logger } from "../logger.ts";
 import type { Sandbox } from "../sandbox-manager.ts";
 import {
   type AbsFilePath,
-  type Cwd,
   type HomeDir,
+  type ProjectDir,
   resolveFilePath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
@@ -18,7 +18,7 @@ export class SandboxFileIO implements FileIO {
   constructor(
     private context: {
       logger: Logger;
-      cwd: Cwd;
+      projectDir: ProjectDir;
       homeDir: HomeDir;
     },
     private sandbox: Sandbox,
@@ -30,7 +30,7 @@ export class SandboxFileIO implements FileIO {
 
   private resolvePath(path: string): AbsFilePath {
     return resolveFilePath(
-      this.context.cwd,
+      this.context.projectDir,
       path as UnresolvedFilePath,
       this.context.homeDir,
     );

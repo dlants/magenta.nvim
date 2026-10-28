@@ -520,7 +520,7 @@ export class Magenta {
       readThreadMeta(id),
     ]);
     const markdown = renderThreadLogToMarkdown(entries);
-    const cwdLine = meta.cwd ? `cwd: ${meta.cwd}\n` : "";
+    const cwdLine = meta.projectDir ? `projectDir: ${meta.projectDir}\n` : "";
     const content = `# Archived thread\n${logPath}\n${cwdLine}\n${markdown}`;
     const buffer = await this.bufferManager.setArchivedThreadContent(
       id,

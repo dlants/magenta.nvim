@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderOptions } from "../provider-options.ts";
-import type { Cwd } from "../utils/files.ts";
+import type { ProjectDir } from "../utils/files.ts";
 import {
   type AgentsMap,
   extractSystemReminderBlock,
@@ -297,7 +297,7 @@ Beta prompt.`,
     };
 
     const result = loadAgents({
-      cwd: tmpDir as Cwd,
+      projectDir: tmpDir as ProjectDir,
       fs: io,
       logger,
       options,
@@ -341,7 +341,7 @@ Prompt 2.`,
     };
 
     const result = loadAgents({
-      cwd: tmpDir as Cwd,
+      projectDir: tmpDir as ProjectDir,
       fs: io,
       logger,
       options,
@@ -370,7 +370,7 @@ Prompt.`,
     };
 
     const result = loadAgents({
-      cwd: tmpDir as Cwd,
+      projectDir: tmpDir as ProjectDir,
       fs: io,
       logger,
       options,
@@ -400,7 +400,7 @@ Prompt.`,
     };
 
     const result = loadAgents({
-      cwd: tmpDir as Cwd,
+      projectDir: tmpDir as ProjectDir,
       fs: io,
       logger,
       options,
@@ -416,7 +416,7 @@ Prompt.`,
     };
 
     const result = loadAgents({
-      cwd: tmpDir as Cwd,
+      projectDir: tmpDir as ProjectDir,
       fs: io,
       logger,
       options,
@@ -432,7 +432,7 @@ Prompt.`,
     };
 
     const result = loadAgents({
-      cwd: tmpDir as Cwd,
+      projectDir: tmpDir as ProjectDir,
       fs: io,
       logger,
       options,
@@ -453,7 +453,7 @@ describe("builtin agents", () => {
     };
 
     const result = loadAgents({
-      cwd: "/tmp" as Cwd,
+      projectDir: "/tmp" as ProjectDir,
       logger,
       options,
     });
@@ -500,7 +500,7 @@ Custom default prompt.`,
       };
 
       const result = loadAgents({
-        cwd: "/tmp" as Cwd,
+        projectDir: "/tmp" as ProjectDir,
         fs: io,
         logger,
         options,

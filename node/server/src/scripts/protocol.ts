@@ -16,14 +16,16 @@ export type Result<T> =
 
 /**
  * Options for a thread() invocation. Designed to be extended later; unknown or
- * omitted fields fall back to the active profile and magenta cwd.
+ * omitted fields fall back to the active profile and session's start directory.
  */
 export type ThreadOptions = {
   profile?: string;
   model?: string;
   tools?: string[];
-  cwd?: string;
-  /** Files to seed into the thread's context (absolute, or relative to cwd). */
+  /** The directory the thread starts from (absolute or `~/`). Defaults to the
+   * session's start directory. */
+  projectDir?: string;
+  /** Files to seed into the thread's context (absolute, or relative to the thread's projectDir). */
   contextFiles?: string[];
   /** A recurring system reminder injected into the thread. */
   systemReminder?: string;

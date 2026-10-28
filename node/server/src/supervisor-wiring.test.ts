@@ -11,7 +11,7 @@ import {
   MaxTokensSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
-import type { Cwd } from "./utils/files.ts";
+import type { ProjectDir } from "./utils/files.ts";
 
 it("a truncated response is continued via MaxTokensSupervisor", () =>
   withHarness({}, async (h) => {
@@ -111,7 +111,7 @@ it.each([
                 containerName: "worker",
                 imageName: "worker-image",
                 workspacePath: "/workspace",
-                hostDir: h.host.cwd as Cwd,
+                hostDir: h.host.projectDir as ProjectDir,
                 supervised: true,
               },
             }

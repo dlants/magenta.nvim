@@ -21,7 +21,7 @@ it("serves lua and lsp requests through the attached client", async () => {
     const hover = await client.request({
       type: "lsp",
       kind: "hover",
-      cwd: threadCwdFromNvimCwd(cwd),
+      projectDir: threadCwdFromNvimCwd(cwd),
       homeDir,
       filePath: path.join(cwd, "test.ts") as AbsFilePath,
       position: { line: 3, character: 4 },

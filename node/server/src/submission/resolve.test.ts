@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import { noopLogger } from "../test-helpers.ts";
 import type { ContextFileAccess } from "../thread.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import { pendingMessage } from "./index.ts";
 import { resolveSubmission } from "./resolve.ts";
 
@@ -11,7 +11,7 @@ function context(canCompact: boolean) {
   return {
     addFileContext,
     ctx: {
-      cwd: "/proj" as Cwd,
+      projectDir: "/proj" as ProjectDir,
       homeDir: "/home" as HomeDir,
       fileIO: new InMemoryFileIO({ "/proj/a.txt": "hello" }),
       logger: noopLogger,

@@ -450,7 +450,7 @@ export class Chat {
         getDisplayWidth,
         nvim,
         homeDir,
-        cwd: prepared.environment.cwd,
+        cwd: prepared.environment.projectDir,
         options: this.context.getOptions(),
         mcpToolManager: this.host.mcpToolManager,
         chat: this,
@@ -1246,8 +1246,8 @@ ${rows}${loadMore}`;
     const entry = this.state.entries[threadId];
     const title = entry?.title ?? "(untitled)";
     const prefix = entry?.scriptName ? `[${entry.scriptName}] ` : "";
-    const cwd = entry?.cwd
-      ? `  (${shortenPath(entry.cwd, this.context.homeDir)})`
+    const cwd = entry?.projectDir
+      ? `  (${shortenPath(entry.projectDir, this.context.homeDir)})`
       : "";
 
     const line = d`- ${date}  ${prefix}${title}${cwd}`;

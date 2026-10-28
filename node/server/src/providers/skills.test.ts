@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FsFileIO } from "../capabilities/file-io.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderOptions } from "../provider-options.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import { loadSkills } from "./skills.ts";
 
 const noopLogger: Logger = {
@@ -17,7 +17,7 @@ const noopLogger: Logger = {
 let testCounter = 0;
 let tmpRoot: string;
 let tmpHome: HomeDir;
-let tmpCwd: Cwd;
+let tmpCwd: ProjectDir;
 
 beforeEach(async () => {
   tmpRoot = path.join(
@@ -26,7 +26,7 @@ beforeEach(async () => {
   );
   await fs.mkdir(tmpRoot, { recursive: true });
   tmpHome = path.join(tmpRoot, "home") as HomeDir;
-  tmpCwd = path.join(tmpRoot, "cwd") as Cwd;
+  tmpCwd = path.join(tmpRoot, "projectDir") as ProjectDir;
   await fs.mkdir(tmpHome, { recursive: true });
   await fs.mkdir(tmpCwd, { recursive: true });
 });
@@ -50,7 +50,7 @@ async function writeSkill(
 
 function makeContext(options: ProviderOptions) {
   return {
-    cwd: tmpCwd,
+    projectDir: tmpCwd,
     logger: noopLogger,
     options,
     fileIO: new FsFileIO(),
@@ -59,8 +59,8 @@ function makeContext(options: ProviderOptions) {
 }
 
 describe("loadSkills with hierarchical relative paths", () => {
-  it("walks up parent directories above cwd for relative skills paths", async () => {
-    const deepCwd = path.join(tmpRoot, "level1", "level2") as Cwd;
+  it("walks up parent directories above projectDir for relative skills paths", async () => {
+    const deepCwd = path.join(tmpRoot, "level1", "level2") as ProjectDir;
     await fs.mkdir(deepCwd, { recursive: true });
 
     await writeSkill(
@@ -70,12 +70,12 @@ describe("loadSkills with hierarchical relative paths", () => {
     );
     await writeSkill(
       path.join(deepCwd, ".magenta", "skills"),
-      "skill-cwd",
-      "cwd skill",
+      "skill-projectDir",
+      "projectDir skill",
     );
 
     const skills = await loadSkills({
-      cwd: deepCwd,
+      projectDir: deepCwd,
       logger: noopLogger,
       options: {
         skillsPaths: [".magenta/skills"],
@@ -87,12 +87,12 @@ describe("loadSkills with hierarchical relative paths", () => {
 
     expect(skills["skill-l1"]).toBeDefined();
     expect(skills["skill-l1"].description).toBe("level1 skill");
-    expect(skills["skill-cwd"]).toBeDefined();
-    expect(skills["skill-cwd"].description).toBe("cwd skill");
+    expect(skills["skill-projectDir"]).toBeDefined();
+    expect(skills["skill-projectDir"].description).toBe("projectDir skill");
   });
 
-  it("skills closer to cwd override same-named skills from parent directories", async () => {
-    const deepCwd = path.join(tmpRoot, "outer", "inner") as Cwd;
+  it("skills closer to projectDir override same-named skills from parent directories", async () => {
+    const deepCwd = path.join(tmpRoot, "outer", "inner") as ProjectDir;
     await fs.mkdir(deepCwd, { recursive: true });
 
     await writeSkill(
@@ -107,7 +107,7 @@ describe("loadSkills with hierarchical relative paths", () => {
     );
 
     const skills = await loadSkills({
-      cwd: deepCwd,
+      projectDir: deepCwd,
       logger: noopLogger,
       options: {
         skillsPaths: [".magenta/skills"],
@@ -125,7 +125,7 @@ describe("loadSkills with hierarchical relative paths", () => {
     const homeSkillsDir = path.join(tmpHome, ".claude", "skills");
     await writeSkill(homeSkillsDir, "home-skill", "home-only");
 
-    const deepCwd = path.join(tmpRoot, "a", "b") as Cwd;
+    const deepCwd = path.join(tmpRoot, "a", "b") as ProjectDir;
     await fs.mkdir(deepCwd, { recursive: true });
     await writeSkill(
       path.join(tmpRoot, "a", ".claude", "skills"),
@@ -134,7 +134,7 @@ describe("loadSkills with hierarchical relative paths", () => {
     );
 
     const skills = await loadSkills({
-      cwd: deepCwd,
+      projectDir: deepCwd,
       logger: noopLogger,
       options: {
         skillsPaths: ["~/.claude/skills"],

@@ -20,6 +20,7 @@ import {
 } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { Defer } from "../utils/async.ts";
+import type { ProjectDir } from "../utils/files.ts";
 import { TokenBudget } from "./token-budget.ts";
 
 const idx = 0 as NativeMessageIdx;
@@ -273,6 +274,7 @@ describe("ThreadCompactor cancellation", () => {
             spawned.resolve();
             return spawn.promise;
           },
+          getProjectDir: () => "/test" as ProjectDir,
           deleteThread: (id) => {
             deleted.push(id);
           },
@@ -339,6 +341,7 @@ it("a late first spawn cannot overwrite a newer compaction", async () => {
       threadManager: {
         spawnThread: async () =>
           ++spawnCount === 1 ? firstSpawn.promise : newerChild,
+        getProjectDir: () => "/test" as ProjectDir,
         deleteThread: (id) => {
           deleted.push(id);
           if (id === newerChild)
@@ -398,6 +401,7 @@ it.each([
     {
       threadManager: {
         spawnThread: async () => child,
+        getProjectDir: () => "/test" as ProjectDir,
         deleteThread: (id) => {
           deleted.push(id);
           childResult.resolve({ type: "aborted", reason: "deleted" });
@@ -769,6 +773,7 @@ describe("complete submission ownership", () => {
         spawning.resolve();
         return spawn.promise;
       },
+      getProjectDir: () => "/test" as ProjectDir,
       deleteThread: (id: ThreadId) => {
         deleted.push(id);
       },
@@ -946,6 +951,7 @@ describe("ThreadCompactor pending turn split", () => {
           opts.fileIO?.writeFile("/summary.md", "S");
           return uniqueThreadId("chunk") as ThreadId;
         },
+        getProjectDir: () => "/test" as ProjectDir,
         deleteThread: () => {},
         awaitThreadResult: async () =>
           ({
@@ -1046,6 +1052,7 @@ describe("ThreadCompactor chunk prompt", () => {
           prompts.push(opts.prompt);
           throw new Error("stop after spawn");
         },
+        getProjectDir: () => "/test" as ProjectDir,
         deleteThread: () => {},
         awaitThreadResult: async () => {
           throw new Error("unreachable");

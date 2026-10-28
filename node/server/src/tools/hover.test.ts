@@ -6,7 +6,7 @@ import type {
   LspHoverResponse,
 } from "../capabilities/lsp-client.ts";
 import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir } from "../utils/files.ts";
 import * as Hover from "./hover.ts";
 
 function createMockLspClient(overrides: Partial<LspClient> = {}): LspClient {
@@ -32,7 +32,6 @@ function createMockFileIO(fileContent: string): FileIO {
   };
 }
 
-const TEST_CWD = "/project" as Cwd;
 const TEST_HOME = "/home/user" as HomeDir;
 
 function makeRequest(
@@ -109,7 +108,6 @@ describe("hover unit tests", () => {
     const fileIO = createMockFileIO(fileContent);
 
     const invocation = Hover.execute(makeRequest("foo"), {
-      cwd: TEST_CWD,
       homeDir: TEST_HOME,
       lspClient,
       fileIO,
@@ -143,7 +141,6 @@ describe("hover unit tests", () => {
     const fileIO = createMockFileIO(fileContent);
 
     const invocation = Hover.execute(makeRequest("Transport"), {
-      cwd: TEST_CWD,
       homeDir: TEST_HOME,
       lspClient,
       fileIO,
@@ -179,7 +176,6 @@ describe("hover unit tests", () => {
     const invocation = Hover.execute(
       makeRequest("res", "/project/test.ts", "  const res = request2()"),
       {
-        cwd: TEST_CWD,
         homeDir: TEST_HOME,
         lspClient,
         fileIO,
@@ -207,7 +203,6 @@ describe("hover unit tests", () => {
     const invocation = Hover.execute(
       makeRequest("foo", "/project/test.ts", "nonexistent"),
       {
-        cwd: TEST_CWD,
         homeDir: TEST_HOME,
         lspClient,
         fileIO,
@@ -226,7 +221,6 @@ describe("hover unit tests", () => {
     const fileIO = createMockFileIO(fileContent);
 
     const invocation = Hover.execute(makeRequest("missing"), {
-      cwd: TEST_CWD,
       homeDir: TEST_HOME,
       lspClient,
       fileIO,
@@ -241,7 +235,6 @@ describe("hover unit tests", () => {
   it("returns a tool error for a relative file path", async () => {
     const fileIO = createMockFileIO("const foo = 42;");
     const invocation = Hover.execute(makeRequest("foo", "test.ts"), {
-      cwd: TEST_CWD,
       homeDir: TEST_HOME,
       lspClient: createMockLspClient(),
       fileIO,
@@ -258,7 +251,6 @@ describe("hover unit tests", () => {
     );
 
     const invocation = Hover.execute(makeRequest("foo"), {
-      cwd: TEST_CWD,
       homeDir: TEST_HOME,
       lspClient,
       fileIO,
@@ -323,7 +315,6 @@ describe("hover unit tests", () => {
     const fileIO = createMockFileIO(fileContent);
 
     const invocation = Hover.execute(makeRequest("foo"), {
-      cwd: TEST_CWD,
       homeDir: TEST_HOME,
       lspClient,
       fileIO,

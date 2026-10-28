@@ -6,14 +6,14 @@ import { describe, expect, it } from "vitest";
 import { FsFileIO } from "../capabilities/file-io.ts";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import { noopLogger } from "../test-helpers.ts";
-import type { AbsFilePath, Cwd, HomeDir } from "../utils/files.ts";
+import type { AbsFilePath, HomeDir, ProjectDir } from "../utils/files.ts";
 import {
   discoverHierarchyContext,
   globFiles,
   resolveAutoContext,
 } from "./auto-context.ts";
 
-const cwd = "/project" as Cwd;
+const projectDir = "/project" as ProjectDir;
 const homeDir = "/home" as HomeDir;
 
 describe("discoverHierarchyContext", () => {
@@ -28,7 +28,7 @@ describe("discoverHierarchyContext", () => {
       {
         fileIO,
         logger: noopLogger,
-        cwd,
+        projectDir,
         homeDir,
         hierarchyContextFileNames: ["context.md", "agent.md"],
       },
@@ -48,7 +48,7 @@ describe("discoverHierarchyContext", () => {
       {
         fileIO,
         logger: noopLogger,
-        cwd,
+        projectDir,
         homeDir,
         hierarchyContextFileNames: ["context.md"],
       },
@@ -66,7 +66,7 @@ describe("discoverHierarchyContext", () => {
       {
         fileIO,
         logger: noopLogger,
-        cwd,
+        projectDir,
         homeDir,
         hierarchyContextFileNames: [],
       },
@@ -88,7 +88,7 @@ describe("resolveAutoContext", () => {
     const results = await resolveAutoContext({
       fileIO,
       logger: noopLogger,
-      cwd,
+      projectDir,
       homeDir,
       globs: [
         "~/.magenta/context.md",
@@ -109,7 +109,7 @@ describe("resolveAutoContext", () => {
     const results = await resolveAutoContext({
       fileIO,
       logger: noopLogger,
-      cwd,
+      projectDir,
       homeDir,
       globs: ["context.md", "**/context.md", "./context.md"],
     });
@@ -129,7 +129,7 @@ describe("resolveAutoContext", () => {
       const results = await resolveAutoContext({
         fileIO: new FsFileIO(),
         logger: noopLogger,
-        cwd: tmp as Cwd,
+        projectDir: tmp as ProjectDir,
         homeDir,
         globs: ["context.md", "link.md"],
       });
@@ -148,7 +148,7 @@ describe("resolveAutoContext", () => {
       await resolveAutoContext({
         fileIO,
         logger: noopLogger,
-        cwd,
+        projectDir,
         homeDir,
         globs: [],
       }),

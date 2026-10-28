@@ -1,1 +1,1 @@
-export type { AbsFilePath, Cwd } from "./utils/files.ts";
+export type { AbsFilePath, ProjectDir } from "./utils/files.ts";

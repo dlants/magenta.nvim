@@ -287,7 +287,7 @@ export class SandboxShell implements Shell {
       );
     } finally {
       // Always clean up bwrap mount points (e.g. ghost .env / .magenta files
-      // bwrap creates in cwd as denyWrite mount points). Without try/finally,
+      // bwrap creates in projectDir as denyWrite mount points). Without try/finally,
       // violation early-returns and exceptions would skip cleanup and leak
       // empty files into the working directory.
       if (traceFilePath) {

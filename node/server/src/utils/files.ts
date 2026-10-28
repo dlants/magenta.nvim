@@ -111,18 +111,6 @@ export function formatFileRef(filePath: string): string {
   return `@file:\`\`${escaped}\`\``;
 }
 
-/** Special nominal type to represent the neovim directory. The node plugin runs in the magenta directory, but when
- * dealing with paths, we always want to do it from the POV of the nvim cwd.
- */
-export type Cwd = AbsFilePath & { __cwd: true };
-
-/** The single checked entry point for the `Cwd` brand. */
-export function toCwd(dir: string): Cwd {
-  if (!path.isAbsolute(dir)) {
-    throw new Error(`Expected an absolute cwd, got "${dir}"`);
-  }
-  return path.normalize(dir) as Cwd;
-}
 /** The directory a thread was started from. Used only at preparation time (config, sandbox
  * path resolution, discovery); it is never a working directory for the agent.
  */
@@ -163,7 +151,7 @@ export function expandTilde(filepath: string, homeDir: HomeDir): string {
 }
 
 export function resolveFilePath(
-  cwd: AbsFilePath,
+  projectDir: AbsFilePath,
   filePath: UnresolvedFilePath | AbsFilePath | RelFilePath,
   homeDir: HomeDir,
 ) {
@@ -171,7 +159,7 @@ export function resolveFilePath(
   if (expandedPath.startsWith("~/") || expandedPath === "~") {
     expandedPath = path.join(homeDir, expandedPath.slice(1));
   }
-  return path.resolve(cwd, expandedPath) as AbsFilePath;
+  return path.resolve(projectDir, expandedPath) as AbsFilePath;
 }
 
 export function resolveAbsPath(
@@ -192,12 +180,12 @@ export function resolveAbsPath(
 }
 
 export function relativePath(
-  cwd: AbsFilePath,
+  projectDir: AbsFilePath,
   filePath: UnresolvedFilePath | AbsFilePath,
   homeDir: HomeDir,
 ) {
-  const absPath = resolveFilePath(cwd, filePath, homeDir);
-  return path.relative(cwd, absPath) as RelFilePath;
+  const absPath = resolveFilePath(projectDir, filePath, homeDir);
+  return path.relative(projectDir, absPath) as RelFilePath;
 }
 
 /** Abbreviate a home-relative path with `~` for display. */
@@ -208,11 +196,11 @@ export function shortenPath(filePath: string, homeDir: HomeDir): string {
 }
 
 export function displayPath(
-  cwd: AbsFilePath,
+  projectDir: AbsFilePath,
   absFilePath: AbsFilePath,
   homeDir: HomeDir,
 ): DisplayPath {
-  const rel = path.relative(cwd, absFilePath);
+  const rel = path.relative(projectDir, absFilePath);
   if (!rel.startsWith("..")) {
     return rel as DisplayPath;
   }

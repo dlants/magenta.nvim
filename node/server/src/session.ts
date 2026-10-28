@@ -43,7 +43,11 @@ import {
 } from "./thread-assembly.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { Defer, type Task } from "./utils/async.ts";
-import type { AbsFilePath, Cwd, UnresolvedFilePath } from "./utils/files.ts";
+import type {
+  AbsFilePath,
+  ProjectDir,
+  UnresolvedFilePath,
+} from "./utils/files.ts";
 
 export type SessionId = string & { __sessionId: true };
 
@@ -295,6 +299,13 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     return [...this.records.values()];
   }
 
+  getProjectDir(id: ThreadId): ProjectDir {
+    const record = this.records.get(id);
+    if (record?.state !== "initialized") {
+      throw new Error(`Thread ${id} not available`);
+    }
+    return record.thread.systemInfo.projectDir;
+  }
   getOrigin(id: ThreadId): ThreadOrigin | undefined {
     return this.records.get(id)?.origin;
   }
@@ -501,7 +512,7 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     prompt: string;
     yieldSchema: JSONSchemaType;
     profile?: ProviderProfile;
-    cwd?: Cwd;
+    projectDir?: ProjectDir;
     contextFiles?: UnresolvedFilePath[];
     systemReminder?: string;
     autoCompactThreshold?: number;
@@ -514,7 +525,7 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
       threadType: "subagent",
       environmentConfig: {
         type: "local",
-        ...(opts.cwd ? { cwd: opts.cwd } : {}),
+        ...(opts.projectDir ? { projectDir: opts.projectDir } : {}),
       },
       ...(opts.contextFiles ? { contextFiles: opts.contextFiles } : {}),
       ...(opts.systemReminder
@@ -885,10 +896,10 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       ? {
           type: "docker",
           container: opts.dockerSpawnConfig.containerName,
-          cwd: opts.dockerSpawnConfig.workspacePath,
+          projectDir: opts.dockerSpawnConfig.workspacePath,
         }
-      : opts.cwd
-        ? { type: "local", cwd: opts.cwd }
+      : opts.projectDir
+        ? { type: "local", projectDir: opts.projectDir }
         : (parent.options.environmentConfig ?? { type: "local" });
     const { prompt: _prompt, parentThreadId: _parentThreadId, ...rest } = opts;
     return this.createThread({

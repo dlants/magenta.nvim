@@ -3,7 +3,7 @@ import type {
   LspRequest,
   LspRequestKind,
 } from "../protocol/client.ts";
-import type { AbsFilePath, Cwd, HomeDir } from "../utils/files.ts";
+import type { AbsFilePath, HomeDir, ProjectDir } from "../utils/files.ts";
 import type { LspClient } from "./lsp-client.ts";
 import type { LuaExecutor } from "./lua-executor.ts";
 
@@ -16,10 +16,10 @@ export type ClientCommandName =
   | "diagnostics";
 
 /** Adapts client requests to the `LspClient` tools use; LSP paths resolve
- * against the thread cwd. */
+ * against the thread projectDir. */
 export function clientLspClient(
   client: ClientEffectHandler,
-  cwd: Cwd,
+  projectDir: ProjectDir,
   homeDir: HomeDir,
 ): LspClient {
   const lsp =
@@ -28,7 +28,7 @@ export function clientLspClient(
       client.request<LspRequest & { kind: K }>({
         type: "lsp",
         kind,
-        cwd,
+        projectDir,
         homeDir,
         filePath,
         position,

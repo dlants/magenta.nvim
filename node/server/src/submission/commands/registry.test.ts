@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { InMemoryFileIO } from "../../edl/in-memory-file-io.ts";
 import { noopLogger } from "../../test-helpers.ts";
 import type { ContextFileAccess } from "../../thread.ts";
-import { type Cwd, type HomeDir, resolveAbsPath } from "../../utils/files.ts";
+import {
+  type HomeDir,
+  type ProjectDir,
+  resolveAbsPath,
+} from "../../utils/files.ts";
 import { CommandRegistry } from "./registry.ts";
 import type { MessageContext } from "./types.ts";
 
@@ -25,7 +29,7 @@ const createMockContext = (): MessageContext => {
   return {
     logger: noopLogger,
     fileIO: new InMemoryFileIO({}),
-    cwd: "/test" as Cwd,
+    projectDir: "/test" as ProjectDir,
     homeDir: os.homedir() as HomeDir,
     fileSupervisor: {
       addFileContext: updateFn,

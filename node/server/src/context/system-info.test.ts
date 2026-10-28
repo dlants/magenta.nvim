@@ -10,13 +10,13 @@ import { spec as edlSpec } from "../tools/edl.ts";
 import { spec as findReferencesSpec } from "../tools/findReferences.ts";
 import { spec as getFileSpec } from "../tools/getFile.ts";
 import { spec as hoverSpec } from "../tools/hover.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import { buildSystemInfo } from "./system-info.ts";
 
-const cwd = "/project" as Cwd;
+const projectDir = "/project" as ProjectDir;
 const promptCtx = {
   logger: noopLogger,
-  cwd,
+  projectDir,
   options: {
     skillsPaths: [],
     agentsPaths: [path.resolve(import.meta.dirname, "../agents")],
@@ -28,9 +28,12 @@ const promptCtx = {
 it("applies systemInfoOverrides when building system info", () => {
   const text = formatSystemInfo(
     buildSystemInfo({
-      cwd,
+      projectDir,
       neovimVersion: "801",
-      overrides: { platform: "linux (docker)", cwd: "/workspace" as Cwd },
+      overrides: {
+        platform: "linux (docker)",
+        projectDir: "/workspace" as ProjectDir,
+      },
     }),
   );
   expect(text).toContain("- Operating system: linux (docker)");
@@ -53,7 +56,9 @@ it("system info is not part of the cached system prompt", async () => {
 });
 
 it("formats system information for the first user message", () => {
-  const text = formatSystemInfo(buildSystemInfo({ cwd, neovimVersion: "801" }));
+  const text = formatSystemInfo(
+    buildSystemInfo({ projectDir, neovimVersion: "801" }),
+  );
   expect(text).toContain("# System Information");
   expect(text).toContain("- Neovim version: 801");
   expect(text).toMatch(/- Operating system: (darwin|linux|win32)/);

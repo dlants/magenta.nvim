@@ -3,7 +3,7 @@ import type { Logger } from "../logger.ts";
 import type { AgentInput } from "../providers/provider-types.ts";
 import type { ContextFileAccess } from "../thread.ts";
 import type { Aborted } from "../thread-api.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import { type AwaitClient, clientCommands } from "./commands/client.ts";
 import { CommandRegistry } from "./commands/registry.ts";
 import type { CustomCommand } from "./commands/types.ts";
@@ -14,7 +14,7 @@ import {
 } from "./index.ts";
 
 export type ResolveSubmissionContext = {
-  cwd: Cwd;
+  projectDir: ProjectDir;
   homeDir: HomeDir;
   fileIO: FileIO;
   logger: Logger;
@@ -44,7 +44,7 @@ export async function resolveSubmission(
   }
   const { processedText, additionalContent, reminders } =
     await registry.processMessage(rest, {
-      cwd: context.cwd,
+      projectDir: context.projectDir,
       homeDir: context.homeDir,
       fileIO: context.fileIO,
       logger: context.logger,

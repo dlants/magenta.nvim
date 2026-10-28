@@ -113,7 +113,11 @@ it("records fork origins on the server", async () => {
 it("derives a child's profile and environment from the parent record", async () => {
   const { session, host, profile } = fixture();
   host.contextOverrides = {
-    environmentConfig: { type: "docker", container: "remote", cwd: "/work" },
+    environmentConfig: {
+      type: "docker",
+      container: "remote",
+      projectDir: "/work",
+    },
   };
   const parentId = await created(
     session.createThread({
@@ -140,7 +144,7 @@ it("derives a child's profile and environment from the parent record", async () 
   expect(child.options.environmentConfig).toEqual({
     type: "docker",
     container: "remote",
-    cwd: "/work",
+    projectDir: "/work",
   });
 });
 
@@ -330,7 +334,7 @@ it("uses the prepared environment when checking whether a fork is local", async 
     environmentConfig: {
       type: "docker",
       container: "remote",
-      cwd: "/workspace",
+      projectDir: "/workspace",
     },
   };
   const id = await created(session.createThread(rootOptions(profile)));

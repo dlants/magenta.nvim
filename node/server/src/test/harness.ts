@@ -44,9 +44,9 @@ import type { MCPServersConfig } from "../tools/mcp/options.ts";
 import type { ToolCapability } from "../tools/tool-registry.ts";
 import { pollUntil, type Task } from "../utils/async.ts";
 import {
-  type Cwd,
   detectFileTypeViaFileIO,
   type HomeDir,
+  type ProjectDir,
   resolveFilePath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
@@ -79,7 +79,7 @@ export type HarnessResolve = (
 export type HarnessOptions = {
   /** abs path -> content, seeds the InMemoryFileIO. */
   files?: Record<string, string>;
-  cwd?: string;
+  projectDir?: string;
   homeDir?: string;
   git?: GitState | GitState[];
   shell?: FakeShellScript;
@@ -105,7 +105,7 @@ export const defaultHarnessResolve: HarnessResolve = async (
     const raw = match[1] ?? match[2];
     if (!raw) continue;
     const abs = resolveFilePath(
-      host.cwd,
+      host.projectDir,
       raw as UnresolvedFilePath,
       host.homeDir,
     );
@@ -131,8 +131,8 @@ export class TestSessionHost implements SessionHost {
   readonly fileIO: InMemoryFileIO;
   readonly git: FakeGitClient;
   readonly shell: FakeShell;
-  /** Default cwd for threads created without an explicit local `cwd`. Mutable so tests can model the client moving. */
-  cwd: Cwd;
+  /** Default projectDir for threads created without an explicit local `projectDir`. Mutable so tests can model the client moving. */
+  projectDir: ProjectDir;
   readonly homeDir: HomeDir;
   readonly profile: ProviderProfile = {
     name: "mock",
@@ -157,7 +157,7 @@ export class TestSessionHost implements SessionHost {
   readonly luaExecutor: LuaExecutor | undefined;
 
   constructor(opts: HarnessOptions = {}) {
-    this.cwd = (opts.cwd ?? "/project") as Cwd;
+    this.projectDir = (opts.projectDir ?? "/project") as ProjectDir;
     this.homeDir = (opts.homeDir ?? "/home") as HomeDir;
     this.fileIO = new InMemoryFileIO(opts.files ?? {});
     this.git = new FakeGitClient(opts.git);
@@ -217,27 +217,27 @@ export class TestSessionHost implements SessionHost {
     const fileIO = request.options.fileIO ?? this.fileIO;
     const { homeDir } = this;
     const requestedConfig = request.options.environmentConfig;
-    const cwd =
-      requestedConfig?.type === "local" && requestedConfig.cwd
-        ? requestedConfig.cwd
-        : this.cwd;
+    const projectDir =
+      requestedConfig?.type === "local" && requestedConfig.projectDir
+        ? requestedConfig.projectDir
+        : this.projectDir;
     const autoContextFiles =
       request.options.fileIO || source
         ? []
         : await resolveAutoContext({
             fileIO,
             logger: noopLogger,
-            cwd,
+            projectDir,
             homeDir,
             globs: this.options.autoContext,
           });
     const initialGitState = source
       ? undefined
-      : await readGitStateAt(this.git, cwd);
+      : await readGitStateAt(this.git, projectDir);
     const systemInfo =
       source?.systemInfo ??
       buildSystemInfo({
-        cwd,
+        projectDir,
         neovimVersion: "0.10.0",
         overrides: { git: initialGitState },
       });
@@ -245,7 +245,7 @@ export class TestSessionHost implements SessionHost {
       source?.systemPrompt ??
       (await createSystemPrompt(threadType, {
         logger: noopLogger,
-        cwd,
+        projectDir,
         options: this.options,
         fileIO,
         homeDir,
@@ -257,7 +257,6 @@ export class TestSessionHost implements SessionHost {
     const context: PreparedThreadContext = {
       logger: noopLogger,
       profile,
-      cwd,
       homeDir,
       initialFiles: autoContextFilesToInitialFiles(autoContextFiles),
       ...(initialGitState ? { initialGitState } : {}),
@@ -273,7 +272,7 @@ export class TestSessionHost implements SessionHost {
         discoverHierarchyContext(absFilePath, {
           fileIO,
           logger: noopLogger,
-          cwd,
+          projectDir,
           homeDir,
           hierarchyContextFileNames: this.options.hierarchyContextFileNames,
         }),
@@ -281,7 +280,6 @@ export class TestSessionHost implements SessionHost {
         logger: noopLogger,
         lspClient: stubLsp,
         mcpToolManager: this.mcp,
-        cwd,
         homeDir,
         maxConcurrentSubagents: this.options.maxConcurrentSubagents,
         maxConcurrentFastSubagents: this.options.maxConcurrentFastSubagents,

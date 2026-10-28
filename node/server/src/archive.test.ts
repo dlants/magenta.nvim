@@ -82,6 +82,18 @@ describe("archive", () => {
       threadType: "reflect",
     });
   });
+  it("reads legacy cwd metadata as projectDir", async () => {
+    const id = uuidv7() as ThreadId;
+    await makeThreadDir(id);
+    await fs.writeFile(
+      threadMetaPath(id, TEST_BASE_DIR),
+      JSON.stringify({ title: "Old", cwd: "/legacy" }),
+    );
+    expect(await readThreadMeta(id, TEST_BASE_DIR)).toEqual({
+      title: "Old",
+      projectDir: "/legacy",
+    });
+  });
   it("returns {} for a malformed sidecar", async () => {
     const id = uuidv7() as ThreadId;
     await makeThreadDir(id);

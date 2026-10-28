@@ -1,9 +1,9 @@
 import { platform } from "node:os";
 import type { SystemInfo } from "../providers/system-prompt.ts";
-import type { Cwd } from "../utils/files.ts";
+import type { ProjectDir } from "../utils/files.ts";
 
 export function buildSystemInfo(ctx: {
-  cwd: Cwd;
+  projectDir: ProjectDir;
   neovimVersion: string;
   overrides?: Partial<SystemInfo>;
 }): SystemInfo {
@@ -11,7 +11,7 @@ export function buildSystemInfo(ctx: {
     timestamp: new Date().toString(),
     platform: platform(),
     neovimVersion: ctx.neovimVersion,
-    cwd: ctx.cwd,
+    projectDir: ctx.projectDir,
     ...ctx.overrides,
   };
 }

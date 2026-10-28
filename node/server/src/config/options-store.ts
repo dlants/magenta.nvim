@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Logger } from "../logger.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 import {
   loadProjectSettings,
   loadUserOptions,
@@ -24,22 +24,24 @@ function mtime(filePath: string): number | undefined {
 }
 
 /** Server configuration comes only from `~/.magenta/options.json` merged with
- * `<cwd>/.magenta/options.json`. Files are re-read when their mtime changes
+ * `<projectDir>/.magenta/options.json`. Files are re-read when their mtime changes
  * (including appearing or disappearing). */
 export class OptionsStore {
-  private readonly cache = new Map<Cwd, Cached>();
+  private readonly cache = new Map<ProjectDir, Cached>();
 
   constructor(
     private readonly homeDir: HomeDir,
     private readonly logger: Logger,
   ) {}
 
-  getOptions(cwd: Cwd): ServerOptions {
+  getOptions(projectDir: ProjectDir): ServerOptions {
     const userMtime = mtime(
       path.join(this.homeDir, ".magenta", "options.json"),
     );
-    const projectMtime = mtime(path.join(cwd, ".magenta", "options.json"));
-    const cached = this.cache.get(cwd);
+    const projectMtime = mtime(
+      path.join(projectDir, ".magenta", "options.json"),
+    );
+    const cached = this.cache.get(projectDir);
     if (
       cached &&
       cached.userMtime === userMtime &&
@@ -53,9 +55,9 @@ export class OptionsStore {
     };
     const options = mergeOptions(
       loadUserOptions(this.homeDir, warnLogger),
-      loadProjectSettings(cwd, warnLogger) ?? {},
+      loadProjectSettings(projectDir, warnLogger) ?? {},
     );
-    this.cache.set(cwd, { options, userMtime, projectMtime });
+    this.cache.set(projectDir, { options, userMtime, projectMtime });
     return options;
   }
 }

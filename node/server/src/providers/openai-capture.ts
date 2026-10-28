@@ -414,7 +414,7 @@ const scenarios: Scenario[] = [
     // Only the instructions differ between two otherwise identical requests.
     // Determines whether instructions participate in the cached prefix, which
     // decides whether the system prompt can carry volatile content (dates,
-    // cwd, context files) without destroying caching.
+    // projectDir, context files) without destroying caching.
     name: "caching-instructions-change",
     run: async (send) => {
       const seed = `instructions-${RUN_ID}`;

@@ -12,7 +12,7 @@ import {
 } from "../sandbox-config.ts";
 import type { CustomCommand } from "../submission/commands/types.ts";
 import { type ServerName, validateServerName } from "../tools/mcp/types.ts";
-import type { Cwd } from "../utils/files.ts";
+import type { ProjectDir } from "../utils/files.ts";
 export {
   DEFAULT_SANDBOX_CONFIG,
   type OnUnknownHostBehavior,
@@ -1105,10 +1105,10 @@ export function loadUserOptions(
   return parseOptions(raw, logger);
 }
 export function loadProjectSettings(
-  cwd: Cwd,
+  projectDir: ProjectDir,
   logger: { warn: (msg: string) => void },
 ): Partial<ServerOptions> | undefined {
-  const settingsPath = path.join(cwd, ".magenta", "options.json");
+  const settingsPath = path.join(projectDir, ".magenta", "options.json");
   try {
     if (fs.existsSync(settingsPath)) {
       const fileContent = fs.readFileSync(settingsPath, "utf8");

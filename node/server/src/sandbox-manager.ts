@@ -11,12 +11,7 @@ import {
   StraceUnavailableError,
 } from "./capabilities/strace.ts";
 import type { SandboxConfig } from "./sandbox-config.ts";
-import {
-  type Cwd,
-  type HomeDir,
-  type ProjectDir,
-  toProjectDir,
-} from "./utils/files.ts";
+import { type HomeDir, type ProjectDir, toProjectDir } from "./utils/files.ts";
 
 export type SandboxState =
   | { status: "uninitialized" }
@@ -264,7 +259,7 @@ class RealSandbox implements Sandbox {
 
 export async function initializeSandbox(
   config: SandboxConfig,
-  cwd: Cwd,
+  projectDir: ProjectDir,
   homeDir: HomeDir,
   askCallback: SandboxAskCallback | undefined,
   logger: { warn(msg: string): void },
@@ -293,7 +288,11 @@ export async function initializeSandbox(
   // to start) if it is missing or cannot attach.
   assertStraceAvailable(process.platform);
 
-  const runtimeConfig = resolveConfigPaths(config, toProjectDir(cwd), homeDir);
+  const runtimeConfig = resolveConfigPaths(
+    config,
+    toProjectDir(projectDir),
+    homeDir,
+  );
   await SandboxManager.initialize(runtimeConfig, askCallback, true);
   const lastConfigJson = JSON.stringify(runtimeConfig);
 
@@ -307,7 +306,7 @@ export async function initializeSandbox(
  * denies). */
 export async function startSandbox(
   config: SandboxConfig,
-  cwd: Cwd,
+  projectDir: ProjectDir,
   homeDir: HomeDir,
   logger: { warn(msg: string): void },
   init: typeof initializeSandbox = initializeSandbox,
@@ -317,7 +316,7 @@ export async function startSandbox(
     if (!sandboxRef) return Promise.resolve(false);
     return sandboxRef.routeNetworkAsk({ host: params.host, port: params.port });
   };
-  const sandbox = await init(config, cwd, homeDir, askCallback, {
+  const sandbox = await init(config, projectDir, homeDir, askCallback, {
     warn: (msg) => logger.warn(`Sandbox: ${msg}`),
   }).catch((err: unknown): Sandbox => {
     if (err instanceof StraceUnavailableError) {

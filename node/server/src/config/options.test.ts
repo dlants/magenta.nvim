@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Cwd } from "../utils/files.ts";
+import type { ProjectDir } from "../utils/files.ts";
 import {
   BUILTIN_SKILLS_PATH,
   DEFAULT_SANDBOX_CONFIG,
@@ -485,7 +485,7 @@ describe("suppressProjectSkills", () => {
     const warnings: string[] = [];
     const logger = { warn: (msg: string) => warnings.push(msg) };
 
-    const result = loadProjectSettings(tmpRoot as Cwd, logger);
+    const result = loadProjectSettings(tmpRoot as ProjectDir, logger);
 
     expect(result).toBeDefined();
     expect(result?.suppressProjectSkills).toBeUndefined();

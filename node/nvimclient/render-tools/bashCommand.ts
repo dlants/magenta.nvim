@@ -17,7 +17,11 @@ import {
   withCode,
   withInlineCode,
 } from "../tea/view.ts";
-import type { Cwd, HomeDir, UnresolvedFilePath } from "../utils/files.ts";
+import type {
+  HomeDir,
+  ProjectDir,
+  UnresolvedFilePath,
+} from "../utils/files.ts";
 import { formatTokens } from "../utils/tokens.ts";
 
 type BashProgress = BashCommand.BashProgress;
@@ -32,7 +36,7 @@ export type RenderContext = {
   getDisplayWidth: () => number;
   requestTick: () => void;
   nvim: Nvim;
-  cwd: Cwd;
+  cwd: ProjectDir;
   homeDir: HomeDir;
   options: MagentaOptions;
   threadDispatch: Dispatch<{

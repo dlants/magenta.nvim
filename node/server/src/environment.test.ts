@@ -9,12 +9,12 @@ import {
 } from "./environment.ts";
 import { MockSandboxManager } from "./test/mock-sandbox-manager.ts";
 import { noopLogger } from "./test-helpers.ts";
-import type { Cwd, HomeDir } from "./utils/files.ts";
+import type { HomeDir, ProjectDir } from "./utils/files.ts";
 
 function build(extra: { lspClient?: LspClient; luaExecutor?: LuaExecutor }) {
   return createLocalEnvironment({
     logger: noopLogger,
-    cwd: "/tmp" as Cwd,
+    projectDir: "/tmp" as ProjectDir,
     homeDir: "/tmp" as HomeDir,
     getSandboxConfig: () => {
       throw new Error("unused");

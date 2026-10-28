@@ -9,7 +9,7 @@ import type {
   SandboxState,
 } from "../sandbox-manager.ts";
 import { noopLogger } from "../test-helpers.ts";
-import type { AbsFilePath, Cwd, HomeDir } from "../utils/files.ts";
+import type { AbsFilePath, HomeDir, ProjectDir } from "../utils/files.ts";
 import { SandboxFileIO } from "./sandbox-file-io.ts";
 
 let currentSandboxState: SandboxState = { status: "uninitialized" };
@@ -40,7 +40,7 @@ function createMockSandbox(): Sandbox {
   };
 }
 
-const cwd = "/test/cwd" as Cwd;
+const projectDir = "/test/projectDir" as ProjectDir;
 const homeDir = "/test/home" as HomeDir;
 
 function createSandboxIO(
@@ -48,7 +48,7 @@ function createSandboxIO(
   isBypassed: () => boolean = () => false,
 ) {
   return new SandboxFileIO(
-    { logger: noopLogger, cwd, homeDir },
+    { logger: noopLogger, projectDir, homeDir },
     createMockSandbox(),
     promptForWriteApproval,
     isBypassed,
@@ -72,7 +72,7 @@ describe("SandboxFileIO", () => {
         };
 
         const sio = createSandboxIO();
-        expect(sio.isReadBlocked("/test/cwd/src/file.ts")).toBe(false);
+        expect(sio.isReadBlocked("/test/projectDir/src/file.ts")).toBe(false);
       });
 
       test("denied path is blocked", () => {
@@ -139,17 +139,17 @@ describe("SandboxFileIO", () => {
     describe("writes", () => {
       test("write to allowed path is not blocked", () => {
         mockFsWriteConfig = {
-          allowOnly: ["/test/cwd"],
+          allowOnly: ["/test/projectDir"],
           denyWithinAllow: [],
         };
 
         const sio = createSandboxIO();
-        expect(sio.isWriteBlocked("/test/cwd/src/file.ts")).toBe(false);
+        expect(sio.isWriteBlocked("/test/projectDir/src/file.ts")).toBe(false);
       });
 
       test("write outside allowOnly is blocked", () => {
         mockFsWriteConfig = {
-          allowOnly: ["/test/cwd"],
+          allowOnly: ["/test/projectDir"],
           denyWithinAllow: [],
         };
 
@@ -159,17 +159,17 @@ describe("SandboxFileIO", () => {
 
       test("write to denyWithinAllow is blocked", () => {
         mockFsWriteConfig = {
-          allowOnly: ["/test/cwd"],
-          denyWithinAllow: ["/test/cwd/.env"],
+          allowOnly: ["/test/projectDir"],
+          denyWithinAllow: ["/test/projectDir/.env"],
         };
 
         const sio = createSandboxIO();
-        expect(sio.isWriteBlocked("/test/cwd/.env")).toBe(true);
+        expect(sio.isWriteBlocked("/test/projectDir/.env")).toBe(true);
       });
 
       test("write blocked path prompts for approval", async () => {
         mockFsWriteConfig = {
-          allowOnly: ["/test/cwd"],
+          allowOnly: ["/test/projectDir"],
           denyWithinAllow: [],
         };
 
@@ -185,12 +185,12 @@ describe("SandboxFileIO", () => {
 
       test("write denyWithinAllow prefix does not match non-child", () => {
         mockFsWriteConfig = {
-          allowOnly: ["/test/cwd"],
-          denyWithinAllow: ["/test/cwd/.env"],
+          allowOnly: ["/test/projectDir"],
+          denyWithinAllow: ["/test/projectDir/.env"],
         };
 
         const sio = createSandboxIO();
-        expect(sio.isWriteBlocked("/test/cwd/.environment")).toBe(false);
+        expect(sio.isWriteBlocked("/test/projectDir/.environment")).toBe(false);
       });
     });
   });
@@ -211,19 +211,19 @@ describe("SandboxFileIO", () => {
     test("writes are blocked when unsupported", () => {
       currentSandboxState = { status: "unsupported", reason: "disabled" };
       const sio = createSandboxIO();
-      expect(sio.isWriteBlocked("/test/cwd/file.ts")).toBe(true);
+      expect(sio.isWriteBlocked("/test/projectDir/file.ts")).toBe(true);
     });
 
     test("writes are blocked when uninitialized", () => {
       currentSandboxState = { status: "uninitialized" };
       const sio = createSandboxIO();
-      expect(sio.isWriteBlocked("/test/cwd/file.ts")).toBe(true);
+      expect(sio.isWriteBlocked("/test/projectDir/file.ts")).toBe(true);
     });
 
     test("writes are not blocked when bypassed", () => {
       currentSandboxState = { status: "uninitialized" };
       const sio = createSandboxIO(vi.fn(), () => true);
-      expect(sio.isWriteBlocked("/test/cwd/file.ts")).toBe(false);
+      expect(sio.isWriteBlocked("/test/projectDir/file.ts")).toBe(false);
     });
   });
 
@@ -295,8 +295,8 @@ describe("SandboxFileIO", () => {
       currentSandboxState = { status: "ready" };
       mockFsReadConfig = { denyOnly: ["/test/home/.ssh"] };
       const sio = createSandboxIO();
-      // "src/file.ts" resolves to "/test/cwd/src/file.ts" — not denied
-      expect(sio.isReadBlocked("/test/cwd/src/file.ts")).toBe(false);
+      // "src/file.ts" resolves to "/test/projectDir/src/file.ts" — not denied
+      expect(sio.isReadBlocked("/test/projectDir/src/file.ts")).toBe(false);
     });
 
     test("resolves tilde paths before checking", async () => {
@@ -320,7 +320,7 @@ describe("SandboxFileIO onFileWritten", () => {
     currentSandboxState = { status: "ready" };
     mockFsWriteConfig = { allowOnly: [dir], denyWithinAllow: [] };
     const sio = new SandboxFileIO(
-      { logger: noopLogger, cwd: dir as Cwd, homeDir },
+      { logger: noopLogger, projectDir: dir as ProjectDir, homeDir },
       createMockSandbox(),
       prompt,
       () => false,

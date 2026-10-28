@@ -7,7 +7,7 @@ import {
 } from "@magenta/server";
 import { expect, it } from "vitest";
 import { BUILTIN_SKILLS_PATH } from "../options.ts";
-import type { Cwd, HomeDir } from "../utils/files.ts";
+import type { HomeDir, ProjectDir } from "../utils/files.ts";
 
 const logger: Logger = {
   debug: () => {},
@@ -18,7 +18,7 @@ const logger: Logger = {
 
 it("discovers the built-in authoring-magenta-scripts skill and it documents the harness", async () => {
   const skills = await loadSkills({
-    cwd: "/nonexistent" as Cwd,
+    projectDir: "/nonexistent" as ProjectDir,
     homeDir: "/nonexistent" as HomeDir,
     logger,
     fileIO: new FsFileIO(),

@@ -18,15 +18,14 @@ import type { Sandbox } from "./sandbox-manager.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import {
   type AbsFilePath,
-  type Cwd,
   type HomeDir,
-  toCwd,
+  type ProjectDir,
   toHomeDir,
   toProjectDir,
 } from "./utils/files.ts";
 export type EnvironmentConfig =
-  | { type: "local"; cwd?: Cwd }
-  | { type: "docker"; container: string; cwd: string };
+  | { type: "local"; projectDir?: ProjectDir }
+  | { type: "docker"; container: string; projectDir: string };
 
 export interface Environment {
   fileIO: FileIO;
@@ -37,7 +36,7 @@ export interface Environment {
   lspClient?: LspClient | undefined;
   /** Editor-backed; its presence is what offers the nvim tools. */
   luaExecutor?: LuaExecutor | undefined;
-  cwd: Cwd;
+  projectDir: ProjectDir;
   homeDir: HomeDir;
   environmentConfig: EnvironmentConfig;
 }
@@ -52,7 +51,7 @@ export function environmentCapabilities(env: Environment): Set<ToolCapability> {
 
 export function createLocalEnvironment({
   logger,
-  cwd,
+  projectDir,
   homeDir,
   getSandboxConfig,
   threadId,
@@ -64,7 +63,7 @@ export function createLocalEnvironment({
   onFileWritten,
 }: {
   logger: Logger;
-  cwd: Cwd;
+  projectDir: ProjectDir;
   homeDir: HomeDir;
   getSandboxConfig: () => SandboxConfig;
   threadId: ThreadId;
@@ -80,7 +79,7 @@ export function createLocalEnvironment({
 }): Environment {
   const violationHandler = approvals;
   const sandboxFileIO = new SandboxFileIO(
-    { logger, cwd, homeDir },
+    { logger, projectDir, homeDir },
     sandbox,
     (absPath) => violationHandler.promptForWriteApproval(absPath),
     isBypassed,
@@ -88,7 +87,7 @@ export function createLocalEnvironment({
   );
   const sandboxShell = new SandboxShell(
     {
-      projectDir: toProjectDir(cwd),
+      projectDir: toProjectDir(projectDir),
       homeDir,
       threadId,
       getSandboxConfig,
@@ -104,7 +103,7 @@ export function createLocalEnvironment({
     sandboxViolationHandler: violationHandler,
     lspClient,
     luaExecutor,
-    cwd,
+    projectDir,
     homeDir,
     environmentConfig: { type: "local" },
   };
@@ -113,11 +112,11 @@ const execFile = promisify(execFileCb);
 
 export async function createDockerEnvironment({
   container,
-  cwd: cwdParam,
+  projectDir: cwdParam,
   threadId,
 }: {
   container: string;
-  cwd?: string;
+  projectDir?: string;
   threadId: ThreadId;
 }): Promise<Environment> {
   const resolvedCwd: string =
@@ -141,8 +140,8 @@ export async function createDockerEnvironment({
     shell,
     gitClient: new DockerGitClient(container),
     sandboxViolationHandler: undefined,
-    cwd: toCwd(resolvedCwd),
+    projectDir: toProjectDir(resolvedCwd),
     homeDir: toHomeDir(resolvedHome),
-    environmentConfig: { type: "docker", container, cwd: resolvedCwd },
+    environmentConfig: { type: "docker", container, projectDir: resolvedCwd },
   };
 }
