@@ -118,10 +118,10 @@ function formatHead(state: GitState): string {
 /** Markdown lines describing git state for the system information block. */
 export function formatGitInfo(state: GitState | undefined): string {
   if (!state) {
-    return "- Git: not a git repository";
+    return "- Git: the directory magenta was started from is not a git repository. Other repositories may still be tracked if you read files from them.";
   }
   return [
-    `- Git repository root: ${state.repoRoot}`,
+    `- Git repository (the one containing the directory magenta was started from; this is one of possibly several tracked repos, others are tracked when you read files from them): ${state.repoRoot}`,
     `- Git branch: ${state.branch ?? "(detached HEAD)"}`,
     `- Git HEAD: ${formatHead(state)}`,
     `- Git changes: ${state.stagedCount} staged, ${state.unstagedCount} unstaged, ${state.untrackedCount} untracked`,
