@@ -155,6 +155,7 @@ Decisions/deviations:
 - A repo's "registration point" for forks is the first delivery that showed it; registrations not yet delivered at fork time are dropped (consistent with file history truncation).
 - `FakeGitClient` holds multiple repos (`set` replaces by `repoRoot`, `remove(root)`); harness `git` option accepts `GitState | GitState[]`.
 - `container/container.test.ts` hangs (docker) on this machine; nvim suite timeouts under heavy load pass individually, except the pre-existing `render-tools/spawn-subagents.test.ts` failure.
+- Review follow-ups: `GitRepoUpdate` is a union (`registered` / `changed` / `gone`) that `gitUpdateToText` and the nvim `renderGitUpdate` switch on; `readAll` returns `{kind: "new" | "tracked"}`. `GitState.repoRoot`, tracker maps/sets, `FakeGitClient` and the root cache are keyed on `AbsFilePath`; git output goes through `parseRepoRoot` (rejects non-absolute). Added tests: re-registering a tracked repo, an unawaited registration showing up in the next update, a failed lookup not blocking updates, `findRepoRoot` before/after `git init`, autoContext files in another repo reported in the first request, and a fork registering into its own tracker (source unaffected).
 
 - Goal: `GitClient` takes the directory per call; `GitSupervisor.registerPath` adds repos to a tracked set; updates cover all tracked repos; FileSupervisor and the host call `registerPath`.
 - Tests:

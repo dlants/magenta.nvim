@@ -8,6 +8,7 @@ import { parseGitState } from "../capabilities/git-client.ts";
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import { FakeGitClient } from "../test/fakes.ts";
 import { noopLogger } from "../test-helpers.ts";
+import { Defer } from "../utils/async.ts";
 import type { AbsFilePath } from "../utils/files.ts";
 import {
   type GitContextUpdate,
@@ -18,7 +19,7 @@ import {
 
 function state(branch: string): GitState {
   return {
-    repoRoot: "/repo",
+    repoRoot: "/repo" as AbsFilePath,
     branch,
     headSha: "abc123",
     headSubject: "Initial commit",
@@ -115,7 +116,7 @@ describe("parseGitState", () => {
     });
     const state = await parseGitState(runner);
     expect(state).toEqual<GitState>({
-      repoRoot: "/repo",
+      repoRoot: "/repo" as AbsFilePath,
       branch: "main",
       headSha: "abc123def456",
       headSubject: "Initial commit",
@@ -146,7 +147,7 @@ function clientFor(states: (GitState | undefined)[]): GitClient {
 }
 
 const base: GitState = {
-  repoRoot: "/repo",
+  repoRoot: "/repo" as AbsFilePath,
   branch: "main",
   headSha: "sha1",
   headSubject: "first",
@@ -188,18 +189,25 @@ describe("GitTracker", () => {
       source: tracker,
       nativeMessageIdx: 1 as NativeMessageIdx,
     });
-    expect(clone.getAgentView().get("/repo")).toEqual(refreshed);
+    expect(clone.getAgentView().get("/repo" as AbsFilePath)).toEqual(refreshed);
 
     const update = await tracker.getUpdate(2 as NativeMessageIdx);
-    expect(update?.repos[0]?.previous).toEqual(refreshed);
-    expect(update?.repos[0]?.current).toEqual(changed);
+    expect(update?.repos[0]).toEqual({
+      type: "changed",
+      repoRoot: "/repo",
+      previous: refreshed,
+      current: changed,
+    });
   });
 
   it("reports when the branch changes", async () => {
     const tracker = trackerFor([{ ...base, branch: "feature" }]);
     const update = await tracker.getUpdate(1 as NativeMessageIdx);
-    expect(update?.repos[0]?.current?.branch).toBe("feature");
-    expect(update?.repos[0]?.previous?.branch).toBe("main");
+    expect(update?.repos[0]).toMatchObject({
+      type: "changed",
+      previous: { branch: "main" },
+      current: { branch: "feature" },
+    });
   });
 
   it("reports when HEAD moves", async () => {
@@ -224,7 +232,7 @@ describe("GitTracker", () => {
   it("reports leaving a repository", async () => {
     const tracker = trackerFor([undefined]);
     const update = await tracker.getUpdate(1 as NativeMessageIdx);
-    expect(update?.repos[0]?.current).toBeUndefined();
+    expect(update?.repos[0]?.type).toBe("gone");
     expect(gitUpdateToText(update!)).toContain("No longer a git repository");
   });
 
@@ -234,9 +242,8 @@ describe("GitTracker", () => {
     expect(await tracker.hasUpdate()).toBe(true);
     expect(await tracker.hasUpdate()).toBe(true);
     expect(
-      (await tracker.getUpdate(1 as NativeMessageIdx))?.repos[0]?.current
-        ?.branch,
-    ).toBe("feature");
+      (await tracker.getUpdate(1 as NativeMessageIdx))?.repos[0],
+    ).toMatchObject({ current: { branch: "feature" } });
   });
 
   it("peeks false when nothing worth reporting changed", async () => {
@@ -272,8 +279,8 @@ describe("GitTracker", () => {
       nativeMessageIdx: 2 as NativeMessageIdx,
     });
     expect(
-      (await clone.getUpdate(4 as NativeMessageIdx))?.repos[0]?.current?.branch,
-    ).toBe("feature");
+      (await clone.getUpdate(4 as NativeMessageIdx))?.repos[0],
+    ).toMatchObject({ current: { branch: "feature" } });
   });
 
   it("a clone through a delivered update does not report it again", async () => {
@@ -289,7 +296,11 @@ describe("GitTracker", () => {
 });
 
 describe("GitTracker multi-repo", () => {
-  const other: GitState = { ...base, repoRoot: "/other", branch: "o" };
+  const other: GitState = {
+    ...base,
+    repoRoot: "/other" as AbsFilePath,
+    branch: "o",
+  };
   function twoRepos() {
     const client = new FakeGitClient([base, other]);
     const tracker = GitTracker.create({
@@ -306,9 +317,48 @@ describe("GitTracker multi-repo", () => {
     await tracker.registerPath("/other/b.txt" as AbsFilePath);
     const update = await tracker.getUpdate(1 as NativeMessageIdx);
     expect(update?.repos).toEqual([
-      { repoRoot: "/other", previous: undefined, current: other },
+      { type: "registered", repoRoot: "/other", current: other },
     ]);
     expect(await tracker.getUpdate(2 as NativeMessageIdx)).toBeUndefined();
+  });
+
+  it("registering a path in an already tracked repo reports nothing", async () => {
+    const { tracker } = twoRepos();
+    await tracker.registerPath("/repo/a.txt" as AbsFilePath);
+    expect(await tracker.hasUpdate()).toBe(false);
+    expect(await tracker.getUpdate(1 as NativeMessageIdx)).toBeUndefined();
+  });
+
+  it("an unawaited registration is included in the next update", async () => {
+    const root = new Defer<AbsFilePath | undefined>();
+    const client = new FakeGitClient([base, other]);
+    vi.spyOn(client, "findRepoRoot").mockReturnValueOnce(root.promise);
+    const tracker = GitTracker.create({
+      gitClient: client,
+      initialState: base,
+      logger: noopLogger,
+    });
+    void tracker.registerPath("/other/a.txt" as AbsFilePath);
+    const update = tracker.getUpdate(1 as NativeMessageIdx);
+    root.resolve("/other" as AbsFilePath);
+    expect((await update)?.repos).toEqual([
+      { type: "registered", repoRoot: "/other", current: other },
+    ]);
+  });
+
+  it("a failed repo lookup does not block later updates", async () => {
+    const client = new FakeGitClient([{ ...base, branch: "feature" }]);
+    vi.spyOn(client, "findRepoRoot").mockRejectedValueOnce(new Error("boom"));
+    const tracker = GitTracker.create({
+      gitClient: client,
+      initialState: base,
+      logger: noopLogger,
+    });
+    await tracker.registerPath("/x/a.txt" as AbsFilePath);
+    expect(await tracker.hasUpdate()).toBe(true);
+    expect(
+      (await tracker.getUpdate(1 as NativeMessageIdx))?.repos[0],
+    ).toMatchObject({ type: "changed", current: { branch: "feature" } });
   });
 
   it("ignores paths outside any repo", async () => {
@@ -333,17 +383,18 @@ describe("GitTracker multi-repo", () => {
       nativeMessageIdx: 3 as NativeMessageIdx,
     });
     expect(
-      (await kept.getUpdate(4 as NativeMessageIdx))?.repos[0]?.current?.branch,
-    ).toBe("moved");
+      (await kept.getUpdate(4 as NativeMessageIdx))?.repos[0],
+    ).toMatchObject({ current: { branch: "moved" } });
   });
 
   it("reports a tracked repo that disappears", async () => {
     const { client, tracker } = twoRepos();
-    client.remove("/repo");
+    client.remove("/repo" as AbsFilePath);
     const update = await tracker.getUpdate(1 as NativeMessageIdx);
     expect(update?.repos[0]).toMatchObject({
+      type: "gone",
       repoRoot: "/repo",
-      current: undefined,
+      previous: base,
     });
   });
 });

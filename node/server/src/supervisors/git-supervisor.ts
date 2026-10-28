@@ -4,13 +4,15 @@ import type { Logger } from "../logger.ts";
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import type { AbsFilePath } from "../utils/files.ts";
 
-/** One repository's change. `previous` is undefined when the repo was just
- * registered; `current` is undefined when it is no longer a repository. */
-export type GitRepoUpdate = {
-  repoRoot: string;
-  previous: GitState | undefined;
-  current: GitState | undefined;
-};
+export type GitRepoUpdate =
+  | { type: "registered"; repoRoot: AbsFilePath; current: GitState }
+  | {
+      type: "changed";
+      repoRoot: AbsFilePath;
+      previous: GitState | undefined;
+      current: GitState;
+    }
+  | { type: "gone"; repoRoot: AbsFilePath; previous: GitState };
 export type GitContextUpdate = { repos: GitRepoUpdate[] };
 
 /** True when the coarse-grained identity of the repo changed: presence,
@@ -38,11 +40,14 @@ function cloneState(state: GitState | undefined): GitState | undefined {
 
 /** Per-repo agent views. A repo's first history entry is the point it was
  * first shown to the agent, which is what forks filter on. */
-type RepoHistories = Map<string, GitViewEntry[]>;
+type RepoHistories = Map<AbsFilePath, GitViewEntry[]>;
+type RepoRead =
+  | { kind: "new"; root: AbsFilePath; state: GitState | undefined }
+  | { kind: "tracked"; root: AbsFilePath; state: GitState | undefined };
 
 export class GitTracker {
   /** Registered roots not yet shown to the agent. */
-  private readonly pending = new Set<string>();
+  private readonly pending = new Set<AbsFilePath>();
   private readonly registrations = new Set<Promise<void>>();
 
   private constructor(
@@ -91,7 +96,7 @@ export class GitTracker {
   }
 
   /** The state the agent last saw, per tracked repo root. */
-  getAgentView(): Map<string, GitState | undefined> {
+  getAgentView(): Map<AbsFilePath, GitState | undefined> {
     return new Map(
       [...this.repos].map(([root, history]) => [
         root,
@@ -118,19 +123,20 @@ export class GitTracker {
     return registration;
   }
 
-  private async readAll(): Promise<
-    { root: string; isNew: boolean; state: GitState | undefined }[]
-  > {
+  private async readAll(): Promise<RepoRead[]> {
     await Promise.all(this.registrations);
     const roots = [
-      ...[...this.repos.keys()].map((root) => ({ root, isNew: false })),
-      ...[...this.pending].map((root) => ({ root, isNew: true })),
+      ...[...this.repos.keys()].map((root) => ({
+        root,
+        kind: "tracked" as const,
+      })),
+      ...[...this.pending].map((root) => ({ root, kind: "new" as const })),
     ];
     const results = await Promise.all(
-      roots.map(async ({ root, isNew }) => {
+      roots.map(async ({ root, kind }): Promise<RepoRead | undefined> => {
         try {
-          const state = await this.gitClient.getState(root as AbsFilePath);
-          return { root, isNew, state };
+          const state = await this.gitClient.getState(root);
+          return { root, kind, state };
         } catch (error) {
           this.logger.error(
             `GitTracker failed to read git state for ${root}: ${String(error)}`,
@@ -146,8 +152,10 @@ export class GitTracker {
    * the agent view. A probe for a request that may never be issued. */
   async hasUpdate(): Promise<boolean> {
     const views = this.getAgentView();
-    return (await this.readAll()).some(({ root, isNew, state }) =>
-      isNew ? state !== undefined : coarseChanged(views.get(root), state),
+    return (await this.readAll()).some(({ root, kind, state }) =>
+      kind === "new"
+        ? state !== undefined
+        : coarseChanged(views.get(root), state),
     );
   }
 
@@ -157,14 +165,14 @@ export class GitTracker {
   ): Promise<GitContextUpdate | undefined> {
     const reads = await this.readAll();
     const repos: GitRepoUpdate[] = [];
-    for (const { root, isNew, state } of reads) {
-      if (isNew) {
+    for (const { root, kind, state } of reads) {
+      if (kind === "new") {
         this.pending.delete(root);
         if (!state) continue;
         this.repos.set(root, [{ nativeMessageIdx, state: cloneState(state) }]);
         repos.push({
+          type: "registered",
           repoRoot: root,
-          previous: undefined,
           current: { ...state },
         });
         continue;
@@ -186,21 +194,30 @@ export class GitTracker {
         );
       }
       history.push({ nativeMessageIdx, state: cloneState(state) });
-      repos.push({ repoRoot: root, previous, current: cloneState(state) });
+      if (state) {
+        repos.push({
+          type: "changed",
+          repoRoot: root,
+          previous,
+          current: { ...state },
+        });
+      } else if (previous) {
+        repos.push({ type: "gone", repoRoot: root, previous });
+      }
     }
     return repos.length ? { repos } : undefined;
   }
 }
 
 function repoUpdateToText(update: GitRepoUpdate): string {
-  const { current } = update;
-  if (!current) {
+  if (update.type === "gone") {
     return `## ${update.repoRoot}\n\nNo longer a git repository.`;
   }
+  const { current } = update;
   return [
     `## ${current.repoRoot}`,
     "",
-    update.previous
+    update.type === "changed"
       ? "The git repository state has changed:"
       : "Now tracking this git repository:",
     `- Repository root: ${current.repoRoot}`,

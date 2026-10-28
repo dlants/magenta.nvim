@@ -24,10 +24,12 @@ it("LocalGitClient reads branch, HEAD and changes from a real repo", async () =>
   );
   try {
     const client = new LocalGitClient();
+    expect(await client.findRepoRoot(dir as AbsFilePath)).toBeUndefined();
     expect(await readGitStateAt(client, dir as AbsFilePath)).toBeUndefined();
 
     await fs.writeFile(path.join(dir, "poem.txt"), "roses\n");
     await git(dir, ["init", "-q"]);
+    expect(await client.findRepoRoot(dir as AbsFilePath)).toBe(dir);
     await git(dir, ["symbolic-ref", "HEAD", "refs/heads/main"]);
     await git(dir, ["add", "poem.txt"]);
     await git(dir, ["commit", "-q", "-m", "initial commit"]);

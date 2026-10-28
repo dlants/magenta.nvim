@@ -1,10 +1,12 @@
 import { expect, it } from "vitest";
 import type { GitState } from "../capabilities/git-client.ts";
 import { withHarness } from "../test/harness.ts";
+import { created } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
+import type { AbsFilePath } from "../utils/files.ts";
 
 const git: GitState = {
-  repoRoot: "/project",
+  repoRoot: "/project" as AbsFilePath,
   branch: "main",
   headSha: "abcdef1234567",
   headSubject: "initial commit",
@@ -53,8 +55,16 @@ it("sends no git update when state is unchanged", () =>
     const text = JSON.stringify((await h.nextStream()).messages);
     expect(text).not.toContain("# Git status update");
   }));
-const other: GitState = { ...git, repoRoot: "/other", branch: "other-main" };
-const untouched: GitState = { ...git, repoRoot: "/untouched", branch: "u" };
+const other: GitState = {
+  ...git,
+  repoRoot: "/other" as AbsFilePath,
+  branch: "other-main",
+};
+const untouched: GitState = {
+  ...git,
+  repoRoot: "/untouched" as AbsFilePath,
+  branch: "u",
+};
 it("starts tracking a repo when the agent reads a file in it", () =>
   withHarness(
     { git: [git, other, untouched], files: { "/other/x.txt": "hi\n" } },
@@ -102,3 +112,61 @@ it("sends no git context when started outside any repo", () =>
     expect(text).toContain("not a git repository");
     expect(text).not.toContain("# Git status update");
   }));
+it("reports the repo of initial context files in the first request", () =>
+  withHarness(
+    {
+      git: [git, other],
+      files: { "/other/x.txt": "hi\n" },
+      options: { autoContext: ["/other/x.txt"] },
+    },
+    async (h) => {
+      const { thread } = await h.createRoot();
+      void h.send(thread, "hello");
+      const text = JSON.stringify((await h.nextStream()).messages);
+      expect(text).toContain("Now tracking this git repository");
+      expect(text).toContain("Branch: other-main");
+    },
+  ));
+it("a fork registers read paths into its own git tracker", () =>
+  withHarness(
+    { git: [git, other], files: { "/other/x.txt": "hi\n" } },
+    async (h) => {
+      const { id, thread } = await h.createRoot();
+      const first = h.send(thread, "hello");
+      (await h.nextStream()).respond({
+        stopReason: "end_turn",
+        text: "ok",
+        toolRequests: [],
+      });
+      await first;
+      const fork = h.thread(await created(h.session.forkThread(id)));
+      const forkDone = h.send(fork, "read it");
+      (await h.nextStream()).respond({
+        stopReason: "tool_use",
+        text: "reading",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "read_other" as ToolRequestId,
+              toolName: "get_files" as ToolName,
+              input: { files: [{ filePath: "/other/x.txt" }] },
+            },
+          },
+        ],
+      });
+      const afterRead = await h.nextStream();
+      expect(JSON.stringify(afterRead.messages)).toContain(
+        "Now tracking this git repository",
+      );
+      afterRead.respond({
+        stopReason: "end_turn",
+        text: "ok",
+        toolRequests: [],
+      });
+      await forkDone;
+      void h.send(thread, "source again");
+      const sourceText = JSON.stringify((await h.nextStream()).messages);
+      expect(sourceText).not.toContain("Now tracking this git repository");
+    },
+  ));

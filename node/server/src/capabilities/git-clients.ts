@@ -7,6 +7,7 @@ import {
   type GitCommandRunner,
   type GitState,
   parseGitState,
+  parseRepoRoot,
 } from "./git-client.ts";
 
 const execFile = promisify(execFileCb);
@@ -26,7 +27,7 @@ function runnerResult(
 /** Shared repo-root lookup over a runner that takes `git -C <dir>` args.
  * `path` may be a file, so a failed lookup falls back to its parent dir. */
 abstract class DirectorylessGitClient implements GitClient {
-  private rootCache = new Map<string, AbsFilePath>();
+  private rootCache = new Map<AbsFilePath, AbsFilePath>();
 
   protected abstract runIn(dir: string): GitCommandRunner;
 
@@ -43,9 +44,9 @@ abstract class DirectorylessGitClient implements GitClient {
   private async lookupRoot(p: AbsFilePath): Promise<AbsFilePath | undefined> {
     for (const dir of [p, path.dirname(p)]) {
       const result = await this.runIn(dir)(["rev-parse", "--show-toplevel"]);
-      if (result.exitCode === 0) {
-        return result.stdout.trim() as AbsFilePath;
-      }
+      const root =
+        result.exitCode === 0 ? parseRepoRoot(result.stdout) : undefined;
+      if (root) return root;
     }
     return undefined;
   }

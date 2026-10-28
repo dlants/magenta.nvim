@@ -1,6 +1,15 @@
+import path from "node:path";
 import type { AbsFilePath } from "../utils/files.ts";
+
+/** Validates `git rev-parse --show-toplevel` output. */
+export function parseRepoRoot(stdout: string): AbsFilePath | undefined {
+  const root = stdout.trim();
+  return root.length > 0 && path.isAbsolute(root)
+    ? (root as AbsFilePath)
+    : undefined;
+}
 export type GitState = {
-  repoRoot: string;
+  repoRoot: AbsFilePath;
   /** undefined when HEAD is detached. */
   branch: string | undefined;
   /** Full HEAD sha. Empty string when the repo has no commits yet. */
@@ -40,10 +49,10 @@ export async function parseGitState(
   run: GitCommandRunner,
 ): Promise<GitState | undefined> {
   const root = await run(["rev-parse", "--show-toplevel"]);
-  if (root.exitCode !== 0) {
+  const repoRoot = root.exitCode === 0 ? parseRepoRoot(root.stdout) : undefined;
+  if (!repoRoot) {
     return undefined;
   }
-  const repoRoot = root.stdout.trim();
 
   const [branchResult, headResult, statusResult] = await Promise.all([
     run(["symbolic-ref", "--short", "-q", "HEAD"]),

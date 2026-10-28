@@ -8,12 +8,12 @@ import {
 } from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
-import type { Cwd } from "../utils/files.ts";
+import type { AbsFilePath, Cwd } from "../utils/files.ts";
 import { FakeShell, shellResult } from "./fakes.ts";
 import { withHarness } from "./harness.ts";
 
 const git = {
-  repoRoot: "/project",
+  repoRoot: "/project" as AbsFilePath,
   branch: "feature-x",
   headSha: "abc123",
   headSubject: "init",

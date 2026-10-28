@@ -15,7 +15,7 @@ import type { AbsFilePath } from "../utils/files.ts";
 /** A git client whose state the test sets directly, e.g. to simulate a branch
  * switch between turns. */
 export class FakeGitClient implements GitClient {
-  private repos = new Map<string, GitState>();
+  private repos = new Map<AbsFilePath, GitState>();
   constructor(states?: GitState | GitState[]) {
     for (const state of [states ?? []].flat()) this.set(state);
   }
@@ -23,14 +23,14 @@ export class FakeGitClient implements GitClient {
   set(state: GitState): void {
     this.repos.set(state.repoRoot, { ...state });
   }
-  remove(repoRoot: string): void {
+  remove(repoRoot: AbsFilePath): void {
     this.repos.delete(repoRoot);
   }
   findRepoRoot(path: AbsFilePath): Promise<AbsFilePath | undefined> {
     const roots = [...this.repos.keys()]
       .filter((root) => path === root || path.startsWith(`${root}/`))
       .sort((a, b) => b.length - a.length);
-    return Promise.resolve(roots[0] as AbsFilePath | undefined);
+    return Promise.resolve(roots.at(0));
   }
   getState(repoRoot: AbsFilePath): Promise<GitState | undefined> {
     const state = this.repos.get(repoRoot);
