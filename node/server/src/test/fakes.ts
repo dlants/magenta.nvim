@@ -10,16 +10,31 @@ import type {
 } from "../protocol/client.ts";
 import { createClientEffectHandler } from "../protocol/client.ts";
 import { Defer } from "../utils/async.ts";
+import type { AbsFilePath } from "../utils/files.ts";
 
 /** A git client whose state the test sets directly, e.g. to simulate a branch
  * switch between turns. */
 export class FakeGitClient implements GitClient {
-  constructor(private state?: GitState) {}
-  set(state: GitState | undefined): void {
-    this.state = state;
+  private repos = new Map<string, GitState>();
+  constructor(states?: GitState | GitState[]) {
+    for (const state of [states ?? []].flat()) this.set(state);
   }
-  getState(): Promise<GitState | undefined> {
-    return Promise.resolve(this.state && { ...this.state });
+  /** Adds or replaces the repo at `state.repoRoot`. */
+  set(state: GitState): void {
+    this.repos.set(state.repoRoot, { ...state });
+  }
+  remove(repoRoot: string): void {
+    this.repos.delete(repoRoot);
+  }
+  findRepoRoot(path: AbsFilePath): Promise<AbsFilePath | undefined> {
+    const roots = [...this.repos.keys()]
+      .filter((root) => path === root || path.startsWith(`${root}/`))
+      .sort((a, b) => b.length - a.length);
+    return Promise.resolve(roots[0] as AbsFilePath | undefined);
+  }
+  getState(repoRoot: AbsFilePath): Promise<GitState | undefined> {
+    const state = this.repos.get(repoRoot);
+    return Promise.resolve(state && { ...state });
   }
 }
 

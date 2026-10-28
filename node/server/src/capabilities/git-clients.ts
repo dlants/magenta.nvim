@@ -1,5 +1,7 @@
 import { execFile as execFileCb } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
+import type { AbsFilePath } from "../utils/files.ts";
 import {
   type GitClient,
   type GitCommandRunner,
@@ -21,34 +23,53 @@ function runnerResult(
     });
 }
 
-export class LocalGitClient implements GitClient {
-  constructor(private cwd: string) {}
+/** Shared repo-root lookup over a runner that takes `git -C <dir>` args.
+ * `path` may be a file, so a failed lookup falls back to its parent dir. */
+abstract class DirectorylessGitClient implements GitClient {
+  private rootCache = new Map<string, AbsFilePath>();
 
-  getState(): Promise<GitState | undefined> {
-    const run: GitCommandRunner = (args) =>
-      runnerResult(execFile("git", args, { cwd: this.cwd }));
-    return parseGitState(run);
+  protected abstract runIn(dir: string): GitCommandRunner;
+
+  /** Only found roots are cached, so a directory that later becomes a repo is
+   * still discovered. */
+  async findRepoRoot(p: AbsFilePath): Promise<AbsFilePath | undefined> {
+    const cached = this.rootCache.get(p);
+    if (cached) return cached;
+    const root = await this.lookupRoot(p);
+    if (root) this.rootCache.set(p, root);
+    return root;
+  }
+
+  private async lookupRoot(p: AbsFilePath): Promise<AbsFilePath | undefined> {
+    for (const dir of [p, path.dirname(p)]) {
+      const result = await this.runIn(dir)(["rev-parse", "--show-toplevel"]);
+      if (result.exitCode === 0) {
+        return result.stdout.trim() as AbsFilePath;
+      }
+    }
+    return undefined;
+  }
+
+  getState(repoRoot: AbsFilePath): Promise<GitState | undefined> {
+    return parseGitState(this.runIn(repoRoot));
   }
 }
 
-export class DockerGitClient implements GitClient {
-  constructor(
-    private container: string,
-    private cwd: string,
-  ) {}
+export class LocalGitClient extends DirectorylessGitClient {
+  protected runIn(dir: string): GitCommandRunner {
+    return (args) => runnerResult(execFile("git", ["-C", dir, ...args]));
+  }
+}
 
-  getState(): Promise<GitState | undefined> {
-    const run: GitCommandRunner = (args) =>
+export class DockerGitClient extends DirectorylessGitClient {
+  constructor(private container: string) {
+    super();
+  }
+
+  protected runIn(dir: string): GitCommandRunner {
+    return (args) =>
       runnerResult(
-        execFile("docker", [
-          "exec",
-          "-w",
-          this.cwd,
-          this.container,
-          "git",
-          ...args,
-        ]),
+        execFile("docker", ["exec", this.container, "git", "-C", dir, ...args]),
       );
-    return parseGitState(run);
   }
 }

@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
+import type { AbsFilePath } from "../utils/files.ts";
+import { readGitStateAt } from "./git-client.ts";
 import { LocalGitClient } from "./git-clients.ts";
 
 const execFile = promisify(execFileCb);
@@ -21,15 +23,15 @@ it("LocalGitClient reads branch, HEAD and changes from a real repo", async () =>
     await fs.mkdtemp(path.join(os.tmpdir(), "magenta-git-")),
   );
   try {
-    const client = new LocalGitClient(dir);
-    expect(await client.getState()).toBeUndefined();
+    const client = new LocalGitClient();
+    expect(await readGitStateAt(client, dir as AbsFilePath)).toBeUndefined();
 
     await fs.writeFile(path.join(dir, "poem.txt"), "roses\n");
     await git(dir, ["init", "-q"]);
     await git(dir, ["symbolic-ref", "HEAD", "refs/heads/main"]);
     await git(dir, ["add", "poem.txt"]);
     await git(dir, ["commit", "-q", "-m", "initial commit"]);
-    expect(await client.getState()).toMatchObject({
+    expect(await readGitStateAt(client, dir as AbsFilePath)).toMatchObject({
       repoRoot: dir,
       branch: "main",
       headSubject: "initial commit",
@@ -38,10 +40,13 @@ it("LocalGitClient reads branch, HEAD and changes from a real repo", async () =>
       untrackedCount: 0,
     });
 
+    expect(
+      await client.findRepoRoot(path.join(dir, "poem.txt") as AbsFilePath),
+    ).toBe(dir);
     await git(dir, ["checkout", "-q", "-b", "feature"]);
     await fs.writeFile(path.join(dir, "poem.txt"), "violets\n");
     await fs.writeFile(path.join(dir, "new.txt"), "new\n");
-    expect(await client.getState()).toMatchObject({
+    expect(await readGitStateAt(client, dir as AbsFilePath)).toMatchObject({
       branch: "feature",
       unstagedCount: 1,
       untrackedCount: 1,

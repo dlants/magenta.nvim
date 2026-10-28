@@ -152,7 +152,10 @@ describe("Thread-owned context delivery", () => {
     try {
       await f.request();
       const fileIO = new InMemoryFileIO({ [f.file]: "destination content" });
-      const gitClient = { getState: vi.fn(async () => undefined) };
+      const gitClient = {
+        findRepoRoot: vi.fn(async () => undefined),
+        getState: vi.fn(async () => undefined),
+      };
       fork = await cloneThread({
         sourceThread: f.thread,
         newId: uniqueThreadId("destination"),

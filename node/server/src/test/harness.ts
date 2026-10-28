@@ -1,5 +1,5 @@
 import type { AgentsMap } from "../agents/agents.ts";
-import type { GitState } from "../capabilities/git-client.ts";
+import { type GitState, readGitStateAt } from "../capabilities/git-client.ts";
 import type { LspClient } from "../capabilities/lsp-client.ts";
 import type { LuaExecutor } from "../capabilities/lua-executor.ts";
 import type { ThreadId } from "../chat-types.ts";
@@ -81,7 +81,7 @@ export type HarnessOptions = {
   files?: Record<string, string>;
   cwd?: string;
   homeDir?: string;
-  git?: GitState;
+  git?: GitState | GitState[];
   shell?: FakeShellScript;
   agents?: AgentsMap;
   options?: Partial<HarnessThreadOptions>;
@@ -231,7 +231,9 @@ export class TestSessionHost implements SessionHost {
             homeDir,
             globs: this.options.autoContext,
           });
-    const initialGitState = source ? undefined : await this.git.getState();
+    const initialGitState = source
+      ? undefined
+      : await readGitStateAt(this.git, cwd);
     const systemInfo =
       source?.systemInfo ??
       buildSystemInfo({

@@ -6,7 +6,9 @@ import type {
 } from "../capabilities/git-client.ts";
 import { parseGitState } from "../capabilities/git-client.ts";
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
+import { FakeGitClient } from "../test/fakes.ts";
 import { noopLogger } from "../test-helpers.ts";
+import type { AbsFilePath } from "../utils/files.ts";
 import {
   type GitContextUpdate,
   GitSupervisor,
@@ -27,9 +29,7 @@ function state(branch: string): GitState {
 }
 
 function setup(current: GitState, initial: GitState | undefined) {
-  const gitClient: GitClient = {
-    getState: () => Promise.resolve(current),
-  } as unknown as GitClient;
+  const gitClient = new FakeGitClient(current);
   const onSent = vi.fn<(u: GitContextUpdate) => void>();
   const supervisor = GitSupervisor.create({
     gitClient,
@@ -140,6 +140,7 @@ describe("parseGitState", () => {
 function clientFor(states: (GitState | undefined)[]): GitClient {
   let i = 0;
   return {
+    findRepoRoot: () => Promise.resolve("/repo" as AbsFilePath),
     getState: () => Promise.resolve(states[Math.min(i++, states.length - 1)]),
   };
 }
@@ -187,18 +188,18 @@ describe("GitTracker", () => {
       source: tracker,
       nativeMessageIdx: 1 as NativeMessageIdx,
     });
-    expect(clone.getAgentView()).toEqual(refreshed);
+    expect(clone.getAgentView().get("/repo")).toEqual(refreshed);
 
     const update = await tracker.getUpdate(2 as NativeMessageIdx);
-    expect(update?.previous).toEqual(refreshed);
-    expect(update?.current).toEqual(changed);
+    expect(update?.repos[0]?.previous).toEqual(refreshed);
+    expect(update?.repos[0]?.current).toEqual(changed);
   });
 
   it("reports when the branch changes", async () => {
     const tracker = trackerFor([{ ...base, branch: "feature" }]);
     const update = await tracker.getUpdate(1 as NativeMessageIdx);
-    expect(update?.current?.branch).toBe("feature");
-    expect(update?.previous?.branch).toBe("main");
+    expect(update?.repos[0]?.current?.branch).toBe("feature");
+    expect(update?.repos[0]?.previous?.branch).toBe("main");
   });
 
   it("reports when HEAD moves", async () => {
@@ -223,10 +224,8 @@ describe("GitTracker", () => {
   it("reports leaving a repository", async () => {
     const tracker = trackerFor([undefined]);
     const update = await tracker.getUpdate(1 as NativeMessageIdx);
-    expect(update?.current).toBeUndefined();
-    expect(gitUpdateToText(update!)).toContain(
-      "no longer inside a git repository",
-    );
+    expect(update?.repos[0]?.current).toBeUndefined();
+    expect(gitUpdateToText(update!)).toContain("No longer a git repository");
   });
 
   it("peeks a pending update without committing the agent view", async () => {
@@ -235,7 +234,8 @@ describe("GitTracker", () => {
     expect(await tracker.hasUpdate()).toBe(true);
     expect(await tracker.hasUpdate()).toBe(true);
     expect(
-      (await tracker.getUpdate(1 as NativeMessageIdx))?.current?.branch,
+      (await tracker.getUpdate(1 as NativeMessageIdx))?.repos[0]?.current
+        ?.branch,
     ).toBe("feature");
   });
 
@@ -247,6 +247,7 @@ describe("GitTracker", () => {
   it("peeks false when reading git state throws", async () => {
     const tracker = GitTracker.create({
       gitClient: {
+        findRepoRoot: () => Promise.resolve("/repo" as AbsFilePath),
         getState: () => Promise.reject(new Error("git is down")),
       },
       initialState: base,
@@ -271,7 +272,7 @@ describe("GitTracker", () => {
       nativeMessageIdx: 2 as NativeMessageIdx,
     });
     expect(
-      (await clone.getUpdate(4 as NativeMessageIdx))?.current?.branch,
+      (await clone.getUpdate(4 as NativeMessageIdx))?.repos[0]?.current?.branch,
     ).toBe("feature");
   });
 
@@ -284,5 +285,65 @@ describe("GitTracker", () => {
       nativeMessageIdx: 3 as NativeMessageIdx,
     });
     expect(await clone.getUpdate(4 as NativeMessageIdx)).toBeUndefined();
+  });
+});
+
+describe("GitTracker multi-repo", () => {
+  const other: GitState = { ...base, repoRoot: "/other", branch: "o" };
+  function twoRepos() {
+    const client = new FakeGitClient([base, other]);
+    const tracker = GitTracker.create({
+      gitClient: client,
+      initialState: base,
+      logger: noopLogger,
+    });
+    return { client, tracker };
+  }
+
+  it("reports a newly registered repo in full, once", async () => {
+    const { tracker } = twoRepos();
+    await tracker.registerPath("/other/a.txt" as AbsFilePath);
+    await tracker.registerPath("/other/b.txt" as AbsFilePath);
+    const update = await tracker.getUpdate(1 as NativeMessageIdx);
+    expect(update?.repos).toEqual([
+      { repoRoot: "/other", previous: undefined, current: other },
+    ]);
+    expect(await tracker.getUpdate(2 as NativeMessageIdx)).toBeUndefined();
+  });
+
+  it("ignores paths outside any repo", async () => {
+    const { tracker } = twoRepos();
+    await tracker.registerPath("/nowhere/a.txt" as AbsFilePath);
+    expect(await tracker.hasUpdate()).toBe(false);
+  });
+
+  it("a fork before the registering delivery does not track the repo", async () => {
+    const { client, tracker } = twoRepos();
+    await tracker.registerPath("/other/a.txt" as AbsFilePath);
+    await tracker.getUpdate(3 as NativeMessageIdx);
+    const fork = GitTracker.clone({
+      source: tracker,
+      nativeMessageIdx: 2 as NativeMessageIdx,
+    });
+    expect([...fork.getAgentView().keys()]).toEqual(["/repo"]);
+    client.set({ ...other, branch: "moved" });
+    expect(await fork.getUpdate(4 as NativeMessageIdx)).toBeUndefined();
+    const kept = GitTracker.clone({
+      source: tracker,
+      nativeMessageIdx: 3 as NativeMessageIdx,
+    });
+    expect(
+      (await kept.getUpdate(4 as NativeMessageIdx))?.repos[0]?.current?.branch,
+    ).toBe("moved");
+  });
+
+  it("reports a tracked repo that disappears", async () => {
+    const { client, tracker } = twoRepos();
+    client.remove("/repo");
+    const update = await tracker.getUpdate(1 as NativeMessageIdx);
+    expect(update?.repos[0]).toMatchObject({
+      repoRoot: "/repo",
+      current: undefined,
+    });
   });
 });

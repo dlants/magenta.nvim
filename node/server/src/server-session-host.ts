@@ -8,7 +8,7 @@ import {
   clientLuaExecutor,
 } from "./capabilities/client.ts";
 import { FsFileIO } from "./capabilities/file-io.ts";
-import type { GitState } from "./capabilities/git-client.ts";
+import { type GitState, readGitStateAt } from "./capabilities/git-client.ts";
 import { NoopLspClient } from "./capabilities/noop-lsp-client.ts";
 import type { SubagentConfig, ThreadId } from "./chat-types.ts";
 import {
@@ -337,7 +337,7 @@ export class ServerSessionHost implements SessionHost {
 
     const initialGitState = source
       ? undefined
-      : await environment.gitClient.getState();
+      : await readGitStateAt(environment.gitClient, environment.cwd);
 
     const systemInfo =
       source?.systemInfo ??

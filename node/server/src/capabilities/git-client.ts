@@ -1,3 +1,4 @@
+import type { AbsFilePath } from "../utils/files.ts";
 export type GitState = {
   repoRoot: string;
   /** undefined when HEAD is detached. */
@@ -11,9 +12,22 @@ export type GitState = {
   untrackedCount: number;
 };
 
+/** Not bound to any directory: callers locate a repo from a path, then read it. */
 export interface GitClient {
-  /** Returns undefined when the working directory is not inside a git repository. */
-  getState(): Promise<GitState | undefined>;
+  /** The root of the repository containing `path` (a file or a directory), or
+   * undefined when it is not inside one. */
+  findRepoRoot(path: AbsFilePath): Promise<AbsFilePath | undefined>;
+  /** Returns undefined when `repoRoot` is no longer a git repository. */
+  getState(repoRoot: AbsFilePath): Promise<GitState | undefined>;
+}
+
+/** Git state of the repository containing `path`, if any. */
+export async function readGitStateAt(
+  client: GitClient,
+  path: AbsFilePath,
+): Promise<GitState | undefined> {
+  const root = await client.findRepoRoot(path);
+  return root ? client.getState(root) : undefined;
 }
 
 /** Runs a git subcommand with the given args and reports its stdout and exit code.

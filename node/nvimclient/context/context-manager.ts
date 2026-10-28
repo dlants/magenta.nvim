@@ -177,12 +177,13 @@ export function renderGitUpdate(
   if (!gitUpdate) {
     return d``;
   }
-  const { current } = gitUpdate;
-  if (!current) {
-    return d`󰊢 git: no longer in a git repository\n`;
-  }
-  const branch = current.branch ?? "(detached HEAD)";
-  return d`󰊢 git: ${branch} @ ${formatGitHead(current)}\n`;
+  return d`${gitUpdate.repos.map(({ repoRoot, current }) => {
+    if (!current) {
+      return d`󰊢 git: ${repoRoot} is no longer a git repository\n`;
+    }
+    const branch = current.branch ?? "(detached HEAD)";
+    return d`󰊢 git: ${branch} @ ${formatGitHead(current)} (${repoRoot})\n`;
+  })}`;
 }
 
 export function renderContextUpdate(

@@ -142,6 +142,20 @@ Decisions/deviations:
 
 ## Git context follows read files
 
+Status: done.
+
+- [x] `GitClient` is directory-less: `findRepoRoot(path)` (tries the path, then its parent, via `git -C`; found roots cached) and `getState(repoRoot)`. `readGitStateAt(client, path)` helper for preparation. `LocalGitClient()`/`DockerGitClient(container)` take no cwd.
+- [x] `GitTracker` keeps per-repo histories (`Map<root, GitViewEntry[]>`); `registerPath` adds unseen roots to a pending set; `getUpdate` awaits in-flight registrations, reports new repos in full (`previous: undefined`), coarse changes per repo, and vanished repos (`current: undefined`). `GitContextUpdate` is now `{ repos: GitRepoUpdate[] }`; `gitUpdateToText` emits one section per repo; the nvim `renderGitUpdate` shows one line per repo.
+- [x] `FileSupervisorDeps.registerGitPath` (called for newly tracked and seeded files); ThreadCore wires it to its `GitSupervisor.registerPath` in create and clone.
+- [x] Tests: `supervisors/git-supervisor.test.ts` "GitTracker multi-repo" (new repo reported once, non-repo paths ignored, fork before the registering delivery drops the repo, vanished repo); `context/git-context.test.ts` (get_files in a second repo announces it, a later HEAD change there is reported and an untouched repo isn't; outside any repo there's no git update); `git-clients.test.ts` uses `findRepoRoot`/`readGitStateAt`.
+
+Decisions/deviations:
+
+- The host doesn't call `registerPath` for the start directory; it still seeds `initialGitState` (read via `readGitStateAt(client, cwd)`), which registers that repo at `PRE_HISTORY` and feeds system info. Same effect, no extra delivery.
+- A repo's "registration point" for forks is the first delivery that showed it; registrations not yet delivered at fork time are dropped (consistent with file history truncation).
+- `FakeGitClient` holds multiple repos (`set` replaces by `repoRoot`, `remove(root)`); harness `git` option accepts `GitState | GitState[]`.
+- `container/container.test.ts` hangs (docker) on this machine; nvim suite timeouts under heavy load pass individually, except the pre-existing `render-tools/spawn-subagents.test.ts` failure.
+
 - Goal: `GitClient` takes the directory per call; `GitSupervisor.registerPath` adds repos to a tracked set; updates cover all tracked repos; FileSupervisor and the host call `registerPath`.
 - Tests:
   - Harness with `FakeGitClient` holding two repos: starting in repo A, then reading a file in repo B, the next context delivery announces repo B; a later HEAD change in B is reported, and a change in a repo never touched is not.

@@ -39,7 +39,7 @@ import { runToolLoop, type ToolLoop, type ToolOutcome } from "./tool-loop.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
 import type { Task } from "./utils/async.ts";
-import type { Cwd, HomeDir } from "./utils/files.ts";
+import type { AbsFilePath, Cwd, HomeDir } from "./utils/files.ts";
 
 export interface ThreadCoreContext {
   logger: Logger;
@@ -125,8 +125,14 @@ export class ThreadCore {
         ? { effortOverride: context.subagentConfig.effort }
         : {}),
     });
+    const gitSupervisor = GitSupervisor.create({
+      gitClient: context.gitClient,
+      initialGitState: seed.initialGitState,
+      logger: context.logger,
+    });
     const fileSupervisor = FileSupervisor.create({
       logger: context.logger,
+      registerGitPath: (path) => void gitSupervisor.registerPath(path),
       fileIO: context.fileIO,
       homeDir: context.homeDir,
       ...(context.discoverHierarchy
@@ -138,11 +144,7 @@ export class ThreadCore {
       manager,
       fileSupervisor,
       editedFilesSupervisor: EditedFilesSupervisor.create(),
-      gitSupervisor: GitSupervisor.create({
-        gitClient: context.gitClient,
-        initialGitState: seed.initialGitState,
-        logger: context.logger,
-      }),
+      gitSupervisor,
       systemInfoSupervisor:
         context.threadType !== "compact"
           ? SystemInfoSupervisor.create({
@@ -196,10 +198,26 @@ export class ThreadCore {
       ]);
       forkSeamIdx = manager.getNativeMessageIdx();
     }
+    const gitSupervisor = source.gitSupervisor
+      ? GitSupervisor.clone({
+          source: source.gitSupervisor,
+          gitClient: context.gitClient,
+          logger: context.logger,
+          nativeMessageIdx,
+        })
+      : undefined;
     const fileSupervisor = FileSupervisor.clone({
       source: source.fileSupervisor,
       history: { type: "truncate", nativeMessageIdx },
-      deps: context,
+      deps: {
+        ...context,
+        ...(gitSupervisor
+          ? {
+              registerGitPath: (path: AbsFilePath) =>
+                void gitSupervisor.registerPath(path),
+            }
+          : {}),
+      },
     });
     const state: ThreadCoreState = {
       manager,
@@ -208,14 +226,7 @@ export class ThreadCore {
         source: source.editedFilesSupervisor,
         nativeMessageIdx,
       }),
-      gitSupervisor: source.gitSupervisor
-        ? GitSupervisor.clone({
-            source: source.gitSupervisor,
-            gitClient: context.gitClient,
-            logger: context.logger,
-            nativeMessageIdx,
-          })
-        : undefined,
+      gitSupervisor,
       systemInfoSupervisor: source.systemInfoSupervisor
         ? SystemInfoSupervisor.clone({
             source: source.systemInfoSupervisor,

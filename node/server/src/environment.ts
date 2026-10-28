@@ -100,7 +100,7 @@ export function createLocalEnvironment({
   return {
     fileIO: sandboxFileIO,
     shell: sandboxShell,
-    gitClient: new LocalGitClient(cwd),
+    gitClient: new LocalGitClient(),
     sandboxViolationHandler: violationHandler,
     lspClient,
     luaExecutor,
@@ -139,7 +139,7 @@ export async function createDockerEnvironment({
   return {
     fileIO,
     shell,
-    gitClient: new DockerGitClient(container, resolvedCwd),
+    gitClient: new DockerGitClient(container),
     sandboxViolationHandler: undefined,
     cwd: toCwd(resolvedCwd),
     homeDir: toHomeDir(resolvedHome),

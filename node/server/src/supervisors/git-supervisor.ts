@@ -2,11 +2,16 @@ import type { GitClient, GitState } from "../capabilities/git-client.ts";
 import { formatGitHead } from "../capabilities/git-client.ts";
 import type { Logger } from "../logger.ts";
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
+import type { AbsFilePath } from "../utils/files.ts";
 
-export type GitContextUpdate = {
+/** One repository's change. `previous` is undefined when the repo was just
+ * registered; `current` is undefined when it is no longer a repository. */
+export type GitRepoUpdate = {
+  repoRoot: string;
   previous: GitState | undefined;
   current: GitState | undefined;
 };
+export type GitContextUpdate = { repos: GitRepoUpdate[] };
 
 /** True when the coarse-grained identity of the repo changed: presence,
  * branch, or HEAD commit. File counts deliberately do not trigger an update,
@@ -23,21 +28,27 @@ function coarseChanged(
     a.headSubject !== b.headSubject
   );
 }
-
 type GitViewEntry = {
   readonly nativeMessageIdx: HistoryIdx;
   state: GitState | undefined;
 };
-
 function cloneState(state: GitState | undefined): GitState | undefined {
   return state ? { ...state } : undefined;
 }
 
+/** Per-repo agent views. A repo's first history entry is the point it was
+ * first shown to the agent, which is what forks filter on. */
+type RepoHistories = Map<string, GitViewEntry[]>;
+
 export class GitTracker {
+  /** Registered roots not yet shown to the agent. */
+  private readonly pending = new Set<string>();
+  private readonly registrations = new Set<Promise<void>>();
+
   private constructor(
     private readonly gitClient: GitClient,
     private readonly logger: Logger,
-    private readonly history: GitViewEntry[],
+    private readonly repos: RepoHistories,
   ) {}
 
   static create(args: {
@@ -45,12 +56,13 @@ export class GitTracker {
     initialState: GitState | undefined;
     logger: Logger;
   }): GitTracker {
-    return new GitTracker(args.gitClient, args.logger, [
-      {
-        nativeMessageIdx: PRE_HISTORY,
-        state: cloneState(args.initialState),
-      },
-    ]);
+    const repos: RepoHistories = new Map();
+    if (args.initialState) {
+      repos.set(args.initialState.repoRoot, [
+        { nativeMessageIdx: PRE_HISTORY, state: cloneState(args.initialState) },
+      ]);
+    }
+    return new GitTracker(args.gitClient, args.logger, repos);
   }
 
   static clone(args: {
@@ -59,92 +71,150 @@ export class GitTracker {
     gitClient?: GitClient;
     logger?: Logger;
   }): GitTracker {
-    return new GitTracker(
-      args.gitClient ?? args.source.gitClient,
-      args.logger ?? args.source.logger,
-      args.source.history
+    const repos: RepoHistories = new Map();
+    for (const [root, history] of args.source.repos) {
+      const kept = history
         .filter((entry) =>
           historyIdxAtOrBefore(entry.nativeMessageIdx, args.nativeMessageIdx),
         )
         .map((entry) => ({
           nativeMessageIdx: entry.nativeMessageIdx,
           state: cloneState(entry.state),
-        })),
+        }));
+      if (kept.length) repos.set(root, kept);
+    }
+    return new GitTracker(
+      args.gitClient ?? args.source.gitClient,
+      args.logger ?? args.source.logger,
+      repos,
     );
   }
 
-  getAgentView(): GitState | undefined {
-    return cloneState(this.history.at(-1)?.state);
+  /** The state the agent last saw, per tracked repo root. */
+  getAgentView(): Map<string, GitState | undefined> {
+    return new Map(
+      [...this.repos].map(([root, history]) => [
+        root,
+        cloneState(history.at(-1)?.state),
+      ]),
+    );
+  }
+
+  /** Starts tracking the repository containing `path`, if any. Its state is
+   * reported in full with the next update. */
+  registerPath(path: AbsFilePath): Promise<void> {
+    const registration = this.gitClient
+      .findRepoRoot(path)
+      .then((root) => {
+        if (root && !this.repos.has(root)) this.pending.add(root);
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `GitTracker failed to find repo for ${path}: ${String(error)}`,
+        );
+      })
+      .finally(() => this.registrations.delete(registration));
+    this.registrations.add(registration);
+    return registration;
+  }
+
+  private async readAll(): Promise<
+    { root: string; isNew: boolean; state: GitState | undefined }[]
+  > {
+    await Promise.all(this.registrations);
+    const roots = [
+      ...[...this.repos.keys()].map((root) => ({ root, isNew: false })),
+      ...[...this.pending].map((root) => ({ root, isNew: true })),
+    ];
+    const results = await Promise.all(
+      roots.map(async ({ root, isNew }) => {
+        try {
+          const state = await this.gitClient.getState(root as AbsFilePath);
+          return { root, isNew, state };
+        } catch (error) {
+          this.logger.error(
+            `GitTracker failed to read git state for ${root}: ${String(error)}`,
+          );
+          return undefined;
+        }
+      }),
+    );
+    return results.filter((r) => r !== undefined);
   }
 
   /** Whether `getUpdate` would report something right now, without committing
    * the agent view. A probe for a request that may never be issued. */
   async hasUpdate(): Promise<boolean> {
-    try {
-      return coarseChanged(
-        this.getAgentView(),
-        await this.gitClient.getState(),
-      );
-    } catch (error) {
-      this.logger.error(
-        `GitTracker failed to read git state: ${String(error)}`,
-      );
-      return false;
-    }
+    const views = this.getAgentView();
+    return (await this.readAll()).some(({ root, isNew, state }) =>
+      isNew ? state !== undefined : coarseChanged(views.get(root), state),
+    );
   }
 
-  /** Polls current git state and commits the state this request will reveal. */
+  /** Polls every tracked repo and commits the states this request will reveal. */
   async getUpdate(
     nativeMessageIdx: NativeMessageIdx,
   ): Promise<GitContextUpdate | undefined> {
-    let current: GitState | undefined;
-    try {
-      current = await this.gitClient.getState();
-    } catch (error) {
-      this.logger.error(
-        `GitTracker failed to read git state: ${String(error)}`,
-      );
-      return undefined;
+    const reads = await this.readAll();
+    const repos: GitRepoUpdate[] = [];
+    for (const { root, isNew, state } of reads) {
+      if (isNew) {
+        this.pending.delete(root);
+        if (!state) continue;
+        this.repos.set(root, [{ nativeMessageIdx, state: cloneState(state) }]);
+        repos.push({
+          repoRoot: root,
+          previous: undefined,
+          current: { ...state },
+        });
+        continue;
+      }
+      const history = this.repos.get(root);
+      if (!history) continue;
+      const latest = history.at(-1);
+      const previous = cloneState(latest?.state);
+      if (!coarseChanged(previous, state)) {
+        if (latest) latest.state = cloneState(state);
+        continue;
+      }
+      if (
+        latest &&
+        historyIdxPrecedes(nativeMessageIdx, latest.nativeMessageIdx)
+      ) {
+        throw new Error(
+          `Git view history must be monotonic: ${nativeMessageIdx} < ${formatHistoryIdx(latest.nativeMessageIdx)}`,
+        );
+      }
+      history.push({ nativeMessageIdx, state: cloneState(state) });
+      repos.push({ repoRoot: root, previous, current: cloneState(state) });
     }
-
-    const previous = this.getAgentView();
-    if (!coarseChanged(previous, current)) {
-      const latest = this.history.at(-1);
-      if (latest) latest.state = cloneState(current);
-      return undefined;
-    }
-
-    const previousIdx = this.history.at(-1)?.nativeMessageIdx;
-    if (
-      previousIdx !== undefined &&
-      historyIdxPrecedes(nativeMessageIdx, previousIdx)
-    ) {
-      throw new Error(
-        `Git view history must be monotonic: ${nativeMessageIdx} < ${formatHistoryIdx(previousIdx)}`,
-      );
-    }
-    this.history.push({ nativeMessageIdx, state: cloneState(current) });
-    return { previous, current: cloneState(current) };
+    return repos.length ? { repos } : undefined;
   }
 }
 
-/** Builds the message text describing a git context update shown to the agent. */
-export function gitUpdateToText(update: GitContextUpdate): string {
+function repoUpdateToText(update: GitRepoUpdate): string {
   const { current } = update;
   if (!current) {
-    return "# Git status update\n\nThe working directory is no longer inside a git repository.";
+    return `## ${update.repoRoot}\n\nNo longer a git repository.`;
   }
-
-  const lines = [
-    "# Git status update",
+  return [
+    `## ${current.repoRoot}`,
     "",
-    "The git repository state has changed:",
+    update.previous
+      ? "The git repository state has changed:"
+      : "Now tracking this git repository:",
     `- Repository root: ${current.repoRoot}`,
     `- Branch: ${current.branch ?? "(detached HEAD)"}`,
     `- HEAD: ${formatGitHead(current)}`,
     `- Changes: ${current.stagedCount} staged, ${current.unstagedCount} unstaged, ${current.untrackedCount} untracked`,
-  ];
-  return lines.join("\n");
+  ].join("\n");
+}
+
+/** Builds the message text describing a git context update shown to the agent. */
+export function gitUpdateToText(update: GitContextUpdate): string {
+  return ["# Git status update", ...update.repos.map(repoUpdateToText)].join(
+    "\n\n",
+  );
 }
 
 import type {
@@ -213,6 +283,10 @@ export class GitSupervisor implements ToolLoopSupervisor {
     if (!update) return { type: "none" };
     this.callbacks.onSent?.(update, context.nativeMessageIdx);
     return injectText(gitUpdateToText(update));
+  }
+
+  registerPath(path: AbsFilePath): Promise<void> {
+    return this.gitTracker.registerPath(path);
   }
 
   async hasPendingContent(): Promise<boolean> {
