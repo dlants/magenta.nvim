@@ -2,7 +2,10 @@ import * as fs from "node:fs/promises";
 import { getTokenAtCursor } from "./nvim/cursorToken.ts";
 import { getCurrentWindow } from "./nvim/nvim.ts";
 import type { Nvim } from "./nvim/nvim-node/index.ts";
-import { openFileInNonMagentaWindow } from "./nvim/openFileInNonMagentaWindow.ts";
+import {
+  findOrCreateNonMagentaWindow,
+  openFileInNonMagentaWindow,
+} from "./nvim/openFileInNonMagentaWindow.ts";
 import { openUrl } from "./nvim/openUrl.ts";
 import type { MagentaOptions } from "./options.ts";
 import {
@@ -22,6 +25,7 @@ const URL_REGEX = /^(https?|ftp|file|ssh):\/\//;
  *  - URL  -> `vim.ui.open(...)` via `openUrl`.
  *  - file -> `openFileInNonMagentaWindow`, after confirming the path
  *    exists and is a regular file.
+ *  - directory -> `:edit` in a non-magenta window (lets oil/netrw handle it).
  *  - otherwise no-op (logged at debug level).
  */
 export async function openTargetUnderCursor(context: {
@@ -48,9 +52,19 @@ export async function openTargetUnderCursor(context: {
       context.homeDir,
     );
     const stat = await fs.stat(absPath);
+    if (stat.isDirectory()) {
+      // `:edit` (rather than bufadd + setBuffer) so directory handlers like oil/netrw take over.
+      const targetWindow = await findOrCreateNonMagentaWindow(context);
+      await context.nvim.call("nvim_set_current_win", [targetWindow.id]);
+      await context.nvim.call("nvim_exec2", [
+        `edit ${await context.nvim.call("nvim_call_function", ["fnameescape", [absPath]])}`,
+        {},
+      ]);
+      return;
+    }
     if (!stat.isFile()) {
       context.nvim.logger.debug(
-        `openTargetUnderCursor: ${absPath} is not a regular file`,
+        `openTargetUnderCursor: ${absPath} is not a regular file or directory`,
       );
       return;
     }
