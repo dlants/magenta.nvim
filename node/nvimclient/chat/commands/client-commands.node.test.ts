@@ -23,8 +23,14 @@ describe("absolutizeFileRefs", () => {
 describe("absolutizeFileRefs git refs", () => {
   it("absolutizes @diff: and @staged: paths", () => {
     expect(
-      absolutizeFileRefs("@diff:src/a.ts @staged:/abs/b.ts", cwd, homeDir),
-    ).toBe("@diff:/proj/src/a.ts @staged:/abs/b.ts");
+      absolutizeFileRefs(
+        "@diff:src/a.ts @staged:/abs/b.ts @diff:~/c.ts @file:d.ts @staged:e.ts",
+        cwd,
+        homeDir,
+      ),
+    ).toBe(
+      "@diff:/proj/src/a.ts @staged:/abs/b.ts @diff:/home/me/c.ts @file:/proj/d.ts @staged:/proj/e.ts",
+    );
   });
 });
 describe("expandClientCommand", () => {

@@ -56,17 +56,19 @@ export function absolutizeFileRefs(
   cwd: NvimCwd,
   homeDir: HomeDir,
 ): string {
+  // Raw ref text from the user is unresolved by definition; this is the one place it gets branded.
+  const absolutize = (rawPath: string) =>
+    resolveFilePath(cwd, rawPath as UnresolvedFilePath, homeDir);
   let result = "";
   let last = 0;
   for (const match of text.matchAll(AT_FILE_PATTERN)) {
-    const path = extractFileRefPath(match) as UnresolvedFilePath;
     result += text.slice(last, match.index);
-    result += formatFileRef(resolveFilePath(cwd, path, homeDir));
+    result += formatFileRef(absolutize(extractFileRefPath(match)));
     last = match.index + match[0].length;
   }
   return (result + text.slice(last)).replace(
     AT_GIT_PATH_PATTERN,
-    (_match, kind: string, path: string) =>
-      `@${kind}:${resolveFilePath(cwd, path as UnresolvedFilePath, homeDir)}`,
+    (_match, kind: "diff" | "staged", path: string) =>
+      `@${kind}:${absolutize(path)}`,
   );
 }

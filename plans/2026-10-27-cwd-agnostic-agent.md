@@ -202,3 +202,4 @@ Decisions/deviations:
 
 - `DisplayContext.cwd` and nvimclient's own `NvimCwd` fields stay: they are client-side UI shortening of displayed paths, never model-facing.
 - The `@diff:` test is a unit test on `absolutizeFileRefs` (the single client conversion point) rather than a full submission test.
+- Review follow-ups: `absolutizeFileRefs` brands raw ref text in one local `absolutize` helper shared by the `@file:` and git-ref passes; the git-ref `kind` is typed `"diff" | "staged"`. Test covers mixed `@file:`/git refs and `~/` git refs.
