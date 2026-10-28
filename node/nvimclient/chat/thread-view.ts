@@ -832,6 +832,12 @@ ${contentView}`;
     ? d`\n${renderStreamingBlock(thread)}\n`
     : d``;
 
+  const pullRequests = thread.threadState.mentionedPullRequests;
+  const mentionedPullRequestsView =
+    pullRequests.length > 0
+      ? d`\n# mentioned pull requests:\n${pullRequests.map((url) => d`- ${url}\n`)}`
+      : d``;
+
   const failedSubmit =
     thread.submission?.type === "failed" ? thread.submission : undefined;
   const failedSubmitView =
@@ -859,7 +865,7 @@ ${sandboxView}\
 ${pendingMessagesView}${pendingNextMessagesView}\
 ${trailingForkedToView}\
 ${editsAt(-1)}
-${statusView}`;
+${statusView}${mentionedPullRequestsView}`;
 };
 
 /** Render a single content block from a message */

@@ -222,6 +222,9 @@ export class Thread implements ThreadCoreView {
   get contextDeliveries(): ReadonlyMap<NativeMessageIdx, ContextDelivery> {
     return this.core.contextDeliveryEntries;
   }
+  get mentionedPullRequests(): ReadonlyArray<string> {
+    return this.core.mentionedPullRequests;
+  }
   get editedFileGroups(): EditedFileGroup[] {
     return this.core.editedFilesSupervisor.groups;
   }

@@ -17,6 +17,7 @@ import type {
   TokenCount,
 } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
+import { PullRequestMentionScanner } from "./pull-request-mentions.ts";
 import {
   FileSupervisor,
   type Files,
@@ -108,6 +109,9 @@ export class ThreadCore {
   readonly edlRegisters: EdlRegisters;
   private readonly contextDeliveries: Map<NativeMessageIdx, ContextDelivery>;
   private readonly createTool: CreateTool;
+  /** Each core scans its own history from scratch, so after compaction the
+   * mentions come from the summary. */
+  private readonly pullRequestScanner: PullRequestMentionScanner;
 
   static create(
     id: ThreadId,
@@ -271,6 +275,11 @@ export class ThreadCore {
     this.edlRegisters = state.edlRegisters;
     this.contextDeliveries = state.contextDeliveries;
     this.forkSeamIdx = state.forkSeamIdx;
+    this.pullRequestScanner = new PullRequestMentionScanner(
+      () => this.manager.log.messages,
+      () => callbacks.onUpdate(),
+    );
+    this.pullRequestScanner.schedule();
     this.createTool = context.threadToolCreator({
       contextTracker: this.fileSupervisor,
       edlRegisters: this.edlRegisters,
@@ -315,14 +324,20 @@ export class ThreadCore {
     return this.contextDeliveries;
   }
 
+  get mentionedPullRequests(): ReadonlyArray<string> {
+    return this.pullRequestScanner.mentionedPullRequests;
+  }
+
   private handleUpdate(): void {
     this.callbacks.onUpdate();
+    this.pullRequestScanner.schedule();
   }
 
   /** Releases conversation-local resources. The owner aborts and awaits any
    * running tool loop first. */
   dispose(): void {
     this.fileSupervisor.destroy();
+    this.pullRequestScanner.dispose();
     if (this.gitSupervisor) this.gitSupervisor.callbacks = {};
   }
 
