@@ -220,6 +220,8 @@ Review follow-up: `getPending(url)` returns `{ snapshot, update }` together. Add
 
 ## Attention signal
 
+Status: DONE. `Session.markAttended(id)`/`getLastAttention(id)` (running thread → now) and `SessionThread.lastAttentionTime` (init at creation); `markAttended` calls `pullRequestMonitor.noteAttention()`. Protocol op `thread.markAttended`; `thread.submit` (all deliveries) also marks attended. `ThreadCoreContext.getLastAttention` (optional) is set by host and harness to `session.getLastAttention(id)` and passed to `PullRequestSupervisor.create`. Client: lua autocmd on CursorMoved/CursorMovedI/FocusGained/BufEnter sends `magentaAttention` (lua-side 1s guard against flooding); `Magenta.onAttention` ignores it unless the sidebar is visible, then `Chat.markShownThreadsAttended` sends the op for each shown thread, throttled 60s per thread. Tests: tier A in `protocol/server.test.ts`, tier C `chat/attention.test.ts`. Dormant-poller wake itself is covered by the monitor test. Baseline nvim failures (thread.test.ts @diff/@staged/followup/tool-use rendering, spawn-subagents, chat.test, script-manager) fail identically without this change.
+
 - Goal: Session `lastAttentionTime` + `markAttended` + `thread.markAttended` op; user submissions and running state count; client sends `thread.markAttended` (throttled to once per minute per thread) when the thread is active in a visible sidebar and nvim fires CursorMoved/FocusGained/BufEnter. Wire `getLastAttention` into `ThreadCoreContext` and `noteAttention` into the monitor.
 - Tests:
   - tier A: `thread.markAttended` updates attention and wakes a dormant poller (fake timers); agent updates do not change `lastAttentionTime`.

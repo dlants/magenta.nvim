@@ -35,6 +35,7 @@ export type Operation =
   | { type: "thread.abort"; threadId: ThreadId }
   | { type: "thread.setTitle"; threadId: ThreadId; title: string }
   | { type: "thread.recordActivity"; threadId: ThreadId }
+  | { type: "thread.markAttended"; threadId: ThreadId }
   | {
       type: "thread.addContextFiles";
       threadId: ThreadId;
@@ -87,6 +88,7 @@ export type OperationSuccessMap = {
   "thread.abort": { type: "threadAborted"; unsent: ReadonlyArray<string> };
   "thread.setTitle": Ok;
   "thread.recordActivity": Ok;
+  "thread.markAttended": Ok;
   "thread.addContextFiles": Ok;
   "thread.removeContextFile": Ok;
   "tool.abort": Ok;

@@ -62,6 +62,8 @@ export interface ThreadCoreContext {
   discoverHierarchy?: HierarchyDiscovery;
   /** Absent: mentioned pull requests are not tracked. */
   pullRequestMonitor?: PullRequestMonitor;
+  /** When the user last attended to the thread (ms epoch); drives poll dormancy. */
+  getLastAttention?: () => number;
   /** Absent: never count, always proceed. */
   tokenBudget?: TokenBudget;
   threadToolCreator: ThreadToolCreator;
@@ -164,6 +166,9 @@ export class ThreadCore {
         context.pullRequestMonitor && context.threadType !== "compact"
           ? PullRequestSupervisor.create({
               monitor: context.pullRequestMonitor,
+              ...(context.getLastAttention
+                ? { getLastAttention: context.getLastAttention }
+                : {}),
               ...(seed.pullRequests ? { track: seed.pullRequests } : {}),
             })
           : undefined,

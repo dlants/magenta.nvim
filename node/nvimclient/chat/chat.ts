@@ -42,6 +42,7 @@ import { NvimThread } from "./thread.ts";
 import { renderYield, view as threadView } from "./thread-view.ts";
 
 const ARCHIVE_PAGE_SIZE = 50;
+const ATTENTION_THROTTLE_MS = 60_000;
 
 const ARCHIVE_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
@@ -838,6 +839,17 @@ export class Chat {
     return map;
   }
 
+  private lastAttendedAt = new Map<ThreadId, number>();
+  /** Throttled to once a minute per thread: the server only needs a coarse
+   * signal to decide whether pull request polling may go dormant. */
+  markShownThreadsAttended(now = Date.now()): void {
+    for (const threadId of this.shownThreadIds()) {
+      const last = this.lastAttendedAt.get(threadId);
+      if (last !== undefined && now - last < ATTENTION_THROTTLE_MS) continue;
+      this.lastAttendedAt.set(threadId, now);
+      void this.server.execute({ type: "thread.markAttended", threadId });
+    }
+  }
   private recordActivity(threadId: ThreadId): void {
     void this.server.execute({ type: "thread.recordActivity", threadId });
   }

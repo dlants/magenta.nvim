@@ -281,6 +281,7 @@ export class TestSessionHost implements SessionHost {
       ...(session.pullRequestMonitor
         ? { pullRequestMonitor: session.pullRequestMonitor }
         : {}),
+      getLastAttention: () => session.getLastAttention(id),
       discoverHierarchy: (absFilePath) =>
         discoverHierarchyContext(absFilePath, {
           fileIO,

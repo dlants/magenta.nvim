@@ -145,6 +145,7 @@ function parseVisualRange(raw: unknown): BindingRange | undefined {
 }
 const MAGENTA_LSP_RESPONSE = "magentaLspResponse";
 const MAGENTA_BUF_ENTER = "magentaBufEnter";
+const MAGENTA_ATTENTION = "magentaAttention";
 const MAGENTA_BUF_DELETE = "magentaBufDelete";
 const MAGENTA_OPEN_ARCHIVED_THREAD_LOG = "magentaOpenArchivedThreadLog";
 const MAGENTA_CLIPBOARD_IMAGE_PASTE = "magentaClipboardImagePaste";
@@ -1366,6 +1367,12 @@ ${lines.join("\n")}
     }
   }
 
+  /** The user is active in nvim; threads shown in the visible sidebar count as
+   * attended. */
+  onAttention(): void {
+    if (!this.sidebar.isVisible()) return;
+    this.chat.markShownThreadsAttended();
+  }
   private handlingBufEnter = false;
 
   /** Handle BufEnter events. Ensures magenta buffers stay in magenta windows
@@ -1767,6 +1774,13 @@ ${lines.join("\n")}
       }
     });
 
+    nvim.onNotification(MAGENTA_ATTENTION, () => {
+      try {
+        getMagentaIfReady()?.onAttention();
+      } catch (err) {
+        nvim.logger.error(err as Error);
+      }
+    });
     nvim.onNotification(MAGENTA_BUF_ENTER, async (args) => {
       try {
         const data = (args as unknown as { bufnr: number; winid: number }[])[0];

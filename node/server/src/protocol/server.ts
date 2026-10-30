@@ -300,6 +300,7 @@ export function createInProcessServer({
     },
     "thread.submit": async (op) => {
       const thread = readyThread(op.threadId);
+      session.markAttended(op.threadId);
       if (op.delivery === "async" || op.delivery === "next") {
         thread.enqueue(op.input, op.delivery);
         return { type: "queued" };
@@ -323,6 +324,11 @@ export function createInProcessServer({
     },
     "thread.setTitle": (op) => {
       readyThread(op.threadId).setTitle(op.title);
+      return ok;
+    },
+    "thread.markAttended": (op) => {
+      knownThread(op.threadId);
+      session.markAttended(op.threadId);
       return ok;
     },
     "thread.recordActivity": (op) => {

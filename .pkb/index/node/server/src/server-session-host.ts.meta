@@ -1,5 +1,5 @@
 {
-  "blobSha": "cba8e34d8a8cdfb59657c97279722b94e19af118",
+  "blobSha": "ec7843d87647c6461dc2cbcd0b4b49daf636102e",
   "modelName": "voyage-context-4@256",
   "version": 11,
   "chunking": "auto",
@@ -38,11 +38,11 @@
     },
     {
       "start": 14048,
-      "end": 16286
+      "end": 16346
     },
     {
-      "start": 16293,
-      "end": 17271
+      "start": 16353,
+      "end": 17331
     }
   ]
 }

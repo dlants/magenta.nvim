@@ -145,6 +145,10 @@ export type SessionThread = {
    * fork is not a subagent child. */
   origin: ThreadOrigin | undefined;
   lastActivityTime: number;
+  /** Last time the user attended to this thread (viewed it, submitted to it).
+   * Distinct from `lastActivityTime`, which agent updates also bump; it drives
+   * pull request polling dormancy. */
+  lastAttentionTime: number;
   /** Retained so child profile/environment derivation and forking read session
    * state rather than a view wrapper. */
   options: ThreadOptions;
@@ -357,6 +361,25 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     this.emit("changed", id);
   }
 
+  /** Note that the user is attending to the thread; wakes dormant pollers. */
+  markAttended(id: ThreadId): void {
+    const record = this.records.get(id);
+    if (!record) return;
+    record.lastAttentionTime = Date.now();
+    this.pullRequestMonitor?.noteAttention();
+  }
+  /** A running thread counts as attended now. */
+  getLastAttention(id: ThreadId): number {
+    const record = this.records.get(id);
+    if (!record) return 0;
+    if (
+      record.state === "initialized" &&
+      record.thread.state.type === "running"
+    ) {
+      return Date.now();
+    }
+    return record.lastAttentionTime;
+  }
   /** The approval store a host wires into a thread's environment. */
   approvalsFor(id: ThreadId): SandboxViolationHandler {
     let handler = this.approvals.get(id);
@@ -623,6 +646,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
         ? { scriptInvocationId: options.scriptInvocationId }
         : {}),
       lastActivityTime: Date.now(),
+      lastAttentionTime: Date.now(),
       options,
     };
     // A fork starts its own tree, so it inherits its source's bypass state.

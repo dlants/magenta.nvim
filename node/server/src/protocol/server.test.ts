@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import type { ApprovalId } from "../capabilities/sandbox-violation-handler.ts";
 import type { ThreadId } from "../chat-types.ts";
 import type { MockStream } from "../providers/mock-anthropic-client.ts";
-import type { SessionId } from "../session.ts";
+import type { SessionId, SessionThread } from "../session.ts";
 import { shellResult } from "../test/fakes.ts";
 import { withHarness } from "../test/harness.ts";
 import { ABORTED } from "../thread-api.ts";
@@ -376,4 +376,45 @@ it("thread.abort returns the rendered unsent queued input", () =>
     expect(
       await server.execute({ type: "thread.abort", threadId: id }),
     ).toEqual({ type: "threadAborted", unsent: [] });
+  }));
+it("markAttended and user submissions record attention; agent updates do not", () =>
+  withHarness({}, async (h) => {
+    const server = createInProcessServer({ session: h.session });
+    const { id } = await h.createRoot();
+    const monitor = h.session.pullRequestMonitor;
+    if (!monitor) throw new Error("expected a monitor");
+    let wakes = 0;
+    const original = monitor.noteAttention.bind(monitor);
+    monitor.noteAttention = () => {
+      wakes++;
+      original();
+    };
+    const record = h.session.listThreads().find((r) => r.id === id) as
+      | SessionThread
+      | undefined;
+    if (!record) throw new Error("missing record");
+    record.lastAttentionTime = 0;
+    expect(h.session.getLastAttention(id)).toBe(0);
+    expect(
+      await server.execute({ type: "thread.markAttended", threadId: id }),
+    ).toEqual({ type: "ok" });
+    expect(h.session.getLastAttention(id)).toBeGreaterThan(0);
+    expect(wakes).toBe(1);
+
+    record.lastAttentionTime = 0;
+    const result = server.execute({
+      type: "thread.submit",
+      threadId: id,
+      input: text("hi"),
+    });
+    const stream = await h.nextStream();
+    expect(h.session.getLastAttention(id)).toBeGreaterThan(0);
+    expect(wakes).toBe(2);
+    record.lastAttentionTime = 0;
+    // A running thread counts as attended now.
+    expect(h.session.getLastAttention(id)).toBeGreaterThan(0);
+    stream.respond({ stopReason: "end_turn", text: "hello", toolRequests: [] });
+    await result;
+    expect(record.lastAttentionTime).toBe(0);
+    expect(h.session.getLastAttention(id)).toBe(0);
   }));
