@@ -25,6 +25,20 @@ export type PullRequestPollStatus =
   | { type: "unavailable"; message: string }
   | { type: "finished" };
 
+/** Poll status paired with the snapshot, so a loaded status always has one. */
+export type PullRequestTrackedState =
+  | {
+      loaded: false;
+      status: Extract<
+        PullRequestPollStatus,
+        { type: "loading" | "failing" | "unavailable" }
+      >;
+    }
+  | {
+      loaded: true;
+      status: Exclude<PullRequestPollStatus, { type: "loading" }>;
+      snapshot: PullRequestSnapshot;
+    };
 export type PullRequestSubscriber = {
   onChange: () => void;
   /** ms epoch of the thread's last user attention; `now` while it runs. */
@@ -140,6 +154,26 @@ export class PullRequestMonitor {
     return undefined;
   }
 
+  /** For a URL with a live subscription (or an invalid URL). Throws for a
+   * valid URL nobody subscribes to: callers only ask about what they track. */
+  getTrackedState(url: string): PullRequestTrackedState {
+    const status = this.getStatus(url);
+    if (!status) throw new Error(`Pull request not tracked: ${url}`);
+    const snapshot = this.getSnapshot(url);
+    if (snapshot && status.type !== "loading") {
+      return { loaded: true, status, snapshot };
+    }
+    if (status.type === "ok" || status.type === "finished") {
+      throw new Error(
+        `Pull request ${url} is ${status.type} without a snapshot`,
+      );
+    }
+    return { loaded: false, status };
+  }
+  /** Test seam: swap the client the pollers fetch through. */
+  setClientForTesting(client: GitHubClient): void {
+    this.deps.client = client;
+  }
   dispose(): void {
     for (const poller of [...this.pollers.values()]) this.stop(poller);
   }

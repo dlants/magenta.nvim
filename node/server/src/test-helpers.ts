@@ -628,6 +628,5 @@ export function setGitHubClient(
   monitor: PullRequestMonitor,
   client: GitHubClient,
 ): void {
-  (monitor as unknown as { deps: { client: GitHubClient } }).deps.client =
-    client;
+  monitor.setClientForTesting(client);
 }

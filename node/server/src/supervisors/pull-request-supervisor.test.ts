@@ -329,15 +329,29 @@ it("protocol thread state reflects snapshot, pending update and status", () =>
   withHarness(opts, async (h) => {
     script(h, { runs: [lint("failure")] });
     const { thread } = await h.createRoot();
-    const pr = () =>
-      threadState(thread, compactorOf(h, thread.id), h.session).pullRequests[0];
+    const pr = () => {
+      const state = threadState(thread, compactorOf(h, thread.id), h.session)
+        .pullRequests[0];
+      if (!state?.loaded) throw new Error("not loaded");
+      return state;
+    };
     await mention(h, thread);
-    expect(pr()?.status.type).toBe("ok");
-    expect(pr()?.snapshot?.checks[0]?.status).toBe("failure");
-    expect(pr()?.pending?.type).toBe("tracked");
+    expect(pr().status.type).toBe("ok");
+    expect(pr().snapshot.checks[0]?.status).toBe("failure");
+    expect(pr().pending?.type).toBe("tracked");
 
     await exchange(h, thread, "status?");
-    expect(pr()?.pending).toBeUndefined();
+    expect(pr().pending).toBeUndefined();
+    script(h, { runs: [lint("success")] });
+    await pollUntil(() => {
+      if (!pr().pending) throw new Error("no pending");
+    });
+    expect(pr().pending).toMatchObject({
+      type: "changed",
+      checks: [
+        { check: { name: "lint", status: "success" }, previous: "failure" },
+      ],
+    });
 
     h.host.github.setResponse("repos/o/r/pulls/12", {
       type: "error",
@@ -346,7 +360,7 @@ it("protocol thread state reflects snapshot, pending update and status", () =>
       retryAfterMs: undefined,
     });
     await pollUntil(() => {
-      if (pr()?.status.type !== "failing") throw new Error("not failing");
+      if (pr().status.type !== "failing") throw new Error("not failing");
     });
-    expect(pr()?.snapshot?.checks[0]?.status).toBe("failure");
+    expect(pr().snapshot.checks[0]?.status).toBe("success");
   }));

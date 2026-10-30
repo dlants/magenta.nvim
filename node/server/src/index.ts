@@ -286,6 +286,7 @@ export {
 export {
   PullRequestMonitor,
   type PullRequestPollStatus,
+  type PullRequestTrackedState,
 } from "./pull-requests/monitor.ts";
 export type {
   CheckStatus,

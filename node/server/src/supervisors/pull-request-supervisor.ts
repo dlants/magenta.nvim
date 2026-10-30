@@ -1,7 +1,7 @@
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import type {
   PullRequestMonitor,
-  PullRequestPollStatus,
+  PullRequestTrackedState,
 } from "../pull-requests/monitor.ts";
 import type {
   CheckStatus,
@@ -35,13 +35,20 @@ export type PullRequestUpdate =
       comments: Array<{ comment: PullRequestComment; edited: boolean }>;
     };
 export type PullRequestContextUpdate = { pullRequests: PullRequestUpdate[] };
-export type PullRequestViewState = {
-  url: string;
-  snapshot: PullRequestSnapshot | undefined;
-  status: PullRequestPollStatus;
-  /** What the next request would deliver. */
-  pending: PullRequestUpdate | undefined;
-};
+export type PullRequestViewState =
+  | {
+      url: string;
+      loaded: false;
+      status: Extract<PullRequestTrackedState, { loaded: false }>["status"];
+    }
+  | {
+      url: string;
+      loaded: true;
+      status: Extract<PullRequestTrackedState, { loaded: true }>["status"];
+      snapshot: PullRequestSnapshot;
+      /** What the next request would deliver. */
+      pending: PullRequestUpdate | undefined;
+    };
 
 export function diffSnapshots(
   seen: PullRequestSnapshot,
@@ -245,12 +252,11 @@ export class PullRequestSupervisor implements ToolLoopSupervisor {
   }
 
   getViewState(): PullRequestViewState[] {
-    return this.trackedPullRequests.map((url) => ({
-      url,
-      snapshot: this.monitor.getSnapshot(url),
-      status: this.monitor.getStatus(url) ?? { type: "loading" },
-      pending: this.getPending(url)?.update,
-    }));
+    return this.trackedPullRequests.map((url): PullRequestViewState => {
+      const state = this.monitor.getTrackedState(url);
+      if (!state.loaded) return { url, ...state };
+      return { url, ...state, pending: this.getPending(url)?.update };
+    });
   }
   /** The snapshot the agent last saw for `url`. */
   getAgentView(url: string): PullRequestSnapshot | undefined {

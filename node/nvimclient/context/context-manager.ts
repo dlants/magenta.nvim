@@ -227,7 +227,9 @@ export function renderPullRequests(
 ): VDOMNode {
   if (!pullRequests.length) return d``;
   return d`\n# pull requests:\n${pullRequests.map((pr) => {
-    const { snapshot, status, pending } = pr;
+    const { status } = pr;
+    const snapshot = pr.loaded ? pr.snapshot : undefined;
+    const pending = pr.loaded ? pr.pending : undefined;
     const failed = snapshot?.checks.filter((c) => c.status === "failure") ?? [];
     const counts = snapshot
       ? ` checks: ${snapshot.checks.filter((c) => c.status === "pending").length.toString()} pending, ${snapshot.checks.filter((c) => c.status === "success").length.toString()} passed, ${failed.length.toString()} failed`
