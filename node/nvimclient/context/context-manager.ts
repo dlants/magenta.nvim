@@ -218,6 +218,12 @@ function describeUpdate(update: PullRequestUpdate): string {
     );
   return parts.join(", ");
 }
+const MAX_TITLE_LENGTH = 50;
+function truncateTitle(title: string): string {
+  return title.length > MAX_TITLE_LENGTH
+    ? `${title.slice(0, MAX_TITLE_LENGTH - 1)}…`
+    : title;
+}
 function formatAgo(ms: number, now: number): string {
   return `${Math.max(0, Math.round((now - ms) / 1000)).toString()}s ago`;
 }
@@ -243,6 +249,7 @@ export function renderPullRequests(
             ? " (no longer polling)"
             : "";
     const state = snapshot ? ` (${snapshot.state})` : "";
+    const title = snapshot ? `${truncateTitle(snapshot.title)} ` : "";
     const failedLines = failed.map(
       (c) => d`  - failed: ${c.name}${c.url ? ` ${c.url}` : ""}\n`,
     );
@@ -255,7 +262,7 @@ export function renderPullRequests(
         : status.type === "unavailable"
           ? d`  - unavailable: ${status.message}\n`
           : d``;
-    return d`- ${pr.url}${state}${counts}${statusText}\n${failedLines}${pendingLine}${statusLine}`;
+    return d`- ${title}${pr.url}${state}${counts}${statusText}\n${failedLines}${pendingLine}${statusLine}`;
   })}`;
 }
 export function renderContextUpdate(

@@ -70,7 +70,7 @@ it("renders the pull request summary and inline deliveries", async () => {
     });
     await driver.assertDisplayBufferContains("# pull requests:");
     await driver.assertDisplayBufferContains(
-      `- ${URL} (open) checks: 1 pending, 0 passed, 1 failed`,
+      `- Fix ${URL} (open) checks: 1 pending, 0 passed, 1 failed`,
     );
     await driver.assertDisplayBufferContains(
       "  - failed: lint https://ci/lint",
