@@ -433,9 +433,14 @@ export class ServerSessionHost implements SessionHost {
       fileIO: env.fileIO,
       gitClient: env.gitClient,
       ...(session.pullRequestMonitor
-        ? { pullRequestMonitor: session.pullRequestMonitor }
+        ? {
+            pullRequestTracking: {
+              monitor: session.pullRequestMonitor,
+              // A deleted thread's supervisor is disposed; treat it as never attended.
+              getLastAttention: () => session.getLastAttention(id) ?? 0,
+            },
+          }
         : {}),
-      getLastAttention: () => session.getLastAttention(id),
       discoverHierarchy: (absFilePath) =>
         discoverHierarchyContext(absFilePath, {
           fileIO: hostFileIO,

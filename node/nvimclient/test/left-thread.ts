@@ -39,3 +39,8 @@ export function serverThread(view: NvimThread): Thread {
 export function serverCompactor(view: NvimThread): ThreadCompactor | undefined {
   return serverRecord(view).compactor;
 }
+
+/** White-box: forget recent attention pings so the next one is sent. */
+export function resetAttentionThrottle(chat: Chat): void {
+  chat.resetAttentionThrottleForTest();
+}

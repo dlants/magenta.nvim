@@ -417,4 +417,8 @@ it("markAttended and user submissions record attention; agent updates do not", (
     await result;
     expect(record.lastAttentionTime).toBe(0);
     expect(h.session.getLastAttention(id)).toBe(0);
+    const unknown = "unknown" as ThreadId;
+    expect(h.session.getLastAttention(unknown)).toBeUndefined();
+    h.session.markAttended(unknown);
+    expect(wakes).toBe(2);
   }));

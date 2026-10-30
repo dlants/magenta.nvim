@@ -328,7 +328,7 @@ M.bridge = function(channelId)
 
   -- Attention pings drive pull request poll dormancy. The node side throttles
   -- per thread; this only keeps CursorMoved from flooding the channel.
-  local last_attention_ms = 0
+  local lastAttentionMs = 0
   vim.api.nvim_create_autocmd(
     { "CursorMoved", "CursorMovedI", "FocusGained", "BufEnter" },
     {
@@ -336,8 +336,8 @@ M.bridge = function(channelId)
       pattern = "*",
       callback = function()
         local now = vim.uv.now()
-        if now - last_attention_ms < 1000 then return end
-        last_attention_ms = now
+        if now - lastAttentionMs < 1000 then return end
+        lastAttentionMs = now
         safe_rpcnotify(channelId, "magentaAttention", {})
       end
     }

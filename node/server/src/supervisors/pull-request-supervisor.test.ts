@@ -5,7 +5,7 @@ import type { ThreadCompactor } from "../compaction/compactor.ts";
 import type { MockStream } from "../providers/mock-anthropic-client.ts";
 import type { PullRequestSnapshot } from "../pull-requests/types.ts";
 import { type Harness, withHarness } from "../test/harness.ts";
-import { created } from "../test-helpers.ts";
+import { created, setLastAttentionTime } from "../test-helpers.ts";
 import type { Thread } from "../thread.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
@@ -260,6 +260,27 @@ it("deleting the thread unsubscribes from the shared poller", () =>
     const calls = pullCalls(h);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(pullCalls(h)).toBe(calls);
+  }));
+
+it("session attention drives the thread's poll dormancy", () =>
+  withHarness(opts, async (h) => {
+    script(h);
+    const { id } = await h.createRoot();
+    const record = h.session.getThread(id);
+    if (record?.state !== "initialized") throw new Error("not ready");
+    await mention(h, record.thread);
+    setLastAttentionTime(h.session, id, Date.now() - 10 * 60_000);
+    await pollUntil(() => {
+      if (pullCalls(h) === 0) throw new Error("no poll yet");
+    });
+    await new Promise((r) => setTimeout(r, 100));
+    const dormant = pullCalls(h);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(pullCalls(h)).toBe(dormant);
+    h.session.markAttended(id);
+    await pollUntil(() => {
+      if (pullCalls(h) < dormant + 3) throw new Error("not polling");
+    });
   }));
 
 it("diffs state changes and formats review comments", () => {

@@ -840,6 +840,10 @@ export class Chat {
   }
 
   private lastAttendedAt = new Map<ThreadId, number>();
+  /** Tests only: start a fresh attention throttle window. */
+  resetAttentionThrottleForTest(): void {
+    this.lastAttendedAt.clear();
+  }
   /** Throttled to once a minute per thread: the server only needs a coarse
    * signal to decide whether pull request polling may go dormant. */
   markShownThreadsAttended(now = Date.now()): void {

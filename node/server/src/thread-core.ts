@@ -60,10 +60,12 @@ export interface ThreadCoreContext {
   fileIO: FileIO;
   gitClient: GitClient;
   discoverHierarchy?: HierarchyDiscovery;
-  /** Absent: mentioned pull requests are not tracked. */
-  pullRequestMonitor?: PullRequestMonitor;
-  /** When the user last attended to the thread (ms epoch); drives poll dormancy. */
-  getLastAttention?: () => number;
+  /** Absent: mentioned pull requests are not tracked. `getLastAttention`
+   * (ms epoch) drives poll dormancy. */
+  pullRequestTracking?: {
+    monitor: PullRequestMonitor;
+    getLastAttention: () => number;
+  };
   /** Absent: never count, always proceed. */
   tokenBudget?: TokenBudget;
   threadToolCreator: ThreadToolCreator;
@@ -163,12 +165,10 @@ export class ThreadCore {
       editedFilesSupervisor: EditedFilesSupervisor.create(),
       gitSupervisor,
       pullRequestSupervisor:
-        context.pullRequestMonitor && context.threadType !== "compact"
+        context.pullRequestTracking && context.threadType !== "compact"
           ? PullRequestSupervisor.create({
-              monitor: context.pullRequestMonitor,
-              ...(context.getLastAttention
-                ? { getLastAttention: context.getLastAttention }
-                : {}),
+              monitor: context.pullRequestTracking.monitor,
+              getLastAttention: context.pullRequestTracking.getLastAttention,
               ...(seed.pullRequests ? { track: seed.pullRequests } : {}),
             })
           : undefined,
@@ -258,8 +258,8 @@ export class ThreadCore {
         ? PullRequestSupervisor.clone({
             source: source.pullRequestSupervisor,
             nativeMessageIdx,
-            ...(context.pullRequestMonitor
-              ? { monitor: context.pullRequestMonitor }
+            ...(context.pullRequestTracking
+              ? { monitor: context.pullRequestTracking.monitor }
               : {}),
           })
         : undefined,

@@ -368,10 +368,10 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     record.lastAttentionTime = Date.now();
     this.pullRequestMonitor?.noteAttention();
   }
-  /** A running thread counts as attended now. */
-  getLastAttention(id: ThreadId): number {
+  /** A running thread counts as attended now. Undefined for unknown threads. */
+  getLastAttention(id: ThreadId): number | undefined {
     const record = this.records.get(id);
-    if (!record) return 0;
+    if (!record) return undefined;
     if (
       record.state === "initialized" &&
       record.thread.state.type === "running"

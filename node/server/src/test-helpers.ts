@@ -34,6 +34,7 @@ import type {
   ProviderToolSpec,
 } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
+import type { Session, SessionThread } from "./session.ts";
 import {
   type ResolvedSubmission,
   type ResolveSubmission,
@@ -607,4 +608,15 @@ export function promiseRun(
   ) => Promise<CompactionOutcome>,
 ): Compactor["run"] {
   return (messages, next) => uninterruptible(run(messages, next));
+}
+
+/** White-box: backdate a thread's recorded user attention. */
+export function setLastAttentionTime(
+  session: Session,
+  id: ThreadId,
+  time: number,
+): void {
+  const record = session.getThread(id);
+  if (!record) throw new Error(`unknown thread ${id}`);
+  (record as SessionThread).lastAttentionTime = time;
 }
