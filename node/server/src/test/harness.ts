@@ -95,6 +95,8 @@ export type HarnessOptions = {
   resolve?: HarnessResolve;
   /** Enables `nvim_lua` (and the "nvim" capability) with a stub executor. */
   luaExecutor?: LuaExecutor;
+  /** Poll interval of the session PullRequestMonitor (default 30s). */
+  pullRequestPollIntervalMs?: number;
   /** Real MCPToolManager over the given (e.g. `type: "mock"`) servers. */
   mcpServers?: MCPServersConfig;
 };
@@ -276,6 +278,9 @@ export class TestSessionHost implements SessionHost {
       getScriptRunner,
       fileIO,
       gitClient: this.git,
+      ...(session.pullRequestMonitor
+        ? { pullRequestMonitor: session.pullRequestMonitor }
+        : {}),
       discoverHierarchy: (absFilePath) =>
         discoverHierarchyContext(absFilePath, {
           fileIO,
@@ -361,6 +366,9 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     pullRequestMonitor: new PullRequestMonitor({
       client: host.github,
       logger: noopLogger,
+      ...(options.pullRequestPollIntervalMs !== undefined
+        ? { intervalMs: options.pullRequestPollIntervalMs }
+        : {}),
     }),
   });
   let last: MockStream | undefined;

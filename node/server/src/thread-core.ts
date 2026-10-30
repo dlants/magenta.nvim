@@ -18,6 +18,7 @@ import type {
 } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import { PullRequestMentionScanner } from "./pull-request-mentions.ts";
+import type { PullRequestMonitor } from "./pull-requests/monitor.ts";
 import {
   FileSupervisor,
   type Files,
@@ -28,6 +29,10 @@ import {
   type GitContextUpdate,
   GitSupervisor,
 } from "./supervisors/git-supervisor.ts";
+import {
+  type PullRequestContextUpdate,
+  PullRequestSupervisor,
+} from "./supervisors/pull-request-supervisor.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
 import type { ToolInvocationState, ToolLoopResult } from "./thread-api.ts";
 import {
@@ -55,6 +60,8 @@ export interface ThreadCoreContext {
   fileIO: FileIO;
   gitClient: GitClient;
   discoverHierarchy?: HierarchyDiscovery;
+  /** Absent: mentioned pull requests are not tracked. */
+  pullRequestMonitor?: PullRequestMonitor;
   /** Absent: never count, always proceed. */
   tokenBudget?: TokenBudget;
   threadToolCreator: ThreadToolCreator;
@@ -65,6 +72,7 @@ export interface ThreadCoreContext {
 export type ContextDelivery = {
   files?: FileUpdates;
   git?: GitContextUpdate;
+  pullRequests?: PullRequestContextUpdate;
 };
 
 export interface ThreadCoreCallbacks {
@@ -80,6 +88,8 @@ export interface ThreadCoreCallbacks {
 export type ThreadCoreSeed = {
   initialFiles?: Files;
   initialGitState?: GitState;
+  /** Pull requests tracked by the core this one replaces. */
+  pullRequests?: ReadonlyArray<string>;
 };
 
 interface ThreadCoreState {
@@ -87,6 +97,7 @@ interface ThreadCoreState {
   fileSupervisor: FileSupervisor;
   gitSupervisor: GitSupervisor | undefined;
   systemInfoSupervisor: SystemInfoSupervisor | undefined;
+  pullRequestSupervisor: PullRequestSupervisor | undefined;
   systemReminders: SystemReminderSupervisor | undefined;
   editedFilesSupervisor: EditedFilesSupervisor;
   edlRegisters: EdlRegisters;
@@ -101,6 +112,7 @@ export class ThreadCore {
   readonly toolSpecs: ProviderToolSpec[];
   readonly fileSupervisor: FileSupervisor;
   readonly gitSupervisor: GitSupervisor | undefined;
+  readonly pullRequestSupervisor: PullRequestSupervisor | undefined;
   readonly systemInfoSupervisor: SystemInfoSupervisor | undefined;
   readonly systemReminders: SystemReminderSupervisor | undefined;
   /** Index of the fork-notification message, on a core created by a fork. */
@@ -148,6 +160,13 @@ export class ThreadCore {
       fileSupervisor,
       editedFilesSupervisor: EditedFilesSupervisor.create(),
       gitSupervisor,
+      pullRequestSupervisor:
+        context.pullRequestMonitor && context.threadType !== "compact"
+          ? PullRequestSupervisor.create({
+              monitor: context.pullRequestMonitor,
+              ...(seed.pullRequests ? { track: seed.pullRequests } : {}),
+            })
+          : undefined,
       systemInfoSupervisor:
         context.threadType !== "compact"
           ? SystemInfoSupervisor.create({
@@ -230,6 +249,15 @@ export class ThreadCore {
         nativeMessageIdx,
       }),
       gitSupervisor,
+      pullRequestSupervisor: source.pullRequestSupervisor
+        ? PullRequestSupervisor.clone({
+            source: source.pullRequestSupervisor,
+            nativeMessageIdx,
+            ...(context.pullRequestMonitor
+              ? { monitor: context.pullRequestMonitor }
+              : {}),
+          })
+        : undefined,
       systemInfoSupervisor: source.systemInfoSupervisor
         ? SystemInfoSupervisor.clone({
             source: source.systemInfoSupervisor,
@@ -269,6 +297,7 @@ export class ThreadCore {
     this.manager = state.manager;
     this.fileSupervisor = state.fileSupervisor;
     this.gitSupervisor = state.gitSupervisor;
+    this.pullRequestSupervisor = state.pullRequestSupervisor;
     this.systemInfoSupervisor = state.systemInfoSupervisor;
     this.systemReminders = state.systemReminders;
     this.editedFilesSupervisor = state.editedFilesSupervisor;
@@ -277,7 +306,12 @@ export class ThreadCore {
     this.forkSeamIdx = state.forkSeamIdx;
     this.pullRequestScanner = new PullRequestMentionScanner(
       () => this.manager.log.messages,
-      () => callbacks.onUpdate(),
+      () => {
+        for (const url of this.pullRequestScanner.mentionedPullRequests) {
+          this.pullRequestSupervisor?.track(url);
+        }
+        callbacks.onUpdate();
+      },
     );
     this.pullRequestScanner.schedule();
     this.createTool = context.threadToolCreator({
@@ -300,6 +334,13 @@ export class ThreadCore {
     if (this.gitSupervisor) {
       this.gitSupervisor.callbacks = {
         onSent: (git, idx) => this.recordDelivery(idx, { git }),
+      };
+    }
+    if (this.pullRequestSupervisor) {
+      this.pullRequestSupervisor.callbacks = {
+        onSent: (pullRequests, idx) =>
+          this.recordDelivery(idx, { pullRequests }),
+        onChanged: () => callbacks.onUpdate(),
       };
     }
   }
@@ -342,6 +383,7 @@ export class ThreadCore {
     this.fileSupervisor.destroy();
     this.pullRequestScanner.dispose();
     if (this.gitSupervisor) this.gitSupervisor.callbacks = {};
+    this.pullRequestSupervisor?.dispose();
   }
 
   private resultMessageIdx: NativeMessageIdx | undefined;

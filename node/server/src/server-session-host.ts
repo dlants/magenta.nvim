@@ -432,6 +432,9 @@ export class ServerSessionHost implements SessionHost {
       getScriptRunner,
       fileIO: env.fileIO,
       gitClient: env.gitClient,
+      ...(session.pullRequestMonitor
+        ? { pullRequestMonitor: session.pullRequestMonitor }
+        : {}),
       discoverHierarchy: (absFilePath) =>
         discoverHierarchyContext(absFilePath, {
           fileIO: hostFileIO,

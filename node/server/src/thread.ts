@@ -229,6 +229,9 @@ export class Thread implements ThreadCoreView {
   get mentionedPullRequests(): ReadonlyArray<string> {
     return this.core.mentionedPullRequests;
   }
+  get trackedPullRequests(): ReadonlyArray<string> {
+    return this.core.pullRequestSupervisor?.trackedPullRequests ?? [];
+  }
   get editedFileGroups(): EditedFileGroup[] {
     return this.core.editedFilesSupervisor.groups;
   }
@@ -356,6 +359,7 @@ export class Thread implements ThreadCoreView {
     return [
       core.editedFilesSupervisor,
       ...(core.gitSupervisor ? [core.gitSupervisor] : []),
+      ...(core.pullRequestSupervisor ? [core.pullRequestSupervisor] : []),
       ...(core.systemReminders ? [core.fileSupervisor] : []),
       ...(core.systemInfoSupervisor ? [core.systemInfoSupervisor] : []),
       ...(core.systemReminders ? [core.systemReminders] : []),
@@ -394,6 +398,7 @@ export class Thread implements ThreadCoreView {
 
   private createFreshCore(
     initialFiles: Files | undefined = this.context.initialFiles,
+    pullRequests?: ReadonlyArray<string>,
   ): ThreadCore {
     const core = ThreadCore.create(
       this.id,
@@ -402,6 +407,7 @@ export class Thread implements ThreadCoreView {
       this.resultArchive,
       {
         ...(initialFiles ? { initialFiles } : {}),
+        ...(pullRequests ? { pullRequests } : {}),
         ...(this.context.initialGitState
           ? { initialGitState: this.context.initialGitState }
           : {}),
@@ -1103,10 +1109,13 @@ export class Thread implements ThreadCoreView {
         this.core.dispose();
       } else {
         const initialFiles = buildClonedFiles(this.contextFiles.files);
+        // Created before the old core is disposed so shared PR pollers keep
+        // a subscriber across the replacement and stay warm.
+        core = this.createFreshCore(
+          initialFiles,
+          this.core.pullRequestSupervisor?.trackedPullRequests,
+        );
         this.core.dispose();
-        // Disposal is irreversible: cancellation prevents the caller's follow-up,
-        // but must not leave this thread pointing at a permanently disposed core.
-        core = this.createFreshCore(initialFiles);
       }
       this.core = core;
       // The replaced core's opening content does not belong to the new one.
