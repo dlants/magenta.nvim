@@ -39,6 +39,7 @@ export {
   parseGitState,
 } from "./capabilities/git-client.ts";
 export { DockerGitClient, LocalGitClient } from "./capabilities/git-clients.ts";
+export { GhCliGitHubClient } from "./capabilities/github-client.ts";
 export type {
   LspClient,
   LspDefinitionResponse,
@@ -282,6 +283,14 @@ export {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
+export {
+  PullRequestMonitor,
+  type PullRequestPollStatus,
+} from "./pull-requests/monitor.ts";
+export type {
+  PullRequestRef,
+  PullRequestSnapshot,
+} from "./pull-requests/types.ts";
 export { buildReflectSeed, renderReflectHistory } from "./reflect/seed.ts";
 export {
   DEFAULT_SANDBOX_CONFIG,

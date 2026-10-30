@@ -16,6 +16,7 @@ import {
   type MockStream,
 } from "../providers/mock-anthropic-client.ts";
 import { createSystemPrompt } from "../providers/system-prompt.ts";
+import { PullRequestMonitor } from "../pull-requests/monitor.ts";
 import type {
   PreparedThread,
   SessionHost,
@@ -51,7 +52,12 @@ import {
   toProjectDir,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
-import { FakeGitClient, FakeShell, type FakeShellScript } from "./fakes.ts";
+import {
+  FakeGitClient,
+  FakeGitHubClient,
+  FakeShell,
+  type FakeShellScript,
+} from "./fakes.ts";
 
 export { FakeGitClient, FakeShell, type FakeShellScript } from "./fakes.ts";
 
@@ -131,6 +137,7 @@ export class TestSessionHost implements SessionHost {
   readonly provider = createMockProvider(this.mockClient);
   readonly fileIO: InMemoryFileIO;
   readonly git: FakeGitClient;
+  readonly github = new FakeGitHubClient();
   readonly shell: FakeShell;
   /** Default projectDir for threads created without an explicit local `projectDir`. Mutable so tests can model the client moving. */
   projectDir: ProjectDir;
@@ -350,7 +357,12 @@ export type Harness = {
 
 export function createHarness(options: HarnessOptions = {}): Harness {
   const host = new TestSessionHost(options);
-  const session = new Session(host);
+  const session = new Session(host, {
+    pullRequestMonitor: new PullRequestMonitor({
+      client: host.github,
+      logger: noopLogger,
+    }),
+  });
   let last: MockStream | undefined;
   const thread = (id: ThreadId): Thread => {
     const record = session.getThread(id);

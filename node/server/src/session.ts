@@ -31,6 +31,7 @@ import type {
   NativeMessageIdx,
   Provider,
 } from "./providers/provider-types.ts";
+import type { PullRequestMonitor } from "./pull-requests/monitor.ts";
 import { buildReflectSeed } from "./reflect/seed.ts";
 import type { ScriptSandboxRoot } from "./scripts/script-manager.ts";
 import type { EnvironmentConfig, Thread, ThreadCallbacks } from "./thread.ts";
@@ -224,8 +225,14 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
   >();
 
   private selectedProfileName: string | undefined;
-  constructor(private host: SessionHost) {
+  /** Session-lifetime, so every thread tracking a PR shares one poller. */
+  readonly pullRequestMonitor: PullRequestMonitor | undefined;
+  constructor(
+    private host: SessionHost,
+    opts: { pullRequestMonitor?: PullRequestMonitor } = {},
+  ) {
     super();
+    this.pullRequestMonitor = opts.pullRequestMonitor;
   }
 
   /** Applies to threads created afterwards. Kept in memory only. */
@@ -1002,6 +1009,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
   dispose(): Promise<void> {
     if (this.disposal) return this.disposal;
     this.disposed = true;
+    this.pullRequestMonitor?.dispose();
     for (const id of [...this.records.keys()]) this.deleteThread(id);
     for (const waiter of this.clientWaiters) {
       waiter.reject(new Error("Session disposed"));
