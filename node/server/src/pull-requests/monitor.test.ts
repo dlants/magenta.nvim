@@ -213,7 +213,7 @@ describe("PullRequestMonitor", () => {
     monitor.subscribe(URL, attended());
     await vi.advanceTimersByTimeAsync(0);
     const snapshot = monitor.getSnapshot(URL);
-    client.setResponse(PATHS.issueComments, ok([{ id: 1, body: "new" }]));
+    client.setResponse(PATHS.issueComments, ok([{ id: 1, body: "new" }], "e2"));
     client.setResponse(PATHS.reviews, {
       type: "error",
       status: 502,
@@ -229,16 +229,63 @@ describe("PullRequestMonitor", () => {
     });
     await vi.advanceTimersByTimeAsync(59_999);
     expect(pullCalls()).toBe(2);
+    client.calls = [];
     await vi.advanceTimersByTimeAsync(1);
-    expect(pullCalls()).toBe(3);
+    expect(pullCalls()).toBe(1);
+    // the failed poll's ETags were never committed
+    expect(client.calls.find((c) => c.path === PATHS.issueComments)?.etag).toBe(
+      "e",
+    );
     expect(monitor.getStatus(URL)).toMatchObject({ consecutiveFailures: 2 });
     client.setResponse(PATHS.reviews, ok([]));
     await vi.advanceTimersByTimeAsync(120_000);
-    expect(pullCalls()).toBe(4);
-    expect(monitor.getStatus(URL).type).toBe("ok");
+    expect(pullCalls()).toBe(2);
+    expect(monitor.getStatus(URL)?.type).toBe("ok");
     expect(monitor.getSnapshot(URL)?.comments).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(pullCalls()).toBe(5);
+    expect(pullCalls()).toBe(3);
+  });
+
+  it("fetches new check paths without an etag after a head change", async () => {
+    const { client, monitor } = setup();
+    monitor.subscribe(URL, attended());
+    await vi.advanceTimersByTimeAsync(0);
+    const runsPath = `${BASE}/commits/sha2/check-runs?per_page=100`;
+    const statusPath = `${BASE}/commits/sha2/status`;
+    client.setResponse(
+      PATHS.pull,
+      ok({ title: "T", state: "open", head: { sha: "sha2" } }, "p2"),
+    );
+    client.setResponse(
+      runsPath,
+      ok({
+        total_count: 1,
+        check_runs: [{ name: "ci", status: "in_progress" }],
+      }),
+    );
+    client.setResponse(statusPath, ok({ statuses: [] }));
+    client.calls = [];
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(client.calls.find((c) => c.path === runsPath)?.etag).toBeUndefined();
+    expect(
+      client.calls.find((c) => c.path === statusPath)?.etag,
+    ).toBeUndefined();
+    expect(monitor.getSnapshot(URL)).toMatchObject({
+      headSha: "sha2",
+      checks: [{ name: "ci", status: "pending" }],
+    });
+    expect(monitor.getStatus(URL)?.type).toBe("ok");
+  });
+
+  it("never fetches an invalid URL", async () => {
+    const { client, monitor } = setup();
+    const url = "https://github.com/o/r/issues/3";
+    const unsub = monitor.subscribe(url, attended());
+    await vi.advanceTimersByTimeAsync(5 * MIN);
+    expect(client.calls).toHaveLength(0);
+    expect(monitor.getStatus(url)?.type).toBe("unavailable");
+    expect(monitor.getStatus(URL)).toBeUndefined();
+    unsub();
   });
 
   it("waits for rate-limit reset", async () => {

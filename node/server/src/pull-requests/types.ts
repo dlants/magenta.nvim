@@ -15,18 +15,31 @@ export type PullRequestCheck = {
   status: CheckStatus;
   url: string | undefined;
 };
-export type PullRequestComment = {
-  /** "issue:123" | "review_comment:456" | "review:789" */
-  id: string;
-  kind: "issue" | "review_comment" | "review";
+export type ReviewState =
+  | "APPROVED"
+  | "CHANGES_REQUESTED"
+  | "COMMENTED"
+  | "DISMISSED"
+  | "PENDING";
+type CommentBase = {
   author: string;
   body: string;
   url: string;
   updatedAt: string;
-  path?: string;
-  line?: number;
-  reviewState?: string;
 };
+export type PullRequestComment =
+  | (CommentBase & { kind: "issue"; id: `issue:${string}` })
+  | (CommentBase & {
+      kind: "review_comment";
+      id: `review_comment:${string}`;
+      path: string | undefined;
+      line: number | undefined;
+    })
+  | (CommentBase & {
+      kind: "review";
+      id: `review:${string}`;
+      reviewState: ReviewState | undefined;
+    });
 export type PullRequestSnapshot = {
   ref: PullRequestRef;
   title: string;

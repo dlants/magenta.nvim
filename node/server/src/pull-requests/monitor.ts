@@ -10,6 +10,7 @@ import {
   type PullRequestRef,
   type PullRequestSnapshot,
   parsePullRequestUrl,
+  type ReviewState,
 } from "./types.ts";
 
 export type PullRequestPollStatus =
@@ -37,6 +38,10 @@ const FIRST_DORMANT_DELAY_MS = 60_000;
 const MAX_DORMANT_DELAY_MS = 5 * 60_000;
 const PER_PAGE = 100;
 
+type PollerPhase =
+  | { type: "idle"; timer: ReturnType<typeof setTimeout> | undefined }
+  | { type: "inFlight" }
+  | { type: "stopped" };
 type Poller = {
   ref: PullRequestRef;
   subscribers: Set<PullRequestSubscriber>;
@@ -44,24 +49,22 @@ type Poller = {
   status: PullRequestPollStatus;
   /** Per-path ETag plus the body it validates, so a 304 reuses the body. */
   cache: Map<string, { etag: string | undefined; body: unknown }>;
-  timer: ReturnType<typeof setTimeout> | undefined;
-  inFlight: boolean;
-  stopped: boolean;
+  phase: PollerPhase;
   lastSettledAt: number | undefined;
   failureDelayMs: number;
   /** Undefined while some subscriber is attended. */
   dormantDelayMs: number | undefined;
 };
-
+type PollError = {
+  type: "error";
+  status: number | undefined;
+  message: string;
+  retryAfterMs: number | undefined;
+};
 type PollResult =
   | { type: "ok"; snapshot: PullRequestSnapshot }
-  | {
-      type: "error";
-      status: number | undefined;
-      message: string;
-      retryAfterMs: number | undefined;
-    };
-
+  | PollError
+  | { type: "stopped" };
 /** Session-owned: one poller per PR URL, shared by every subscribed thread.
  * It never touches thread state; subscribers read the cached snapshot. */
 export class PullRequestMonitor {
@@ -80,28 +83,26 @@ export class PullRequestMonitor {
     this.now = deps.now ?? Date.now;
   }
 
+  /** Invalid URLs are never polled: their status is permanently unavailable,
+   * so there is nothing to subscribe to. */
   subscribe(url: string, sub: PullRequestSubscriber): () => void {
     let poller = this.pollers.get(url);
     if (!poller) {
       const ref = parsePullRequestUrl(url);
+      if (!ref) return () => {};
       poller = {
-        ref: ref ?? { url, owner: "", repo: "", number: 0 },
-        subscribers: new Set(),
+        ref,
+        subscribers: new Set([sub]),
         snapshot: undefined,
-        status: ref
-          ? { type: "loading" }
-          : { type: "unavailable", message: `Not a pull request URL: ${url}` },
+        status: { type: "loading" },
         cache: new Map(),
-        timer: undefined,
-        inFlight: false,
-        stopped: !ref,
+        phase: { type: "idle", timer: undefined },
         lastSettledAt: undefined,
         failureDelayMs: 0,
         dormantDelayMs: undefined,
       };
       this.pollers.set(url, poller);
-      poller.subscribers.add(sub);
-      if (ref) this.poll(poller);
+      this.poll(poller);
     } else {
       poller.subscribers.add(sub);
     }
@@ -118,7 +119,7 @@ export class PullRequestMonitor {
     for (const poller of this.pollers.values()) {
       if (poller.dormantDelayMs === undefined) continue;
       poller.dormantDelayMs = undefined;
-      if (poller.stopped || poller.inFlight) continue;
+      if (poller.phase.type !== "idle") continue;
       const delay = Math.max(this.intervalMs, poller.failureDelayMs);
       const dueAt = (poller.lastSettledAt ?? 0) + delay;
       this.schedule(poller, Math.max(0, dueAt - this.now()));
@@ -129,8 +130,14 @@ export class PullRequestMonitor {
     return this.pollers.get(url)?.snapshot;
   }
 
-  getStatus(url: string): PullRequestPollStatus {
-    return this.pollers.get(url)?.status ?? { type: "loading" };
+  /** Undefined when nothing subscribes to a valid URL. */
+  getStatus(url: string): PullRequestPollStatus | undefined {
+    const poller = this.pollers.get(url);
+    if (poller) return poller.status;
+    if (!parsePullRequestUrl(url)) {
+      return { type: "unavailable", message: `Not a pull request URL: ${url}` };
+    }
+    return undefined;
   }
 
   dispose(): void {
@@ -138,28 +145,45 @@ export class PullRequestMonitor {
   }
 
   private stop(poller: Poller): void {
-    poller.stopped = true;
-    if (poller.timer) clearTimeout(poller.timer);
-    poller.timer = undefined;
+    if (poller.phase.type === "idle" && poller.phase.timer) {
+      clearTimeout(poller.phase.timer);
+    }
+    poller.phase = { type: "stopped" };
     if (this.pollers.get(poller.ref.url) === poller) {
       this.pollers.delete(poller.ref.url);
     }
   }
 
+  /** Terminal statuses keep the poller (and its subscribers) for reads but
+   * end polling. */
+  private finish(
+    poller: Poller,
+    status: Extract<
+      PullRequestPollStatus,
+      { type: "unavailable" | "finished" }
+    >,
+  ): void {
+    poller.status = status;
+    poller.phase = { type: "stopped" };
+    this.notify(poller);
+  }
+
   private schedule(poller: Poller, delayMs: number): void {
-    if (poller.timer) clearTimeout(poller.timer);
-    poller.timer = setTimeout(() => {
-      poller.timer = undefined;
-      this.poll(poller);
-    }, delayMs);
+    if (poller.phase.type !== "idle") return;
+    if (poller.phase.timer) clearTimeout(poller.phase.timer);
+    poller.phase = {
+      type: "idle",
+      timer: setTimeout(() => this.poll(poller), delayMs),
+    };
     if (poller.status.type === "ok" || poller.status.type === "failing") {
       poller.status = { ...poller.status, nextPollAt: this.now() + delayMs };
     }
   }
 
   private poll(poller: Poller): void {
-    if (poller.stopped || poller.inFlight) return;
-    poller.inFlight = true;
+    if (poller.phase.type !== "idle") return;
+    if (poller.phase.timer) clearTimeout(poller.phase.timer);
+    poller.phase = { type: "inFlight" };
     this.fetchSnapshot(poller).then(
       (result) => this.settle(poller, result),
       (error: unknown) =>
@@ -173,15 +197,13 @@ export class PullRequestMonitor {
   }
 
   private settle(poller: Poller, result: PollResult): void {
-    poller.inFlight = false;
-    if (poller.stopped) return;
+    if (poller.phase.type !== "inFlight" || result.type === "stopped") return;
+    poller.phase = { type: "idle", timer: undefined };
     const now = this.now();
     poller.lastSettledAt = now;
     if (result.type === "error") {
       if (result.status === 404) {
-        poller.status = { type: "unavailable", message: result.message };
-        poller.stopped = true;
-        this.notify(poller);
+        this.finish(poller, { type: "unavailable", message: result.message });
         return;
       }
       const failures =
@@ -210,9 +232,7 @@ export class PullRequestMonitor {
       poller.snapshot = result.snapshot;
       const { state, checks } = result.snapshot;
       if (state !== "open" && !checks.some((c) => c.status === "pending")) {
-        poller.status = { type: "finished" };
-        poller.stopped = true;
-        this.notify(poller);
+        this.finish(poller, { type: "finished" });
         return;
       }
       poller.status = { type: "ok", lastPolledAt: now, nextPollAt: now };
@@ -262,16 +282,9 @@ export class PullRequestMonitor {
     const get = async (
       path: string,
     ): Promise<
-      { type: "ok"; body: unknown } | Extract<PollResult, { type: "error" }>
+      { type: "ok"; body: unknown } | PollError | { type: "stopped" }
     > => {
-      if (poller.stopped) {
-        return {
-          type: "error",
-          status: undefined,
-          message: "stopped",
-          retryAfterMs: undefined,
-        };
-      }
+      if (poller.phase.type === "stopped") return { type: "stopped" };
       const cached = poller.cache.get(path);
       const response: GitHubResponse = await this.deps.client.get(
         path,
@@ -295,7 +308,7 @@ export class PullRequestMonitor {
     };
 
     const pull = await get(`${base}/pulls/${number}`);
-    if (pull.type === "error") return pull;
+    if (pull.type !== "ok") return pull;
     const pr = asRecord(pull.body);
     const headSha = str(asRecord(pr.head).sha);
     const paths = [
@@ -308,17 +321,10 @@ export class PullRequestMonitor {
     const bodies: unknown[] = [];
     for (const path of paths) {
       const result = await get(path);
-      if (result.type === "error") return result;
+      if (result.type !== "ok") return result;
       bodies.push(result.body);
     }
-    if (poller.stopped) {
-      return {
-        type: "error",
-        status: undefined,
-        message: "stopped",
-        retryAfterMs: undefined,
-      };
-    }
+    if (poller.phase.type === "stopped") return { type: "stopped" };
     poller.cache = fetched;
     const [checkRuns, combinedStatus, issueComments, reviewComments, reviews] =
       bodies;
@@ -335,7 +341,6 @@ export class PullRequestMonitor {
     };
   }
 }
-
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -367,6 +372,16 @@ export function checkRunStatus(
     default:
       return "failure";
   }
+}
+const REVIEW_STATES: ReadonlyArray<ReviewState> = [
+  "APPROVED",
+  "CHANGES_REQUESTED",
+  "COMMENTED",
+  "DISMISSED",
+  "PENDING",
+];
+function reviewState(state: string): ReviewState | undefined {
+  return REVIEW_STATES.find((s) => s === state);
 }
 function legacyStatus(state: string): CheckStatus {
   if (state === "success") return "success";
@@ -432,8 +447,8 @@ export function normalizeSnapshot(
         body: str(c.body),
         url: str(c.html_url),
         updatedAt: str(c.updated_at),
-        ...(optStr(c.path) ? { path: str(c.path) } : {}),
-        ...(typeof line === "number" ? { line } : {}),
+        path: optStr(c.path),
+        line: typeof line === "number" ? line : undefined,
       };
     }),
     ...reviews.map(
@@ -444,7 +459,7 @@ export function normalizeSnapshot(
         body: str(r.body),
         url: str(r.html_url),
         updatedAt: str(r.submitted_at),
-        ...(optStr(r.state) ? { reviewState: str(r.state) } : {}),
+        reviewState: reviewState(str(r.state)),
       }),
     ),
   ];
