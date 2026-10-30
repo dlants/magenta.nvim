@@ -240,24 +240,25 @@ export class PullRequestSupervisor implements ToolLoopSupervisor {
   }
 
   /** What the next request would deliver for `url`. */
-  getPending(url: string): PullRequestUpdate | undefined {
-    const latest = this.monitor.getSnapshot(url);
-    if (!latest) return undefined;
+  getPending(
+    url: string,
+  ): { snapshot: PullRequestSnapshot; update: PullRequestUpdate } | undefined {
+    const snapshot = this.monitor.getSnapshot(url);
+    if (!snapshot) return undefined;
     const seen = this.getAgentView(url);
-    return seen
-      ? diffSnapshots(seen, latest)
-      : { type: "tracked", snapshot: latest };
+    const update: PullRequestUpdate | undefined = seen
+      ? diffSnapshots(seen, snapshot)
+      : { type: "tracked", snapshot };
+    return update && { snapshot, update };
   }
-
   private pendingUpdates(): Array<{
     url: string;
     snapshot: PullRequestSnapshot;
     update: PullRequestUpdate;
   }> {
     return this.trackedPullRequests.flatMap((url) => {
-      const update = this.getPending(url);
-      const snapshot = this.monitor.getSnapshot(url);
-      return update && snapshot ? [{ url, snapshot, update }] : [];
+      const pending = this.getPending(url);
+      return pending ? [{ url, ...pending }] : [];
     });
   }
 

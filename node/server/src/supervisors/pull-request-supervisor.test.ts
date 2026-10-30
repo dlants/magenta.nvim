@@ -3,11 +3,16 @@ import type { GitHubResponse } from "../capabilities/github-client.ts";
 import type { ThreadId } from "../chat-types.ts";
 import type { ThreadCompactor } from "../compaction/compactor.ts";
 import type { MockStream } from "../providers/mock-anthropic-client.ts";
+import type { PullRequestSnapshot } from "../pull-requests/types.ts";
 import { type Harness, withHarness } from "../test/harness.ts";
 import { created } from "../test-helpers.ts";
 import type { Thread } from "../thread.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
+import {
+  diffSnapshots,
+  pullRequestUpdateToText,
+} from "./pull-request-supervisor.ts";
 
 const URL = "https://github.com/o/r/pull/12";
 const ok = (body: unknown): GitHubResponse => ({
@@ -15,6 +20,7 @@ const ok = (body: unknown): GitHubResponse => ({
   body,
   etag: undefined,
 });
+// Fixtures mirror `gh api` JSON, where absent conclusions are `null`.
 type Run = { name: string; status: string; conclusion: string | null };
 type Comment = { id: number; body: string; updated_at: string };
 
@@ -200,7 +206,9 @@ it("compaction replacement keeps the shared poller warm", () =>
     await pollUntil(() => {
       if (!compactorOf(h, id).current) throw new Error("not compacting");
     });
-    (await h.nextStream()).respond({
+    const compactStream = await h.nextStream();
+    expect(text(compactStream)).not.toContain("# Pull request update");
+    compactStream.respond({
       stopReason: "tool_use",
       text: "Compacting.",
       toolRequests: [
@@ -238,3 +246,59 @@ it("compaction replacement keeps the shared poller warm", () =>
     expect(thread.trackedPullRequests).toEqual([URL]);
     expect(pullCalls(h)).toBe(calls);
   }));
+
+it("deleting the thread unsubscribes from the shared poller", () =>
+  withHarness(opts, async (h) => {
+    script(h);
+    const { id, thread } = await h.createRoot();
+    await mention(h, thread);
+    h.session.deleteThread(id);
+    await pollUntil(() => {
+      if (h.session.pullRequestMonitor?.getStatus(URL) !== undefined)
+        throw new Error("still subscribed");
+    });
+    const calls = pullCalls(h);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(pullCalls(h)).toBe(calls);
+  }));
+
+it("diffs state changes and formats review comments", () => {
+  const base: PullRequestSnapshot = {
+    ref: { url: URL, owner: "o", repo: "r", number: 12 },
+    title: "Fix it",
+    state: "open",
+    draft: false,
+    headSha: "sha1",
+    checks: [{ name: "lint", status: "success", url: undefined }],
+    comments: [],
+    truncated: false,
+  };
+  expect(diffSnapshots(base, { ...base })).toBeUndefined();
+  const merged = diffSnapshots(base, {
+    ...base,
+    state: "merged",
+    comments: [
+      {
+        id: "review_comment:5",
+        kind: "review_comment",
+        author: "bob",
+        body: "nit here",
+        url: "https://c/5",
+        updatedAt: "t1",
+        path: "a.ts",
+        line: 3,
+      },
+    ],
+  });
+  expect(merged).toMatchObject({
+    type: "changed",
+    stateChange: { from: "open", to: "merged" },
+    checks: [],
+  });
+  const rendered = pullRequestUpdateToText({
+    pullRequests: merged ? [merged] : [],
+  });
+  expect(rendered).toContain("merged");
+  expect(rendered).toContain("a.ts:3");
+  expect(rendered).toContain("nit here");
+});
