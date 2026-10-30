@@ -7,7 +7,7 @@ export type GitHubResponse =
       type: "error";
       status: number | undefined;
       message: string;
-      retryAfterMs?: number;
+      retryAfterMs: number | undefined;
     };
 
 export interface GitHubClient {
@@ -34,7 +34,7 @@ const defaultExecFile: ExecFileFn = (file, args) =>
       args,
       { maxBuffer: MAX_BUFFER },
       (error, stdout, stderr) => {
-        const code = (error as { code?: unknown } | null)?.code;
+        const code = error && "code" in error ? error.code : undefined;
         resolve({
           stdout: String(stdout ?? ""),
           stderr: String(stderr ?? ""),
@@ -64,6 +64,7 @@ export class GhCliGitHubClient implements GitHubClient {
         type: "error",
         status: undefined,
         message: e instanceof Error ? e.message : String(e),
+        retryAfterMs: undefined,
       };
     }
   }
@@ -82,6 +83,7 @@ export function parseGhApiOutput(
       message:
         result.stderr.trim() ||
         `gh exited with code ${result.exitCode} and no response`,
+      retryAfterMs: undefined,
     };
   }
   const status = Number(statusMatch[1]);
@@ -117,25 +119,31 @@ export function parseGhApiOutput(
         type: "error",
         status,
         message: `Failed to parse GitHub response: ${e instanceof Error ? e.message : String(e)}`,
+        retryAfterMs: undefined,
       };
     }
   }
 
   let message = `GitHub API returned ${status}`;
   try {
-    const parsed = JSON.parse(bodyText) as { message?: unknown };
-    if (typeof parsed.message === "string") {
+    const parsed: unknown = JSON.parse(bodyText);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "message" in parsed &&
+      typeof parsed.message === "string"
+    ) {
       message += `: ${parsed.message}`;
     }
   } catch {
     // non-JSON error body; keep the status-only message
   }
-  const response: GitHubResponse = { type: "error", status, message };
-  const retryAfterMs = rateLimitDelayMs(status, headers, now);
-  if (retryAfterMs !== undefined) {
-    response.retryAfterMs = retryAfterMs;
-  }
-  return response;
+  return {
+    type: "error",
+    status,
+    message,
+    retryAfterMs: rateLimitDelayMs(status, headers, now),
+  };
 }
 
 function rateLimitDelayMs(

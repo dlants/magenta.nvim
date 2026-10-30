@@ -67,7 +67,7 @@ export type GitHubResponse =
   | { type: "ok"; body: unknown; etag: string | undefined }
   | { type: "not-modified" }
   | { type: "error"; status: number | undefined; message: string;
-      retryAfterMs?: number };
+      retryAfterMs: number | undefined };
 export interface GitHubClient {
   get(path: string, etag: string | undefined): Promise<GitHubResponse>;
 }
@@ -181,7 +181,7 @@ Bottom-of-thread view (always shown when any PR is tracked, replacing the curren
 
 ## GitHub client
 
-Status: DONE. `node/server/src/capabilities/github-client.ts` (`GhCliGitHubClient`, exported `parseGhApiOutput`, injectable `execFile`/`now`), `FakeGitHubClient` in `test/fakes.ts` (`setResponse(path, response | () => Promise)`, `calls`; unscripted paths return a 404 error), tests in `github-client.test.ts`. Decisions: output is parsed from stdout regardless of exit code (gh exits 1 on 304/4xx but still prints the response with `--include`); `retryAfterMs` is only set for 403/429, from `retry-after` seconds or `x-ratelimit-reset` when `x-ratelimit-remaining: 0`.
+Status: DONE. `node/server/src/capabilities/github-client.ts` (`GhCliGitHubClient`, exported `parseGhApiOutput`, injectable `execFile`/`now`), `FakeGitHubClient` in `test/fakes.ts` (`setResponse(path, response | () => Promise)`, `calls`; unscripted paths return a 404 error), tests in `github-client.test.ts`. Decisions: output is parsed from stdout regardless of exit code (gh exits 1 on 304/4xx but still prints the response with `--include`); `retryAfterMs` is a required `number | undefined` field (also changed in the interface above), only defined for 403/429 rate limits, from `retry-after` seconds or `x-ratelimit-reset` when `x-ratelimit-remaining: 0`.
 
 - Goal: `GitHubClient` interface, `GhCliGitHubClient` parsing of `gh api --include` output (status, `etag`, `retry-after`, `x-ratelimit-*`, body), and a `FakeGitHubClient` in `test/fakes.ts` (scripted responses per path, records calls with etags, can be made to fail).
 - Tests:

@@ -163,6 +163,7 @@ export class FakeGitHubClient implements GitHubClient {
         type: "error",
         status: 404,
         message: `no fake response for ${path}`,
+        retryAfterMs: undefined,
       };
     }
     return typeof response === "function" ? response() : response;

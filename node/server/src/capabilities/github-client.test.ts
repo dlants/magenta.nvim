@@ -50,9 +50,45 @@ describe("parseGhApiOutput", () => {
       type: "error",
       status: 404,
       message: "GitHub API returned 404: Not Found",
+      retryAfterMs: undefined,
     });
   });
 
+  it("reports invalid JSON in a 2xx as an error keeping the status", () => {
+    const stdout = "HTTP/2.0 200 OK\r\n\r\n{not json";
+    expect(
+      parseGhApiOutput({ stdout, stderr: "", exitCode: 0 }, NOW),
+    ).toMatchObject({ type: "error", status: 200 });
+  });
+  it("returns an undefined body for an empty 2xx", () => {
+    const stdout = "HTTP/2.0 204 No Content\r\n\r\n";
+    expect(parseGhApiOutput({ stdout, stderr: "", exitCode: 0 }, NOW)).toEqual({
+      type: "ok",
+      body: undefined,
+      etag: undefined,
+    });
+  });
+  it("does not retry a 403 that is not a rate limit", () => {
+    const stdout = `HTTP/2.0 403 Forbidden\r\nX-Ratelimit-Remaining: 10\r\nX-Ratelimit-Reset: ${NOW / 1000 + 60}\r\n\r\n{"message":"Resource not accessible"}`;
+    expect(
+      parseGhApiOutput({ stdout, stderr: "", exitCode: 1 }, NOW),
+    ).toMatchObject({ status: 403, retryAfterMs: undefined });
+  });
+  it("clamps a past rate-limit reset to 0", () => {
+    const stdout = `HTTP/2.0 403 Forbidden\r\nX-Ratelimit-Remaining: 0\r\nX-Ratelimit-Reset: ${NOW / 1000 - 60}\r\n\r\n{}`;
+    expect(
+      parseGhApiOutput({ stdout, stderr: "", exitCode: 1 }, NOW),
+    ).toMatchObject({ status: 403, retryAfterMs: 0 });
+  });
+  it("falls back to a status-only message for a non-JSON error body", () => {
+    const stdout = "HTTP/2.0 502 Bad Gateway\r\n\r\n<html>bad</html>";
+    expect(parseGhApiOutput({ stdout, stderr: "", exitCode: 1 }, NOW)).toEqual({
+      type: "error",
+      status: 502,
+      message: "GitHub API returned 502",
+      retryAfterMs: undefined,
+    });
+  });
   it("reports a non-zero exit with no output", () => {
     expect(
       parseGhApiOutput(
