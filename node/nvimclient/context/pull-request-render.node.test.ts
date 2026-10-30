@@ -92,7 +92,7 @@ describe("renderPullRequests", () => {
         },
       ]),
     ).toBe(
-      `\n# pull requests:\n- ${URL} (open) checks: 1 pending, 1 passed, 1 failed (polled 40s ago)\n  - failed: lint https://ci/lint\n  - [pending update: 1 comment]\n`,
+      `\n# pull requests:\n-  Fix it ${URL} (open) checks: 1 pending, 1 passed, 1 failed (polled 40s ago)\n  - failed: lint https://ci/lint\n  - [pending update: 1 comment]\n`,
     );
   });
 
@@ -119,10 +119,10 @@ describe("renderPullRequests", () => {
       },
     ]);
     expect(text).toContain(
-      `- ${URL} (open) checks: 0 pending, 0 passed, 0 failed\n  - poll failing (3x): boom\n`,
+      `-  Fix it ${URL} (open) checks: 0 pending, 0 passed, 0 failed\n  - poll failing (3x): boom\n`,
     );
     expect(text).toContain(
-      `- ${URL} (merged) checks: 0 pending, 0 passed, 0 failed (no longer polling)\n`,
+      `-  Fix it ${URL} (merged) checks: 0 pending, 0 passed, 0 failed (no longer polling)\n`,
     );
   });
 
@@ -147,7 +147,7 @@ describe("renderPullRequests", () => {
         },
       ]),
     ).toBe(
-      `\n# pull requests:\n- ${URL} (loading)\n- ${URL}\n  - unavailable: gone\n- ${URL}\n  - poll failing (1x): x\n`,
+      `\n# pull requests:\n-  ${URL} (loading)\n-  ${URL}\n  - unavailable: gone\n-  ${URL}\n  - poll failing (1x): x\n`,
     );
   });
 

@@ -11,7 +11,13 @@ import open from "open";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 import type { MagentaOptions } from "../options.ts";
-import { d, type VDOMNode, withBindings, withInlineCode } from "../tea/view.ts";
+import {
+  d,
+  type VDOMNode,
+  withBindings,
+  withExtmark,
+  withInlineCode,
+} from "../tea/view.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import {
   type AbsFilePath,
@@ -232,38 +238,41 @@ export function renderPullRequests(
   now: number = Date.now(),
 ): VDOMNode {
   if (!pullRequests.length) return d``;
-  return d`\n# pull requests:\n${pullRequests.map((pr) => {
-    const { status } = pr;
-    const snapshot = pr.loaded ? pr.snapshot : undefined;
-    const pending = pr.loaded ? pr.pending : undefined;
-    const failed = snapshot?.checks.filter((c) => c.status === "failure") ?? [];
-    const counts = snapshot
-      ? ` checks: ${snapshot.checks.filter((c) => c.status === "pending").length.toString()} pending, ${snapshot.checks.filter((c) => c.status === "success").length.toString()} passed, ${failed.length.toString()} failed`
-      : "";
-    const statusText =
-      status.type === "ok"
-        ? ` (polled ${formatAgo(status.lastPolledAt, now)})`
-        : status.type === "loading"
-          ? " (loading)"
-          : status.type === "finished"
-            ? " (no longer polling)"
-            : "";
-    const state = snapshot ? ` (${snapshot.state})` : "";
-    const title = snapshot ? `${truncateTitle(snapshot.title)} ` : "";
-    const failedLines = failed.map(
-      (c) => d`  - failed: ${c.name}${c.url ? ` ${c.url}` : ""}\n`,
-    );
-    const pendingLine = pending
-      ? d`  - [pending update: ${describeUpdate(pending)}]\n`
-      : d``;
-    const statusLine =
-      status.type === "failing"
-        ? d`  - poll failing (${status.consecutiveFailures.toString()}x): ${status.lastError}\n`
-        : status.type === "unavailable"
-          ? d`  - unavailable: ${status.message}\n`
-          : d``;
-    return d`- ${title}${pr.url}${state}${counts}${statusText}\n${failedLines}${pendingLine}${statusLine}`;
-  })}`;
+  return d`\n${withExtmark(d`# pull requests:`, { hl_group: "@markup.heading.1.markdown" })}\n${pullRequests.map(
+    (pr) => {
+      const { status } = pr;
+      const snapshot = pr.loaded ? pr.snapshot : undefined;
+      const pending = pr.loaded ? pr.pending : undefined;
+      const failed =
+        snapshot?.checks.filter((c) => c.status === "failure") ?? [];
+      const counts = snapshot
+        ? ` checks: ${snapshot.checks.filter((c) => c.status === "pending").length.toString()} pending, ${snapshot.checks.filter((c) => c.status === "success").length.toString()} passed, ${failed.length.toString()} failed`
+        : "";
+      const statusText =
+        status.type === "ok"
+          ? ` (polled ${formatAgo(status.lastPolledAt, now)})`
+          : status.type === "loading"
+            ? " (loading)"
+            : status.type === "finished"
+              ? " (no longer polling)"
+              : "";
+      const state = snapshot ? ` (${snapshot.state})` : "";
+      const title = snapshot ? `${truncateTitle(snapshot.title)} ` : "";
+      const failedLines = failed.map(
+        (c) => d`  - failed: ${c.name}${c.url ? ` ${c.url}` : ""}\n`,
+      );
+      const pendingLine = pending
+        ? d`  - [pending update: ${describeUpdate(pending)}]\n`
+        : d``;
+      const statusLine =
+        status.type === "failing"
+          ? d`  - poll failing (${status.consecutiveFailures.toString()}x): ${status.lastError}\n`
+          : status.type === "unavailable"
+            ? d`  - unavailable: ${status.message}\n`
+            : d``;
+      return d`-  ${title}${pr.url}${state}${counts}${statusText}\n${failedLines}${pendingLine}${statusLine}`;
+    },
+  )}`;
 }
 export function renderContextUpdate(
   contextUpdates: FileUpdates | undefined,

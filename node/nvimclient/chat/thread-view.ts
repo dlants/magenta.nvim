@@ -839,7 +839,11 @@ ${contentView}`;
   const gitRepos = thread.threadState.trackedGitRepos;
   const trackedGitReposView =
     gitRepos.length > 0
-      ? d`\n# git repos:\n${gitRepos.map((root) => d`- ${root}\n`)}`
+      ? d`\n${withExtmark(d`# git repos:`, { hl_group: "@markup.heading.1.markdown" })}\n${gitRepos.map((root) => d`-  ${root}\n`)}`
+      : d``;
+  const bottomSeparatorView =
+    thread.threadState.pullRequests.length > 0 || gitRepos.length > 0
+      ? d`\n${withExtmark(d`${"─".repeat(20)}`, { hl_group: "Comment" })}\n`
       : d``;
   const failedSubmit =
     thread.submission?.type === "failed" ? thread.submission : undefined;
@@ -868,7 +872,7 @@ ${sandboxView}\
 ${pendingMessagesView}${pendingNextMessagesView}\
 ${trailingForkedToView}\
 ${editsAt(-1)}
-${statusView}${pullRequestsView}${trackedGitReposView}`;
+${statusView}${bottomSeparatorView}${pullRequestsView}${trackedGitReposView}`;
 };
 
 /** Render a single content block from a message */
