@@ -119,6 +119,7 @@ export type ProtocolThreadState = {
   contextDeliveries: Readonly<Record<NativeMessageIdx, ContextDelivery>>;
   editedFileGroups: ReadonlyArray<EditedFileGroup>;
   mentionedPullRequests: ReadonlyArray<string>;
+  trackedGitRepos: ReadonlyArray<AbsFilePath>;
   /** The current run, if any, is the last entry with `type: "running"`. */
   compaction: { runs: ReadonlyArray<CompactionRunState> };
   derived: {
@@ -328,6 +329,7 @@ export function threadState(
     contextDeliveries,
     editedFileGroups: thread.editedFileGroups,
     mentionedPullRequests: thread.mentionedPullRequests,
+    trackedGitRepos: thread.trackedGitRepos,
     compaction: { runs: compactor?.runs ?? [] },
     derived: {
       forks: session.listDerived(thread.id, "fork").map((d) => d.threadId),

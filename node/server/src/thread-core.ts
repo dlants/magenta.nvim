@@ -324,6 +324,9 @@ export class ThreadCore {
     return this.contextDeliveries;
   }
 
+  get trackedGitRepos(): ReadonlyArray<AbsFilePath> {
+    return this.gitSupervisor?.gitTracker.trackedRepoRoots ?? [];
+  }
   get mentionedPullRequests(): ReadonlyArray<string> {
     return this.pullRequestScanner.mentionedPullRequests;
   }

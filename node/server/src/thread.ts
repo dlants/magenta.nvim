@@ -76,6 +76,7 @@ import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
+import type { AbsFilePath } from "./utils/files.ts";
 export type { ContextDelivery, ThreadCoreContext, ThreadStatus, YieldState };
 /** What hooks see when no submission is running: nothing can abort them. */
 const RETIRED_CORE_SUPERVISOR: ThreadCoreCallbacks["supervisor"] = {
@@ -221,6 +222,9 @@ export class Thread implements ThreadCoreView {
   }
   get contextDeliveries(): ReadonlyMap<NativeMessageIdx, ContextDelivery> {
     return this.core.contextDeliveryEntries;
+  }
+  get trackedGitRepos(): ReadonlyArray<AbsFilePath> {
+    return this.core.trackedGitRepos;
   }
   get mentionedPullRequests(): ReadonlyArray<string> {
     return this.core.mentionedPullRequests;

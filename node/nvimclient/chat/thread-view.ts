@@ -838,6 +838,11 @@ ${contentView}`;
       ? d`\n# mentioned pull requests:\n${pullRequests.map((url) => d`- ${url}\n`)}`
       : d``;
 
+  const gitRepos = thread.threadState.trackedGitRepos;
+  const trackedGitReposView =
+    gitRepos.length > 0
+      ? d`\n# git repos:\n${gitRepos.map((root) => d`- ${root}\n`)}`
+      : d``;
   const failedSubmit =
     thread.submission?.type === "failed" ? thread.submission : undefined;
   const failedSubmitView =
@@ -865,7 +870,7 @@ ${sandboxView}\
 ${pendingMessagesView}${pendingNextMessagesView}\
 ${trailingForkedToView}\
 ${editsAt(-1)}
-${statusView}${mentionedPullRequestsView}`;
+${statusView}${mentionedPullRequestsView}${trackedGitReposView}`;
 };
 
 /** Render a single content block from a message */

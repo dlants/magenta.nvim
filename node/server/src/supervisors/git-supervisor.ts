@@ -95,6 +95,9 @@ export class GitTracker {
     );
   }
 
+  get trackedRepoRoots(): ReadonlyArray<AbsFilePath> {
+    return [...this.repos.keys()];
+  }
   /** The state the agent last saw, per tracked repo root. */
   getAgentView(): Map<AbsFilePath, GitState | undefined> {
     return new Map(
