@@ -288,6 +288,9 @@ export {
   type PullRequestPollStatus,
 } from "./pull-requests/monitor.ts";
 export type {
+  CheckStatus,
+  PullRequestCheck,
+  PullRequestComment,
   PullRequestRef,
   PullRequestSnapshot,
 } from "./pull-requests/types.ts";
@@ -374,6 +377,11 @@ export {
   gitUpdateToText,
 } from "./supervisors/git-supervisor.ts";
 export { type HistoryIdx, PRE_HISTORY } from "./supervisors/history.ts";
+export type {
+  PullRequestContextUpdate,
+  PullRequestUpdate,
+  PullRequestViewState,
+} from "./supervisors/pull-request-supervisor.ts";
 export {
   type CompactThreadContext,
   type ContextFileAccess,

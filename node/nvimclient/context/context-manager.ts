@@ -2,6 +2,9 @@ import {
   type FileUpdates,
   formatGitHead,
   type GitContextUpdate,
+  type PullRequestContextUpdate,
+  type PullRequestUpdate,
+  type PullRequestViewState,
   type TrackedContextFile,
 } from "@magenta/server";
 import open from "open";
@@ -187,6 +190,72 @@ export function renderGitUpdate(
   })}`;
 }
 
+export function renderPullRequestUpdate(
+  update: PullRequestContextUpdate | undefined,
+): VDOMNode {
+  if (!update) return d``;
+  return d`${update.pullRequests.map((pr) => {
+    if (pr.type === "tracked") {
+      const { snapshot } = pr;
+      return d` pr: ${snapshot.ref.url} tracked (${snapshot.state}, ${snapshot.checks.length.toString()} checks, ${snapshot.comments.length.toString()} comments)\n`;
+    }
+    return d` pr: ${pr.ref.url} ${describeUpdate(pr)}\n`;
+  })}`;
+}
+function describeUpdate(update: PullRequestUpdate): string {
+  if (update.type === "tracked") return "tracked";
+  const parts: string[] = [];
+  if (update.stateChange) parts.push(`now ${update.stateChange.to}`);
+  if (update.headChange)
+    parts.push(`new head ${update.headChange.to.slice(0, 7)}`);
+  if (update.checks.length)
+    parts.push(
+      `${update.checks.length.toString()} check${update.checks.length === 1 ? "" : "s"}`,
+    );
+  if (update.comments.length)
+    parts.push(
+      `${update.comments.length.toString()} comment${update.comments.length === 1 ? "" : "s"}`,
+    );
+  return parts.join(", ");
+}
+function formatAgo(ms: number, now: number): string {
+  return `${Math.max(0, Math.round((now - ms) / 1000)).toString()}s ago`;
+}
+export function renderPullRequests(
+  pullRequests: ReadonlyArray<PullRequestViewState>,
+  now: number = Date.now(),
+): VDOMNode {
+  if (!pullRequests.length) return d``;
+  return d`\n# pull requests:\n${pullRequests.map((pr) => {
+    const { snapshot, status, pending } = pr;
+    const failed = snapshot?.checks.filter((c) => c.status === "failure") ?? [];
+    const counts = snapshot
+      ? ` checks: ${snapshot.checks.filter((c) => c.status === "pending").length.toString()} pending, ${snapshot.checks.filter((c) => c.status === "success").length.toString()} passed, ${failed.length.toString()} failed`
+      : "";
+    const statusText =
+      status.type === "ok"
+        ? ` (polled ${formatAgo(status.lastPolledAt, now)})`
+        : status.type === "loading"
+          ? " (loading)"
+          : status.type === "finished"
+            ? " (no longer polling)"
+            : "";
+    const state = snapshot ? ` (${snapshot.state})` : "";
+    const failedLines = failed.map(
+      (c) => d`  - failed: ${c.name}${c.url ? ` ${c.url}` : ""}\n`,
+    );
+    const pendingLine = pending
+      ? d`  - [pending update: ${describeUpdate(pending)}]\n`
+      : d``;
+    const statusLine =
+      status.type === "failing"
+        ? d`  - poll failing (${status.consecutiveFailures.toString()}x): ${status.lastError}\n`
+        : status.type === "unavailable"
+          ? d`  - unavailable: ${status.message}\n`
+          : d``;
+    return d`- ${pr.url}${state}${counts}${statusText}\n${failedLines}${pendingLine}${statusLine}`;
+  })}`;
+}
 export function renderContextUpdate(
   contextUpdates: FileUpdates | undefined,
   files: ReadonlyArray<TrackedContextFile>,

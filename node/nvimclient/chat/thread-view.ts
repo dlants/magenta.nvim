@@ -32,6 +32,8 @@ import {
   contextFilesView,
   renderContextUpdate,
   renderGitUpdate,
+  renderPullRequests,
+  renderPullRequestUpdate,
 } from "../context/context-manager.ts";
 import { notify } from "../nvim/nvim.ts";
 import type {
@@ -778,7 +780,7 @@ ${contextFilesView(contextFilesData(thread), contextViewCtx(thread), {
         )
       : d``;
 
-    const gitUpdateView = renderGitUpdate(delivery?.git);
+    const gitUpdateView = d`${renderGitUpdate(delivery?.git)}${renderPullRequestUpdate(delivery?.pullRequests)}`;
 
     // Render content blocks. For user messages we render auto-generated meta
     // blocks (system_reminder, system_info) before the user's own text so the
@@ -832,11 +834,7 @@ ${contentView}`;
     ? d`\n${renderStreamingBlock(thread)}\n`
     : d``;
 
-  const pullRequests = thread.threadState.mentionedPullRequests;
-  const mentionedPullRequestsView =
-    pullRequests.length > 0
-      ? d`\n# mentioned pull requests:\n${pullRequests.map((url) => d`- ${url}\n`)}`
-      : d``;
+  const pullRequestsView = renderPullRequests(thread.threadState.pullRequests);
 
   const gitRepos = thread.threadState.trackedGitRepos;
   const trackedGitReposView =
@@ -870,7 +868,7 @@ ${sandboxView}\
 ${pendingMessagesView}${pendingNextMessagesView}\
 ${trailingForkedToView}\
 ${editsAt(-1)}
-${statusView}${mentionedPullRequestsView}${trackedGitReposView}`;
+${statusView}${pullRequestsView}${trackedGitReposView}`;
 };
 
 /** Render a single content block from a message */

@@ -231,6 +231,8 @@ Review follow-up: `ThreadCoreContext` bundles `pullRequestTracking?: { monitor, 
 
 ## Protocol and view
 
+Status: DONE. `PullRequestSupervisor.getViewState()` builds `PullRequestViewState[]` (status defaults to `loading` before the monitor has one); `Thread.pullRequests` exposes it and protocol `ProtocolThreadState.pullRequests` replaces `mentionedPullRequests` (removed from Thread/ThreadCore; the scanner keeps its getter). PR types exported from the server barrel. Client: `renderPullRequests` (bottom `# pull requests:` section: state, check counts, `polled Ns ago`/`loading`/`no longer polling`, failed checks with URLs, `[pending update: ...]`, `poll failing (Nx)`/`unavailable`) and `renderPullRequestUpdate` (one ` pr:` line per delivered update, next to the git line) in `context/context-manager.ts`. Tests: tier A in `supervisors/pull-request-supervisor.test.ts` (protocol state through snapshot, pending, failing keeps snapshot), tier C `chat/pull-requests.test.ts`, which swaps the in-process monitor's client for a `FakeGitHubClient` via white-box `setGitHubClient` in server `test-helpers.ts`. Baseline nvim failures unchanged (thread.test @diff/@staged/followup/tool-use, spawn-subagents; script-e2e flakes only under full-run load).
+
 - Goal: `pullRequests: PullRequestViewState[]` in thread protocol state; bottom section with check counts, failed check names + URLs, pending-update marker, poll status; inline rendering of delivered PR updates (like `renderGitUpdate`).
 - Tests:
   - tier A: protocol thread state reflects snapshot, pending update and status transitions.

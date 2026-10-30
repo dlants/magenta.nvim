@@ -373,9 +373,6 @@ export class ThreadCore {
   get trackedGitRepos(): ReadonlyArray<AbsFilePath> {
     return this.gitSupervisor?.gitTracker.trackedRepoRoots ?? [];
   }
-  get mentionedPullRequests(): ReadonlyArray<string> {
-    return this.pullRequestScanner.mentionedPullRequests;
-  }
 
   private handleUpdate(): void {
     this.callbacks.onUpdate();

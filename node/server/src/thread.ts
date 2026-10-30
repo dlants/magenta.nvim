@@ -35,6 +35,7 @@ import {
   type FileSupervisor,
   type Files,
 } from "./supervisors/file-supervisor.ts";
+import type { PullRequestViewState } from "./supervisors/pull-request-supervisor.ts";
 import {
   ABORTED,
   type Aborted,
@@ -226,8 +227,8 @@ export class Thread implements ThreadCoreView {
   get trackedGitRepos(): ReadonlyArray<AbsFilePath> {
     return this.core.trackedGitRepos;
   }
-  get mentionedPullRequests(): ReadonlyArray<string> {
-    return this.core.mentionedPullRequests;
+  get pullRequests(): PullRequestViewState[] {
+    return this.core.pullRequestSupervisor?.getViewState() ?? [];
   }
   get trackedPullRequests(): ReadonlyArray<string> {
     return this.core.pullRequestSupervisor?.trackedPullRequests ?? [];

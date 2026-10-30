@@ -1,5 +1,8 @@
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
-import type { PullRequestMonitor } from "../pull-requests/monitor.ts";
+import type {
+  PullRequestMonitor,
+  PullRequestPollStatus,
+} from "../pull-requests/monitor.ts";
 import type {
   CheckStatus,
   PullRequestCheck,
@@ -32,6 +35,13 @@ export type PullRequestUpdate =
       comments: Array<{ comment: PullRequestComment; edited: boolean }>;
     };
 export type PullRequestContextUpdate = { pullRequests: PullRequestUpdate[] };
+export type PullRequestViewState = {
+  url: string;
+  snapshot: PullRequestSnapshot | undefined;
+  status: PullRequestPollStatus;
+  /** What the next request would deliver. */
+  pending: PullRequestUpdate | undefined;
+};
 
 export function diffSnapshots(
   seen: PullRequestSnapshot,
@@ -234,6 +244,14 @@ export class PullRequestSupervisor implements ToolLoopSupervisor {
     return [...this.subscriptions.keys()];
   }
 
+  getViewState(): PullRequestViewState[] {
+    return this.trackedPullRequests.map((url) => ({
+      url,
+      snapshot: this.monitor.getSnapshot(url),
+      status: this.monitor.getStatus(url) ?? { type: "loading" },
+      pending: this.getPending(url)?.update,
+    }));
+  }
   /** The snapshot the agent last saw for `url`. */
   getAgentView(url: string): PullRequestSnapshot | undefined {
     return this.histories.get(url)?.at(-1)?.snapshot;

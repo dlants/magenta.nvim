@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
+import type { GitHubClient } from "./capabilities/github-client.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { CompactionOutcome, Compactor } from "./compaction/index.ts";
 import type { EdlRegisters } from "./edl/index.ts";
@@ -34,6 +35,7 @@ import type {
   ProviderToolSpec,
 } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
+import type { PullRequestMonitor } from "./pull-requests/monitor.ts";
 import type { Session, SessionThread } from "./session.ts";
 import {
   type ResolvedSubmission,
@@ -619,4 +621,13 @@ export function setLastAttentionTime(
   const record = session.getThread(id);
   if (!record) throw new Error(`unknown thread ${id}`);
   (record as SessionThread).lastAttentionTime = time;
+}
+
+/** White-box: swap the GitHub client a monitor polls through. */
+export function setGitHubClient(
+  monitor: PullRequestMonitor,
+  client: GitHubClient,
+): void {
+  (monitor as unknown as { deps: { client: GitHubClient } }).deps.client =
+    client;
 }
