@@ -39,7 +39,7 @@ it("chat render and a few updates", async () => {
           value: {
             id: toolRequestId,
             toolName: "bash_command" as ToolName,
-            input: { command: "echo 'Hello from bash!'" },
+            input: { description: "test", command: "echo 'Hello from bash!'" },
           },
         },
       ],

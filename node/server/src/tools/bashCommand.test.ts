@@ -38,7 +38,7 @@ function createTool(command: string, shellResult: ShellResult) {
     {
       id: "tool_1" as ToolRequestId,
       toolName: "bash_command" as const,
-      input: { command },
+      input: { description: "test", command },
     },
     { shell, requestRender },
   );
@@ -283,7 +283,7 @@ describe("bashCommand unit tests", () => {
       {
         id: "tool_1" as ToolRequestId,
         toolName: "bash_command" as const,
-        input: { command: "sleep 60" },
+        input: { description: "d", command: "sleep 60" },
       },
       { shell, requestRender },
     );
@@ -328,7 +328,7 @@ describe("bashCommand unit tests", () => {
       {
         id: "tool_1" as ToolRequestId,
         toolName: "bash_command" as const,
-        input: { command: "sleep 60" },
+        input: { description: "d", command: "sleep 60" },
       },
       { shell, requestRender },
     );
@@ -353,10 +353,65 @@ describe("bashCommand unit tests", () => {
   });
 
   it("validateInput accepts valid command", () => {
-    const result = BashCommand.validateInput({ command: "echo hello" });
+    const result = BashCommand.validateInput({
+      description: "d",
+      command: "echo hello",
+    });
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       expect(result.value.command).toBe("echo hello");
     }
+  });
+  it("validateInput requires a non-empty description", () => {
+    expect(BashCommand.validateInput({ command: "x" }).status).toBe("error");
+    expect(
+      BashCommand.validateInput({ description: " ", command: "x" }).status,
+    ).toBe("error");
+  });
+  it("validateInput accepts timeoutSeconds within bounds", () => {
+    const result = BashCommand.validateInput({
+      description: "d",
+      command: "x",
+      timeoutSeconds: 3600,
+    });
+    expect(result).toEqual({
+      status: "ok",
+      value: { description: "d", command: "x", timeoutSeconds: 3600 },
+    });
+  });
+  it("validateInput rejects out-of-range timeoutSeconds", () => {
+    for (const timeoutSeconds of [0, -1, 86401, "60"]) {
+      expect(
+        BashCommand.validateInput({
+          description: "d",
+          command: "x",
+          timeoutSeconds,
+        }).status,
+      ).toBe("error");
+    }
+  });
+  it("passes timeoutSeconds to the shell in ms, defaulting to 5 min", async () => {
+    const execute = vi.fn<Shell["execute"]>(() =>
+      Promise.resolve({
+        exitCode: 0,
+        signal: undefined,
+        output: [],
+        logFilePath: undefined,
+        durationMs: 0,
+      }),
+    );
+    const shell: Shell = { execute, terminate: vi.fn() };
+    for (const input of [
+      { description: "d", command: "a" },
+      { description: "d", command: "b", timeoutSeconds: 7200 },
+    ]) {
+      await BashCommand.execute(
+        { id: "t" as ToolRequestId, toolName: "bash_command" as const, input },
+        { shell, requestRender: vi.fn() },
+      ).promise;
+    }
+    expect(execute.mock.calls.map(([, opts]) => opts.timeoutMs)).toEqual([
+      300_000, 7_200_000,
+    ]);
   });
 });

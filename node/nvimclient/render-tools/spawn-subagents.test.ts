@@ -219,6 +219,7 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
               id: "test-bash-command" as ToolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "echo 'Hello from subagent'",
               },
             },
@@ -862,7 +863,7 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
             value: {
               id: "child-bash" as ToolRequestId,
               toolName: "bash_command" as ToolName,
-              input: { command: "cat .secret" },
+              input: { description: "test", command: "cat .secret" },
             },
           },
         ],

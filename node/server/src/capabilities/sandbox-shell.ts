@@ -11,7 +11,12 @@ import {
   type ProjectDir,
 } from "../utils/files.ts";
 import type { SandboxViolationHandler } from "./sandbox-violation-handler.ts";
-import type { OutputLine, Shell, ShellResult } from "./shell.ts";
+import {
+  DEFAULT_SHELL_TIMEOUT_MS,
+  type OutputLine,
+  type Shell,
+  type ShellResult,
+} from "./shell.ts";
 import {
   createLogWriter,
   escalateToSigkill,
@@ -100,6 +105,7 @@ export class SandboxShell implements Shell {
       toolRequestId: string;
       onOutput?: (line: OutputLine) => void;
       onStart?: () => void;
+      timeoutMs?: number;
     },
   ): Promise<ShellResult> {
     const logWriter = createLogWriter(
@@ -148,7 +154,7 @@ export class SandboxShell implements Shell {
             reject(error);
           });
         }),
-        300000,
+        opts.timeoutMs ?? DEFAULT_SHELL_TIMEOUT_MS,
       );
 
       const durationMs = Date.now() - startTime;
@@ -200,6 +206,7 @@ export class SandboxShell implements Shell {
       toolRequestId: string;
       onOutput?: (line: OutputLine) => void;
       onStart?: () => void;
+      timeoutMs?: number;
     },
   ): Promise<ShellResult> {
     if (this.context.isBypassed()) {
@@ -308,6 +315,7 @@ export class SandboxShell implements Shell {
       toolRequestId: string;
       onOutput?: (line: OutputLine) => void;
       onStart?: () => void;
+      timeoutMs?: number;
     },
     store: ReturnType<Sandbox["getViolationStore"]>,
     preCount: number,

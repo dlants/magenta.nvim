@@ -67,6 +67,7 @@ describe("pending approvals surfaced in parent thread", () => {
               id: "bash-1" as ToolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "mkdir test-approval-dir",
               },
             },
@@ -196,6 +197,7 @@ describe("pending approvals surfaced in parent thread", () => {
               id: "bash-1" as ToolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "mkdir test-auto-approve-dir",
               },
             },
@@ -293,6 +295,7 @@ describe("pending approvals surfaced in parent thread", () => {
                 id: "bash-3" as ToolRequestId,
                 toolName: "bash_command" as ToolName,
                 input: {
+                  description: "test",
                   command: "mkdir test-subagents-dir",
                 },
               },

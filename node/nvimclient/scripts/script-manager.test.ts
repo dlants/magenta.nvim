@@ -275,7 +275,7 @@ it("surfaces a spawned thread's pending permission under a collapsed script row 
             value: {
               id: "bash-tool" as ToolRequestId,
               toolName: "bash_command" as ToolName,
-              input: { command: "echo hi" },
+              input: { description: "test", command: "echo hi" },
             },
           },
         ],
@@ -349,7 +349,7 @@ it("toggling the invocation sandbox approves a spawned thread's pending permissi
             value: {
               id: "bash-tool" as ToolRequestId,
               toolName: "bash_command" as ToolName,
-              input: { command: "echo hi" },
+              input: { description: "test", command: "echo hi" },
             },
           },
         ],

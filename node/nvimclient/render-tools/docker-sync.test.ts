@@ -86,6 +86,7 @@ describe("docker subagent file sync", () => {
                   id: "test-docker-bash" as ToolRequestId,
                   toolName: "bash_command" as ToolName,
                   input: {
+                    description: "test",
                     command:
                       'echo "modified" > /workspace/test-file.txt && echo "new content" > /workspace/new-file.txt',
                   },
@@ -214,6 +215,7 @@ describe("docker subagent file sync", () => {
                   id: "test-options-bash" as ToolRequestId,
                   toolName: "bash_command" as ToolName,
                   input: {
+                    description: "test",
                     command:
                       'echo \'{"container":{"dockerfile":"Dockerfile","workspacePath":"/workspace"},"sandbox":{"filesystem":{"allowWrite":["/"]},"denyWrite":[]}}\' > /workspace/.magenta/options.json',
                   },

@@ -27,7 +27,7 @@ function respondBash(stream: MockStream, id: string) {
         value: {
           id: id as ToolRequestId,
           toolName: "bash_command" as ToolName,
-          input: { command: "slow" },
+          input: { description: "test", command: "slow" },
         },
       },
     ],

@@ -162,7 +162,7 @@ it("auto-respond combines the standing and bash reminders into a single block", 
             value: {
               id: "tool_long" as ToolRequestId,
               toolName: "bash_command" as ToolName,
-              input: { command: "long-output" },
+              input: { description: "test", command: "long-output" },
             },
           },
         ],

@@ -27,6 +27,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "echo 'Hello from Magenta!'",
               },
             },
@@ -70,6 +71,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "nonexistentcommand",
               },
             },
@@ -114,6 +116,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: 'true && echo "hello, world"',
               },
             },
@@ -165,6 +168,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "true && ls -la",
               },
             },
@@ -208,6 +212,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "dangerous-command",
               },
             },
@@ -256,6 +261,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "sleep 30",
               },
             },
@@ -301,6 +307,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "sleep 30",
               },
             },
@@ -360,6 +367,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: appendCmd,
               },
             },
@@ -412,6 +420,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: `echo "${longText}"`,
               },
             },
@@ -482,6 +491,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: commandWithCd,
               },
             },
@@ -519,6 +529,7 @@ describe("bash command output logging", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: 'echo "test output"',
               },
             },
@@ -574,6 +585,7 @@ describe("bash command output logging", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command,
               },
             },
@@ -637,6 +649,7 @@ describe("bash command output logging", () => {
               id: toolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "exit 1",
               },
             },

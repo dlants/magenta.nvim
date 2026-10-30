@@ -1,7 +1,12 @@
 import { spawn } from "node:child_process";
 import type { ThreadId } from "../chat-types.ts";
 import { withTimeout } from "../utils/async.ts";
-import type { OutputLine, Shell, ShellResult } from "./shell.ts";
+import {
+  DEFAULT_SHELL_TIMEOUT_MS,
+  type OutputLine,
+  type Shell,
+  type ShellResult,
+} from "./shell.ts";
 import {
   createLogWriter,
   escalateToSigkill,
@@ -38,6 +43,7 @@ export class DockerShell implements Shell {
       toolRequestId: string;
       onOutput?: (line: OutputLine) => void;
       onStart?: () => void;
+      timeoutMs?: number;
     },
   ): Promise<ShellResult> {
     const logWriter = createLogWriter(
@@ -85,7 +91,7 @@ export class DockerShell implements Shell {
             reject(error);
           });
         }),
-        300000,
+        opts.timeoutMs ?? DEFAULT_SHELL_TIMEOUT_MS,
       );
 
       const durationMs = Date.now() - startTime;

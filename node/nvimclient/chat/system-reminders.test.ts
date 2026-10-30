@@ -106,7 +106,7 @@ test("auto-respond combines the standing and bash reminders into a single system
           value: {
             id: "tool_long" as ToolRequestId,
             toolName: "bash_command" as ToolName,
-            input: { command: `echo "${longArg}"` },
+            input: { description: "test", command: `echo "${longArg}"` },
           },
         },
       ],

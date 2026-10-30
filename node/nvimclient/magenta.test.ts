@@ -110,6 +110,7 @@ it("abort command should stop pending tool use", async () => {
             id: "request_id" as ToolRequestId,
             toolName: "bash_command" as ToolName,
             input: {
+              description: "test",
               command: "cat .secret",
             },
           },
@@ -301,6 +302,7 @@ it("should use project settings to allow bash commands without permission", asyn
               id: "bash_cmd_1" as ToolRequestId,
               toolName: "bash_command" as ToolName,
               input: {
+                description: "test",
                 command: "echo 'hello world'",
               },
             },

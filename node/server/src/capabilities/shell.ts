@@ -5,6 +5,7 @@ export interface Shell {
       toolRequestId: string;
       onOutput?: (line: OutputLine) => void;
       onStart?: () => void;
+      timeoutMs?: number;
     },
   ): Promise<ShellResult>;
   terminate(): void;
@@ -22,3 +23,5 @@ export type OutputLine = {
   stream: "stdout" | "stderr";
   text: string;
 };
+
+export const DEFAULT_SHELL_TIMEOUT_MS = 300_000;

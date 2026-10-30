@@ -3216,6 +3216,7 @@ describe("structured tool result ownership", () => {
     });
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(requestId, "bash_command" as ToolName, {
+      description: "test",
       command: "echo hi",
     });
     stream.finishResponse("tool_use");
@@ -3228,7 +3229,7 @@ describe("structured tool result ownership", () => {
       request: {
         id: requestId,
         toolName: "bash_command",
-        input: { command: "echo hi" },
+        input: { description: "test", command: "echo hi" },
       },
       result: { type: "tool_result", id: requestId, result: { status: "ok" } },
       structuredResult: {
@@ -3267,7 +3268,7 @@ describe("Agent bash summary reminder", () => {
     stream.streamToolUse(
       "tool-bash-1" as ToolRequestId,
       "bash_command" as ToolName,
-      { command: "echo hi" },
+      { description: "test", command: "echo hi" },
     );
     stream.finishResponse("tool_use");
 
@@ -3300,7 +3301,7 @@ describe("Agent bash summary reminder", () => {
     stream.streamToolUse(
       "tool-bash-1" as ToolRequestId,
       "bash_command" as ToolName,
-      { command: "echo hi" },
+      { description: "test", command: "echo hi" },
     );
     // High output tokens to also fire the standing reminder gate.
     stream.finishResponse("tool_use", { inputTokens: 1, outputTokens: 5000 });
@@ -3357,7 +3358,7 @@ describe("Agent bash summary reminder", () => {
     stream1.streamToolUse(
       "tool-bash-1" as ToolRequestId,
       "bash_command" as ToolName,
-      { command: "echo hi" },
+      { description: "test", command: "echo hi" },
     );
     stream1.finishResponse("tool_use", { inputTokens: 1, outputTokens: 10 });
 
@@ -3374,7 +3375,7 @@ describe("Agent bash summary reminder", () => {
     stream2.streamToolUse(
       "tool-bash-2" as ToolRequestId,
       "bash_command" as ToolName,
-      { command: "echo hi" },
+      { description: "test", command: "echo hi" },
     );
     stream2.finishResponse("tool_use", { inputTokens: 1, outputTokens: 10 });
 
@@ -3396,7 +3397,7 @@ describe("Agent bash summary reminder", () => {
     stream3.streamToolUse(
       "tool-bash-3" as ToolRequestId,
       "bash_command" as ToolName,
-      { command: "echo hi" },
+      { description: "test", command: "echo hi" },
     );
     stream3.finishResponse("tool_use", { inputTokens: 1, outputTokens: 10 });
 

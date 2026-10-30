@@ -55,8 +55,12 @@ export function renderStreamdedTool(
         streamingBlock.inputJson,
         "command",
       );
-      if (command !== undefined) {
-        return d`⚡\n${withCode(d`${abridgeStreamedText(command)}`)}`;
+      const description = extractPartialJsonStringValue(
+        streamingBlock.inputJson,
+        "description",
+      );
+      if (command !== undefined || description !== undefined) {
+        return d`${description ? d`${description}\n` : d``}⚡\n${withCode(d`${abridgeStreamedText(command ?? "")}`)}`;
       }
       break;
     }

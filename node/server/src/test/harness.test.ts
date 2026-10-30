@@ -137,6 +137,7 @@ function runBash(
       "bash-1" as ToolRequestId,
       "bash_command" as ToolName,
       {
+        description: "test",
         command,
       },
     );

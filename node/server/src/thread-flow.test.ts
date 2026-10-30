@@ -40,7 +40,7 @@ function bashRequest(id: string, command: string) {
     value: {
       id: id as ToolRequestId,
       toolName: "bash_command" as ToolName,
-      input: { command },
+      input: { description: "test", command },
     },
   };
 }

@@ -10,7 +10,7 @@ import type { Result } from "../utils/result.ts";
 
 const BASE_DESCRIPTION = `Run a command in a bash shell.
 For example, you can run \`ls\`, \`echo 'Hello, World!'\`, or \`git status\`.
-The command will time out after 1 min.
+The command times out after 5 min by default. Set \`timeoutSeconds\` (max 86400) for commands that intentionally block for a long time, such as a script that waits for an external condition. Such scripts should poll at a modest cadence rather than spinning.
 You should not run commands that require user input, such as \`git commit\` without \`-m\` or \`ssh\`.
 You should not run commands that do not halt, such as \`docker compose up\` without \`-d\`, \`tail -f\` or \`watch\`.
 
@@ -18,6 +18,8 @@ Long output will be abbreviated (first 10 + last 20 lines). Full output is saved
 You will get the stdout and stderr of the command, as well as the exit code, so you do not need to do stream redirects like "2>&1".
 `;
 
+const DEFAULT_TIMEOUT_SECONDS = 300;
+const MAX_TIMEOUT_SECONDS = 86400;
 export function getSpec(): ProviderToolSpec {
   const description = BASE_DESCRIPTION;
 
@@ -27,12 +29,21 @@ export function getSpec(): ProviderToolSpec {
     input_schema: {
       type: "object",
       properties: {
+        description: {
+          type: "string",
+          description:
+            "A short (5-10 word) description of what the command does and why, shown to the user above the command.",
+        },
         command: {
           type: "string",
           description: "The command to run in the terminal",
         },
+        timeoutSeconds: {
+          type: "number",
+          description: `Timeout in seconds. Defaults to ${DEFAULT_TIMEOUT_SECONDS}, max ${MAX_TIMEOUT_SECONDS}.`,
+        },
       },
-      required: ["command"],
+      required: ["description", "command"],
     },
   };
 }
@@ -40,7 +51,9 @@ export function getSpec(): ProviderToolSpec {
 export const spec: ProviderToolSpec = getSpec();
 
 export type Input = {
+  description: string;
   command: string;
+  timeoutSeconds?: number;
 };
 export type StructuredResult = {
   toolName: "bash_command";
@@ -62,10 +75,30 @@ export function validateInput(args: { [key: string]: unknown }): Result<Input> {
     };
   }
 
+  if (typeof args.description !== "string" || args.description.trim() === "") {
+    return {
+      status: "error",
+      error: "Expected description to be a non-empty string",
+    };
+  }
+  const { timeoutSeconds } = args;
+  if (
+    timeoutSeconds !== undefined &&
+    (typeof timeoutSeconds !== "number" ||
+      !(timeoutSeconds > 0) ||
+      timeoutSeconds > MAX_TIMEOUT_SECONDS)
+  ) {
+    return {
+      status: "error",
+      error: `Expected timeoutSeconds to be a number in (0, ${MAX_TIMEOUT_SECONDS}] but got ${JSON.stringify(timeoutSeconds)}`,
+    };
+  }
   return {
     status: "ok",
     value: {
+      description: args.description,
       command: args.command,
+      ...(timeoutSeconds !== undefined ? { timeoutSeconds } : {}),
     },
   };
 }
@@ -246,6 +279,8 @@ export function execute(
   const promise = context.shell
     .execute(sanitizedCommand, {
       toolRequestId: request.id,
+      timeoutMs:
+        (request.input.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
       onOutput: (line) => {
         progress.liveOutput.push(line);
         context.requestRender();

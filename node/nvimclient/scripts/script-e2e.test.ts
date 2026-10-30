@@ -221,7 +221,7 @@ it("bell behavior: pending-approval bells propagate to script+neovim, yields don
             value: {
               id: "bash-1" as ToolRequestId,
               toolName: "bash_command" as ToolName,
-              input: { command: "mkdir bell-test-dir" },
+              input: { description: "test", command: "mkdir bell-test-dir" },
             },
           },
         ],

@@ -65,6 +65,7 @@ it("projects tools, context, edits and compaction as serializable thread state",
     const { id, thread } = await h.createRoot();
     const done = h.send(thread, "look at @file:a.txt");
     respondTool(await h.nextStream(), "bash1", "bash_command", {
+      description: "test",
       command: "slow",
     });
     await pollUntil(() => {

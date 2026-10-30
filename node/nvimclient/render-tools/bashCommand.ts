@@ -28,9 +28,15 @@ type BashProgress = BashCommand.BashProgress;
 
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 
+// description is optional here: threads persisted before it was required lack it.
 type Input = {
   command: string;
+  description?: string;
+  timeoutSeconds?: number;
 };
+function renderDescription(input: Input): VDOMNode {
+  return input.description ? d`${input.description}\n` : d``;
+}
 
 export type RenderContext = {
   getDisplayWidth: () => number;
@@ -50,7 +56,7 @@ export function renderSummary(
   _displayContext: DisplayContext,
 ): VDOMNode {
   const input = request.input as Input;
-  return d`⚡ ${withInlineCode(d`\`${input.command}\``)}`;
+  return d`${renderDescription(input)}⚡ ${withInlineCode(d`\`${input.command}\``)}`;
 }
 
 export function renderInput(
@@ -62,7 +68,7 @@ export function renderInput(
 }
 
 export function renderProgress(
-  _request: UnionToolRequest,
+  request: UnionToolRequest,
   progress: BashProgress,
   context: RenderContext,
   expanded: boolean,
@@ -70,7 +76,8 @@ export function renderProgress(
   let timing: VDOMNode | undefined;
   if (progress.startTime !== undefined) {
     context.requestTick();
-    timing = d`(${String(Math.floor((Date.now() - progress.startTime) / 1000))}s / 300s) `;
+    const timeoutSeconds = (request.input as Input).timeoutSeconds ?? 300;
+    timing = d`(${String(Math.floor((Date.now() - progress.startTime) / 1000))}s / ${String(timeoutSeconds)}s) `;
   }
 
   if (!expanded) {
@@ -208,7 +215,7 @@ function renderResultDetail(
   const outputText = sr ? sr.outputText : firstValue.text;
   const logFileView = renderLogFileLink(sr, context);
 
-  return d`command: ${withInlineCode(d`\`${input.command}\``)}
+  return d`${renderDescription(input)}command: ${withInlineCode(d`\`${input.command}\``)}
 ${withCode(d`${outputText}`)}${logFileView}`;
 }
 

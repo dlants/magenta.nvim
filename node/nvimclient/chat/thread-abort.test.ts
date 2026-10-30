@@ -25,7 +25,7 @@ it("clears pending file permission checks when aborting", async () => {
           value: {
             id: toolRequestId,
             toolName: "bash_command" as ToolName,
-            input: { command: "cat .secret" },
+            input: { description: "test", command: "cat .secret" },
           },
         },
       ],
@@ -74,7 +74,7 @@ it("clears pending permissions when sending a new message during tool_use", asyn
           value: {
             id: "bash-tool" as ToolRequestId,
             toolName: "bash_command" as ToolName,
-            input: { command: "cat .secret" },
+            input: { description: "test", command: "cat .secret" },
           },
         },
       ],
@@ -223,7 +223,7 @@ it("aborting one running tool leaves the rest of the batch running", async () =>
         value: {
           id,
           toolName: "bash_command" as ToolName,
-          input: { command: `sleep ${30 + i}` },
+          input: { description: "test", command: `sleep ${30 + i}` },
         },
       })),
     });
