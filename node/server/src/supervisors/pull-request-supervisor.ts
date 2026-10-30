@@ -55,14 +55,26 @@ export function diffSnapshots(
   latest: PullRequestSnapshot,
 ): PullRequestUpdate | undefined {
   const headChanged = seen.headSha !== latest.headSha;
-  const seenChecks = new Map(seen.checks.map((c) => [c.name, c.status]));
+  // Check names aren't unique (e.g. the same job in several workflow runs), so
+  // keying by name alone flip-flops between duplicates and re-reports forever.
+  const checkKey = (c: PullRequestCheck) => `${c.name}\0${c.url ?? ""}`;
+  const seenByKey = new Map(seen.checks.map((c) => [checkKey(c), c.status]));
+  const seenNameCounts = new Map<string, number>();
+  for (const c of seen.checks) {
+    seenNameCounts.set(c.name, (seenNameCounts.get(c.name) ?? 0) + 1);
+  }
+  const seenByUniqueName = new Map(
+    seen.checks
+      .filter((c) => seenNameCounts.get(c.name) === 1)
+      .map((c) => [c.name, c.status]),
+  );
+  const previousStatus = (c: PullRequestCheck) =>
+    seenByKey.get(checkKey(c)) ?? seenByUniqueName.get(c.name);
   const checks = latest.checks
-    .filter(
-      (check) => headChanged || seenChecks.get(check.name) !== check.status,
-    )
+    .filter((check) => headChanged || previousStatus(check) !== check.status)
     .map((check) => ({
       check,
-      previous: headChanged ? undefined : seenChecks.get(check.name),
+      previous: headChanged ? undefined : previousStatus(check),
     }));
   const seenComments = new Map(seen.comments.map((c) => [c.id, c.updatedAt]));
   const comments = latest.comments.flatMap((comment) => {
