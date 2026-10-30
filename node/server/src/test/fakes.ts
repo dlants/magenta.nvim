@@ -1,4 +1,8 @@
 import type { GitClient, GitState } from "../capabilities/git-client.ts";
+import type {
+  GitHubClient,
+  GitHubResponse,
+} from "../capabilities/github-client.ts";
 import type { OutputLine, Shell, ShellResult } from "../capabilities/shell.ts";
 import type {
   ClientEffectHandler,
@@ -133,5 +137,34 @@ export class FakeClient implements ClientEffectHandler {
   }
   notify(n: ClientNotification): void {
     this.inner.notify(n);
+  }
+}
+
+/** Scripted GitHub client: responses are keyed by path; unscripted paths fail. */
+export class FakeGitHubClient implements GitHubClient {
+  calls: Array<{ path: string; etag: string | undefined }> = [];
+  responses = new Map<
+    string,
+    GitHubResponse | (() => Promise<GitHubResponse>)
+  >();
+
+  setResponse(
+    path: string,
+    response: GitHubResponse | (() => Promise<GitHubResponse>),
+  ): void {
+    this.responses.set(path, response);
+  }
+
+  async get(path: string, etag: string | undefined): Promise<GitHubResponse> {
+    this.calls.push({ path, etag });
+    const response = this.responses.get(path);
+    if (response === undefined) {
+      return {
+        type: "error",
+        status: 404,
+        message: `no fake response for ${path}`,
+      };
+    }
+    return typeof response === "function" ? response() : response;
   }
 }
