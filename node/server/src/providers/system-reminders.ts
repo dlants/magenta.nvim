@@ -15,12 +15,6 @@ When making a selection, select the beginning of the text, then extend_forward t
 
 Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.`;
 
-const BASH_REMINDER = `\
-When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
-WRONG: \`command 2>&1 | tail -50\`
-WRONG: \`command | head -100\`
-RIGHT: \`command\``;
-
 const SUBAGENT_REMINDER = `\
 Don't spawn sub-agents for things you can do with a single tool call (get_files, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
 `;
@@ -35,12 +29,10 @@ function getStandingReminderBody(
   switch (threadType) {
     case "root":
       return `${SKILLS_REMINDER}
-${BASH_REMINDER}
 ${EDL_REMINDER}
 ${SUBAGENT_REMINDER}`;
     case "docker_root":
       return `${SKILLS_REMINDER}
-${BASH_REMINDER}
 ${EDL_REMINDER}
 ${SUBAGENT_REMINDER}
 
@@ -53,7 +45,6 @@ You are reflecting on another thread's work to help the user understand it. Do n
         ? `\n${subagentConfig.systemReminder}`
         : "";
       return `${SKILLS_REMINDER}
-${BASH_REMINDER}
 ${EDL_REMINDER}
 ${customReminder}
 CRITICAL: Use yield_to_parent tool when task is complete.`;

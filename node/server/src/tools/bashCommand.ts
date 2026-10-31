@@ -14,8 +14,8 @@ The command times out after 5 min by default. Set \`timeoutSeconds\` (max 86400)
 You should not run commands that require user input, such as \`git commit\` without \`-m\` or \`ssh\`.
 You should not run commands that do not halt, such as \`docker compose up\` without \`-d\`, \`tail -f\` or \`watch\`.
 
-Long output will be abbreviated (first 10 + last 20 lines). Full output is saved to a log file that can be read with get_files. You do not need to use head/tail/grep to limit output - just run the command directly.
-You will get the stdout and stderr of the command, as well as the exit code, so you do not need to do stream redirects like "2>&1".
+Long output will be abbreviated (first 10 + last 20 lines). Full output is saved to a log file that can be read with get_files.
+You will get the stdout and stderr of the command, as well as the exit code.
 `;
 
 const DEFAULT_TIMEOUT_SECONDS = 300;
@@ -108,20 +108,6 @@ function formatTokens(charCount: number): string {
   return tokens >= 1000
     ? `~${Math.round(tokens / 1000).toString()}k tok`
     : `~${tokens.toString()} tok`;
-}
-
-const TRIM_REMINDER =
-  "\nNote: a trailing `| head`/`| tail` was removed from your command. The bash_command tool already trims long output for you, so you don't need to pipe into head or tail.\n";
-
-export function stripTrailingHeadTail(command: string): {
-  command: string;
-  wasTrimmed: boolean;
-} {
-  const trimmed = command.replace(/\s*\|\s*(?:head|tail)\b[^|]*$/, "");
-  if (trimmed !== command) {
-    return { command: trimmed, wasTrimmed: true };
-  }
-  return { command, wasTrimmed: false };
 }
 
 const MAX_OUTPUT_TOKENS_FOR_AGENT = 2000;
@@ -262,10 +248,6 @@ export function execute(
     startTime: undefined,
   };
 
-  const { command: sanitizedCommand, wasTrimmed } = stripTrailingHeadTail(
-    request.input.command,
-  );
-
   let aborted = false;
   let tickInterval: ReturnType<typeof setInterval> | undefined;
 
@@ -277,7 +259,7 @@ export function execute(
   }
 
   const promise = context.shell
-    .execute(sanitizedCommand, {
+    .execute(request.input.command, {
       toolRequestId: request.id,
       timeoutMs:
         (request.input.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
@@ -326,9 +308,7 @@ export function execute(
         result.logFilePath,
       );
       const wasAbbreviated = formatted.wasAbbreviated;
-      const formattedOutput = wasTrimmed
-        ? formatted.formattedOutput + TRIM_REMINDER
-        : formatted.formattedOutput;
+      const formattedOutput = formatted.formattedOutput;
 
       return {
         type: "tool_result",

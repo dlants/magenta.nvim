@@ -56,59 +56,6 @@ async function getResultText(invocation: {
   return result.error;
 }
 
-describe("stripTrailingHeadTail", () => {
-  it("strips trailing | head", () => {
-    expect(BashCommand.stripTrailingHeadTail("ls -la | head")).toEqual({
-      command: "ls -la",
-      wasTrimmed: true,
-    });
-  });
-
-  it("strips trailing | head -n 50", () => {
-    expect(BashCommand.stripTrailingHeadTail("cat foo | head -n 50")).toEqual({
-      command: "cat foo",
-      wasTrimmed: true,
-    });
-  });
-
-  it("strips trailing | tail", () => {
-    expect(BashCommand.stripTrailingHeadTail("cat foo | tail -50")).toEqual({
-      command: "cat foo",
-      wasTrimmed: true,
-    });
-  });
-
-  it("strips trailing | tail -n 10", () => {
-    expect(BashCommand.stripTrailingHeadTail("cat foo | tail -n 10")).toEqual({
-      command: "cat foo",
-      wasTrimmed: true,
-    });
-  });
-
-  it("strips trailing | head -n 10", () => {
-    expect(BashCommand.stripTrailingHeadTail("cat foo | head -n 10")).toEqual({
-      command: "cat foo",
-      wasTrimmed: true,
-    });
-  });
-
-  it("does not strip head in the middle of a pipeline", () => {
-    expect(
-      BashCommand.stripTrailingHeadTail("cat foo | head -50 | grep bar"),
-    ).toEqual({
-      command: "cat foo | head -50 | grep bar",
-      wasTrimmed: false,
-    });
-  });
-
-  it("leaves commands without head/tail alone", () => {
-    expect(BashCommand.stripTrailingHeadTail("ls -la")).toEqual({
-      command: "ls -la",
-      wasTrimmed: false,
-    });
-  });
-});
-
 describe("bashCommand unit tests", () => {
   it("returns formatted output for simple successful command without trailer", async () => {
     const { invocation } = createTool("echo hello", {
