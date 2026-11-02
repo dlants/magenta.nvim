@@ -757,7 +757,7 @@ export class NvimThread {
   async abortAndWait(): Promise<void> {
     const { unsent } = await this.context.chat.abortThread(this.id);
     const { threadType } = this.threadState;
-    const isUserFacing = threadType === "root" || threadType === "docker_root";
+    const isUserFacing = threadType === "root";
     if (!isUserFacing) return;
     const text = unsent.join("\n");
     if (!text) return;

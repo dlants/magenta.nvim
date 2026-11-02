@@ -17,7 +17,6 @@ For tools and MCP support, see |magenta-tools.txt|
 For provider configuration, see |magenta-providers.txt|
 For the Edit Description Language, see |magenta-edl.txt|
 For sub-agent types and workflows, see |magenta-subagents.txt|
-For dev containers, see |magenta-docker.txt|
 For the security model, see |magenta-security.txt|
 For sandbox permissions, see |magenta-permissions.txt|
 For creating skills, see |magenta-skills.txt|
@@ -37,7 +36,7 @@ Features:~
   - MCP (Model Context Protocol) support
   - Smart context tracking with automatic diffing
   - Auto-compaction with chunked incremental summarization
-  - Prompt caching for efficiency  - Dev containers for isolated Docker-based agent work
+  - Prompt caching for efficiency
 
 ==============================================================================
 REQUIREMENTS                                            *magenta-requirements*

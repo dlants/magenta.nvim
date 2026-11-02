@@ -24,9 +24,6 @@
 - Let's revisit how we summarize files.
 - summarize large files even when they're pulled in via contextFiles
 
-# docker
-
-- we're still referencing some files from the host, which the agent can't actually read
 
 # UX
 

@@ -31,12 +31,6 @@ function getStandingReminderBody(
       return `${SKILLS_REMINDER}
 ${EDL_REMINDER}
 ${SUBAGENT_REMINDER}`;
-    case "docker_root":
-      return `${SKILLS_REMINDER}
-${EDL_REMINDER}
-${SUBAGENT_REMINDER}
-
-CRITICAL: You are in a Docker container. Call yield_to_parent when done. Your changes will be synced back automatically.`;
     case "reflect":
       return `${SKILLS_REMINDER}
 You are reflecting on another thread's work to help the user understand it. Do not continue that work or modify files.`;

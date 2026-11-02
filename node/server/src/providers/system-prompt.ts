@@ -60,12 +60,7 @@ function getBaseSystemPrompt(
   }
 
   // Fall back to loading agents from disk
-  const agentName =
-    type === "root"
-      ? "default"
-      : type === "docker_root"
-        ? "docker"
-        : "subagent";
+  const agentName = type === "root" ? "default" : "subagent";
 
   const agents = loadAgents({
     projectDir: opts.projectDir,
@@ -94,7 +89,6 @@ export async function createSystemPrompt(
     options: ProviderOptions;
     fileIO: FileIO;
     homeDir: HomeDir;
-    dockerAvailable?: boolean;
     subagentConfig?: SubagentConfig;
   },
 ): Promise<SystemPrompt> {

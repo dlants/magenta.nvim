@@ -44,11 +44,7 @@ import {
 } from "./submission/index.ts";
 import type { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { type ContextDelivery, Thread, type ThreadContext } from "./thread.ts";
-import type {
-  SubmissionResult,
-  ToolLoopResult,
-  YieldValue,
-} from "./thread-api.ts";
+import type { SubmissionResult, ToolLoopResult } from "./thread-api.ts";
 import { ABORTED, type Aborted } from "./thread-api.ts";
 import { archiveThread } from "./thread-logger.ts";
 import type { ThreadState } from "./thread-state.ts";
@@ -375,7 +371,6 @@ function testManager(
         context.subagentConfig,
         context.yieldSchema,
         context.getScriptRunner?.()?.getScriptCatalog(),
-        context.subagentDockerfile,
       ),
       ...(context.subagentConfig?.effort
         ? { effortOverride: context.subagentConfig.effort }
@@ -552,12 +547,6 @@ export function getFileSupervisor(thread: Thread): FileSupervisor {
  * cores keep their own, so this observes only the live generation. */
 export function getContextDeliveries(thread: Thread): ContextDelivery[] {
   return [...thread["core"]["contextDeliveries"].values()];
-}
-/** Stand a thread up in the terminal state an accepted, torn-down yield
- * leaves behind, without driving a whole yield + teardown. */
-export function markTornDownYield(thread: Thread, value: YieldValue): void {
-  thread["status"] = { type: "yielded", value };
-  thread["tornDownState"] = true;
 }
 export function resetThread(
   thread: Thread,

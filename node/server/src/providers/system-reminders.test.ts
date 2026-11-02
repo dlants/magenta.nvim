@@ -52,16 +52,6 @@ describe("buildSystemReminder", () => {
     expect(reminder).not.toContain("yield_to_parent");
   });
 
-  it("docker_root standing reminder includes the docker yield_to_parent instruction", () => {
-    const reminder = buildSystemReminder({
-      threadType: "docker_root",
-      kinds: ["standing"],
-    });
-    expect(reminder).toBeDefined();
-    expect(reminder).toContain("Docker container");
-    expect(reminder).toContain("yield_to_parent");
-  });
-
   it("subagent standing reminder includes the subagent yield_to_parent instruction", () => {
     const reminder = buildSystemReminder({
       threadType: "subagent",

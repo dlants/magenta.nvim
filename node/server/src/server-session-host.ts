@@ -18,7 +18,6 @@ import {
 } from "./context/auto-context.ts";
 import { buildSystemInfo } from "./context/system-info.ts";
 import {
-  createDockerEnvironment,
   createLocalEnvironment,
   type Environment,
   environmentCapabilities,
@@ -67,7 +66,6 @@ export type ServerHostOptions = ProviderOptions & {
   hierarchyContextFileNames: string[];
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
-  dockerfile?: string;
   autoCompactThreshold: number;
   autoCompactPrompt: string;
   mcpServers: MCPServersConfig;
@@ -103,7 +101,7 @@ export type PreparedThreadInfo = {
 };
 
 /** Auto/hierarchy context is discovered on the host filesystem, independent of
- * a thread's (possibly sandboxed or docker) fileIO. */
+ * a thread's sandboxed fileIO. */
 const hostFileIO = new FsFileIO();
 
 /** Prepares threads with server-owned execution. Editor collaborators (LSP,
@@ -302,31 +300,25 @@ export class ServerSessionHost implements SessionHost {
             homeDir,
             globs: hostOptions.autoContext,
           }),
-      resolvedConfig.type === "docker"
-        ? createDockerEnvironment({
-            container: resolvedConfig.container,
-            projectDir: resolvedConfig.projectDir,
-            threadId,
-          })
-        : Promise.resolve(
-            createLocalEnvironment({
-              logger,
-              projectDir: localCwd,
-              homeDir,
-              getSandboxConfig: () => this.context.getOptions().sandbox,
-              ...(editor
-                ? {
-                    lspClient: clientLspClient(editor, localCwd, homeDir),
-                    luaExecutor: clientLuaExecutor(editor),
-                    onFileWritten: clientFileWritten(editor),
-                  }
-                : {}),
-              threadId,
-              sandbox: this.context.sandbox,
-              approvals: session.approvalsFor(threadId),
-              isBypassed: () => session.isSandboxBypassed(threadId),
-            }),
-          ),
+      Promise.resolve(
+        createLocalEnvironment({
+          logger,
+          projectDir: localCwd,
+          homeDir,
+          getSandboxConfig: () => this.context.getOptions().sandbox,
+          ...(editor
+            ? {
+                lspClient: clientLspClient(editor, localCwd, homeDir),
+                luaExecutor: clientLuaExecutor(editor),
+                onFileWritten: clientFileWritten(editor),
+              }
+            : {}),
+          threadId,
+          sandbox: this.context.sandbox,
+          approvals: session.approvalsFor(threadId),
+          isBypassed: () => session.isSandboxBypassed(threadId),
+        }),
+      ),
       session.scriptRunner?.discover(),
     ]);
 
@@ -347,9 +339,6 @@ export class ServerSessionHost implements SessionHost {
           editor?.info.neovimVersion ?? "none (no client attached)",
         overrides: {
           git: initialGitState,
-          ...(resolvedConfig.type === "docker"
-            ? { platform: "linux (docker)", projectDir: environment.projectDir }
-            : {}),
         },
       });
 
@@ -467,7 +456,6 @@ export class ServerSessionHost implements SessionHost {
       }),
       availableCapabilities: environmentCapabilities(env),
       environmentConfig: env.environmentConfig,
-      ...(options.dockerfile ? { subagentDockerfile: options.dockerfile } : {}),
       ...(info.yieldSchema ? { yieldSchema: info.yieldSchema } : {}),
       getAgents,
       provider: this.getProvider(info.profile),

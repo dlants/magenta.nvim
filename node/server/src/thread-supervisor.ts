@@ -16,18 +16,10 @@ import {
   historyIdxAtOrBefore,
   PRE_HISTORY,
 } from "./supervisors/history.ts";
-import type { YieldValue } from "./thread-api.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 
 /** Action returned from the `onToolLoopEnd` hook. */
 export type ToolLoopEndAction =
-  | { type: "send-message"; text: string }
-  | { type: "none" };
-
-/** Action returned from the `onYield` hook. */
-export type YieldAction =
-  | { type: "accept"; resultPrefix?: string }
-  | { type: "reject"; message: string }
   | { type: "send-message"; text: string }
   | { type: "none" };
 
@@ -97,7 +89,6 @@ export interface SubmissionSupervisor {
    * can affect the submission. */
   onSubmission?(messages: readonly AgentInput[]): void;
   onToolLoopEnd?(context: ToolLoopEndContext): ToolLoopEndAction;
-  onYield?(result: YieldValue): Promise<YieldAction>;
 }
 
 export type SupervisorChainDeps = {
@@ -217,27 +208,6 @@ export class SubmissionSupervisorChain extends ChainBase<SubmissionSupervisor> {
       const action = supervisor.onToolLoopEnd?.(context);
       if (action?.type === "send-message") texts.push(action.text);
     });
-    return texts.length
-      ? { type: "send-message", text: texts.join("\n\n") }
-      : { type: "none" };
-  }
-
-  /** The first `accept`/`reject` wins outright — later hooks are not consulted,
-   * since the decision is made — and `send-message` texts are joined. */
-  async onYield(value: YieldValue): Promise<YieldAction> {
-    const texts: string[] = [];
-    for (const supervisor of this.members()) {
-      if (!supervisor.onYield) continue;
-      let action: YieldAction;
-      try {
-        action = await supervisor.onYield(value);
-      } catch (error) {
-        this.logThrow("onYield", error);
-        continue;
-      }
-      if (action.type === "accept" || action.type === "reject") return action;
-      if (action.type === "send-message") texts.push(action.text);
-    }
     return texts.length
       ? { type: "send-message", text: texts.join("\n\n") }
       : { type: "none" };
@@ -415,8 +385,8 @@ export class MaxTokensSupervisor implements SubmissionSupervisor {
     };
   }
 }
-/** For threads that must end by calling yield_to_parent (subagents, docker
- *  roots, compact threads). Nobody is watching them, so an end_turn without a
+/** For threads that must end by calling yield_to_parent (subagents and
+ *  compact threads). Nobody is watching them, so an end_turn without a
  *  yield is treated as an accidental stop and the agent is restarted. */
 export class UnsupervisedSupervisor implements SubmissionSupervisor {
   static create(opts?: { maxRestarts?: number }): UnsupervisedSupervisor {
@@ -457,9 +427,5 @@ export class UnsupervisedSupervisor implements SubmissionSupervisor {
       type: "send-message",
       text: `You stopped without yielding. You are running unsupervised: nobody will respond to messages. Continue your task, and you should use the yield_to_parent tool when you're done. (auto-restart ${this.restartCount}/${this.maxRestarts})`,
     };
-  }
-
-  async onYield(_result: YieldValue): Promise<YieldAction> {
-    return { type: "none" };
   }
 }

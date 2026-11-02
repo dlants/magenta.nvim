@@ -40,15 +40,6 @@ it("applies systemInfoOverrides when building system info", () => {
   expect(text).toContain("- The user started this thread from: /workspace");
 });
 
-it("docker_root prompt mentions docker, syncing and yield_to_parent", async () => {
-  const systemPrompt = await createSystemPrompt("docker_root", promptCtx);
-  expect(systemPrompt).toContain("# Docker Environment");
-  expect(systemPrompt).toContain("yield_to_parent");
-  expect(systemPrompt).toContain("synced back");
-  expect(systemPrompt).not.toContain("commit");
-  expect(systemPrompt).not.toContain("worker branch");
-});
-
 it("system info is not part of the cached system prompt", async () => {
   const systemPrompt = await createSystemPrompt("root", promptCtx);
   expect(systemPrompt).not.toContain("# System Information");

@@ -3,7 +3,6 @@ import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import { expect, it } from "vitest";
 import type { ScriptInvocationId, ThreadId, ThreadType } from "./chat-types.ts";
 import type { TokenBudget } from "./compaction/token-budget.ts";
-import { DockerSupervisor } from "./docker-supervisor.ts";
 import { withHarness } from "./test/harness.ts";
 import { created } from "./test-helpers.ts";
 import { TitleSupervisor } from "./thread-assembly.ts";
@@ -11,7 +10,6 @@ import {
   MaxTokensSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
-import type { ProjectDir } from "./utils/files.ts";
 
 it("a truncated response is continued via MaxTokensSupervisor", () =>
   withHarness({}, async (h) => {
@@ -78,26 +76,13 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", () =
 it.each([
   {
     threadType: "compact",
-    supervised: false,
     expected: [MaxTokensSupervisor, UnsupervisedSupervisor, TitleSupervisor],
-  },
-  {
-    threadType: "docker_root",
-    supervised: false,
-    expected: [MaxTokensSupervisor, UnsupervisedSupervisor, TitleSupervisor],
-  },
-  {
-    threadType: "subagent",
-    supervised: true,
-    expected: [MaxTokensSupervisor, DockerSupervisor, TitleSupervisor],
   },
 ] satisfies {
   threadType: ThreadType;
-  supervised: boolean;
   expected: unknown[];
-}[])("constructs $threadType supervised=$supervised with ordered, stable policies", ({
+}[])("constructs $threadType with ordered, stable policies", ({
   threadType,
-  supervised,
   expected,
 }) =>
   withHarness({}, async (h) => {
@@ -105,17 +90,6 @@ it.each([
       h.session.createThread({
         profile: h.host.getDefaultProfile(),
         threadType,
-        ...(supervised
-          ? {
-              dockerSpawnConfig: {
-                containerName: "worker",
-                imageName: "worker-image",
-                workspacePath: "/workspace",
-                hostDir: h.host.projectDir as ProjectDir,
-                supervised: true,
-              },
-            }
-          : {}),
       }),
     );
     const record = h.session.getThread(id);

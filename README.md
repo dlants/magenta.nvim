@@ -47,14 +47,13 @@ I haven't actually used other neovim AI plugins in a while, so take this with a 
 
 - **Edit Description Language (EDL)**: A [small DSL](https://github.com/dlants/magenta.nvim/blob/main/node/server/src/tools/edl-description.md) that's more expressive than string match/replace and often uses far fewer tokens to express edits, since it doesn't have to accurately re-type large swaths of text when making large edits.
 - **OS-level sandboxing**: By default we use anthropic's sandbox-runtime to run the agent in an OS sandbox (seatbelt on macOS, bubblewrap on Linux) with configurable filesystem and network policies. Fewer operations require manual approval, leading to less alert fatigue.
-- **Docker sub-agents**: Spawn isolated agents in Docker containers for parallel, unsupervised work.
 - **Per-thread buffers**: Each thread is its own buffer, so you can use buffer navigation, jump lists, and pickers to jump between threads.
 - **Declarative TUI rendering**: A VDOM-like / react-like system ([code](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/tea/view.ts)) for rendering text into neovim buffers supports a rich display with expanding sections, navigation UI, and in-display-window approval dialogues.
 - **UX polish**: Chimes and terminal bells integrate nicely with things like multiplexing neovim sessions in tmux.
 - **Customizable agents**: Agent system prompts are markdown files on disk (`~/.magenta/agents/` or `.magenta/agents/`). Override or create new agent personalities without touching code.
 - **Auto-compaction**: Chunked incremental summarization with accurate token counting keeps long threads manageable without losing important context.
 - **TEA architecture**: State is managed via an [elm-inspired architecture](https://github.com/evancz/elm-architecture-tutorial) ([code](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/tea/tea.ts)), making the plugin easy to understand, extend, and [test](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/chat/chat.test.ts).
-- **Full end-to-end testing**: A complete [integration test setup](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/magenta.test.ts) with TypeScript async/await makes writing readable tests easy. The plugin is well-tested across unit, integration, and docker levels.
+- **Full end-to-end testing**: A complete [integration test setup](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/magenta.test.ts) with TypeScript async/await makes writing readable tests easy. The plugin is well-tested across unit and integration levels.
 - **TypeScript + official SDKs**: Using the Anthropic SDK directly means streaming, tool use, and caching just work. Async/await makes side-effect chains straightforward.
 - **Smart prompt caching**: Pinned files only move up in message history when they change, maximizing Anthropic's prompt cache hit rate. Cache breakpoints are placed strategically.
 - **Transparency**: Raw tool use requests/responses, stop reasons, and token usage are all visible. You can see everything the agent sees and manipulate it.
@@ -228,7 +227,6 @@ For any of the below, you can also just ask magenta to explain.
 - **Skills** — markdown files in `~/.magenta/skills/`, `.magenta/skills/`, `~/.claude/skills/`, or `.claude/skills/` that teach the agent project-specific knowledge. Supports suppressing project-level skills by name when shared configs collide with personal ones. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-skills.txt) · `:help magenta-skills`
 - **Sandbox** — OS-level sandboxing (seatbelt/bubblewrap) with configurable filesystem, network, and approval policies. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-permissions.txt) · `:help magenta-sandbox`
 - **MCP servers** — connect to local or remote MCP servers for additional tools. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-tools.txt) · `:help magenta-mcp`
-- **Docker subagents** — spawn isolated agents in Docker containers for parallel, unsupervised work. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-docker.txt) · `:help magenta-docker`
 
 # Usage
 

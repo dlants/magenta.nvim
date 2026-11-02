@@ -37,7 +37,6 @@ import {
   createTestAgent,
   defaultAnthropicOptions,
   flatLoop,
-  markTornDownYield,
   promiseRun,
   resetThread,
   sendResolved,
@@ -282,14 +281,6 @@ describe("Thread.submit result", () => {
     { result: '{"count":3}', type: "text", text: "not a wrapper" },
   ])("passes custom input unchanged to hooks and consumers: %j", async (input) => {
     const { core, mockClient } = createAgentWithMock({
-      submissionSupervisors: [
-        {
-          onYield: async (value) => {
-            expect(value).toEqual(input);
-            return { type: "accept", resultPrefix: "synced" };
-          },
-        },
-      ],
       threadType: "subagent" as ThreadType,
       yieldSchema: {
         type: "object",
@@ -317,7 +308,6 @@ describe("Thread.submit result", () => {
     expect(await result).toEqual({
       type: "yielded",
       value: input,
-      resultPrefix: "synced",
     });
     expect(await core.result).toEqual(await result);
     expect(core.lastResult()).toEqual(await result);
@@ -375,23 +365,6 @@ describe("Thread.submit result", () => {
     expect(await core.submit({ type: "resolved", messages: [] })).toEqual({
       type: "empty",
     });
-  });
-  it("rejects once the thread's container has been torn down", async () => {
-    const { core } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-    });
-    markTornDownYield(core, { result: "done" });
-    await expect(
-      core.submit({
-        type: "resolved",
-        messages: [
-          {
-            type: "text",
-            text: "more",
-          },
-        ],
-      }),
-    ).rejects.toThrow(/torn down/);
   });
   it("reports a queued send as queued rather than borrowing another submission's outcome", async () => {
     const { core, mockClient } = createAgentWithMock();

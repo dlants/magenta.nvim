@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ThreadId } from "./chat-types.ts";
 import type { TokenBudget } from "./compaction/token-budget.ts";
-import { DockerSupervisor } from "./docker-supervisor.ts";
 import type { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
 import type {
   NativeMessageIdx,
@@ -193,18 +192,6 @@ describe("assembleThread", () => {
       subagent.thread.submissionSupervisors.map((s) => s.constructor),
     ).toEqual([MaxTokensSupervisor, UnsupervisedSupervisor, TitleSupervisor]);
 
-    const dockerRoot = setup({
-      initialization: {
-        type: "fresh",
-        threadType: "docker_root",
-        archiveOptions: { baseDir: TEST_ARCHIVE_DIR },
-        policy: defaultPolicy,
-      },
-    });
-    expect(
-      dockerRoot.thread.submissionSupervisors.map((s) => s.constructor),
-    ).toEqual([MaxTokensSupervisor, UnsupervisedSupervisor, TitleSupervisor]);
-
     const compact = setup({
       initialization: {
         type: "fresh",
@@ -218,28 +205,7 @@ describe("assembleThread", () => {
     expect(compact.compactor).toBeUndefined();
     expect(compact.thread.tokenBudget).toBeUndefined();
 
-    const docker = setup({
-      initialization: freshRoot({
-        docker: {
-          containerName: "container",
-          imageName: "image",
-          workspacePath: "/workspace",
-          hostDir: "/host",
-          supervised: true,
-        },
-      }),
-    });
-    expect(
-      docker.thread.submissionSupervisors.map((s) => s.constructor),
-    ).toEqual([MaxTokensSupervisor, DockerSupervisor, TitleSupervisor]);
-
-    for (const { id, thread } of [
-      root,
-      subagent,
-      dockerRoot,
-      compact,
-      docker,
-    ]) {
+    for (const { id, thread } of [root, subagent, compact]) {
       await thread.destroy();
       await cleanupArchive(id);
     }

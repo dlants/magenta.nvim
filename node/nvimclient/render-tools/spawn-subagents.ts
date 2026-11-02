@@ -32,24 +32,12 @@ function promptTail(text: string): string {
   return `(${formatTokens(text.length)}) ${tail}`;
 }
 
-function isDockerEntry(entry: PartialEntry): boolean {
-  return (
-    entry.environment === "docker" ||
-    entry.environment === "docker_unsupervised"
-  );
-}
-
 function agentMetaLine(entry: PartialEntry, statusIcon?: string): string {
   const parts: string[] = [];
-  if (isDockerEntry(entry)) parts.push("🐳");
   if (statusIcon) parts.push(statusIcon);
   if (entry.agentType && entry.agentType !== "default")
     parts.push(entry.agentType);
-  if (entry.environment && entry.environment !== "host")
-    parts.push(`[${entry.environment}]`);
-  if (entry.dockerfile) parts.push(`dockerfile=${entry.dockerfile}`);
   if (entry.directory) parts.push(`dir=${entry.directory}`);
-  if (entry.workspacePath) parts.push(`ws=${entry.workspacePath}`);
   if (parts.length === 0) parts.push("agent");
   return parts.join(" ");
 }

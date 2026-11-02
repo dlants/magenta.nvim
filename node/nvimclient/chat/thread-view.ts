@@ -98,15 +98,11 @@ export type RunningCompaction = {
   onSelectChunk: (threadId: ThreadId) => void;
 };
 
-export function renderYield(
-  yielded: Pick<YieldState, "value" | "resultPrefix">,
-): string {
-  const body =
-    Object.keys(yielded.value).length === 1 &&
+export function renderYield(yielded: Pick<YieldState, "value">): string {
+  return Object.keys(yielded.value).length === 1 &&
     typeof yielded.value.result === "string"
-      ? yielded.value.result
-      : JSON.stringify(yielded.value);
-  return yielded.resultPrefix ? `${yielded.resultPrefix}\n\n${body}` : body;
+    ? yielded.value.result
+    : JSON.stringify(yielded.value);
 }
 
 export const renderStatus = (
@@ -481,8 +477,6 @@ export const view: View<{
   dispatch: Dispatch<Msg>;
 }> = ({ thread, dispatch }) => {
   const state = thread.threadState;
-  const threadType = state.threadType;
-  const titlePrefix = threadType === "docker_root" ? "🐳 " : "";
   const archiveLink = withBindings(d`[Archive]`, {
     "<CR>": () =>
       thread.context.dispatch({
@@ -491,8 +485,8 @@ export const view: View<{
       }),
   });
   const titleView = state.title
-    ? d`# ${titlePrefix}${state.title} ${archiveLink}`
-    : d`# ${titlePrefix}[ Untitled ] ${archiveLink}`;
+    ? d`# ${state.title} ${archiveLink}`
+    : d`# [ Untitled ] ${archiveLink}`;
 
   const systemPromptView = renderSystemPrompt(
     state.systemPrompt,

@@ -113,30 +113,4 @@ describe("tier-based spawn_subagents control", () => {
     expect(names).toContain("spawn_subagents");
     expect(names).toContain("yield_to_parent");
   });
-
-  it("leaf docker_root does not get spawn_subagents", () => {
-    const specs = getToolSpecs(
-      "docker_root",
-      noopMcpToolManager,
-      undefined,
-      {},
-      { tier: "leaf" },
-    );
-    const names = specs.map((s) => s.name);
-    expect(names).not.toContain("spawn_subagents");
-    expect(names).toContain("yield_to_parent");
-  });
-
-  it("thread docker_root gets spawn_subagents", () => {
-    const specs = getToolSpecs(
-      "docker_root",
-      noopMcpToolManager,
-      undefined,
-      {},
-      { tier: "thread" },
-    );
-    const names = specs.map((s) => s.name);
-    expect(names).toContain("spawn_subagents");
-    expect(names).toContain("yield_to_parent");
-  });
 });

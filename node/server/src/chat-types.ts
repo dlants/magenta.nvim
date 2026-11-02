@@ -18,12 +18,7 @@ export type ScriptInvocationId = string & { __scriptInvocationId: true };
 export type MessageIdx = number & { __messageIdx: true };
 export type ContentBlockIdx = number & { __contentBlockIdx: true };
 
-export type ThreadType =
-  | "subagent"
-  | "compact"
-  | "root"
-  | "docker_root"
-  | "reflect";
+export type ThreadType = "subagent" | "compact" | "root" | "reflect";
 
 /** Text as it appeared in a display buffer (decoration, placeholders and
  * summaries included). Never compare it against message content. */

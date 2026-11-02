@@ -22,7 +22,6 @@ to provide defense in depth:
 
   - OS-level sandboxing restricts what shell commands can access
   - An approval system prompts for dangerous operations
-  - Docker isolation containerizes autonomous agents
   - Layered defenses mean no single point of failure
 
 This document explains how these protections work and how to use them
@@ -69,16 +68,6 @@ If the sandbox detects an operation that would violate the sandbox config:
   - You see which sandbox rule was violated
   - You must explicitly APPROVE or REJECT the operation
   - This acts as a backup safety mechanism
-
-3. DOCKER ISOLATION~
-
-When using `docker_unsupervised` agents for long-running or autonomous
-tasks, the agent runs inside a Docker container:
-  - The agent has no direct access to your filesystem
-  - Files are synced INTO the container at startup
-  - Files are only synced BACK to your system when the agent yields
-  - This limits the time window for accidental damage
-  - If something goes wrong, you simply don't accept the changes
 
 ==============================================================================
 THREAT MODEL                                        *magenta-security-threats*
@@ -191,17 +180,6 @@ Add project-specific patterns in `.magenta/options.json`:
   "requireApprovalPatterns": ["git push", "rm -rf", "npm publish"]
 <
 
-3. DOCKER CONFIGURATION~
-
-For `docker_unsupervised` agents, configure:
-  - Dockerfile: Custom image if needed (see |magenta-docker|)
-  - workspacePath: Where files sync inside the container
-  - denyRead/allowRead: What the container can access on your system
-
-The container is the security boundary. Files only sync back on yield.
-
-See |magenta-docker| for detailed Docker configuration.
-
 ==============================================================================
 BEST PRACTICES                                     *magenta-security-practices*
 
@@ -233,15 +211,7 @@ Add regex patterns for operations that could cause serious damage:
 
 These commands will always prompt for approval before executing.
 
-3. USE DOCKER_UNSUPERVISED FOR LONG AUTONOMOUS TASKS~
-
-For tasks where the agent runs for a long time without human input:
-  - Use `docker_unsupervised` environment
-  - The agent runs in a container with limited filesystem access
-  - You review and approve file changes before they sync back
-  - This gives you a final checkpoint to catch mistakes
-
-4. REVIEW SANDBOX VIOLATIONS BEFORE APPROVING~
+3. REVIEW SANDBOX VIOLATIONS BEFORE APPROVING~
 
 When a sandbox violation prompt appears:
   - Read the exact command or operation that was blocked
@@ -249,14 +219,14 @@ When a sandbox violation prompt appears:
   - Only approve if you understand and trust the operation
   - If unsure, reject it and ask the agent to do something else
 
-5. DON'T APPROVE COMMANDS YOU DON'T UNDERSTAND~
+4. DON'T APPROVE COMMANDS YOU DON'T UNDERSTAND~
 
 If an approval prompt shows a command you don't recognize:
   - Reject it
   - Ask the agent to explain what it's doing
   - You maintain control through the approval system
 
-6. USE PROJECT-LEVEL OPTIONS.JSON FOR RESTRICTIONS~
+5. USE PROJECT-LEVEL OPTIONS.JSON FOR RESTRICTIONS~
 
 For sensitive projects, create `.magenta/options.json` with restrictive
 settings:
@@ -275,7 +245,7 @@ settings:
 
 This gives you per-project control over what agents can do.
 
-7. KEEP PLUGIN AND DEPENDENCIES UP TO DATE~
+6. KEEP PLUGIN AND DEPENDENCIES UP TO DATE~
 
 Security fixes are released regularly. Keep magenta and its dependencies
 updated:
@@ -322,8 +292,6 @@ HOW MAGENTA MITIGATES THIS~
    Even if the agent is tricked into trying a destructive command, you get
    a chance to block it.
 
-3. Docker isolation for autonomous agents means changes don't apply until
-   you review and accept them.
 
 STAYING SAFE FROM PROMPT INJECTION~
 
@@ -331,7 +299,6 @@ STAYING SAFE FROM PROMPT INJECTION~
   - Use requireApprovalPatterns for operations you don't expect the agent
     to perform
   - Review sandbox violations before approving
-  - Use docker_unsupervised agents for exploring untrusted code
 
 Remember: The sandbox and approval system are there to catch mistakes and
 protect you, even when the agent is confused or misled.
@@ -340,7 +307,6 @@ protect you, even when the agent is confused or misled.
 RELATED DOCUMENTATION~
 
   |magenta-permissions|  — Detailed sandbox configuration reference
-  |magenta-docker|       — Docker agent configuration
   |magenta-config|       — General magenta configuration
 
 ==============================================================================

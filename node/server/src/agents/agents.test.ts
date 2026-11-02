@@ -446,7 +446,7 @@ describe("builtin agents", () => {
   const logger = createTestLogger();
   const builtinDir = path.join(__dirname);
 
-  it("loads default, root, and docker-root from builtin path", () => {
+  it("loads default and subagent from builtin path", () => {
     const options: ProviderOptions = {
       skillsPaths: [],
       agentsPaths: [builtinDir],
@@ -467,10 +467,7 @@ describe("builtin agents", () => {
     expect(result.subagent.tier).toBe("thread");
     expect(result.subagent.systemPrompt).toContain("# Role");
 
-    expect(result.docker).toBeDefined();
-    expect(result.docker.tier).toBe("thread");
-    expect(result.docker.systemPrompt).toContain("# Docker Environment");
-    expect(result.docker.systemReminder).toBeDefined();
+    expect(result.docker).toBeUndefined();
   });
 
   it("allows user override of default agent", () => {

@@ -7,9 +7,8 @@ CONTENTS                                            *magenta-subagents-contents*
     2. Agent Tiers ............................. |magenta-agent-tiers|
     3. Built-in Agents ......................... |magenta-builtin-agents|
     4. Project Agents .......................... |magenta-project-agents|
-    5. Environments ............................ |magenta-agent-environments|
-    6. Example Workflows ....................... |magenta-agent-examples|
-    7. Configuration ........................... |magenta-agent-config|
+    5. Example Workflows ....................... |magenta-agent-examples|
+    6. Configuration ........................... |magenta-agent-config|
 
 ==============================================================================
 OVERVIEW                                          *magenta-subagents-overview*
@@ -31,9 +30,8 @@ agent configurations. Each configuration specifies:
 
     - `agentType`: Built-in ("explore", "fast-edit", etc.) or custom agent
     - `prompt`: Task description for the agent
-    - `environment`: "host", "docker", or "docker_unsupervised"
-    - (For docker) `dockerfile`: Path to Dockerfile
-    - (For docker) `workspacePath`: Working directory in container
+    - `directory` (optional): Host directory the agent runs in
+      (defaults to cwd)
 
 ==============================================================================
 AGENT TIERS                                            *magenta-agent-tiers*
@@ -51,8 +49,7 @@ Examples:~
 
 THREAD AGENTS                                          *magenta-agent-thread*
 
-Can spawn leaf agents in any environment, and thread agents in docker
-environments only. Useful for orchestrating work that needs some parallel
+Can spawn leaf agents. Useful for orchestrating work that needs some parallel
 execution but maintains a single thread of execution.
 
 Examples:~
@@ -60,12 +57,8 @@ Examples:~
 
 ORCHESTRATOR AGENTS                                  *magenta-agent-orchestrator*
 
-Can spawn leaf and thread agents in any environment, and orchestrator
-agents in docker environments only. Used for complex workflows spanning
-multiple worktrees or coordinating large amounts of parallel work.
-
-Examples:~
-    - `worktree`: Orchestrate work across multiple git worktrees
+Can spawn leaf and thread agents. Used for complex workflows or
+coordinating large amounts of parallel work.
 
 ==============================================================================
 BUILT-IN AGENTS                                      *magenta-builtin-agents*
@@ -111,8 +104,7 @@ Usage:~
 
 DEFAULT AGENT                                          *magenta-agent-default*
 
-General-purpose coding assistant. Can spawn leaf agents in any environment
-and thread agents in docker. Use when you need to do complex work that
+General-purpose coding assistant. Can spawn leaf agents. Use when you need to do complex work that
 may require spawning other agents.
 
 Tier: Thread
@@ -129,8 +121,8 @@ Built-in project agents come with magenta.nvim:
 
 TESTS-IN-SANDBOX AGENT                           *magenta-agent-tests-sandbox*
 
-Run the test suite in sandbox mode locally. Skips tests that require Docker
-or elevated privileges.
+Run the test suite in sandbox mode locally. Skips tests that require
+elevated privileges.
 
 Tier: Leaf
 
@@ -147,110 +139,6 @@ Usage:~
       }]
     })
 <
-
-TESTS-IN-DOCKER AGENT                           *magenta-agent-tests-docker*
-
-Run the complete test suite in Docker with full capabilities. Includes
-tests that require elevated privileges or docker-in-docker features.
-
-Tier: Leaf
-
-Configuration:~
-    - Environment: docker_unsupervised (autonomous container execution)
-    - Full test coverage including privileged operations
-
-Usage:~
->typescript
-    spawn_subagents({
-      agents: [{
-        agentType: "tests",
-        environment: "docker_unsupervised",
-        prompt: "Run the full test suite"
-      }]
-    })
-<
-
-WORKTREE AGENT                                         *magenta-agent-worktree*
-
-Orchestrate work across multiple git worktrees. Useful for:
-    - Managing feature branches across worktrees
-    - Coordinating parallel development work
-    - Isolated environment per worktree
-
-Tier: Orchestrator
-
-Configuration:~
-    - Can spawn leaf agents across multiple worktrees
-    - Can manage docker environments per worktree
-
-==============================================================================
-ENVIRONMENTS                                      *magenta-agent-environments*
-
-Agents run in different environments depending on the task:
-
-HOST ENVIRONMENT (default)                        *magenta-environment-host*
-
-Runs locally on the host machine. Default for all agents unless specified
-otherwise.
-
-Example:~
->typescript
-    spawn_subagents({
-      agents: [{
-        agentType: "explore",
-        environment: "host",
-        prompt: "Analyze the codebase structure"
-      }]
-    })
-<
-
-DOCKER ENVIRONMENT                                *magenta-environment-docker*
-
-Runs in an isolated Docker container. Requires:
-
-    - `dockerfile`: Path to Dockerfile (relative to directory)
-    - `workspacePath`: Working directory inside container
-    - `directory` (optional): Host directory to build from (defaults to cwd)
-
-Files are synced between host and container via rsync.
-
-Example:~
->typescript
-    spawn_subagents({
-      agents: [{
-        agentType: "default",
-        environment: "docker",
-        dockerfile: "docker/Dockerfile",
-        workspacePath: "/workspace",
-        prompt: "Run linting and fix issues"
-      }]
-    })
-<
-
-DOCKER_UNSUPERVISED ENVIRONMENT                *magenta-environment-docker-unsupervised*
-
-Same as docker but the agent runs autonomously without streaming responses
-back. The agent performs its work in the container and reports results.
-
-Use for long-running operations or when you don't need real-time feedback:
-    - Building artifacts
-    - Running long test suites
-    - Batch processing
-
-Example:~
->typescript
-    spawn_subagents({
-      agents: [{
-        agentType: "tests",
-        environment: "docker_unsupervised",
-        dockerfile: "docker/Dockerfile",
-        workspacePath: "/workspace",
-        prompt: "Run full test suite and report results"
-      }]
-    })
-<
-
-See |magenta-docker| for more details on Docker configuration.
 
 ==============================================================================
 EXAMPLE WORKFLOWS                                  *magenta-agent-examples*
@@ -290,25 +178,6 @@ Create an implementation plan before starting work:
 Tip: Create a planning skill at `~/.magenta/skills/plan/skill.md` to teach
 the agent your preferred planning methodology. See |magenta-skills-recommended|
 for details.
-
-DOCKER WORKFLOW                                        *magenta-example-docker*
-
-Spawn a docker_unsupervised agent to perform isolated work:
-
->typescript
-    spawn_subagents({
-      agents: [{
-        agentType: "default",
-        environment: "docker_unsupervised",
-        dockerfile: "docker/Dockerfile",
-        workspacePath: "/workspace",
-        prompt: "Run the test suite, fix failures, and commit changes"
-      }]
-    })
-    
-    // Agent works autonomously in container
-    // Results synced back to host via rsync
-<
 
 PARALLEL WORKFLOW                                    *magenta-example-parallel*
 

@@ -7,10 +7,7 @@ const FULL_INPUT = JSON.stringify({
   agents: [
     {
       agentType: "subagent",
-      environment: "docker",
-      dockerfile: "Dockerfile",
       directory: ".",
-      workspacePath: "/workspace",
       prompt: "do the thing",
       contextFiles: ["x.ts", "y.ts"],
     },
@@ -28,10 +25,7 @@ describe("parsePartialSpawnSubagentsInput", () => {
     expect(r.agents).toHaveLength(2);
     expect(r.agents[0]).toEqual({
       agentType: "subagent",
-      environment: "docker",
-      dockerfile: "Dockerfile",
       directory: ".",
-      workspacePath: "/workspace",
       prompt: "do the thing",
       contextFiles: ["x.ts", "y.ts"],
     });

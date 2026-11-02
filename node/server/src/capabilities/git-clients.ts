@@ -61,16 +61,3 @@ export class LocalGitClient extends DirectorylessGitClient {
     return (args) => runnerResult(execFile("git", ["-C", dir, ...args]));
   }
 }
-
-export class DockerGitClient extends DirectorylessGitClient {
-  constructor(private container: string) {
-    super();
-  }
-
-  protected runIn(dir: string): GitCommandRunner {
-    return (args) =>
-      runnerResult(
-        execFile("docker", ["exec", this.container, "git", "-C", dir, ...args]),
-      );
-  }
-}

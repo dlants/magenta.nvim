@@ -205,7 +205,6 @@ export const SERVER_OPTION_KEYS = [
   "agentsPaths",
   "maxConcurrentSubagents",
   "maxConcurrentFastSubagents",
-  "dockerfile",
   "autoCompactThreshold",
   "autoCompactPrompt",
   "mcpServers",

@@ -62,7 +62,7 @@ export type ProtocolSubmissionResult =
 export type ProtocolRunState =
   | { type: "idle"; lastResult: ProtocolSubmissionResult | undefined }
   | { type: "destroyed"; lastResult: ProtocolSubmissionResult | undefined }
-  | { type: "yielded"; value: YieldValue; resultPrefix?: string }
+  | { type: "yielded"; value: YieldValue }
   | { type: "running"; aborting: boolean; activity: ProtocolActivity };
 
 export type ProtocolActivity =
@@ -141,7 +141,6 @@ export type SessionThreadSummary = {
   profileName: string;
   environment?: EnvironmentConfig;
   sandboxBypassed: boolean;
-  teardownMessage?: string;
 } & (
   | { state: "pending" }
   | { state: "error"; error: { message: string } }
@@ -219,11 +218,7 @@ export function runState(state: ThreadState): ProtocolRunState {
     case "destroyed":
       return { type: state.type, lastResult: optionalResult(state.lastResult) };
     case "yielded":
-      return {
-        type: "yielded",
-        value: state.value,
-        ...(state.resultPrefix ? { resultPrefix: state.resultPrefix } : {}),
-      };
+      return { type: "yielded", value: state.value };
     case "running": {
       const { activity } = state;
       let projected: ProtocolActivity;
@@ -390,7 +385,6 @@ export function sessionState(
 ): ProtocolSessionState {
   const records = session.listThreads();
   const threads = records.map((record): SessionThreadSummary => {
-    const teardownMessage = session.teardownMessages.get(record.id);
     const title =
       record.state === "initialized"
         ? record.thread.title
@@ -413,7 +407,6 @@ export function sessionState(
         ? { environment: record.options.environmentConfig }
         : {}),
       sandboxBypassed: session.isSandboxBypassed(record.id),
-      ...(teardownMessage !== undefined ? { teardownMessage } : {}),
     };
     switch (record.state) {
       case "pending":

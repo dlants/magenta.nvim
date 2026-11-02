@@ -38,7 +38,6 @@ the most up-to-date list.
 For detailed documentation on specific tools and features:
   See |magenta-edl| for the Edit Description Language
   See |magenta-subagents| for sub-agent types and workflows
-  See |magenta-docker| for dev container setup
   See |magenta-permissions| for sandbox configuration
   See |magenta-security| for the overall security model
 

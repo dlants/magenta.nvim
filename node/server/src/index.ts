@@ -26,8 +26,6 @@ export type {
   ToolApplied,
   TrackedFileInfo,
 } from "./capabilities/context-tracker.ts";
-export { DockerFileIO } from "./capabilities/docker-file-io.ts";
-export { DockerShell } from "./capabilities/docker-shell.ts";
 export type { FileIO } from "./capabilities/file-io.ts";
 export { FsFileIO } from "./capabilities/file-io.ts";
 export {
@@ -38,7 +36,7 @@ export {
   type GitState,
   parseGitState,
 } from "./capabilities/git-client.ts";
-export { DockerGitClient, LocalGitClient } from "./capabilities/git-clients.ts";
+export { LocalGitClient } from "./capabilities/git-clients.ts";
 export { GhCliGitHubClient } from "./capabilities/github-client.ts";
 export type {
   LspClient,
@@ -67,10 +65,7 @@ export {
   assertStraceAvailable,
   StraceUnavailableError,
 } from "./capabilities/strace.ts";
-export type {
-  DockerSpawnConfig,
-  ThreadManager,
-} from "./capabilities/thread-manager.ts";
+export type { ThreadManager } from "./capabilities/thread-manager.ts";
 export {
   type ContentBlockIdx,
   type DisplayBufferText,
@@ -111,13 +106,6 @@ export {
 } from "./compaction/token-budget.ts";
 export * from "./config/options.ts";
 export { OptionsStore } from "./config/options-store.ts";
-export { provisionContainer } from "./container/provision.ts";
-export { teardownContainer } from "./container/teardown.ts";
-export type {
-  ContainerConfig,
-  ProvisionResult,
-  TeardownResult,
-} from "./container/types.ts";
 export {
   type AutoContextFile,
   autoContextFilesToInitialFiles,
@@ -127,7 +115,6 @@ export {
 } from "./context/auto-context.ts";
 export { buildSystemInfo } from "./context/system-info.ts";
 export type { Dispatch } from "./dispatch.ts";
-export { DockerSupervisor } from "./docker-supervisor.ts";
 export {
   Executor,
   type InitialDocIndex,
@@ -429,7 +416,6 @@ export type {
   ToolLoopEndAction,
   ToolLoopEndContext,
   ToolLoopSupervisor,
-  YieldAction,
 } from "./thread-supervisor.ts";
 export {
   EditedFilesSupervisor,

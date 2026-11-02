@@ -364,7 +364,7 @@ export async function isLikelyTextFile(filePath: string): Promise<boolean> {
 }
 /**
  * FileIO-aware file type detection. Uses the FileIO abstraction instead of
- * direct filesystem access, so it works in docker environments.
+ * direct filesystem access, so it respects the thread's sandbox.
  */
 export async function detectFileTypeViaFileIO(
   filePath: string,

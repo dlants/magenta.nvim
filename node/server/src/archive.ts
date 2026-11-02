@@ -18,7 +18,6 @@ const THREAD_TYPES: ReadonlySet<ThreadType> = new Set([
   "subagent",
   "compact",
   "root",
-  "docker_root",
   "reflect",
 ]);
 
@@ -81,7 +80,7 @@ export type ArchiveEntry = {
  * so only top-level threads and script-spawned threads are listed. */
 function isListable(meta: ThreadMeta): boolean {
   if (meta.scriptName !== undefined) return true;
-  return meta.threadType === "root" || meta.threadType === "docker_root";
+  return meta.threadType === "root";
 }
 
 const META_READ_CONCURRENCY = 64;

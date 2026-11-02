@@ -1,12 +1,11 @@
 import path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { type AgentsMap, loadAgents } from "../agents/agents.ts";
 import type { MockStream } from "../providers/mock-anthropic-client.ts";
 import { type Harness, withHarness } from "../test/harness.ts";
 import { noopLogger } from "../test-helpers.ts";
 import type { Thread } from "../thread.ts";
-import { UnsupervisedSupervisor } from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
 import type { ProjectDir } from "../utils/files.ts";
@@ -112,31 +111,6 @@ it("yield_to_parent submits tool result back to subagent thread", () =>
       return child.yielded;
     });
     expect(yielded.value.result).toBe("Task result: success");
-  }));
-
-it("supervisor resultPrefix is prepended to yield response", () =>
-  withHarness({}, async (h) => {
-    const { thread } = await h.createRoot();
-    void h.send(thread, "Spawn a subagent.");
-    spawn(await h.nextStream(), "spawn-1", [{ prompt: "Do the task" }]);
-    const subagentStream = await h.streamWithText("Do the task");
-    const child = childThread(h, thread);
-    const supervisor = child.submissionSupervisors.find(
-      (s): s is UnsupervisedSupervisor => s instanceof UnsupervisedSupervisor,
-    );
-    if (!supervisor) throw new Error("expected an UnsupervisedSupervisor");
-    vi.spyOn(supervisor, "onYield").mockResolvedValue({
-      type: "accept",
-      resultPrefix: "[Worker branch: magenta/worker-test123]",
-    });
-    yieldResult(subagentStream, "yield-prefix", "Completed all changes");
-    const yielded = await pollUntil(() => {
-      if (!child.yielded) throw new Error("not yielded yet");
-      return child.yielded;
-    });
-    expect(yielded.resultPrefix).toContain("magenta/worker-test123");
-    expect(yielded.value).toEqual({ result: "Completed all changes" });
-    expect(child.tornDown).toBe(true);
   }));
 
 it("uses fast model for subagents when agentType is 'fast-edit'", () =>

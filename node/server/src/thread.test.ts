@@ -396,52 +396,6 @@ describe("deferred submissions", () => {
     ).toBe(1);
   });
 
-  it("does not drain the async queue into an agent-internal submission", async () => {
-    const { core, mockClient } = createAgentWithMock(
-      {
-        submissionSupervisors: [
-          {
-            onYield: async () => {
-              if (rejected) return { type: "none" as const };
-              rejected = true;
-              return { type: "reject" as const, message: "not done yet" };
-            },
-          },
-        ],
-        threadType: "subagent" as ThreadType,
-      },
-      uniqueThreadId("deferred-yield-rejection"),
-    );
-    let rejected = false;
-
-    void core.submit({
-      type: "resolved",
-      messages: [
-        {
-          type: "text",
-          text: "do the task",
-        },
-      ],
-    });
-    const stream = await mockClient.awaitStream();
-    core.enqueue(
-      { type: "raw", message: pendingMessage("also check this") },
-      "async",
-    );
-    stream.streamToolUse(
-      "tool-yield-rejected" as ToolRequestId,
-      "yield_to_parent" as ToolName,
-      { result: "done" },
-    );
-    stream.finishResponse("end_turn");
-    // The rejection is a submission the agent makes on its own behalf, and it
-    // is a request like any other: the async queue rides it.
-    const rejection = await awaitNextStream(mockClient, stream);
-    expect(userTexts(core)).toContain("not done yet");
-    expect(userTexts(core)).toContain("also check this");
-    expect(core.queued.async).toEqual([]);
-    rejection.finishResponse("end_turn");
-  });
   it("defers an @async @compact past the request it cannot ride on", async () => {
     let resolveStat!: () => void;
     const statPromise = new Promise<{ mtimeMs: number; size: number }>(
@@ -1583,43 +1537,6 @@ describe("thread status", () => {
     });
     await core.destroy();
   });
-  it("keeps the teardown guard when the accepting submission never settles", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-      submissionSupervisors: [
-        { onYield: () => Promise.resolve({ type: "accept" as const }) },
-      ],
-    });
-    void core.submit({
-      type: "resolved",
-      messages: [
-        {
-          type: "text",
-          text: "work",
-        },
-      ],
-    });
-    const stream = await mockClient.awaitStream();
-    stream.streamToolUse(
-      "yield-teardown" as ToolRequestId,
-      "yield_to_parent" as ToolName,
-      { result: "done" },
-    );
-    stream.finishResponse("tool_use");
-    await pollUntil(() => {
-      if (core.tornDown) return true;
-      throw new Error(`waiting for the teardown: ${activityLabel(core.state)}`);
-    });
-    // Teardown is terminal and lives outside `status`: a submission preempted
-    // or aborted between the accept hook and the settle cannot resurrect the
-    // thread. Standing in for that race by clearing the status directly.
-    core["status"] = { type: "idle", lastResult: undefined };
-    expect(core.yielded).toBeUndefined();
-    await expect(
-      core.submit({ type: "resolved", messages: [] }),
-    ).rejects.toThrow("torn down");
-    await core.destroy();
-  });
 });
 describe("replaceable conversation core", () => {
   it("remains usable when reset is interrupted during disposal", async () => {
@@ -1703,52 +1620,6 @@ describe("replaceable conversation core", () => {
     expect(mockClient.streams).toHaveLength(1);
     stream.finishResponse("end_turn");
     expect(await second).toEqual({ type: "completed", stopReason: "end_turn" });
-  });
-
-  it.each([
-    "abort",
-    "reset",
-    "destroy",
-  ] as const)("%s invalidates a pending yield decision", async (action) => {
-    const { core, mockClient } = createAgentWithMock({
-      submissionSupervisors: [
-        {
-          onYield: () => {
-            entered.resolve();
-            return decision.promise;
-          },
-        },
-      ],
-      threadType: "subagent" as ThreadType,
-    });
-    const entered = new Defer<void>();
-    const decision = new Defer<{ type: "accept" }>();
-
-    const sent = core.submit({
-      type: "resolved",
-      messages: [
-        {
-          type: "text",
-          text: "work",
-        },
-      ],
-    });
-    const stream = await mockClient.awaitStream();
-    stream.streamToolUse(
-      "late-yield" as ToolRequestId,
-      "yield_to_parent" as ToolName,
-      { result: "done" },
-    );
-    stream.finishResponse("end_turn");
-    await entered.promise;
-    if (action === "reset")
-      await resetThread(core, { archive: { type: "none" } });
-    else await core[action]();
-    decision.resolve({ type: "accept" });
-    expect(await sent).toEqual({ type: "aborted" });
-    expect(core.yielded).toBeUndefined();
-    expect(mockClient.streams).toHaveLength(1);
-    await core.destroy();
   });
 
   it("keeps an already yielded result across replacement", async () => {
@@ -2101,88 +1972,6 @@ describe("stale outer submissions", () => {
     replacement.streamText("done");
     replacement.finishResponse("end_turn");
     expect(await second).toEqual({ type: "completed", stopReason: "end_turn" });
-  });
-
-  it.each([
-    { action: "send", decision: { type: "accept" as const } },
-    {
-      action: "send",
-      decision: { type: "reject" as const, message: "stale rejection" },
-    },
-    { action: "reset", decision: { type: "accept" as const } },
-    {
-      action: "reset",
-      decision: { type: "reject" as const, message: "stale rejection" },
-    },
-  ])("$action invalidates a pending $decision.type yield decision while replacement runs", async ({
-    action,
-    decision,
-  }) => {
-    const entered = new Defer<void>();
-    const gate = new Defer<typeof decision>();
-    let yields = 0;
-    const { core, mockClient } = createAgentWithMock({
-      submissionSupervisors: [
-        {
-          onYield: () => {
-            if (yields++ > 0) return Promise.resolve({ type: "none" as const });
-            entered.resolve();
-            return gate.promise;
-          },
-        },
-      ],
-      threadType: "subagent",
-    });
-
-    const first = core.submit({
-      type: "resolved",
-      messages: [
-        {
-          type: "text",
-          text: "work",
-        },
-      ],
-    });
-    const stream = await mockClient.awaitStream();
-    stream.streamToolUse(
-      "stale-yield" as ToolRequestId,
-      "yield_to_parent" as ToolName,
-      { result: "old result" },
-    );
-    stream.finishResponse("tool_use");
-    await entered.promise;
-    if (action === "reset")
-      await resetThread(core, { archive: { type: "none" } });
-    const second = core.submit({
-      type: "resolved",
-      messages: [
-        {
-          type: "text",
-          text: "replacement",
-        },
-      ],
-    });
-    const replacement = await awaitNextStream(mockClient, stream);
-    gate.resolve(decision);
-    expect(await first).toEqual({ type: "aborted" });
-    expect(core.yielded).toBeUndefined();
-    expect(core.isBusy).toBe(true);
-    expect(core.lastResult()).toBeUndefined();
-    expect(userTexts(core)).not.toContain("stale rejection");
-    expect(mockClient.streams).toHaveLength(2);
-    replacement.streamToolUse(
-      "current-yield" as ToolRequestId,
-      "yield_to_parent" as ToolName,
-      { result: "new result" },
-    );
-
-    replacement.finishResponse("tool_use");
-    const expected = {
-      type: "yielded",
-      value: { result: "new result" },
-    };
-    expect(await second).toEqual(expected);
-    expect(await core.result).toEqual(expected);
   });
 });
 

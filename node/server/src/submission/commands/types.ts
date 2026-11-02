@@ -7,7 +7,7 @@ import type { HomeDir, ProjectDir } from "../../utils/files.ts";
 export interface MessageContext {
   projectDir: ProjectDir;
   homeDir: HomeDir;
-  /** The thread's (possibly sandboxed or docker) fileIO. */
+  /** The thread's sandboxed fileIO. */
   fileIO: FileIO;
   fileSupervisor: ContextFileAccess;
   logger: Logger;

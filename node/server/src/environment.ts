@@ -1,10 +1,6 @@
-import { execFile as execFileCb } from "node:child_process";
-import { promisify } from "node:util";
-import { DockerFileIO } from "./capabilities/docker-file-io.ts";
-import { DockerShell } from "./capabilities/docker-shell.ts";
 import type { FileIO } from "./capabilities/file-io.ts";
 import type { GitClient } from "./capabilities/git-client.ts";
-import { DockerGitClient, LocalGitClient } from "./capabilities/git-clients.ts";
+import { LocalGitClient } from "./capabilities/git-clients.ts";
 import type { LspClient } from "./capabilities/lsp-client.ts";
 import type { LuaExecutor } from "./capabilities/lua-executor.ts";
 import { SandboxFileIO } from "./capabilities/sandbox-file-io.ts";
@@ -20,12 +16,9 @@ import {
   type AbsFilePath,
   type HomeDir,
   type ProjectDir,
-  toHomeDir,
   toProjectDir,
 } from "./utils/files.ts";
-export type EnvironmentConfig =
-  | { type: "local"; projectDir?: ProjectDir }
-  | { type: "docker"; container: string; projectDir: ProjectDir };
+export type EnvironmentConfig = { type: "local"; projectDir?: ProjectDir };
 
 export interface Environment {
   fileIO: FileIO;
@@ -106,42 +99,5 @@ export function createLocalEnvironment({
     projectDir,
     homeDir,
     environmentConfig: { type: "local" },
-  };
-}
-const execFile = promisify(execFileCb);
-
-export async function createDockerEnvironment({
-  container,
-  projectDir: cwdParam,
-  threadId,
-}: {
-  container: string;
-  projectDir?: ProjectDir;
-  threadId: ThreadId;
-}): Promise<Environment> {
-  const projectDir: ProjectDir =
-    cwdParam ??
-    toProjectDir(
-      (await execFile("docker", ["exec", container, "pwd"])).stdout.trim(),
-    );
-  const resolvedHome = await execFile("docker", [
-    "exec",
-    container,
-    "sh",
-    "-c",
-    "echo $HOME",
-  ]).then((r) => r.stdout.trim());
-
-  const fileIO = new DockerFileIO({ container });
-  const shell = new DockerShell({ container, threadId });
-
-  return {
-    fileIO,
-    shell,
-    gitClient: new DockerGitClient(container),
-    sandboxViolationHandler: undefined,
-    projectDir,
-    homeDir: toHomeDir(resolvedHome),
-    environmentConfig: { type: "docker", container, projectDir },
   };
 }

@@ -8,10 +8,7 @@ import {
   SandboxViolationHandler,
 } from "./capabilities/sandbox-violation-handler.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
-import type {
-  DockerSpawnConfig,
-  ThreadManager,
-} from "./capabilities/thread-manager.ts";
+import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type {
   MessageIdx,
   ReflectAnchor,
@@ -44,11 +41,10 @@ import {
 } from "./thread-assembly.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { Defer, type Task } from "./utils/async.ts";
-import {
-  type AbsFilePath,
-  type ProjectDir,
-  toProjectDir,
-  type UnresolvedFilePath,
+import type {
+  AbsFilePath,
+  ProjectDir,
+  UnresolvedFilePath,
 } from "./utils/files.ts";
 
 export type SessionId = string & { __sessionId: true };
@@ -69,7 +65,6 @@ export type SessionCreateOptions = {
   subagentConfig?: SubagentConfig;
   fileIO?: FileIO;
   environmentConfig?: EnvironmentConfig;
-  dockerSpawnConfig?: DockerSpawnConfig | undefined;
   yieldSchema?: JSONSchemaType;
   scriptInvocationId?: ScriptInvocationId;
   scriptName?: string;
@@ -206,9 +201,6 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
   private cleanup = new Set<Promise<unknown>>();
   private disposed = false;
   private disposal: Promise<void> | undefined;
-  /** Docker teardown progress. The core has no opinion about containers, so
-   * the message a supervisor reports lives with the session that owns them. */
-  readonly teardownMessages = new Map<ThreadId, string>();
   /** Late-bound so scripts can be wired after construction, before any thread
    * exists. */
   scriptRunner: ScriptRunner | undefined;
@@ -732,7 +724,6 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       });
       thread.result.then(
         (result) => {
-          this.teardownMessages.delete(id);
           this.results.get(id)?.resolve(result);
         },
         (error: unknown) =>
@@ -799,18 +790,6 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     const threshold =
       options.autoCompactThreshold ?? prepared.autoCompactThreshold;
     const policy: ChatThreadPolicy = {
-      ...(options.dockerSpawnConfig
-        ? {
-            docker: {
-              ...options.dockerSpawnConfig,
-              onProgress: (message: string) => {
-                if (!this.records.has(options.threadId)) return;
-                this.teardownMessages.set(options.threadId, message);
-                this.emit("changed", options.threadId);
-              },
-            },
-          }
-        : {}),
       ...(threshold !== undefined ? { autoCompactThreshold: threshold } : {}),
       autoCompactPrompt:
         options.autoCompactPrompt ?? prepared.autoCompactPrompt,
@@ -841,11 +820,6 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     const source = this.records.get(sourceThreadId);
     if (source?.state !== "initialized") {
       throw new Error(`Thread ${sourceThreadId} not available for forking`);
-    }
-    if (source.options.environmentConfig?.type === "docker") {
-      throw new Error(
-        `Session.forkThread only supports local-source forks for MVP. Docker-source forks are a follow-up.`,
-      );
     }
     const {
       parent: _parent,
@@ -924,15 +898,9 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       : opts.subagentConfig?.thinkingModel
         ? { ...base, model: base.thinkingModel }
         : base;
-    const environmentConfig: EnvironmentConfig = opts.dockerSpawnConfig
-      ? {
-          type: "docker",
-          container: opts.dockerSpawnConfig.containerName,
-          projectDir: toProjectDir(opts.dockerSpawnConfig.workspacePath),
-        }
-      : opts.projectDir
-        ? { type: "local", projectDir: opts.projectDir }
-        : (parent.options.environmentConfig ?? { type: "local" });
+    const environmentConfig: EnvironmentConfig = opts.projectDir
+      ? { type: "local", projectDir: opts.projectDir }
+      : (parent.options.environmentConfig ?? { type: "local" });
     const { prompt: _prompt, parentThreadId: _parentThreadId, ...rest } = opts;
     return this.createThread({
       ...rest,
@@ -1007,7 +975,6 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     this.results
       .get(id)
       ?.resolve({ type: "aborted", reason: "thread deleted" });
-    this.teardownMessages.delete(id);
     const release = this.releases.get(id);
     this.releases.delete(id);
     void this.track(

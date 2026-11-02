@@ -3,14 +3,6 @@ import type { Aborted, ThreadOutcome } from "../thread-api.ts";
 import type { ProjectDir, UnresolvedFilePath } from "../utils/files.ts";
 import type { FileIO } from "./file-io.ts";
 
-export type DockerSpawnConfig = {
-  containerName: string;
-  imageName: string;
-  workspacePath: string;
-  hostDir: string;
-  supervised: boolean;
-};
-
 export interface ThreadManager {
   spawnThread(opts: {
     parentThreadId: ThreadId;
@@ -18,7 +10,6 @@ export interface ThreadManager {
     threadType: Exclude<ThreadType, "reflect">;
     subagentConfig?: SubagentConfig;
     contextFiles?: UnresolvedFilePath[];
-    dockerSpawnConfig?: DockerSpawnConfig;
     projectDir?: ProjectDir;
     /** Sandboxes the thread's file tools to an in-memory world (compaction). */
     fileIO?: FileIO;
@@ -34,7 +25,7 @@ export interface ThreadManager {
    * settles `aborted`. */
   deleteThread(threadId: ThreadId): void;
 
-  /** Resolves when the thread finishes — an accepted yield, or a teardown
+  /** Resolves when the thread finishes — a yield, or a deletion
    * that beat it. A promise rather than a poll plus a callback registry, so
    * the "did I miss the edge" guard every consumer used to need is gone. */
   awaitThreadResult(threadId: ThreadId): Promise<ThreadOutcome>;

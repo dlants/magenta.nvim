@@ -3,7 +3,6 @@ import type {
   StopReason,
   ToolResults,
 } from "./providers/provider-types.ts";
-import type { YieldAction } from "./thread-supervisor.ts";
 import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
 import { Defer, type Task } from "./utils/async.ts";
 
@@ -46,12 +45,12 @@ export type SubmissionResult =
   /** The submission settled without ever issuing a request (empty content),
    * so there was never a tool loop and there is nothing to continue from. */
   | { type: "empty" }
-  | { type: "yielded"; value: YieldValue; resultPrefix?: string }
+  | { type: "yielded"; value: YieldValue }
   | TerminalResult;
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */
 export type ThreadOutcome =
-  | { type: "yielded"; value: YieldValue; resultPrefix?: string }
+  | { type: "yielded"; value: YieldValue }
   /** destroyed before it ever yielded */
   | { type: "aborted"; reason: string };
 
@@ -145,11 +144,7 @@ export const IDLE_SUBMISSION = new ActiveSubmission(async () => {});
 export type ThreadStatus =
   | { type: "idle"; lastResult: SubmissionResult | undefined }
   | { type: "running"; submission: ActiveSubmission }
-  | {
-      type: "yielded";
-      value: YieldValue;
-      resultPrefix?: string;
-    }
+  | { type: "yielded"; value: YieldValue }
   /** Terminal. The last result is kept because a destroyed thread's history
    * can still be rendered. */
   | { type: "destroyed"; lastResult: SubmissionResult | undefined };
@@ -164,11 +159,6 @@ export type ToolResultsHook = (
   results: ToolResults,
   nativeMessageIdx: NativeMessageIdx,
 ) => void;
-
-/** The model called yield_to_parent and the tool result is already in the log.
- * Awaited; a refusal arrives as a follow-up system message after that
- * result. */
-export type YieldHook = (value: YieldValue) => Promise<YieldAction>;
 
 /** "Something visible moved." No payload: read `state`. Called at streaming
  * rates and not throttled; the recipient coalesces, and its debounce must be

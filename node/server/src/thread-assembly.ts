@@ -1,8 +1,6 @@
-import type { DockerSpawnConfig } from "./capabilities/thread-manager.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import { ThreadCompactor } from "./compaction/compactor.ts";
 import { TokenBudget } from "./compaction/token-budget.ts";
-import { DockerSupervisor } from "./docker-supervisor.ts";
 import type {
   AgentInput,
   NativeMessageIdx,
@@ -27,9 +25,6 @@ import { generateTitle } from "./tools/thread-title.ts";
  * fallbacks are resolved by the host, so assembly never reads editor
  * options. */
 export type ChatThreadPolicy = {
-  /** Progress reporting is only meaningful for a supervised docker thread, so
-   * it lives inside the docker config rather than beside it. */
-  docker?: DockerSpawnConfig & { onProgress?: (message: string) => void };
   autoCompactThreshold?: number;
   /** The handoff prompt an automatic compaction continues with. */
   autoCompactPrompt: string;
@@ -112,10 +107,6 @@ export function assembleThread(args: {
 }): AssembledThread {
   const { id, initialization, context, callbacks } = args;
   const conversation = resolveConversation(initialization);
-  const docker =
-    initialization.type === "fresh" && initialization.threadType !== "compact"
-      ? initialization.policy.docker
-      : undefined;
 
   const titles = new TitleSupervisor(context);
 
@@ -123,7 +114,7 @@ export function assembleThread(args: {
   const base = {
     ...context,
     submissionSupervisors: [
-      ...buildSubmissionSupervisors(conversation, docker),
+      ...buildSubmissionSupervisors(conversation),
       titles,
     ],
   };
@@ -210,21 +201,10 @@ function resolveConversation(
 
 function buildSubmissionSupervisors(
   conversation: Conversation,
-  docker: ChatThreadPolicy["docker"],
 ): SubmissionSupervisor[] {
   const supervisors: SubmissionSupervisor[] = [MaxTokensSupervisor.create()];
-  if (docker?.supervised) {
-    supervisors.push(
-      DockerSupervisor.create({
-        containerName: docker.containerName,
-        workspacePath: docker.workspacePath,
-        hostDir: docker.hostDir,
-        ...(docker.onProgress ? { onProgress: docker.onProgress } : {}),
-      }),
-    );
-  } else if (
+  if (
     conversation.threadType === "subagent" ||
-    conversation.threadType === "docker_root" ||
     conversation.threadType === "compact"
   ) {
     supervisors.push(UnsupervisedSupervisor.create());

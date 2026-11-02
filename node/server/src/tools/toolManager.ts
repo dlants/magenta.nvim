@@ -20,7 +20,6 @@ import * as ThreadTitle from "./thread-title.ts";
 import {
   CHAT_STATIC_TOOL_NAMES,
   COMPACT_STATIC_TOOL_NAMES,
-  DOCKER_ROOT_STATIC_TOOL_NAMES,
   REFLECT_STATIC_TOOL_NAMES,
   type StaticToolName,
   SUBAGENT_STATIC_TOOL_NAMES,
@@ -84,7 +83,6 @@ export function getToolSpecs(
   subagentConfig?: SubagentConfig,
   yieldSchema?: JSONSchemaType,
   scriptCatalog?: ScriptCatalogEntry[],
-  subagentDockerfile?: string,
 ): ProviderToolSpec[] {
   let staticToolNames: StaticToolName[] = [];
   switch (threadType) {
@@ -100,17 +98,6 @@ export function getToolSpecs(
     case "compact":
       staticToolNames = COMPACT_STATIC_TOOL_NAMES;
       break;
-    case "docker_root": {
-      const tier = subagentConfig?.tier;
-      if (tier === "leaf" || tier === undefined) {
-        staticToolNames = DOCKER_ROOT_STATIC_TOOL_NAMES.filter(
-          (t) => t !== "spawn_subagents",
-        );
-      } else {
-        staticToolNames = DOCKER_ROOT_STATIC_TOOL_NAMES;
-      }
-      break;
-    }
     case "root":
       staticToolNames = CHAT_STATIC_TOOL_NAMES;
       break;
@@ -135,13 +122,7 @@ export function getToolSpecs(
   const specs: ProviderToolSpec[] = [];
   for (const toolName of filteredToolNames) {
     if (toolName === "spawn_subagents") {
-      specs.push(
-        SpawnSubagents.getSpec(
-          agents ?? {},
-          subagentConfig?.tier,
-          subagentDockerfile,
-        ),
-      );
+      specs.push(SpawnSubagents.getSpec(agents ?? {}, subagentConfig?.tier));
     } else if (toolName === "yield_to_parent") {
       specs.push(YieldToParent.getSpec(yieldSchema));
     } else if (toolName === "run_script") {

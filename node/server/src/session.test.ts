@@ -114,8 +114,7 @@ it("derives a child's profile and environment from the parent record", async () 
   const { session, host, profile } = fixture();
   host.contextOverrides = {
     environmentConfig: {
-      type: "docker",
-      container: "remote",
+      type: "local",
       projectDir: toProjectDir("/work"),
     },
   };
@@ -142,8 +141,7 @@ it("derives a child's profile and environment from the parent record", async () 
   expect(child.options.profile.model).toBe("fast-model");
   // Environment is inherited from what the parent's construction resolved.
   expect(child.options.environmentConfig).toEqual({
-    type: "docker",
-    container: "remote",
+    type: "local",
     projectDir: "/work",
   });
 });
@@ -326,19 +324,6 @@ it("rejects approvals on deletion and releases environments even when destructio
   await session.dispose();
   expect(session.getPendingApprovals(id).size).toBe(0);
   expect(release).toHaveBeenCalledTimes(1);
-});
-
-it("uses the prepared environment when checking whether a fork is local", async () => {
-  const { session, profile, host } = fixture();
-  host.contextOverrides = {
-    environmentConfig: {
-      type: "docker",
-      container: "remote",
-      projectDir: toProjectDir("/workspace"),
-    },
-  };
-  const id = await created(session.createThread(rootOptions(profile)));
-  expect(() => session.forkThread(id)).toThrow("local-source forks");
 });
 
 it("freezes a fork at the requested index even if the source advances", async () => {

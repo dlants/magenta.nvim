@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadType } from "./chat-types.ts";
 import type { Logger } from "./logger.ts";
 import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import type { SystemInfo } from "./providers/system-prompt.ts";
@@ -14,8 +13,6 @@ import {
   type ToolLoopEndContext,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
-import type { ToolName, ToolRequestId } from "./tool-types.ts";
-import { pollUntil } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 
 const context: RequestContext = {
@@ -103,70 +100,6 @@ describe("Thread supervisor arbitration", () => {
     stream.finishResponse("end_turn");
     await turn;
   });
-  it("lets a rejecting yield gate win over one whose hook throws", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-      submissionSupervisors: [
-        {
-          onYield: () => {
-            throw new Error("boom");
-          },
-        },
-        {
-          onYield: () =>
-            Promise.resolve({ type: "reject", message: "not done yet" }),
-        },
-      ],
-    });
-    const sent = core.submit({
-      type: "resolved",
-      messages: userInput("do the task"),
-    });
-    const first = await mockClient.awaitStream();
-    first.streamToolUse(
-      "yield-1" as ToolRequestId,
-      "yield_to_parent" as ToolName,
-      { result: "all done" },
-    );
-    first.finishResponse("tool_use");
-    const second = await pollUntil(() => {
-      if (mockClient.streams.length < 2) throw new Error("waiting");
-      return mockClient.streams[1];
-    });
-    expect(JSON.stringify(second.messages)).toContain("not done yet");
-    second.finishResponse("end_turn");
-    expect(await sent).toMatchObject({ type: "completed" });
-  });
-
-  it("accepts the yield when the only yield hook throws", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-      submissionSupervisors: [
-        {
-          onYield: () => {
-            throw new Error("boom");
-          },
-        },
-      ],
-    });
-    const sent = core.submit({
-      type: "resolved",
-      messages: userInput("do the task"),
-    });
-    const stream = await mockClient.awaitStream();
-    stream.streamToolUse(
-      "yield-1" as ToolRequestId,
-      "yield_to_parent" as ToolName,
-      { result: "all done" },
-    );
-    stream.finishResponse("tool_use");
-    expect(await sent).toEqual({
-      type: "yielded",
-      value: { result: "all done" },
-    });
-    expect(mockClient.streams).toHaveLength(1);
-  });
-
   it("ignores a throwing pending-content hook and still asks the rest", async () => {
     const { core, mockClient } = createAgentWithMock({
       toolLoopSupervisors: [

@@ -1042,16 +1042,8 @@ export class Chat {
     const marker = threadId === left ? "*" : "-";
     const indent = "  ".repeat(depth);
     const threadWrapper = this.wrapper(threadId);
-    const threadType =
-      threadWrapper?.state === "initialized"
-        ? threadWrapper.thread.threadState.threadType
-        : undefined;
     const icon =
-      this.session.getOrigin(threadId)?.type === "reflect"
-        ? "💭 "
-        : threadType === "docker_root"
-          ? "🐳 "
-          : "";
+      this.session.getOrigin(threadId)?.type === "reflect" ? "💭 " : "";
 
     const isSandboxBypassed =
       threadWrapper?.state === "initialized"
@@ -1417,15 +1409,6 @@ ${rows}${loadMore}`;
         const summary = {
           title: thread.threadState.title,
           status: (() => {
-            // Check mode for thread-specific states first
-            const teardownMessage =
-              this.session.getThread(threadId)?.teardownMessage;
-            if (teardownMessage) {
-              return {
-                type: "running" as const,
-                activity: `🐳 ${teardownMessage}`,
-              };
-            }
             if (loopState.type === "yielded") {
               return {
                 type: "yielded" as const,

@@ -48,7 +48,6 @@ import {
   type ThreadStatus,
   type ToolLoopResult,
   type YieldState,
-  type YieldValue,
 } from "./thread-api.ts";
 import {
   type ContextDelivery,
@@ -110,7 +109,6 @@ export interface ThreadContextBase
   getAgents: () => AgentsMap;
   yieldSchema?: JSONSchemaType;
   getScriptRunner?: () => ScriptRunner | undefined;
-  subagentDockerfile?: string;
   initialFiles?: Files;
   initialGitState?: GitState;
   readonly resolve: ResolveSubmission;
@@ -378,7 +376,6 @@ export class Thread implements ThreadCoreView {
       context.subagentConfig,
       context.yieldSchema,
       context.getScriptRunner?.()?.getScriptCatalog(),
-      context.subagentDockerfile,
     );
   }
 
@@ -500,12 +497,7 @@ export class Thread implements ThreadCoreView {
       case "destroyed":
         return status.lastResult;
       case "yielded": {
-        const { value, resultPrefix } = status;
-        return {
-          type: "yielded",
-          value,
-          ...(resultPrefix ? { resultPrefix } : {}),
-        };
+        return { type: "yielded", value: status.value };
       }
       case "running":
         return undefined;
@@ -575,10 +567,6 @@ export class Thread implements ThreadCoreView {
     force?: true,
   ): Promise<SubmissionResult> {
     if (this.isDestroyed) throw new Error("Thread has been destroyed");
-    if (this.tornDownState)
-      throw new Error(
-        "This thread's container has been torn down. No further messages can be sent.",
-      );
     // Installed before the first await, so a caller that preempts can observe
     // the request having landed synchronously. The previous submission is
     // chained into this one: aborting this one waits for both to unwind, and
@@ -601,13 +589,7 @@ export class Thread implements ThreadCoreView {
       if (this.inFlight === submission) {
         this.status =
           result.type === "yielded"
-            ? {
-                type: "yielded",
-                value: result.value,
-                ...(result.resultPrefix
-                  ? { resultPrefix: result.resultPrefix }
-                  : {}),
-              }
+            ? { type: "yielded", value: result.value }
             : { type: "idle", lastResult: result };
         if (result.type === "yielded") this.settleResult(result);
         this.handleUpdate();
@@ -903,12 +885,8 @@ export class Thread implements ThreadCoreView {
     };
     let result = await runToolLoop(messages);
     for (;;) {
-      if (result.type === "yield") {
-        const resolved = await this.resolveYield(result.value, submission);
-        if (resolved.type === "settled") return resolved.result;
-        result = await runToolLoop(resolved.messages);
-        continue;
-      }
+      if (result.type === "yield")
+        return { type: "yielded", value: result.value };
       if (result.type !== "completed") return result;
       if (result.stopReason === "context_budget") {
         // Core only refuses when it holds a budget, which comes from here.
@@ -938,68 +916,6 @@ export class Thread implements ThreadCoreView {
           assertUnreachable(next);
       }
     }
-  }
-  /** The agent has yielded and settled; the supervisors decide whether that
-   * stands. The first `accept`/`reject` wins outright — later hooks are not
-   * consulted, since the decision is made — and `send-message` texts
-   * concatenate. */
-  /** Terminal and irreversible, and deliberately not part of `status`: an
-   * accepted yield means an owner took the thread's world away, which
-   * outlives any submission that is preempted or aborted before it settles.
-   * Written only by the yield hooks, and the single source of truth for the
-   * "nothing more can be sent" guards. */
-  private tornDownState = false;
-  /** Whether an owner accepted this thread's yield and tore it down. */
-  get tornDown(): boolean {
-    return this.tornDownState;
-  }
-  private async resolveYield(
-    value: YieldValue,
-    submission: ActiveSubmission,
-  ): Promise<
-    | { type: "settled"; result: LoopResult }
-    | { type: "resubmit"; messages: AgentInput[] }
-  > {
-    // A hook that is still deliberating when the thread is aborted keeps
-    // deliberating; its decision simply has nobody left to apply it.
-    const action = await submission.step(() =>
-      this.submissionChain.onYield(value),
-    );
-    if (action === ABORTED)
-      return { type: "settled", result: { type: "aborted" } };
-    if (action.type === "accept") {
-      const prefix = action.resultPrefix
-        ? { resultPrefix: action.resultPrefix }
-        : {};
-      this.tornDownState = true;
-      return {
-        type: "settled",
-        result: { type: "yielded", value, ...prefix },
-      };
-    }
-    if (action.type === "reject") {
-      return {
-        type: "resubmit",
-        messages: [
-          {
-            type: "text",
-            text: action.message,
-          },
-        ],
-      };
-    }
-    if (action.type !== "send-message") {
-      return { type: "settled", result: { type: "yielded", value } };
-    }
-    return {
-      type: "resubmit",
-      messages: [
-        {
-          type: "text",
-          text: action.text,
-        },
-      ],
-    };
   }
 
   private async continuation(
