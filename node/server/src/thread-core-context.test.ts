@@ -54,7 +54,7 @@ async function fixture(overrides: TestContextOverrides = {}) {
     {
       homeDir,
       fileIO,
-      initialGitState: git,
+      initialGitState: Promise.resolve(git),
       gitClient,
       ...overrides,
     },

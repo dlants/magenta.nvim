@@ -34,7 +34,7 @@ function setup(current: GitState, initial: GitState | undefined) {
   const onSent = vi.fn<(u: GitContextUpdate) => void>();
   const supervisor = GitSupervisor.create({
     gitClient,
-    initialGitState: initial,
+    initialGitState: Promise.resolve(initial),
     logger: noopLogger,
   });
   supervisor.callbacks = { ...supervisor.callbacks, onSent: onSent };
@@ -162,7 +162,7 @@ function trackerFor(
 ): GitTracker {
   return GitTracker.create({
     gitClient: clientFor(states),
-    initialState,
+    initialState: Promise.resolve(initialState),
     logger: noopLogger,
   });
 }
@@ -251,13 +251,26 @@ describe("GitTracker", () => {
     expect(await tracker.hasUpdate()).toBe(false);
   });
 
+  it("treats a background initial read as already shown", async () => {
+    const initial = new Defer<GitState | undefined>();
+    const tracker = GitTracker.create({
+      gitClient: clientFor([base]),
+      initialState: initial.promise,
+      logger: noopLogger,
+    });
+    const update = tracker.getUpdate(1 as NativeMessageIdx);
+    initial.resolve(base);
+    expect(await update).toBeUndefined();
+    expect(tracker.trackedRepoRoots).toEqual([base.repoRoot]);
+  });
+
   it("peeks false when reading git state throws", async () => {
     const tracker = GitTracker.create({
       gitClient: {
         findRepoRoot: () => Promise.resolve("/repo" as AbsFilePath),
         getState: () => Promise.reject(new Error("git is down")),
       },
-      initialState: base,
+      initialState: Promise.resolve(base),
       logger: noopLogger,
     });
     expect(await tracker.hasUpdate()).toBe(false);
@@ -305,7 +318,7 @@ describe("GitTracker multi-repo", () => {
     const client = new FakeGitClient([base, other]);
     const tracker = GitTracker.create({
       gitClient: client,
-      initialState: base,
+      initialState: Promise.resolve(base),
       logger: noopLogger,
     });
     return { client, tracker };
@@ -335,7 +348,7 @@ describe("GitTracker multi-repo", () => {
     vi.spyOn(client, "findRepoRoot").mockReturnValueOnce(root.promise);
     const tracker = GitTracker.create({
       gitClient: client,
-      initialState: base,
+      initialState: Promise.resolve(base),
       logger: noopLogger,
     });
     void tracker.registerPath("/other/a.txt" as AbsFilePath);
@@ -351,7 +364,7 @@ describe("GitTracker multi-repo", () => {
     vi.spyOn(client, "findRepoRoot").mockRejectedValueOnce(new Error("boom"));
     const tracker = GitTracker.create({
       gitClient: client,
-      initialState: base,
+      initialState: Promise.resolve(base),
       logger: noopLogger,
     });
     await tracker.registerPath("/x/a.txt" as AbsFilePath);

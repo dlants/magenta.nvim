@@ -110,7 +110,7 @@ export interface ThreadContextBase
   yieldSchema?: JSONSchemaType;
   getScriptRunner?: () => ScriptRunner | undefined;
   initialFiles?: Files;
-  initialGitState?: GitState;
+  initialGitState?: Promise<GitState | undefined>;
   readonly resolve: ResolveSubmission;
   readonly submissionSupervisors?: readonly SubmissionSupervisor[];
   readonly toolLoopSupervisors?: readonly ToolLoopSupervisor[];

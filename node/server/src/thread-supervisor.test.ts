@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { GitState } from "./capabilities/git-client.ts";
 import type { Logger } from "./logger.ts";
 import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import type { SystemInfo } from "./providers/system-prompt.ts";
@@ -9,10 +10,12 @@ import {
   type RequestContext,
   type SubmissionSupervisor,
   SubmissionSupervisorChain,
+  type SupervisorAction,
   SystemInfoSupervisor,
   type ToolLoopEndContext,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
+import { Defer } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 
 const context: RequestContext = {
@@ -259,6 +262,32 @@ describe("SystemInfoSupervisor", () => {
     });
     expect((await sup.onBeforeRequest(context)).type).toBe("inject");
     expect((await sup.onBeforeRequest(context)).type).toBe("none");
+  });
+
+  it("waits for the background git read before injecting", async () => {
+    const git = new Defer<GitState | undefined>();
+    const sup = SystemInfoSupervisor.create({
+      systemInfo,
+      git: git.promise,
+      alreadyInjected: false,
+    });
+    let action: SupervisorAction | undefined;
+    const request = sup.onBeforeRequest(context).then((a) => {
+      action = a;
+    });
+    await Promise.resolve();
+    expect(action).toBeUndefined();
+    git.resolve({
+      repoRoot: "/tmp" as AbsFilePath,
+      branch: "feature-x",
+      headSha: "abc",
+      headSubject: "subject",
+      stagedCount: 0,
+      unstagedCount: 0,
+      untrackedCount: 0,
+    });
+    await request;
+    expect(JSON.stringify(action)).toContain("feature-x");
   });
 
   it("restores whether the preamble existed at the clone point", async () => {

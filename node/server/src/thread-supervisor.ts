@@ -1,4 +1,5 @@
 import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
+import type { GitState } from "./capabilities/git-client.ts";
 import type { Logger } from "./logger.ts";
 import type {
   AgentInput,
@@ -330,15 +331,20 @@ export class SystemInfoSupervisor implements ToolLoopSupervisor {
   private constructor(
     private readonly systemInfo: SystemInfo,
     private injectedAt: HistoryIdx | undefined,
+    /** Git state is read in the background so thread creation doesn't wait on
+     * it; the first request does. */
+    private readonly git?: Promise<GitState | undefined>,
   ) {}
 
   static create(args: {
     systemInfo: SystemInfo;
+    git?: Promise<GitState | undefined>;
     alreadyInjected: boolean;
   }): SystemInfoSupervisor {
     return new SystemInfoSupervisor(
       args.systemInfo,
       args.alreadyInjected ? PRE_HISTORY : undefined,
+      args.git,
     );
   }
 
@@ -352,13 +358,15 @@ export class SystemInfoSupervisor implements ToolLoopSupervisor {
         historyIdxAtOrBefore(args.source.injectedAt, args.nativeMessageIdx)
         ? args.source.injectedAt
         : undefined,
+      args.source.git,
     );
   }
 
   async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
     if (this.injectedAt !== undefined) return { type: "none" };
     this.injectedAt = context.nativeMessageIdx;
-    return injectText(formatSystemInfo(this.systemInfo));
+    const git = this.git ? await this.git : this.systemInfo.git;
+    return injectText(formatSystemInfo({ ...this.systemInfo, git }));
   }
 }
 

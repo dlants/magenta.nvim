@@ -91,7 +91,7 @@ export interface ThreadCoreCallbacks {
 
 export type ThreadCoreSeed = {
   initialFiles?: Files;
-  initialGitState?: GitState;
+  initialGitState?: Promise<GitState | undefined>;
   /** Pull requests tracked by the core this one replaces. */
   pullRequests?: ReadonlyArray<string>;
 };
@@ -176,6 +176,7 @@ export class ThreadCore {
         context.threadType !== "compact"
           ? SystemInfoSupervisor.create({
               systemInfo: context.systemInfo,
+              ...(seed.initialGitState ? { git: seed.initialGitState } : {}),
               alreadyInjected: manager.log.messages.length > 0,
             })
           : undefined,

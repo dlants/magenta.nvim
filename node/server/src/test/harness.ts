@@ -243,13 +243,12 @@ export class TestSessionHost implements SessionHost {
           });
     const initialGitState = source
       ? undefined
-      : await readGitStateAt(this.git, projectDir);
+      : readGitStateAt(this.git, projectDir);
     const systemInfo =
       source?.systemInfo ??
       buildSystemInfo({
         projectDir,
         neovimVersion: "0.10.0",
-        overrides: { git: initialGitState },
       });
     const systemPrompt =
       source?.systemPrompt ??

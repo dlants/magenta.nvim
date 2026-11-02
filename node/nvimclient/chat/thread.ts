@@ -228,7 +228,6 @@ export type NvimThreadContext = {
   scriptName?: string;
   environment: Environment;
   initialFiles?: ContextFiles;
-  initialGitState?: GitState | undefined;
   subagentConfig?: SubagentConfig;
   systemInfo: SystemInfo;
 };

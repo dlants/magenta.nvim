@@ -93,7 +93,7 @@ export type PreparedThreadInfo = {
   environment: Environment;
   initialFiles?: Files;
   /** Undefined for forks, which inherit the source's git context. */
-  initialGitState: GitState | undefined;
+  initialGitState: Promise<GitState | undefined> | undefined;
   subagentConfig?: SubagentConfig;
   systemInfo: SystemInfo;
   yieldSchema?: JSONSchemaType;
@@ -327,9 +327,16 @@ export class ServerSessionHost implements SessionHost {
       environment.sandboxViolationHandler = undefined;
     }
 
+    // Not awaited: a git read costs several process spawns, and nothing needs it
+    // until the first request, where the system info and git tracker await it.
     const initialGitState = source
       ? undefined
-      : await readGitStateAt(environment.gitClient, environment.projectDir);
+      : readGitStateAt(environment.gitClient, environment.projectDir).catch(
+          (error: unknown) => {
+            logger.error(`Failed to read initial git state: ${String(error)}`);
+            return undefined;
+          },
+        );
 
     const systemInfo =
       source?.systemInfo ??
@@ -337,9 +344,6 @@ export class ServerSessionHost implements SessionHost {
         projectDir: environment.projectDir,
         neovimVersion:
           editor?.info.neovimVersion ?? "none (no client attached)",
-        overrides: {
-          git: initialGitState,
-        },
       });
 
     // A fork continues the source's conversation, so it keeps its prompt.

@@ -58,16 +58,30 @@ export class GitTracker {
 
   static create(args: {
     gitClient: GitClient;
-    initialState: GitState | undefined;
+    /** Read in the background so thread creation doesn't wait on git; every
+     * read waits on it like any other registration. */
+    initialState: Promise<GitState | undefined> | undefined;
     logger: Logger;
   }): GitTracker {
-    const repos: RepoHistories = new Map();
-    if (args.initialState) {
-      repos.set(args.initialState.repoRoot, [
-        { nativeMessageIdx: PRE_HISTORY, state: cloneState(args.initialState) },
-      ]);
-    }
-    return new GitTracker(args.gitClient, args.logger, repos);
+    const tracker = new GitTracker(args.gitClient, args.logger, new Map());
+    if (args.initialState) tracker.trackInitial(args.initialState);
+    return tracker;
+  }
+
+  private trackInitial(initial: Promise<GitState | undefined>): void {
+    const registration = initial
+      .then((state) => {
+        if (!state || this.repos.has(state.repoRoot)) return;
+        this.pending.delete(state.repoRoot);
+        this.repos.set(state.repoRoot, [
+          { nativeMessageIdx: PRE_HISTORY, state: cloneState(state) },
+        ]);
+      })
+      .catch((error: unknown) => {
+        this.logger.error(`GitTracker failed initial read: ${String(error)}`);
+      })
+      .finally(() => this.registrations.delete(registration));
+    this.registrations.add(registration);
   }
 
   static clone(args: {
@@ -154,8 +168,11 @@ export class GitTracker {
   /** Whether `getUpdate` would report something right now, without committing
    * the agent view. A probe for a request that may never be issued. */
   async hasUpdate(): Promise<boolean> {
+    // Snapshot after reading: pending registrations (e.g. the initial state)
+    // may add to the agent view while we wait.
+    const reads = await this.readAll();
     const views = this.getAgentView();
-    return (await this.readAll()).some(({ root, kind, state }) =>
+    return reads.some(({ root, kind, state }) =>
       kind === "new"
         ? state !== undefined
         : coarseChanged(views.get(root), state),
@@ -271,7 +288,7 @@ export class GitSupervisor implements ToolLoopSupervisor {
 
   static create(args: {
     gitClient: GitClient;
-    initialGitState: GitState | undefined;
+    initialGitState: Promise<GitState | undefined> | undefined;
     logger: Logger;
   }): GitSupervisor {
     return new GitSupervisor(
