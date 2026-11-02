@@ -213,7 +213,8 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
    * attached view and are rejected when their thread is aborted or deleted. */
   private approvals = new Map<ThreadId, SandboxViolationHandler>();
   /** Bypass state for session-owned roots. */
-  private bypassed = new Set<ThreadId>();
+  /** Sandbox is off by default; roots listed here have it enabled. */
+  private sandboxed = new Set<ThreadId>();
   /** Roots whose bypass state is owned elsewhere (a script invocation). */
   private sandboxRoots = new Map<
     ThreadId,
@@ -442,7 +443,7 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     const root = this.getSandboxRootId(id);
     const external = this.sandboxRoots.get(root)?.();
     if (external) return external.isSandboxBypassed;
-    return this.bypassed.has(root);
+    return !this.sandboxed.has(root);
   }
 
   toggleSandboxBypass(id: ThreadId): void {
@@ -450,10 +451,10 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     const external = this.sandboxRoots.get(root)?.();
     if (external) {
       external.toggle();
-    } else if (this.bypassed.has(root)) {
-      this.bypassed.delete(root);
+    } else if (this.sandboxed.has(root)) {
+      this.sandboxed.delete(root);
     } else {
-      this.bypassed.add(root);
+      this.sandboxed.add(root);
     }
     if (this.isSandboxBypassed(root)) this.approveAllPendingInSubtree(root);
     this.emit("changed", root);
@@ -642,8 +643,8 @@ The title must be a single line (no newlines) and a few words long (ideally arou
       options,
     };
     // A fork starts its own tree, so it inherits its source's bypass state.
-    if (request.type === "fork" && this.isSandboxBypassed(request.source.id)) {
-      this.bypassed.add(id);
+    if (request.type === "fork" && !this.isSandboxBypassed(request.source.id)) {
+      this.sandboxed.add(id);
     }
     this.records.set(id, record);
     this.results.set(id, new Defer());
@@ -969,7 +970,7 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     this.pending.delete(id);
     this.rejectAll(id);
     this.approvals.delete(id);
-    this.bypassed.delete(id);
+    this.sandboxed.delete(id);
     this.sandboxRoots.delete(id);
     this.records.delete(id);
     this.results

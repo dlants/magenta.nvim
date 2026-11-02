@@ -173,6 +173,7 @@ it("bell behavior: pending-approval bells propagate to script+neovim, yields don
         reason: "disabled",
       });
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
       const scriptManager = driver.magenta.serverInternals.internals.scripts;
 
       await pollUntil(() =>

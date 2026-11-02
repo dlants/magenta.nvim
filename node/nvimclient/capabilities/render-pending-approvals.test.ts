@@ -10,6 +10,7 @@ describe("pending approvals surfaced in parent thread", () => {
         reason: "disabled",
       });
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
 
       await driver.inputMagentaText("Spawn a subagent to run a command.");
       await driver.send();
@@ -143,6 +144,7 @@ describe("pending approvals surfaced in parent thread", () => {
         reason: "disabled",
       });
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
 
       await driver.inputMagentaText("Spawn a subagent to run a command.");
       await driver.send();
@@ -239,6 +241,7 @@ describe("pending approvals surfaced in parent thread", () => {
           reason: "disabled",
         });
         await driver.showSidebar();
+        await driver.magenta.command("sandbox-bypass");
 
         await driver.inputMagentaText("Run mkdir in parallel for me.");
         await driver.send();

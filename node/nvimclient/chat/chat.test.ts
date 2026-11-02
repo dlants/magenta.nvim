@@ -53,6 +53,7 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
       const thread1 = driver.getThreadId(0);
+      await driver.magenta.command("sandbox-bypass");
 
       // Send a message in thread 1
       await driver.inputMagentaText("First thread message");
@@ -89,6 +90,7 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
         state: "thread-selected",
         id: thread2,
       });
+      await driver.magenta.command("sandbox-bypass");
 
       // Send a message in thread 2
       await driver.inputMagentaText("Second thread message");
@@ -239,6 +241,7 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
   it("deletes entire thread subtree when pressing dd on root thread", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
 
       // Create first parent thread with a child
       await driver.inputMagentaText("Thread to delete");
@@ -268,6 +271,7 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
       // Create a second root thread
       await driver.magenta.command("new-thread");
       await driver.awaitThreadCount(3);
+      await driver.magenta.command("sandbox-bypass");
       await driver.inputMagentaText("Thread to keep");
       await driver.send();
 
@@ -309,6 +313,7 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
   it("deletes entire subtree when pressing dd on a child thread", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
 
       await driver.inputMagentaText("Root thread for dd child test");
       await driver.send();

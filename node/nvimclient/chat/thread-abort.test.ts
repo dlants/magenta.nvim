@@ -9,6 +9,7 @@ it("clears pending file permission checks when aborting", async () => {
   await withDriver({}, async (driver) => {
     driver.mockSandbox.setState({ status: "unsupported", reason: "disabled" });
     await driver.showSidebar();
+    await driver.magenta.command("sandbox-bypass");
     await driver.inputMagentaText("Run a command");
     await driver.send();
 
@@ -59,6 +60,7 @@ it("clears pending permissions when sending a new message during tool_use", asyn
   await withDriver({}, async (driver) => {
     driver.mockSandbox.setState({ status: "unsupported", reason: "disabled" });
     await driver.showSidebar();
+    await driver.magenta.command("sandbox-bypass");
     await driver.inputMagentaText("Run a command");
     await driver.send();
 
@@ -210,6 +212,7 @@ it("aborting one running tool leaves the rest of the batch running", async () =>
   await withDriver({}, async (driver) => {
     driver.mockSandbox.setState({ status: "unsupported", reason: "disabled" });
     await driver.showSidebar();
+    await driver.magenta.command("sandbox-bypass");
     await driver.inputMagentaText("Run two commands");
     await driver.send();
     const request = await driver.mockAnthropic.awaitPendingStream();

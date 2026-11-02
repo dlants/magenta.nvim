@@ -20,7 +20,6 @@ it("sandbox bypass and write approvals use the fork owner", async () => {
 
     const sourceThreadId = driver.magenta.chat.state.left!;
     const sourceThread = leftThread(driver.magenta.chat);
-    await driver.magenta.chat.toggleSandboxBypass(sourceThreadId);
 
     const idx = serverThread(sourceThread).nativeMessageIdx;
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);

@@ -421,6 +421,7 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
   it("shows thread hierarchy with parent-child relationships", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
 
       // Create a parent thread with some content
       await driver.inputMagentaText("This is the parent thread");
@@ -451,6 +452,7 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
       // Create another parent thread
       await driver.magenta.command("new-thread");
       await driver.awaitThreadCount(3);
+      await driver.magenta.command("sandbox-bypass");
 
       await driver.inputMagentaText("This is another parent thread");
       await driver.send();
@@ -511,6 +513,7 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
   it("handles thread hierarchy with stopped and yielded children", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
 
       // Create parent and spawn child that will yield
       await driver.inputMagentaText("Parent with yielding child");
@@ -565,6 +568,7 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
       await driver.magenta.command("new-thread");
       // Wait for new thread to be created
       await driver.awaitThreadCount(3);
+      await driver.magenta.command("sandbox-bypass");
       await driver.inputMagentaText("Parent with stopping child");
       await driver.send();
 
@@ -702,6 +706,7 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
   it("formats thread status correctly for different states", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
 
       // Create a thread and let it complete normally
       await driver.inputMagentaText("Test message");
@@ -716,6 +721,7 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
       await driver.magenta.command("new-thread");
       await driver.assertDisplayBufferContains("# [ Untitled ]");
       await driver.assertDisplayBufferContains(LOGO);
+      await driver.magenta.command("sandbox-bypass");
       await driver.inputMagentaText("Spawn subagents");
       await driver.send();
 
@@ -822,6 +828,7 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
         reason: "disabled",
       });
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
       const thread1 = driver.getThreadId(0);
 
       await driver.inputMagentaText(

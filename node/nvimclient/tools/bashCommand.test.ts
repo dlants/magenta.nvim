@@ -51,6 +51,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
   it("handles command errors gracefully after approval", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
       driver.mockSandbox.setState({
         status: "unsupported",
         reason: "disabled",
@@ -94,6 +95,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
   it("requires approval for a command not in the allowlist", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
       driver.mockSandbox.setState({
         status: "unsupported",
         reason: "disabled",
@@ -148,6 +150,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
   it("handles user rejection of command", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
       driver.mockSandbox.setState({
         status: "unsupported",
         reason: "disabled",
@@ -192,6 +195,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
   it("displays approval dialog with proper box formatting", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
       driver.mockSandbox.setState({
         status: "unsupported",
         reason: "disabled",
@@ -240,6 +244,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
   it("terminates a long-running command with 't' key", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
       driver.mockSandbox.setState({
         status: "unsupported",
         reason: "disabled",
@@ -287,6 +292,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
   it("shows the timer in both collapsed and expanded progress views", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
       driver.mockSandbox.setState({
         status: "unsupported",
         reason: "disabled",
@@ -335,6 +341,7 @@ describe("node/nvimclient/tools/bashCommand.test.ts", () => {
   it("ensures a command is executed only once", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
       driver.mockSandbox.setState({
         status: "unsupported",
         reason: "disabled",
@@ -629,6 +636,7 @@ describe("bash command output logging", () => {
   it("includes duration in the tool result for failed commands", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      await driver.magenta.command("sandbox-bypass");
       driver.mockSandbox.setState({
         status: "unsupported",
         reason: "disabled",

@@ -592,6 +592,8 @@ it("creates a reflect thread seeded from the source without sending", async () =
   expect(session.listDerived(id, "reflect").map((d) => d.threadId)).toEqual([
     reflectId,
   ]);
+  expect(session.isSandboxBypassed(reflectId)).toBe(true);
+  session.toggleSandboxBypass(reflectId);
   expect(session.isSandboxBypassed(reflectId)).toBe(false);
   session.toggleSandboxBypass(id);
   expect(session.isSandboxBypassed(reflectId)).toBe(true);
@@ -720,6 +722,8 @@ it("deletes nested and pending reflections with their source", async () => {
 it("owns approvals and bypass: toggling a root approves its subtree, forks inherit", async () => {
   const { session } = fixture();
   const rootId = await created(session.createRootThread());
+  expect(session.isSandboxBypassed(rootId)).toBe(true);
+  session.toggleSandboxBypass(rootId);
   const childId = await created(
     session.spawnThread({
       parentThreadId: rootId,

@@ -394,7 +394,7 @@ export function createInProcessServer({
       const invocationId = requireScripts().startScript(
         op.name,
         op.parameters,
-        { sandboxBypassed: false },
+        { sandboxBypassed: true },
       );
       return { type: "started", invocationId };
     },
