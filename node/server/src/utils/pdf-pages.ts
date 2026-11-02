@@ -1,4 +1,3 @@
-import { PDFDocument } from "pdf-lib";
 import type { FileIO } from "../capabilities/file-io.ts";
 import type { ToolResultContent } from "../providers/provider-types.ts";
 import type { AbsFilePath } from "./files.ts";
@@ -14,6 +13,7 @@ export async function extractPDFPage(
     const existingPdfBytes = await fileIO.readBinaryFile(filePath);
 
     // Load the PDF document
+    const { PDFDocument } = await import("pdf-lib");
     const pdfDoc = await PDFDocument.load(existingPdfBytes);
 
     // Check if page index is valid
@@ -56,6 +56,7 @@ export async function getPDFPageCount(
     const existingPdfBytes = await fileIO.readBinaryFile(filePath);
 
     // Load the PDF document
+    const { PDFDocument } = await import("pdf-lib");
     const pdfDoc = await PDFDocument.load(existingPdfBytes);
 
     // Get page count

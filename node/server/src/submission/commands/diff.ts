@@ -1,17 +1,20 @@
-import { $ } from "zx";
+import { execFile as execFileCb } from "node:child_process";
+import { promisify } from "node:util";
 import type { AgentInput } from "../../providers/provider-types.ts";
 import type { ProjectDir, UnresolvedFilePath } from "../../utils/files.ts";
 import type { Command } from "./types.ts";
+
+const execFile = promisify(execFileCb);
 
 async function getGitDiff(
   filePath: UnresolvedFilePath,
   projectDir: ProjectDir,
 ): Promise<string> {
   try {
-    const result = await $({
+    const result = await execFile("git", ["diff", "--", filePath], {
       cwd: projectDir,
-      quiet: true,
-    })`git diff -- ${filePath}`;
+      maxBuffer: 64 * 1024 * 1024,
+    });
     return result.stdout || "(no unstaged changes)";
   } catch (error) {
     throw new Error(
@@ -25,10 +28,10 @@ async function getStagedDiff(
   projectDir: ProjectDir,
 ): Promise<string> {
   try {
-    const result = await $({
+    const result = await execFile("git", ["diff", "--staged", "--", filePath], {
       cwd: projectDir,
-      quiet: true,
-    })`git diff --staged -- ${filePath}`;
+      maxBuffer: 64 * 1024 * 1024,
+    });
     return result.stdout || "(no staged changes)";
   } catch (error) {
     throw new Error(

@@ -27,6 +27,7 @@ const cmd = [
   "esbuild",
   "node/nvimclient/index.ts",
   "--bundle",
+  "--minify",
   "--platform=node",
   "--format=esm",
   `--outfile=${join("dist", "magenta.mjs")}`,

@@ -14,7 +14,8 @@
     "glob": "^13.0.6",
     "nock": "^14.0.5",
     "typescript": "^7.0.2",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "zx": "^8.8.5"
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.32.0",
@@ -40,8 +41,7 @@
     "play-sound": "^1.1.6",
     "tsx": "^4.19.2",
     "uuid": "^14.0.0",
-    "winston": "^3.17.0",
-    "zx": "^8.8.5"
+    "winston": "^3.17.0"
   },
   "overrides": {
     "winston": {

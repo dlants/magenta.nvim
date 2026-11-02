@@ -1,5 +1,4 @@
-import { Sha256 } from "@aws-crypto/sha256-js";
-import { SignatureV4 } from "@smithy/signature-v4";
+import type { SignatureV4 } from "@smithy/signature-v4";
 import type { AwsCredentials } from "./aws-credentials.ts";
 
 export const DEFAULT_BEDROCK_MANTLE_REGION = "us-west-2";
@@ -22,12 +21,24 @@ export function createSigV4Fetch(
   region: string,
   credentials: AwsCredentials,
 ): typeof fetch {
-  const signer = new SignatureV4({
-    service: "bedrock",
-    region,
-    credentials: credentials.resolve,
-    sha256: Sha256,
-  });
+  // The signing libraries are loaded on first request to keep them out of
+  // startup.
+  let signer: SignatureV4 | undefined;
+  const getSigner = async () => {
+    if (!signer) {
+      const [{ Sha256 }, { SignatureV4 }] = await Promise.all([
+        import("@aws-crypto/sha256-js"),
+        import("@smithy/signature-v4"),
+      ]);
+      signer = new SignatureV4({
+        service: "bedrock",
+        region,
+        credentials: credentials.resolve,
+        sha256: Sha256,
+      });
+    }
+    return signer;
+  };
 
   return async (input, init) => {
     const url = new URL(
@@ -40,7 +51,7 @@ export function createSigV4Fetch(
     // The SDK always serializes bodies to strings, and SigV4 needs the exact
     // bytes it will send in order to compute the payload hash.
     const body = typeof init?.body === "string" ? init.body : undefined;
-    const signed = await signer.sign({
+    const signed = await (await getSigner()).sign({
       method: init?.method ?? "GET",
       protocol: url.protocol,
       hostname: url.hostname,

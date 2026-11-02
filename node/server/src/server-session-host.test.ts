@@ -262,7 +262,7 @@ describe("submission resolution", () => {
     await writeFile(path.join(dir, "s.txt"), "staged\n");
     await git("add", "s.txt");
     await writeFile(path.join(dir, "s.txt"), "unstaged\n");
-    // zx builds a shell string, so shell metacharacters in the path must be quoted
+    // shell metacharacters in the path must reach git verbatim
     const weirdName = "we$ird'\"name.txt";
     await writeFile(path.join(dir, weirdName), "weird\n");
     await git("add", weirdName);

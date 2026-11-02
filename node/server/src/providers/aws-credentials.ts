@@ -1,4 +1,3 @@
-import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import type {
   AwsCredentialIdentity,
   AwsCredentialIdentityProvider,
@@ -27,9 +26,20 @@ function buildProvider(env: AwsEnv): AwsCredentialIdentityProvider {
       "Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set together",
     );
   }
-  return fromNodeProviderChain(
-    env?.AWS_PROFILE ? { profile: env.AWS_PROFILE } : {},
-  );
+  // Loaded on first use: the credential-providers SDK is large, and keeping it
+  // off the module graph keeps it out of startup for non-bedrock users.
+  let chain: AwsCredentialIdentityProvider | undefined;
+  return async (props) => {
+    if (!chain) {
+      const { fromNodeProviderChain } = await import(
+        "@aws-sdk/credential-providers"
+      );
+      chain = fromNodeProviderChain(
+        env?.AWS_PROFILE ? { profile: env.AWS_PROFILE } : {},
+      );
+    }
+    return chain(props);
+  };
 }
 
 /** Credential resolution shared by the two Bedrock-backed providers: the
