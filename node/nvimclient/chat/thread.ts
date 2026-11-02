@@ -101,7 +101,7 @@ export type Msg =
       type: "toggle-pending-message";
       index: number;
     }
-  | { type: "toggle-pull-request-error"; url: string }
+  | { type: "toggle-pull-request-expanded"; url: string }
   | { type: "retry-pull-request"; url: string }
   | {
       type: "toggle-expand-content";
@@ -239,7 +239,7 @@ export class NvimThread {
     expandedToolDefinitions: { [toolName: string]: boolean };
     contextFilesExpanded: boolean;
     pendingMessagesExpanded: { [index: number]: boolean };
-    pullRequestErrorsExpanded: { [url: string]: boolean };
+    pullRequestsExpanded: { [url: string]: boolean };
     editedFilesExpanded: { [key: string]: { patch: string } };
     messageViewState: { [messageIdx: number]: MessageViewState };
     toolViewState: { [toolRequestId: ToolRequestId]: ToolViewState };
@@ -280,7 +280,7 @@ export class NvimThread {
       expandedToolDefinitions: {},
       contextFilesExpanded: false,
       pendingMessagesExpanded: {},
-      pullRequestErrorsExpanded: {},
+      pullRequestsExpanded: {},
       editedFilesExpanded: {},
       messageViewState: {},
       toolViewState: {},
@@ -569,9 +569,9 @@ export class NvimThread {
         this.state.contextFilesExpanded = !this.state.contextFilesExpanded;
         return;
 
-      case "toggle-pull-request-error":
-        this.state.pullRequestErrorsExpanded[msg.url] =
-          !this.state.pullRequestErrorsExpanded[msg.url];
+      case "toggle-pull-request-expanded":
+        this.state.pullRequestsExpanded[msg.url] =
+          !this.state.pullRequestsExpanded[msg.url];
         return;
 
       case "retry-pull-request":

@@ -102,10 +102,33 @@ describe("renderPullRequests", () => {
         },
       ]),
     ).toBe(
-      `\n# pull requests:\n- \uf407 Fix it ${URL} (open) checks: 1 pending, 1 passed, 1 failed (polled 40s ago)\n  - failed: lint https://ci/lint\n  - [pending update: 1 comment]\n`,
+      `\n# pull requests:\n- \uf407 Fix it ${URL} (open) checks: 1 pending, 1 passed, 1 failed (polled 40s ago)\n  - failed: lint https://ci/lint\n  - pending: test\n  - passed: build\n  - [pending update: 1 comment]\n`,
     );
   });
 
+  it("collapsed shows at most 3 failed checks", () => {
+    const checks = ["a", "b", "c", "d", "e"].map((name) => ({
+      name,
+      status: "failure" as const,
+      url: undefined,
+    }));
+    const text = render(
+      [
+        {
+          url: URL,
+          loaded: true,
+          status: { type: "finished" },
+          snapshot: { ...snapshot, checks: [...checks, snapshot.checks[2]] },
+          pending: undefined,
+        },
+      ],
+      false,
+    );
+    expect(text).toContain(
+      "  - failed: a\n  - failed: b\n  - failed: c\n  - ... 2 more failed\n",
+    );
+    expect(text).not.toContain("passed: build");
+  });
   it("renders failing with a snapshot and finished", () => {
     const text = render([
       {

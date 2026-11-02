@@ -2,6 +2,7 @@ import {
   type FileUpdates,
   formatGitHead,
   type GitContextUpdate,
+  type PullRequestCheck,
   type PullRequestContextUpdate,
   type PullRequestUpdate,
   type PullRequestViewState,
@@ -233,6 +234,15 @@ function truncateTitle(title: string): string {
 function formatAgo(ms: number, now: number): string {
   return `${Math.max(0, Math.round((now - ms) / 1000)).toString()}s ago`;
 }
+const MAX_COLLAPSED_FAILED_CHECKS = 3;
+const CHECK_LABELS: Record<PullRequestCheck["status"], string> = {
+  pending: "pending",
+  success: "passed",
+  failure: "failed",
+  neutral: "neutral",
+  skipped: "skipped",
+};
+
 export type PullRequestControls = {
   isExpanded: (url: string) => boolean;
   onToggle: (url: string) => void;
@@ -264,22 +274,28 @@ export function renderPullRequests(
               : "";
       const state = snapshot ? ` (${snapshot.state})` : "";
       const title = snapshot ? `${truncateTitle(snapshot.title)} ` : "";
-      const failedLines = failed.map(
-        (c) => d`  - failed: ${c.name}${c.url ? ` ${c.url}` : ""}\n`,
-      );
+      const expanded = controls.isExpanded(pr.url);
+      const checkLine = (c: PullRequestCheck) =>
+        d`  - ${CHECK_LABELS[c.status]}: ${c.name}${c.url ? ` ${c.url}` : ""}\n`;
+      const hiddenFailed = failed.length - MAX_COLLAPSED_FAILED_CHECKS;
+      const checkLines = expanded
+        ? (snapshot?.checks ?? []).map(checkLine)
+        : [
+            ...failed.slice(0, MAX_COLLAPSED_FAILED_CHECKS).map(checkLine),
+            hiddenFailed > 0
+              ? d`  - ... ${hiddenFailed.toString()} more failed\n`
+              : d``,
+          ];
       const pendingLine = pending
         ? d`  - [pending update: ${describeUpdate(pending)}]\n`
         : d``;
       const errorBadge =
         status.type === "failing"
-          ? d` ${withBindings(
-              withExtmark(d` Error`, { hl_group: "ErrorMsg" }),
-              { "=": () => controls.onToggle(pr.url) },
-            )}`
+          ? d` ${withExtmark(d` Error`, { hl_group: "ErrorMsg" })}`
           : d``;
       const statusLine =
         status.type === "failing"
-          ? controls.isExpanded(pr.url)
+          ? expanded
             ? d`  - poll failed (${status.consecutiveFailures.toString()}x${status.stopped ? ", stopped polling" : ""}): ${status.lastError}\n  ${withBindings(
                 withExtmark(d`[retry]`, { hl_group: "@comment" }),
                 { "<CR>": () => controls.onRetry(pr.url) },
@@ -294,7 +310,10 @@ export function renderPullRequests(
           : snapshot?.state === "closed"
             ? "\uf4dc"
             : "\uf407";
-      return d`- ${icon} ${title}${pr.url}${state}${counts}${statusText}${errorBadge}\n${failedLines}${pendingLine}${statusLine}`;
+      return d`${withBindings(
+        d`- ${icon} ${title}${pr.url}${state}${counts}${statusText}${errorBadge}`,
+        { "=": () => controls.onToggle(pr.url) },
+      )}\n${checkLines}${pendingLine}${statusLine}`;
     },
   )}`;
 }
