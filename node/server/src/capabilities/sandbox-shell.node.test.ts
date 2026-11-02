@@ -24,6 +24,7 @@ const passthroughSandbox: Sandbox = {
   annotateStderrWithSandboxFailures: (_command: string, stderr: string) =>
     stderr,
   cleanupAfterCommand: () => {},
+  acquireViolationMonitor: () => Promise.resolve(() => {}),
   getFsReadConfig: () => ({ denyOnly: [] }),
   getFsWriteConfig: () => ({ allowOnly: ["/"], denyWithinAllow: [] }),
   updateConfigIfChanged: () => {},

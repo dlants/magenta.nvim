@@ -3,6 +3,7 @@ import { StraceUnavailableError } from "./capabilities/strace.ts";
 import type { SandboxConfig } from "./sandbox-config.ts";
 import { DEFAULT_SANDBOX_CONFIG } from "./sandbox-config.ts";
 import {
+  LazyViolationMonitor,
   mergeApprovedDomains,
   type NetworkAskParams,
   NetworkAskStack,
@@ -131,7 +132,7 @@ describe("sandbox-manager", () => {
       expect(calledConfig.filesystem.allowWrite).toEqual(
         expect.arrayContaining(["/home/user/project"]),
       );
-      expect(mockInitialize.mock.calls[0][2]).toBe(true);
+      expect(mockInitialize.mock.calls[0][2]).toBe(false);
     });
 
     it("dependency warnings are logged but do not prevent initialization", async () => {
@@ -393,5 +394,44 @@ describe("startSandbox", () => {
     expect(sandbox).toBeDefined();
     expect(await ask!({ host: "late.com", port: 443 })).toBe(true);
     expect(routed).toEqual(["late.com"]);
+  });
+});
+
+describe("LazyViolationMonitor", () => {
+  it("starts on first acquire, shares across users, stops after idle", async () => {
+    vi.useFakeTimers();
+    try {
+      const stop = vi.fn();
+      const start = vi.fn(() => stop);
+      const monitor = new LazyViolationMonitor(start, 1000, 10);
+
+      const first = monitor.acquire();
+      await vi.advanceTimersByTimeAsync(10);
+      const release1 = await first;
+      const release2 = await monitor.acquire();
+      expect(start).toHaveBeenCalledTimes(1);
+
+      release1();
+      release1();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(stop).not.toHaveBeenCalled();
+
+      release2();
+      await vi.advanceTimersByTimeAsync(999);
+      const release3 = await monitor.acquire();
+      expect(stop).not.toHaveBeenCalled();
+      release3();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(stop).toHaveBeenCalledTimes(1);
+
+      const restarted = monitor.acquire();
+      await vi.advanceTimersByTimeAsync(10);
+      (await restarted)();
+      expect(start).toHaveBeenCalledTimes(2);
+      monitor.shutdown();
+      expect(stop).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -33,6 +33,7 @@ function createMockSandbox(): Sandbox {
     annotateStderrWithSandboxFailures: (_cmd: string, stderr: string) => stderr,
     updateConfigIfChanged: () => {},
     cleanupAfterCommand: () => {},
+    acquireViolationMonitor: () => Promise.resolve(() => {}),
     pushNetworkAskTarget: () => {},
     popNetworkAskTarget: () => {},
     routeNetworkAsk: () => Promise.resolve(false),

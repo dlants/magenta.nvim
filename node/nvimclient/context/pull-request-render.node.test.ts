@@ -77,8 +77,18 @@ describe("renderPullRequestUpdate", () => {
 });
 
 describe("renderPullRequests", () => {
-  const render = (states: PullRequestViewState[]) =>
-    renderToString(renderPullRequests(states, NOW));
+  const render = (states: PullRequestViewState[], expanded = true) =>
+    renderToString(
+      renderPullRequests(
+        states,
+        {
+          isExpanded: () => expanded,
+          onToggle: () => {},
+          onRetry: () => {},
+        },
+        NOW,
+      ),
+    );
 
   it("renders a loaded PR with counts, failed checks and pending update", () => {
     expect(
@@ -106,6 +116,7 @@ describe("renderPullRequests", () => {
           consecutiveFailures: 3,
           lastError: "boom",
           nextPollAt: NOW,
+          stopped: true,
         },
         snapshot: { ...snapshot, checks: [] },
         pending: undefined,
@@ -119,7 +130,7 @@ describe("renderPullRequests", () => {
       },
     ]);
     expect(text).toContain(
-      `-  Fix it ${URL} (open) checks: 0 pending, 0 passed, 0 failed\n  - poll failing (3x): boom\n`,
+      `-  Fix it ${URL} (open) checks: 0 pending, 0 passed, 0 failed  Error\n  - poll failed (3x, stopped polling): boom\n  [retry]\n`,
     );
     expect(text).toContain(
       `-  Fix it ${URL} (merged) checks: 0 pending, 0 passed, 0 failed (no longer polling)\n`,
@@ -128,26 +139,30 @@ describe("renderPullRequests", () => {
 
   it("omits state and counts without a snapshot", () => {
     expect(
-      render([
-        { url: URL, loaded: false, status: { type: "loading" } },
-        {
-          url: URL,
-          loaded: false,
-          status: { type: "unavailable", message: "gone" },
-        },
-        {
-          url: URL,
-          loaded: false,
-          status: {
-            type: "failing",
-            consecutiveFailures: 1,
-            lastError: "x",
-            nextPollAt: NOW,
+      render(
+        [
+          { url: URL, loaded: false, status: { type: "loading" } },
+          {
+            url: URL,
+            loaded: false,
+            status: { type: "unavailable", message: "gone" },
           },
-        },
-      ]),
+          {
+            url: URL,
+            loaded: false,
+            status: {
+              type: "failing",
+              consecutiveFailures: 1,
+              lastError: "x",
+              nextPollAt: NOW,
+              stopped: false,
+            },
+          },
+        ],
+        false,
+      ),
     ).toBe(
-      `\n# pull requests:\n-  ${URL} (loading)\n-  ${URL}\n  - unavailable: gone\n-  ${URL}\n  - poll failing (1x): x\n`,
+      `\n# pull requests:\n-  ${URL} (loading)\n-  ${URL}\n  - unavailable: gone\n-  ${URL}  Error\n`,
     );
   });
 

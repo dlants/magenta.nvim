@@ -233,8 +233,14 @@ function truncateTitle(title: string): string {
 function formatAgo(ms: number, now: number): string {
   return `${Math.max(0, Math.round((now - ms) / 1000)).toString()}s ago`;
 }
+export type PullRequestControls = {
+  isExpanded: (url: string) => boolean;
+  onToggle: (url: string) => void;
+  onRetry: (url: string) => void;
+};
 export function renderPullRequests(
   pullRequests: ReadonlyArray<PullRequestViewState>,
+  controls: PullRequestControls,
   now: number = Date.now(),
 ): VDOMNode {
   if (!pullRequests.length) return d``;
@@ -264,13 +270,25 @@ export function renderPullRequests(
       const pendingLine = pending
         ? d`  - [pending update: ${describeUpdate(pending)}]\n`
         : d``;
+      const errorBadge =
+        status.type === "failing"
+          ? d` ${withBindings(
+              withExtmark(d` Error`, { hl_group: "ErrorMsg" }),
+              { "=": () => controls.onToggle(pr.url) },
+            )}`
+          : d``;
       const statusLine =
         status.type === "failing"
-          ? d`  - poll failing (${status.consecutiveFailures.toString()}x): ${status.lastError}\n`
+          ? controls.isExpanded(pr.url)
+            ? d`  - poll failed (${status.consecutiveFailures.toString()}x${status.stopped ? ", stopped polling" : ""}): ${status.lastError}\n  ${withBindings(
+                withExtmark(d`[retry]`, { hl_group: "@comment" }),
+                { "<CR>": () => controls.onRetry(pr.url) },
+              )}\n`
+            : d``
           : status.type === "unavailable"
             ? d`  - unavailable: ${status.message}\n`
             : d``;
-      return d`-  ${title}${pr.url}${state}${counts}${statusText}\n${failedLines}${pendingLine}${statusLine}`;
+      return d`-  ${title}${pr.url}${state}${counts}${statusText}${errorBadge}\n${failedLines}${pendingLine}${statusLine}`;
     },
   )}`;
 }

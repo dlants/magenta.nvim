@@ -834,7 +834,11 @@ ${contentView}`;
     ? d`\n${renderStreamingBlock(thread)}\n`
     : d``;
 
-  const pullRequestsView = renderPullRequests(thread.threadState.pullRequests);
+  const pullRequestsView = renderPullRequests(thread.threadState.pullRequests, {
+    isExpanded: (url) => !!thread.state.pullRequestErrorsExpanded[url],
+    onToggle: (url) => dispatch({ type: "toggle-pull-request-error", url }),
+    onRetry: (url) => dispatch({ type: "retry-pull-request", url }),
+  });
 
   const gitRepos = thread.threadState.trackedGitRepos;
   const trackedGitReposView =

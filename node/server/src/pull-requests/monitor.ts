@@ -21,6 +21,8 @@ export type PullRequestPollStatus =
       consecutiveFailures: number;
       lastError: string;
       nextPollAt: number;
+      /** Automatic polling gave up; only `retry` polls again. */
+      stopped: boolean;
     }
   | { type: "unavailable"; message: string }
   | { type: "finished" };
@@ -51,6 +53,7 @@ const DORMANT_AFTER_MS = 5 * 60_000;
 const FIRST_DORMANT_DELAY_MS = 60_000;
 const MAX_DORMANT_DELAY_MS = 5 * 60_000;
 const PER_PAGE = 100;
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 type PollerPhase =
   | { type: "idle"; timer: ReturnType<typeof setTimeout> | undefined }
@@ -131,13 +134,19 @@ export class PullRequestMonitor {
    * polling right away if the last poll is older than that. */
   noteAttention(): void {
     for (const poller of this.pollers.values()) {
-      if (poller.dormantDelayMs === undefined) continue;
+      if (poller.dormantDelayMs === undefined || isStopped(poller)) continue;
       poller.dormantDelayMs = undefined;
       if (poller.phase.type !== "idle") continue;
       const delay = Math.max(this.intervalMs, poller.failureDelayMs);
       const dueAt = (poller.lastSettledAt ?? 0) + delay;
       this.schedule(poller, Math.max(0, dueAt - this.now()));
     }
+  }
+
+  /** Poll once now; a successful poll resumes automatic polling. */
+  retry(url: string): void {
+    const poller = this.pollers.get(url);
+    if (poller) this.poll(poller);
   }
 
   getSnapshot(url: string): PullRequestSnapshot | undefined {
@@ -256,8 +265,10 @@ export class PullRequestMonitor {
         consecutiveFailures: failures,
         lastError: result.message,
         nextPollAt: now,
+        stopped: failures >= MAX_CONSECUTIVE_FAILURES,
       };
       this.notify(poller);
+      if (poller.status.stopped) return;
     } else {
       poller.failureDelayMs = 0;
       const changed =
@@ -374,6 +385,9 @@ export class PullRequestMonitor {
       }),
     };
   }
+}
+function isStopped(poller: Poller): boolean {
+  return poller.status.type === "failing" && poller.status.stopped;
 }
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)

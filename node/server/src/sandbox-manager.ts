@@ -6,6 +6,7 @@ import type {
   SandboxViolationEvent,
 } from "@anthropic-ai/sandbox-runtime";
 import { SandboxManager } from "@anthropic-ai/sandbox-runtime";
+import { startMacOSSandboxLogMonitor } from "@anthropic-ai/sandbox-runtime/dist/sandbox/macos-sandbox-utils.js";
 import {
   assertStraceAvailable,
   StraceUnavailableError,
@@ -41,7 +42,10 @@ export interface Sandbox {
     homeDir: HomeDir,
   ): void;
   cleanupAfterCommand(): void;
-  // The sandbox owns a single global network-ask callback, but UI prompts live
+  /** Keeps the violation log monitor running until the returned release is
+   * called. Resolves once the monitor is able to observe violations. */
+  acquireViolationMonitor(): Promise<() => void>;
+  // The sandbox owns...
   // in per-command handlers. Each in-flight sandboxed command pushes itself as
   // the active target; routeNetworkAsk forwards to the top of the stack. An
   // empty stack fails closed (deny).
@@ -182,8 +186,68 @@ export class NetworkAskStack {
 
 // -- Real implementation wrapping @anthropic-ai/sandbox-runtime --
 
+/** How long the shared monitor outlives its last user. Each `log stream`
+ * filters the whole system log and costs ~40% of a core even when idle, so it
+ * must not run for the life of the process; the delay amortizes the restart
+ * across bursts of commands. */
+const VIOLATION_MONITOR_IDLE_MS = 5 * 60 * 1000;
+/** `log stream` gives no reliable readiness signal (its banner can precede
+ * the subscription); it measured ~45ms to start, so wait comfortably past
+ * that on a cold start. */
+const VIOLATION_MONITOR_WARMUP_MS = 150;
+
+/** One `log stream` process shared by all sandboxed commands in this
+ * process, started on demand and stopped after an idle period. */
+export class LazyViolationMonitor {
+  private stop: (() => void) | undefined;
+  private ready: Promise<void> | undefined;
+  private users = 0;
+  private idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(
+    private readonly start: () => () => void,
+    private readonly idleMs = VIOLATION_MONITOR_IDLE_MS,
+    private readonly warmupMs = VIOLATION_MONITOR_WARMUP_MS,
+  ) {}
+
+  async acquire(): Promise<() => void> {
+    this.users++;
+    clearTimeout(this.idleTimer);
+    this.idleTimer = undefined;
+    if (!this.stop) {
+      this.stop = this.start();
+      this.ready = new Promise((resolve) => setTimeout(resolve, this.warmupMs));
+    }
+    await this.ready;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.users--;
+      if (this.users > 0) return;
+      this.idleTimer = setTimeout(() => this.shutdown(), this.idleMs);
+      this.idleTimer.unref?.();
+    };
+  }
+
+  shutdown(): void {
+    clearTimeout(this.idleTimer);
+    this.idleTimer = undefined;
+    this.stop?.();
+    this.stop = undefined;
+    this.ready = undefined;
+  }
+}
+
 class RealSandbox implements Sandbox {
   private state: SandboxState;
+  private violationMonitor = new LazyViolationMonitor(() => {
+    const store = SandboxManager.getSandboxViolationStore();
+    return startMacOSSandboxLogMonitor(
+      (violation) => store.addViolation(violation),
+      SandboxManager.getConfig()?.ignoreViolations,
+    );
+  });
   private lastConfigJson: string | undefined;
   private networkAskStack = new NetworkAskStack();
 
@@ -236,6 +300,10 @@ class RealSandbox implements Sandbox {
 
   cleanupAfterCommand(): void {
     SandboxManager.cleanupAfterCommand();
+  }
+  acquireViolationMonitor(): Promise<() => void> {
+    if (process.platform !== "darwin") return Promise.resolve(() => {});
+    return this.violationMonitor.acquire();
   }
 
   pushNetworkAskTarget(target: NetworkAskTarget): void {
@@ -293,7 +361,8 @@ export async function initializeSandbox(
     toProjectDir(projectDir),
     homeDir,
   );
-  await SandboxManager.initialize(runtimeConfig, askCallback, true);
+  // The log monitor is started lazily per command (RealSandbox), not here.
+  await SandboxManager.initialize(runtimeConfig, askCallback, false);
   const lastConfigJson = JSON.stringify(runtimeConfig);
 
   return new RealSandbox({ status: "ready" }, lastConfigJson);
@@ -346,6 +415,7 @@ function unsupportedSandbox(reason: string): Sandbox {
     getFsWriteConfig: () => ({ allowOnly: [], denyWithinAllow: [] }),
     updateConfigIfChanged: () => {},
     cleanupAfterCommand: () => {},
+    acquireViolationMonitor: () => Promise.resolve(() => {}),
     pushNetworkAskTarget: () => {},
     popNetworkAskTarget: () => {},
     routeNetworkAsk: () => Promise.resolve(false),

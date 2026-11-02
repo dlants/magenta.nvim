@@ -29,6 +29,7 @@ const mockSandbox = {
   annotateStderrWithSandboxFailures: (...args: [string, string]) =>
     mockAnnotateStderrWithSandboxFailures(...args),
   cleanupAfterCommand: () => mockCleanupAfterCommand(),
+  acquireViolationMonitor: () => Promise.resolve(() => {}),
   getFsReadConfig: () => ({ denyOnly: [] }),
   getFsWriteConfig: () => ({ allowOnly: ["/"], denyWithinAllow: [] }),
   updateConfigIfChanged: (...args: [SandboxConfig, ProjectDir, HomeDir]) =>

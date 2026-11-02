@@ -49,6 +49,10 @@ export class MockSandboxManager implements Sandbox {
   updateConfigIfChanged(): void {}
   cleanupAfterCommand(): void {}
 
+  acquireViolationMonitor(): Promise<() => void> {
+    return Promise.resolve(() => {});
+  }
+
   private networkAskStack = new NetworkAskStack();
 
   pushNetworkAskTarget(target: NetworkAskTarget): void {

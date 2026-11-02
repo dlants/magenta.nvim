@@ -282,6 +282,7 @@ export class SandboxShell implements Shell {
     const preCount = store.getTotalCount();
 
     const wrapped = await this.sandbox.wrapWithSandbox(commandToWrap);
+    const releaseMonitor = await this.sandbox.acquireViolationMonitor();
 
     try {
       return await this.runWrappedAndHandleViolations(
@@ -305,6 +306,7 @@ export class SandboxShell implements Shell {
         }
       }
       this.sandbox.cleanupAfterCommand();
+      releaseMonitor();
     }
   }
 

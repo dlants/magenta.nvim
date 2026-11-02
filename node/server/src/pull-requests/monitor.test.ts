@@ -246,6 +246,34 @@ describe("PullRequestMonitor", () => {
     expect(pullCalls()).toBe(3);
   });
 
+  it("stops after 3 consecutive failures; retry polls once", async () => {
+    const { client, monitor, pullCalls } = setup();
+    client.setResponse(PATHS.pull, {
+      type: "error",
+      status: 403,
+      message: "saml",
+      retryAfterMs: undefined,
+    });
+    monitor.subscribe(URL, attended());
+    await vi.advanceTimersByTimeAsync(10 * MIN);
+    expect(monitor.getStatus(URL)).toMatchObject({
+      type: "failing",
+      consecutiveFailures: 3,
+      stopped: true,
+    });
+    await vi.advanceTimersByTimeAsync(60 * MIN);
+    monitor.noteAttention();
+    await vi.advanceTimersByTimeAsync(60 * MIN);
+    expect(pullCalls()).toBe(3);
+
+    monitor.retry(URL);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pullCalls()).toBe(4);
+    expect(monitor.getStatus(URL)).toMatchObject({ consecutiveFailures: 4 });
+    await vi.advanceTimersByTimeAsync(60 * MIN);
+    expect(pullCalls()).toBe(4);
+  });
+
   it("fetches new check paths without an etag after a head change", async () => {
     const { client, monitor } = setup();
     monitor.subscribe(URL, attended());
@@ -405,9 +433,9 @@ describe("PullRequestMonitor", () => {
       });
       await vi.advanceTimersByTimeAsync(0);
       const start = Date.now();
-      // failure: 60,120,240 ; dormancy: 60,120,240 -> then failure 480 vs 300
-      const times = await pollTimes(pullCalls, 4);
-      expect(gaps([start, ...times])).toEqual([60, 120, 240, 480]);
+      // failure: 60,120 ; dormancy: 60,120; the third failure stops polling
+      const times = await pollTimes(pullCalls, 2);
+      expect(gaps([start, ...times])).toEqual([60, 120]);
     });
   });
 });

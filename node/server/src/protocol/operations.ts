@@ -56,6 +56,7 @@ export type Operation =
       threadId: ThreadId;
     }
   | { type: "sandbox.toggleBypass"; threadId: ThreadId }
+  | { type: "pullRequest.retry"; url: string }
   | { type: "session.setActiveProfile"; sessionId: SessionId; name: string }
   | {
       type: "script.run";
@@ -98,6 +99,7 @@ export type OperationSuccessMap = {
   "approval.rejectAll": Ok;
   "approval.approveAllInSubtree": Ok;
   "sandbox.toggleBypass": Ok;
+  "pullRequest.retry": Ok;
   "session.setActiveProfile": Ok;
   "script.run": { type: "started"; invocationId: ScriptInvocationId };
   "script.abort": Ok;

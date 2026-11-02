@@ -344,6 +344,10 @@ export function createInProcessServer({
       readyThread(op.threadId).contextFiles.removeFileContext(op.file);
       return ok;
     },
+    "pullRequest.retry": (op) => {
+      session.pullRequestMonitor?.retry(op.url);
+      return ok;
+    },
     "tool.abort": (op) => {
       const state = readyThread(op.threadId).state;
       const entry =
