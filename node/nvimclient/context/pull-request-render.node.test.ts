@@ -102,7 +102,7 @@ describe("renderPullRequests", () => {
         },
       ]),
     ).toBe(
-      `\n# pull requests:\n-  Fix it ${URL} (open) checks: 1 pending, 1 passed, 1 failed (polled 40s ago)\n  - failed: lint https://ci/lint\n  - [pending update: 1 comment]\n`,
+      `\n# pull requests:\n- \uf407 Fix it ${URL} (open) checks: 1 pending, 1 passed, 1 failed (polled 40s ago)\n  - failed: lint https://ci/lint\n  - [pending update: 1 comment]\n`,
     );
   });
 
@@ -130,10 +130,10 @@ describe("renderPullRequests", () => {
       },
     ]);
     expect(text).toContain(
-      `-  Fix it ${URL} (open) checks: 0 pending, 0 passed, 0 failed  Error\n  - poll failed (3x, stopped polling): boom\n  [retry]\n`,
+      `- \uf407 Fix it ${URL} (open) checks: 0 pending, 0 passed, 0 failed  Error\n  - poll failed (3x, stopped polling): boom\n  [retry]\n`,
     );
     expect(text).toContain(
-      `-  Fix it ${URL} (merged) checks: 0 pending, 0 passed, 0 failed (no longer polling)\n`,
+      `- \uf419 Fix it ${URL} (merged) checks: 0 pending, 0 passed, 0 failed (no longer polling)\n`,
     );
   });
 
@@ -162,7 +162,7 @@ describe("renderPullRequests", () => {
         false,
       ),
     ).toBe(
-      `\n# pull requests:\n-  ${URL} (loading)\n-  ${URL}\n  - unavailable: gone\n-  ${URL}  Error\n`,
+      `\n# pull requests:\n- \uf407 ${URL} (loading)\n- \uf407 ${URL}\n  - unavailable: gone\n- \uf407 ${URL}  Error\n`,
     );
   });
 

@@ -203,7 +203,7 @@ Stopped (end_turn)  [input: 1000, output: 5000]
 ────────────────────
 
 # git repos:
--  /private/tmp/magenta-test/<id>/cwd
+-  /private/tmp/magenta-test/<id>/cwd
 "
 `;
 
@@ -236,7 +236,7 @@ Stopped (end_turn)  [input: 1000, output: 5000]
 ────────────────────
 
 # git repos:
--  /private/tmp/magenta-test/<id>/cwd
+-  /private/tmp/magenta-test/<id>/cwd
 "
 `;
 
@@ -739,6 +739,6 @@ Stopped (end_turn)  [input: 1000, output: 5000]
 ────────────────────
 
 # git repos:
--  /private/tmp/magenta-test/<id>/cwd
+-  /private/tmp/magenta-test/<id>/cwd
 "
 `;

@@ -837,7 +837,7 @@ ${contentView}`;
   const gitRepos = thread.threadState.trackedGitRepos;
   const trackedGitReposView =
     gitRepos.length > 0
-      ? d`\n${withExtmark(d`# git repos:`, { hl_group: "@markup.heading.1.markdown" })}\n${gitRepos.map((root) => d`-  ${root}\n`)}`
+      ? d`\n${withExtmark(d`# git repos:`, { hl_group: "@markup.heading.1.markdown" })}\n${gitRepos.map((root) => d`- \ue725 ${root}\n`)}`
       : d``;
   const bottomSeparatorView =
     thread.threadState.pullRequests.length > 0 || gitRepos.length > 0

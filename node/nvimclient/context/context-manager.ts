@@ -288,7 +288,13 @@ export function renderPullRequests(
           : status.type === "unavailable"
             ? d`  - unavailable: ${status.message}\n`
             : d``;
-      return d`-  ${title}${pr.url}${state}${counts}${statusText}${errorBadge}\n${failedLines}${pendingLine}${statusLine}`;
+      const icon =
+        snapshot?.state === "merged"
+          ? "\uf419"
+          : snapshot?.state === "closed"
+            ? "\uf4dc"
+            : "\uf407";
+      return d`- ${icon} ${title}${pr.url}${state}${counts}${statusText}${errorBadge}\n${failedLines}${pendingLine}${statusLine}`;
     },
   )}`;
 }
