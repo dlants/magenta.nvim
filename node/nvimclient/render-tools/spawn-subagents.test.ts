@@ -601,6 +601,11 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
         toolRequests: [],
       });
 
+      // Unsupervised subagents get auto-restarted when they end_turn without yielding
+      await driver.mockAnthropic.awaitPendingStreamWithText(
+        "You stopped without yielding",
+      );
+
       // View thread hierarchy
       await driver.magenta.command("threads-overview");
 
@@ -621,7 +626,7 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
         `* ▼ Parent with stopping child: ⏳ executing tools (1 subthreads)`,
       );
       await driver.assertDisplayBufferContains(
-        `  - 🔔 Just stop without yielding: ⏹️ stopped (end_turn)`,
+        `  - Just stop without yielding: ⏳ streaming response`,
       );
     });
   });

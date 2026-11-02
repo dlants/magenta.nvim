@@ -16,7 +16,9 @@ import { LOGO } from "./thread-view.ts";
 /** Sanitize display buffer text for stable snapshots by removing dynamic content */
 function sanitizeDisplayForSnapshot(text: string): string {
   // Replace timing info like "exit code 0 (16ms)" with stable placeholder
-  return text.replace(/\((\d+)ms\)/g, "(<timing>ms)");
+  return text
+    .replace(/\((\d+)ms\)/g, "(<timing>ms)")
+    .replace(/\/magenta-test\/[a-z0-9]+\//g, "/magenta-test/<id>/");
 }
 
 /** Replace dynamic thread IDs and timing info in messages with a placeholder for stable snapshots */
@@ -478,7 +480,7 @@ it("processes @diff command to include git diff in message", {
     const diffContent = userContent.find(
       (content) =>
         content.type === "text" &&
-        content.text.includes("Git diff for `poem.txt`:") &&
+        content.text.includes(`Git diff for \`${cwd}/poem.txt\`:`) &&
         content.text.includes("modified content"),
     );
     expect(diffContent).toBeDefined();
@@ -491,11 +493,13 @@ it("processes @diff command to include git diff in message", {
 
     // Verify the original message is displayed
     await driver.assertDisplayBufferContains(
-      "Show me changes in @diff:poem.txt",
+      `Show me changes in @diff:${cwd}/poem.txt`,
     );
 
     // Verify git diff content is included
-    await driver.assertDisplayBufferContains("Git diff for `poem.txt`:");
+    await driver.assertDisplayBufferContains(
+      `Git diff for \`${cwd}/poem.txt\`:`,
+    );
     await driver.assertDisplayBufferContains("modified content");
   });
 });
@@ -532,7 +536,7 @@ it("processes @staged command to include staged diff in message", {
     const stagedContent = userContent.find(
       (content) =>
         content.type === "text" &&
-        content.text.includes("Staged diff for `poem2.txt`:") &&
+        content.text.includes(`Staged diff for \`${cwd}/poem2.txt\`:`) &&
         content.text.includes("staged content"),
     );
     expect(stagedContent).toBeDefined();
@@ -545,11 +549,13 @@ it("processes @staged command to include staged diff in message", {
 
     // Verify the original message is displayed
     await driver.assertDisplayBufferContains(
-      "Review staged changes @staged:poem2.txt",
+      `Review staged changes @staged:${cwd}/poem2.txt`,
     );
 
     // Verify staged diff content is included
-    await driver.assertDisplayBufferContains("Staged diff for `poem2.txt`:");
+    await driver.assertDisplayBufferContains(
+      `Staged diff for \`${cwd}/poem2.txt\`:`,
+    );
     await driver.assertDisplayBufferContains("staged content");
   });
 });

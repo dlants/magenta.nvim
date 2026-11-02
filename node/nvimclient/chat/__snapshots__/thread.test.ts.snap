@@ -199,7 +199,12 @@ I'll edit the poem for you.
 
 ▶ 1 file in context
 
-Stopped (end_turn)  [input: 1000, output: 5000] "
+Stopped (end_turn)  [input: 1000, output: 5000] 
+────────────────────
+
+# git repos:
+-  /private/tmp/magenta-test/<id>/cwd
+"
 `;
 
 exports[`followup user message text is visible with context updates > followup-with-context-updates 1`] = `
@@ -227,7 +232,12 @@ I'll make the poem longer.
 
 ▶ 1 file in context
 
-Stopped (end_turn)  [input: 1000, output: 5000] "
+Stopped (end_turn)  [input: 1000, output: 5000] 
+────────────────────
+
+# git repos:
+-  /private/tmp/magenta-test/<id>/cwd
+"
 `;
 
 exports[`forks a thread while streaming by aborting the stream first 1`] = `
@@ -725,5 +735,10 @@ I've read both files for you.
 
 ▶ 2 files in context
 
-Stopped (end_turn)  [input: 1000, output: 5000] "
+Stopped (end_turn)  [input: 1000, output: 5000] 
+────────────────────
+
+# git repos:
+-  /private/tmp/magenta-test/<id>/cwd
+"
 `;
