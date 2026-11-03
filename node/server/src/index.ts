@@ -586,3 +586,4 @@ export {
   type Row0Indexed,
   type StringIdx,
 } from "./utils/string-position.ts";
+export * from "./watchers/protocol.ts";
