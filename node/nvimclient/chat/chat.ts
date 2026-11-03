@@ -1192,15 +1192,18 @@ export class Chat {
     const marker = threadId === left ? "*" : "-";
     const indent = "  ".repeat(depth);
     const threadWrapper = this.wrapper(threadId);
+    const originType = this.session.getOrigin(threadId)?.type;
     const icon =
-      this.session.getOrigin(threadId)?.type === "reflect" ? "💭 " : "";
+      originType === "reflect" ? "💭 " : originType === "fork" ? "↰ " : "";
 
     const isSandboxBypassed =
       threadWrapper?.state === "initialized"
         ? threadWrapper.thread.isSandboxBypassed
         : false;
     const sandboxIndicator =
-      depth === 0 && isSandboxBypassed ? withError(d` SANDBOX OFF `) : d``;
+      (depth === 0 || originType === "fork") && isSandboxBypassed
+        ? withError(d` SANDBOX OFF `)
+        : d``;
 
     const bell = this.threadNeedsAttention(threadId) ? "🔔 " : "";
 
@@ -1295,16 +1298,35 @@ export class Chat {
     const childrenMap = this.buildChildrenMap();
     const threadViews: VDOMNode[] = [];
 
-    const rootThreads: { id: ThreadId }[] = [];
-    for (const record of this.session.listThreads()) {
+    const isTopLevelCandidate = (id: ThreadId) => {
+      const record = this.session.getThread(id);
       // Script-owned threads are rendered nested under their script invocation
       // in the Scripts section, not as top-level threads here.
-      if (
+      return (
+        record !== undefined &&
         record.parentThreadId === undefined &&
         record.scriptInvocationId === undefined &&
         record.origin?.type !== "reflect" &&
-        !this.isThreadDeleted(record.id)
+        !this.isThreadDeleted(id)
+      );
+    };
+
+    // Forks nest under their source thread when that source is itself shown
+    // in this list; otherwise they fall back to being roots.
+    const forksMap = new Map<ThreadId, ThreadId[]>();
+    const rootThreads: { id: ThreadId }[] = [];
+    for (const record of this.session.listThreads()) {
+      if (!isTopLevelCandidate(record.id)) continue;
+      const origin = record.origin;
+      if (
+        origin?.type === "fork" &&
+        isTopLevelCandidate(origin.sourceThreadId)
       ) {
+        forksMap.set(origin.sourceThreadId, [
+          ...(forksMap.get(origin.sourceThreadId) ?? []),
+          record.id,
+        ]);
+      } else {
         rootThreads.push({ id: record.id });
       }
     }
@@ -1318,7 +1340,9 @@ export class Chat {
 No threads yet`;
     }
 
-    for (const { id } of rootThreads) {
+    const renderEntry = (id: ThreadId, depth: number, seen: Set<ThreadId>) => {
+      if (seen.has(id)) return;
+      seen.add(id);
       const hasChildren = (childrenMap.get(id)?.length ?? 0) > 0;
       const isExpanded = this.expandedThreads.has(id);
       const childCount = hasChildren
@@ -1326,7 +1350,7 @@ No threads yet`;
         : 0;
 
       threadViews.push(
-        this.renderThread(id, 0, this.state.left, {
+        this.renderThread(id, depth, this.state.left, {
           hasChildren,
           isExpanded,
           childCount,
@@ -1334,25 +1358,27 @@ No threads yet`;
       );
 
       if (hasChildren && isExpanded) {
-        const children = childrenMap.get(id) ?? [];
-        for (const childId of children) {
+        for (const childId of childrenMap.get(id) ?? []) {
           this.renderThreadSubtree(
             childId,
-            1,
+            depth + 1,
             childrenMap,
             this.state.left,
             threadViews,
           );
         }
       } else if (hasChildren && !isExpanded) {
-        const violationViews = this.collectSubtreeViolationViews(
-          id,
-          childrenMap,
-        );
-        for (const violationView of violationViews) {
-          threadViews.push(violationView);
-        }
+        threadViews.push(...this.collectSubtreeViolationViews(id, childrenMap));
       }
+
+      for (const forkId of forksMap.get(id) ?? []) {
+        renderEntry(forkId, depth + 1, seen);
+      }
+    };
+
+    const seen = new Set<ThreadId>();
+    for (const { id } of rootThreads) {
+      renderEntry(id, 0, seen);
     }
 
     return d`# Threads ${archiveLink}
