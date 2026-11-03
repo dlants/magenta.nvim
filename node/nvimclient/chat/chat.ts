@@ -1096,11 +1096,7 @@ export class Chat {
     views: VDOMNode[],
   ) {
     if (!this.session.getThread(threadId)) return;
-    views.push(
-      this.renderThread(threadId, depth, this.state.left, undefined, {
-        showTokenCount: true,
-      }),
-    );
+    views.push(this.renderThread(threadId, depth, this.state.left));
     for (const childId of childrenMap.get(threadId) ?? []) {
       this.renderScriptSubtreeInner(childId, childrenMap, depth + 1, views);
     }
@@ -1183,9 +1179,6 @@ export class Chat {
       isExpanded: boolean;
       childCount: number;
     },
-    extra?: {
-      showTokenCount: boolean;
-    },
   ): VDOMNode {
     const displayName = this.getThreadDisplayName(threadId);
     const status = this.formatThreadStatus(threadId);
@@ -1217,7 +1210,7 @@ export class Chat {
       : "";
 
     let tokenSuffix = "";
-    if (extra?.showTokenCount && threadWrapper?.state === "initialized") {
+    if (threadWrapper?.state === "initialized") {
       const tokenCount = threadWrapper.thread.threadState.lastStopTokenCount;
       if (tokenCount > 0) {
         tokenSuffix = ` [${formatTokenCount(tokenCount)}]`;
