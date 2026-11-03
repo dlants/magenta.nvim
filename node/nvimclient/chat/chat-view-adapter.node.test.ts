@@ -118,7 +118,7 @@ it("rebuilding the view adapter over an existing session makes no new thread or 
     request.finishResponse("end_turn");
     await submitted;
 
-    const threadId = liveThread.id as ThreadId;
+    const threadId = liveThread.id;
     const titleRequests = mock.forceToolUseRequests.length;
     const rebuilt = newChat();
 
@@ -150,7 +150,7 @@ it("a turn completes with no view listener attached to the session", async () =>
     request.streamText("response with no view");
     request.finishResponse("end_turn");
     expect((await submitted).type).toBe("completed");
-    expect(chat.session.getThread(thread.id as ThreadId)?.state).toBe("ready");
+    expect(chat.session.getThread(thread.id)?.state).toBe("ready");
   });
 });
 

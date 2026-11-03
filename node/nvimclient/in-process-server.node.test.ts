@@ -34,4 +34,7 @@ it("owner shutdown disposes the scripts and the session", async () => {
   await server.dispose();
   expect(scriptsDispose).toHaveBeenCalledOnce();
   expect(sessionDispose).toHaveBeenCalledOnce();
+  expect(scriptsDispose.mock.invocationCallOrder[0]).toBeLessThan(
+    sessionDispose.mock.invocationCallOrder[0],
+  );
 });
