@@ -79,3 +79,4 @@ Client option: `autoReloadBuffers: boolean` in `lua/magenta/options.lua`.
 
 - Goal: `autoReloadBuffers = false` disables watching; with it on, a bash tool call (`sed -i`) through a mock provider updates an open buffer.
 - Tests: tier C end-to-end via mock provider issuing a `bash_command` that edits an open file; assert buffer content after the tool completes.
+- [x] Done. `autoReloadBuffers = true` default in `lua/magenta/options.lua`; the gate lives in `autoreload.setup()` (tears down and returns when false), so `init.lua` still calls it unconditionally and there is one place to check. Option is lua-only (not parsed in TS `options.ts`, which never needs it). Tests in `buffer-reload.test.ts`: "autoReloadBuffers = false disables watching" and "a bash_command sed -i updates an open clean buffer" (mock provider, `sed -i.bak` for BSD/GNU portability). pull-requests and spawn-subagents tests fail identically on the base commit.

@@ -597,4 +597,48 @@ describe("autoreload watcher", () => {
       expect(await allLines(buffer)).toEqual(["ONE", "two", "three"]);
     });
   });
+  test("autoReloadBuffers = false disables watching", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      await lua(
+        driver,
+        `require("magenta.options").set_options({ autoReloadBuffers = false })`,
+      );
+      const { buffer } = await openWatched(
+        driver,
+        path.join(dirs.tmpDir, "test.txt"),
+      );
+      expect(await lua<number>(driver, countDirs)).toBe(0);
+      await fs.writeFile(path.join(dirs.tmpDir, "test.txt"), "changed\n");
+      await sleep(300);
+      expect(await allLines(buffer)).toEqual(["one", "two", "three"]);
+    });
+  });
+  test("a bash_command sed -i updates an open clean buffer", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      const filePath = path.join(dirs.tmpDir, "test.txt");
+      const { buffer } = await openWatched(driver, filePath);
+      await driver.showSidebar();
+      await driver.inputMagentaText("replace two");
+      await driver.send();
+      const request = await driver.mockAnthropic.awaitPendingStream();
+      request.respond({
+        stopReason: "tool_use",
+        text: "ok",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "sed-edit" as ToolRequestId,
+              toolName: "bash_command" as ToolName,
+              input: {
+                description: "edit",
+                command: `sed -i.bak 's/two/TWO/' ${filePath}`,
+              },
+            },
+          },
+        ],
+      });
+      await waitForLines(buffer, ["one", "TWO", "three"]);
+    });
+  });
 });

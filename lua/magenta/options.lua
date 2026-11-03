@@ -35,7 +35,8 @@ local defaults = {
     }
   },
   chimeVolume = 0.3,
-  bellOnNotify = true
+  bellOnNotify = true,
+  autoReloadBuffers = true
 }
 
 M.options = defaults

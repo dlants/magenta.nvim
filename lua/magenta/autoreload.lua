@@ -196,6 +196,9 @@ end
 
 function M.setup()
   M.teardown()
+  if not require("magenta.options").options.autoReloadBuffers then
+    return
+  end
   augroup = vim.api.nvim_create_augroup("MagentaAutoreload", { clear = true })
   vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufFilePost" }, {
     group = augroup,
