@@ -282,3 +282,4 @@ Approvals in tests go through the existing public session APIs (`session.getPend
   - `thread-edited-files`: all three tests are about `<CR>` diff windows/buffers; records are covered by `edited-files-flow.test.ts`.
   - "disposing the view leaves the thread alone" (AC) is left for stage 6.
 - `withDriver(` call sites: 248 → 232. Full suite: only the 3 known pre-existing failures (plus a `@staged` flake that passes in isolation). tsc and biome clean.
+- Review follow-up: `thread-compact-flow.test.ts` "spawns one compact child thread per chunk" no longer uses `current!`; it checks the active compaction explicitly (re-read mid-run, since `current` is a state snapshot) and throws a clear error if it is missing.

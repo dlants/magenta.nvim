@@ -621,7 +621,9 @@ it("spawns one compact child thread per chunk, carrying the summary forward", ()
 
     const done = h.send(thread, "@compact Continue with next task");
     await waitCompacting(h, id);
-    const totalChunks = compactorOf(h, id).current!.totalChunks;
+    const current = compactorOf(h, id).current;
+    if (!current) throw new Error("expected an active compaction");
+    const totalChunks = current.totalChunks;
     expect(totalChunks).toBeGreaterThanOrEqual(2);
 
     const chunk1 = await h.nextStream();
@@ -631,7 +633,9 @@ it("spawns one compact child thread per chunk, carrying the summary forward", ()
     const chunk2 = await h.nextStream();
     expect(text(chunk2)).toContain("chunk 2 of");
     expect(text(chunk2)).toContain("First chunk processed");
-    expect(compactionRunThreadIds(compactorOf(h, id).current!)).toHaveLength(2);
+    const midRun = compactorOf(h, id).current;
+    if (!midRun) throw new Error("expected compaction to still be active");
+    expect(compactionRunThreadIds(midRun)).toHaveLength(2);
     await finishChunk(h, chunk2, "Both answers were very long");
     for (let i = 2; i < totalChunks; i++) {
       await finishChunk(h, await h.nextStream(), "more");
