@@ -4,12 +4,19 @@ import net from "node:net";
 import path from "node:path";
 import {
   type HelloResult,
-  type JsonRpcResponse,
   type LoadedManifest,
   lineSplitter,
+  parseJsonRpcLine,
+  parseResourceState,
   type ResourceState,
   readManifest,
 } from "./protocol.ts";
+
+function expectState(raw: unknown): ResourceState {
+  const state = parseResourceState(raw);
+  if (!state) throw new Error("watcher sent an invalid ResourceState");
+  return state;
+}
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
 
@@ -23,21 +30,19 @@ export class WatcherClient {
     socket.on(
       "data",
       lineSplitter((line) => {
-        let msg: JsonRpcResponse & { method?: string; params?: unknown };
-        try {
-          msg = JSON.parse(line);
-        } catch {
-          return;
-        }
-        if (msg.method === "state") {
-          for (const cb of this.stateListeners) cb(msg.params as ResourceState);
+        const msg = parseJsonRpcLine(line);
+        if (!msg) return;
+        if (msg.kind === "notification" || msg.kind === "request") {
+          if (msg.method !== "state") return;
+          const state = parseResourceState(msg.params);
+          if (state) for (const cb of this.stateListeners) cb(state);
           return;
         }
         if (typeof msg.id !== "number") return;
         const p = this.pending.get(msg.id);
         if (!p) return;
         this.pending.delete(msg.id);
-        if ("error" in msg) p.reject(new Error(msg.error.message));
+        if (msg.kind === "error") p.reject(new Error(msg.error.message));
         else p.resolve(msg.result);
       }),
     );
@@ -60,26 +65,43 @@ export class WatcherClient {
     });
   }
 
-  hello(): Promise<HelloResult> {
-    return this.request("hello") as Promise<HelloResult>;
+  async hello(): Promise<HelloResult> {
+    const r = await this.request("hello");
+    if (
+      typeof r !== "object" ||
+      r === null ||
+      !("name" in r) ||
+      typeof r.name !== "string" ||
+      !("protocolVersion" in r) ||
+      r.protocolVersion !== 1
+    ) {
+      throw new Error("invalid hello result");
+    }
+    return { name: r.name, protocolVersion: 1 };
   }
-  subscribe(key: string, filter?: unknown): Promise<ResourceState> {
-    return this.request(
-      "subscribe",
-      filter === undefined ? { key } : { key, filter },
-    ) as Promise<ResourceState>;
+  async subscribe(key: string, filter?: unknown): Promise<ResourceState> {
+    return expectState(
+      await this.request(
+        "subscribe",
+        filter === undefined ? { key } : { key, filter },
+      ),
+    );
   }
-  unsubscribe(key: string): Promise<null> {
-    return this.request("unsubscribe", { key }) as Promise<null>;
+  async unsubscribe(key: string): Promise<void> {
+    await this.request("unsubscribe", { key });
   }
-  get(key: string, filter?: unknown): Promise<ResourceState> {
-    return this.request(
-      "get",
-      filter === undefined ? { key } : { key, filter },
-    ) as Promise<ResourceState>;
+  async get(key: string, filter?: unknown): Promise<ResourceState> {
+    return expectState(
+      await this.request(
+        "get",
+        filter === undefined ? { key } : { key, filter },
+      ),
+    );
   }
-  list(): Promise<ResourceState[]> {
-    return this.request("list") as Promise<ResourceState[]>;
+  async list(): Promise<ResourceState[]> {
+    const r = await this.request("list");
+    if (!Array.isArray(r)) throw new Error("invalid list result");
+    return r.map(expectState);
   }
   onState(cb: (s: ResourceState) => void): () => void {
     this.stateListeners.add(cb);
@@ -165,9 +187,7 @@ export async function waitFor(
       const check = (s: ResourceState) => {
         if (predicate(s)) resolve(s);
         else if (s.status === "unavailable") {
-          reject(
-            new Error(`${key} is unavailable${s.error ? `: ${s.error}` : ""}`),
-          );
+          reject(new Error(`${key} is unavailable: ${s.error}`));
         }
       };
       if (opts.timeoutMs !== undefined) {

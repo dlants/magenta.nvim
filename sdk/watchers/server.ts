@@ -2,17 +2,16 @@ import { mkdirSync, unlinkSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import {
-  type JsonRpcRequest,
   lineSplitter,
   PROTOCOL_VERSION,
+  parseJsonRpcLine,
   type ResourceState,
-  type ResourceStatus,
   readManifest,
 } from "./protocol.ts";
 
 export type PollResult<S> =
   | { kind: "ok"; snapshot: S }
-  | { kind: "unavailable"; error?: string }
+  | { kind: "unavailable"; error: string }
   | { kind: "error"; error: string };
 
 export type WatcherSpec<S, F = unknown> = {
@@ -40,12 +39,17 @@ type Sub<F> = {
   pending: boolean;
 };
 
+type PollerPhase =
+  | { status: "loading" | "active" | "finished" }
+  | { status: "failing" | "unavailable"; error: string };
+
+type Request = { method: string; params: Record<string, unknown> };
+
 type Poller<S, F> = {
   key: string;
   subs: Map<net.Socket, Sub<F>>;
-  status: ResourceStatus;
+  phase: PollerPhase;
   snapshot: S | undefined;
-  error: string | undefined;
   failures: number;
   timer: NodeJS.Timeout | undefined;
   abort: AbortController;
@@ -75,9 +79,9 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
   function stateFor(p: Poller<S, F>, filter: F | undefined): ResourceState {
     const state: ResourceState = {
       key: p.key,
-      status: p.status,
+      ...p.phase,
       context: "",
-      summary: p.status,
+      summary: p.phase.status,
     };
     if (p.snapshot !== undefined) {
       state.context = spec.render(p.snapshot, filter);
@@ -85,7 +89,6 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
       state.summary = summary;
       if (details !== undefined) state.details = details;
     }
-    if (p.error !== undefined) state.error = p.error;
     return state;
   }
 
@@ -118,21 +121,18 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
     let delay: number | undefined = intervalMs;
     if (result.kind === "ok") {
       p.snapshot = result.snapshot;
-      p.error = undefined;
       p.failures = 0;
       if (spec.isFinished?.(result.snapshot)) {
-        p.status = "finished";
+        p.phase = { status: "finished" };
         delay = undefined;
       } else {
-        p.status = "active";
+        p.phase = { status: "active" };
       }
     } else if (result.kind === "unavailable") {
-      p.status = "unavailable";
-      p.error = result.error;
+      p.phase = { status: "unavailable", error: result.error };
       delay = undefined;
     } else {
-      p.status = "failing";
-      p.error = result.error;
+      p.phase = { status: "failing", error: result.error };
       p.failures++;
       delay = Math.min(intervalMs * 2 ** p.failures, maxBackoffMs);
     }
@@ -148,9 +148,8 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
       const created: Poller<S, F> = {
         key,
         subs: new Map(),
-        status: "loading",
+        phase: { status: "loading" },
         snapshot: undefined,
-        error: undefined,
         failures: 0,
         timer: undefined,
         abort: new AbortController(),
@@ -171,11 +170,10 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
     pollers.delete(p.key);
   }
 
-  async function handle(
-    socket: net.Socket,
-    req: JsonRpcRequest,
-  ): Promise<unknown> {
-    const params = (req.params ?? {}) as { key?: unknown; filter?: unknown };
+  async function handle(socket: net.Socket, req: Request): Promise<unknown> {
+    const params = req.params;
+    // Filters are watcher-defined JSON; the watcher's render() owns validating them.
+    const filter = params.filter as F | undefined;
     const key = () => {
       if (typeof params.key !== "string")
         throw new Error("key must be a string");
@@ -187,7 +185,7 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
       case "subscribe": {
         const p = getPoller(key());
         const sub: Sub<F> = {
-          filter: params.filter as F | undefined,
+          filter: filter,
           lastSent: undefined,
           pending: true,
         };
@@ -201,17 +199,17 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
       case "unsubscribe": {
         const p = pollers.get(key());
         if (p) release(p, socket);
-        return null;
+        return undefined;
       }
       case "get": {
         const existing = pollers.get(key());
         if (existing) {
           await existing.firstPoll;
-          return stateFor(existing, params.filter as F | undefined);
+          return stateFor(existing, filter);
         }
         const p = getPoller(key());
         await p.firstPoll;
-        const state = stateFor(p, params.filter as F | undefined);
+        const state = stateFor(p, filter);
         if (p.subs.size === 0) {
           p.abort.abort();
           clearTimeout(p.timer);
@@ -247,10 +245,8 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
     socket.on(
       "data",
       lineSplitter((line) => {
-        let req: JsonRpcRequest;
-        try {
-          req = JSON.parse(line) as JsonRpcRequest;
-        } catch {
+        const msg = parseJsonRpcLine(line);
+        if (!msg) {
           send(socket, {
             jsonrpc: "2.0",
             id: null,
@@ -258,9 +254,22 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
           });
           return;
         }
-        if (req.id === undefined) return;
-        handle(socket, req).then(
-          (result) => send(socket, { jsonrpc: "2.0", id: req.id, result }),
+        if (msg.kind !== "request") return;
+        const req = { id: msg.id, method: msg.method };
+        const params =
+          typeof msg.params === "object" &&
+          msg.params !== null &&
+          !Array.isArray(msg.params)
+            ? (msg.params as Record<string, unknown>)
+            : {};
+        handle(socket, { method: msg.method, params }).then(
+          // JSON-RPC requires a result member; undefined becomes null on the wire.
+          (result) =>
+            send(socket, {
+              jsonrpc: "2.0",
+              id: req.id,
+              result: result ?? null,
+            }),
           (e: Error & { code?: number }) =>
             send(socket, {
               jsonrpc: "2.0",
