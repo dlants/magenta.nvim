@@ -102,3 +102,19 @@ it("per-test custom commands expand through submissionResolve", () =>
       await done;
     },
   ));
+it("an approved command that fails reports its exit code and stderr", () =>
+  withHarness(
+    {
+      sandbox,
+      shell: {
+        "rm x": { exitCode: 127, stderr: "rm: command not found" },
+      },
+    },
+    async (h) => {
+      const { id, done } = await runBash(h, "rm x");
+      h.session.approve(id, await pendingApproval(h, id));
+      const request = await finish(h, done);
+      expect(request).toContain("exit code 127");
+      expect(request).toContain("rm: command not found");
+    },
+  ));

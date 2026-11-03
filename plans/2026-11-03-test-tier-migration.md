@@ -251,3 +251,15 @@ Approvals in tests go through the existing public session APIs (`session.getPend
 - [x] `options.customCommands` was added. `maxConcurrentSubagents` already existed. Custom commands only expand through the new exported `submissionResolve`, which is the production `resolveSubmission` over the harness fileIO (it has no client, so client commands throw). The default resolver is unchanged.
 - [x] `node/server/src/test/harness-sandbox.test.ts`: approve, reject ("The user did not allow running this command."), the `toggleSandboxBypass` auto-approve, a blocked write waiting for approval before it reaches `InMemoryFileIO`, and custom command expansion.
 - Full suite: only the 3 known pre-existing failures. tsc and biome are clean.
+
+# Stage 4 results (done)
+
+- [x] `node/server/src/tools/spawn-subagents-flow.test.ts` gained: child abort keeps the spawn pending and a later yield resolves it (replaces both C "abort does not resolve parent tool calls" tests), parent abort aborts the spawn ("Sub-agent execution was aborted" in the tool result), a subagent's bash approval surfaces via `session.getPendingApprovals(childId)` and approving it runs the command, explore agentType uses the explore system prompt, and an errored subagent keeps its slot until it recovers and yields (`Successful: 2`).
+- [x] `node/server/src/test/harness-sandbox.test.ts` gained "an approved command that fails reports its exit code and stderr". Approval-required and rejection were already covered there in stage 3.
+- [x] Deleted from C: `tools/bashCommand` (requires approval, rejection, error after approval, redundant `cd`, duration in failed result — covered by server `bashCommand.test.ts`), `tools/spawn-subagents` (navigation duplicate of the render-tools test, explore, both concurrency tests — batching duplicates server "respects maxConcurrentSubagents"), `render-tools/spawn-subagents` (the 3 abort tests).
+- Deviations:
+  - Redundant `cd <cwd> &&` auto-approve: the server has no cd-stripping logic; the C test only passed because the mock sandbox needs no approval by default. Deleted without a port.
+  - "truncates display preview but preserves full output" kept in C: half of it is a preview (view) check, and the full-output half is already covered by server `bashCommand.test.ts`.
+  - "shows pending approvals from subagent in parent progress view" kept as the one C render check for subagent approvals; the routing is now asserted in A.
+  - "executed only once" left in C for now (tier B candidate).
+- `withDriver(` call sites: 259 → 248. Full suite: only the 3 known pre-existing failures; wall 66.9s. tsc and biome clean.

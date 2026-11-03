@@ -246,3 +246,126 @@ it("built-in explore agent is discoverable in tool spec", () =>
     expect(agentTypes).toContain("explore");
     expect(agentTypes).not.toContain("plan");
   }));
+
+it("spawn stays pending when the child is aborted, and resolves when it later yields", () =>
+  withHarness({}, async (h) => {
+    const { thread } = await h.createRoot();
+    void h.send(thread, "Spawn a subagent.");
+    spawn(await h.nextStream(), "spawn-1", [{ prompt: "Do the task" }]);
+    const childStream = await h.streamWithText("Do the task");
+    const child = childThread(h, thread);
+    await h.session.abortThread(child.id);
+    expect(childStream.aborted).toBe(true);
+    expect(thread.lastResult()).toBeUndefined();
+
+    void h.send(child, "Continue the task");
+    yieldResult(
+      await h.streamWithText("Continue the task"),
+      "yield-1",
+      "The answer is 42",
+    );
+    const parentResume = await h.streamWithText("The answer is 42");
+    expect(toolResultText(parentResume, "spawn-1")).toContain(
+      "The answer is 42",
+    );
+  }));
+
+it("aborting the parent aborts the spawn", () =>
+  withHarness({}, async (h) => {
+    const { thread } = await h.createRoot();
+    void h.send(thread, "Spawn a subagent.");
+    spawn(await h.nextStream(), "spawn-1", [{ prompt: "Long running task" }]);
+    const childStream = await h.streamWithText("Long running task");
+    await h.session.abortThread(thread.id);
+    await pollUntil(() => {
+      if (!childStream.aborted) throw new Error("child not aborted");
+    });
+    void h.send(thread, "What happened?");
+    const next = await h.streamWithText("What happened?");
+    expect(toolResultText(next, "spawn-1")).toContain(
+      "Sub-agent execution was aborted",
+    );
+  }));
+
+it("a subagent's bash approval surfaces at the session level for the child", () =>
+  withHarness(
+    {
+      sandbox: { config: { requireApprovalPatterns: ["^cat "] } },
+      shell: { "cat .secret": { stdout: "s3cret" } },
+    },
+    async (h) => {
+      const { thread } = await h.createRoot();
+      void h.send(thread, "Spawn a subagent.");
+      spawn(await h.nextStream(), "spawn-1", [
+        { prompt: "Read the .secret file" },
+      ]);
+      const childStream = await h.streamWithText("Read the .secret file");
+      const child = childThread(h, thread);
+      childStream.streamToolUse(
+        "child-bash" as ToolRequestId,
+        "bash_command" as ToolName,
+        { description: "test", command: "cat .secret" },
+      );
+      childStream.finishResponse("tool_use");
+      const approvalId = await pollUntil(() => {
+        const [entry] = h.session.getPendingApprovals(child.id).keys();
+        if (!entry) throw new Error("no pending approval");
+        return entry;
+      });
+      expect(h.shell.calls).toEqual([]);
+      h.session.approve(child.id, approvalId);
+      const childNext = await h.streamWithText("s3cret");
+      expect(toolResultText(childNext, "child-bash")).toContain("s3cret");
+    },
+  ));
+
+it("explore agentType uses the explore system prompt", () =>
+  withHarness({ agents: builtinAgents }, async (h) => {
+    const { thread } = await h.createRoot();
+    void h.send(thread, "Find X.");
+    spawn(await h.nextStream(), "spawn-1", [
+      { prompt: "Find where X is defined", agentType: "explore" },
+    ]);
+    const sub = await h.streamWithText("Find where X is defined");
+    expect(sub.systemPrompt).toContain(
+      "specialized in searching and understanding codebases",
+    );
+  }));
+
+it("an errored subagent keeps its slot until it recovers and yields", () =>
+  withHarness({ options: { maxConcurrentSubagents: 1 } }, async (h) => {
+    const { thread } = await h.createRoot();
+    void h.send(thread, "Process 2 tasks.");
+    spawn(await h.nextStream(), "spawn-1", [
+      { prompt: "error_task" },
+      { prompt: "success_task" },
+    ]);
+    const first = await h.streamWithText("error_task");
+    const child = childThread(h, thread);
+    first.respondWithError(new Error("Simulated subagent error"));
+    await pollUntil(() => {
+      if (child.lastResult()?.type !== "failed") throw new Error("not failed");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const mentions = (text: string) =>
+      h.mockClient.streams.some((s) =>
+        JSON.stringify(s.messages).includes(text),
+      );
+    expect(mentions("success_task")).toBe(false);
+
+    void h.send(child, "retry error_task");
+    yieldResult(
+      await h.streamWithText("retry error_task"),
+      "yield-retry",
+      "Recovered successfully",
+    );
+    yieldResult(
+      await h.streamWithText("success_task"),
+      "yield-success",
+      "Successfully processed",
+    );
+    const parent = await h.streamWithText("Recovered successfully");
+    const result = toolResultText(parent, "spawn-1");
+    expect(result).toContain("Successful: 2");
+    expect(result).toContain("Failed: 0");
+  }));
