@@ -1,7 +1,11 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { expect, it } from "vitest";
 import type { MockStream } from "./providers/mock-anthropic-client.ts";
-import { type Harness, withHarness } from "./test/harness.ts";
+import {
+  type Harness,
+  submissionResolve,
+  withHarness,
+} from "./test/harness.ts";
 import type { Thread } from "./thread.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 
@@ -198,4 +202,18 @@ it("a markdown context file's block is active while in context", () =>
     void h.send(thread, "@file:skill.md Hello");
     const [reminder] = reminders(lastMessage(await h.nextStream()));
     expect(reminder?.text).toContain("always pet the cat");
+  }));
+
+it("@implementplan activates a persistent plan-maintenance reminder", () =>
+  withHarness({ files, resolve: submissionResolve }, async (h) => {
+    const { thread } = await h.createRoot();
+    void h.send(thread, "@implementplan");
+    (await h.nextStream()).respond({
+      stopReason: "tool_use",
+      text: "Implementing",
+      toolRequests: [getFiles("tool_1", "/project/poem.txt")],
+      usage: { inputTokens: 100, outputTokens: 5000 },
+    });
+    const [reminder] = reminders(lastMessage(await h.nextStream()));
+    expect(reminder?.text).toContain("keep the plan file updated");
   }));

@@ -264,3 +264,21 @@ Approvals in tests go through the existing public session APIs (`session.getPend
   - "executed only once" left in C for now (tier B candidate).
 - `withDriver(` call sites: 259 → 248. Full suite: only the 3 known pre-existing failures; wall 66.9s. tsc and biome clean.
 - Review follow-up: "an errored subagent keeps its slot" no longer uses a fixed `setTimeout(50)`. After the child fails, it is re-driven to a new request ("retry error_task"), and only then the test asserts that the parent still has exactly one child and no stream has mentioned `success_task`. That anchors the negative check to a later event instead of a timer.
+
+# Stage 5 results (done)
+
+- [x] `context/git-context.test.ts` deleted: covered by server `context/git-context.test.ts` "attaches a git context update when the branch changes".
+- [x] `context/context-manager.test.ts`: deleted the 4 A tests (end-to-end + snapshot, autoContext, large-file summary, out-of-process change). Covered by `context/context-flow.test.ts` ("autoContext is delivered in the first message", "large context files are summarized", "returns diff when file is edited on disk", "user's @file: ...") and `file-supervisor-delivery.test.ts` "detects out-of-process change". The keymap/buffer tests stay.
+- [x] `chat/system-reminders.test.ts`: "auto-respond combines..." deleted (server `system-reminders-flow.test.ts` has the same test); `@implementplan` ported there (uses `submissionResolve`, since commands only expand through the production resolver).
+- [x] `chat/fork-thread.test.ts`: fork_notification test deleted (server `fork-flow.test.ts` + `session.test.ts` origin/listDerived). Approval ownership ported to `test/harness-sandbox.test.ts` "sandbox bypass and write approvals use the fork owner" (fork inherits the source's bypass at fork time, toggling the source doesn't affect it, a fork write's approval lands on the fork).
+- [x] `capabilities/render-pending-approvals.test.ts`: subtree auto-approve ported to `spawn-subagents-flow.test.ts` "bypassing the root's sandbox auto-approves a subagent's pending approval"; the multiple-agents test deleted (per-child routing is in "a subagent's bash approval surfaces at the session level"). One C render test kept.
+- [x] `chat/thread-abort.test.ts`: "clears pending file permission checks when aborting" ported to `harness-sandbox.test.ts` (via `session.abortThread`, which is what the client's abort calls).
+- [x] `chat/thread-compact.test.ts` deleted: ported "@compact with a next prompt summarizes on the fast model and continues" (incl. hierarchy discovery after replacement) and "spawns one compact child thread per chunk..." to `thread-compact-flow.test.ts`; the fork+compact test is covered by "forks a thread and compacts the fork in one step". Compaction rendering stays in `thread-compact-view.test.ts`.
+- [x] `chat/thread.test.ts`: custom command test deleted (covered by `harness-sandbox.test.ts` custom command expansion).
+- Deviations, kept in C:
+  - `thread-abort` "clears pending permissions when sending a new message during tool_use": the clearing is client logic (`chat/thread.ts` sends `approval.rejectAll` before submitting), the server alone does not clear them on preemption.
+  - `thread-abort` "aborting one running tool...": driven by the `t` keymap.
+  - `chat/thread.test.ts` deleted-context and web-search tests: their only real assertions are on the display (the deleted-context request check had no `expect`). Server coverage of deletion delivery already exists (`context-flow` "handles file deletion during tracking").
+  - `thread-edited-files`: all three tests are about `<CR>` diff windows/buffers; records are covered by `edited-files-flow.test.ts`.
+  - "disposing the view leaves the thread alone" (AC) is left for stage 6.
+- `withDriver(` call sites: 248 → 232. Full suite: only the 3 known pre-existing failures (plus a `@staged` flake that passes in isolation). tsc and biome clean.

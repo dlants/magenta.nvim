@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import * as os from "node:os";
-import type { ProviderMessage, ProviderMessageContent } from "@magenta/server";
 import {
   type HomeDir,
   PRE_HISTORY,
@@ -13,7 +12,6 @@ import { describe, expect, it } from "vitest";
 import { getAllWindows, getcwd } from "../nvim/nvim.ts";
 import { leftThread, serverThread } from "../test/left-thread.ts";
 import { withDriver } from "../test/preamble.ts";
-import { sanitizeMessagesForSnapshot } from "../test/sanitize-snapshot.ts";
 
 it("returns diff when disk changes even if buffer has unsaved changes", async () => {
   await withDriver({}, async (driver) => {
@@ -204,164 +202,6 @@ describe("key bindings", () => {
         const displayWinPos = await displayWindow.getPosition();
         expect(fileWinPos[1]).toBeLessThan(displayWinPos[1]);
       },
-    );
-  });
-});
-
-it("context-files end-to-end", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-    await driver.addContextFiles("poem.txt");
-
-    await driver.assertDisplayBufferContains(`- \`poem.txt\``);
-
-    await driver.inputMagentaText("check out this file");
-    await driver.send();
-    const request = await driver.mockAnthropic.awaitPendingUserRequest();
-    expect(sanitizeMessagesForSnapshot(request.messages)).toMatchSnapshot();
-  });
-});
-
-it("autoContext loads on startup and after new-thread", async () => {
-  const testOptions = {
-    autoContext: [`test-auto-context.md`],
-  };
-
-  await withDriver({ options: testOptions }, async (driver) => {
-    // Show sidebar and verify autoContext is loaded
-    await driver.showSidebar();
-    await driver.assertDisplayBufferContains(`- \`test-auto-context.md\``);
-
-    // Create new thread and verify autoContext is loaded
-    await driver.magenta.command("new-thread");
-    await driver.assertDisplayBufferContains(`- \`test-auto-context.md\``);
-
-    // Check that the content is included in messages when sending
-    await driver.inputMagentaText("hello");
-    await driver.send();
-
-    const request = await driver.mockAnthropic.awaitPendingStream();
-    expect(request.messages).toContainEqual(
-      expect.objectContaining<ProviderMessage>({
-        role: "user",
-
-        content: expect.arrayContaining([
-          expect.objectContaining({
-            type: "text",
-            text: expect.stringContaining("test-auto-context.md"),
-          }),
-        ]) as ProviderMessageContent[],
-      }),
-    );
-  });
-});
-
-it("large context files are summarized and rendered with a (summary) badge", async () => {
-  await withDriver(
-    {
-      setupFiles: async (tmpDir) => {
-        const path = await import("node:path");
-        const fsPromises = await import("node:fs/promises");
-        const lines: string[] = [];
-        for (let i = 0; i < 4000; i++) {
-          lines.push(`line ${i}: ${"x".repeat(40)}`);
-        }
-        await fsPromises.writeFile(
-          path.join(tmpDir, "huge.txt"),
-          lines.join("\n"),
-        );
-      },
-    },
-    async (driver) => {
-      await driver.showSidebar();
-      await driver.addContextFiles("huge.txt");
-
-      await driver.assertDisplayBufferContains("- `huge.txt` [ summary ]");
-
-      await driver.inputMagentaText("describe this file");
-      await driver.send();
-
-      const request = await driver.mockAnthropic.awaitPendingStream();
-
-      request.respond({
-        stopReason: "end_turn",
-        text: "ok",
-        toolRequests: [],
-      });
-
-      const fileSupervisor = serverThread(
-        leftThread(driver.magenta.chat),
-      ).contextFiles;
-      const cwd = await getcwd(driver.nvim);
-      const absHuge = resolveFilePath(
-        cwd,
-        "huge.txt" as UnresolvedFilePath,
-        os.homedir() as HomeDir,
-      );
-      await pollUntil(() => {
-        if (fileSupervisor.files[absHuge]?.agentView?.type !== "summary") {
-          throw new Error("agentView not yet set to summary");
-        }
-      });
-
-      await driver.triggerDisplayBufferKeyOnContent("1 file in context", "=");
-
-      await driver.assertDisplayBufferContains("- `huge.txt` (summary)");
-
-      let userMessageContent: ProviderMessageContent[] | undefined;
-      for (const msg of request.messages) {
-        if (
-          msg.role === "user" &&
-          Array.isArray(msg.content) &&
-          (msg.content as ProviderMessageContent[]).some(
-            (c) => c.type === "text" && c.text.includes("<context_update>"),
-          )
-        ) {
-          userMessageContent = msg.content as ProviderMessageContent[];
-          break;
-        }
-      }
-
-      expect(userMessageContent).toBeDefined();
-      const textBlock = userMessageContent!.find(
-        (c) => c.type === "text" && c.text.includes("<context_update>"),
-      ) as Extract<ProviderMessageContent, { type: "text" }>;
-      expect(textBlock.text).toContain("[File too large for full context");
-      expect(textBlock.text).toContain("[File summary:");
-    },
-  );
-});
-
-it("out-of-process file change surfaces in the pending-context view", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-    const fileSupervisor = getFileSupervisor(
-      serverThread(leftThread(driver.magenta.chat)),
-    );
-
-    const cwd = await getcwd(driver.nvim);
-    const absFilePath = resolveFilePath(
-      cwd,
-      "poem.txt" as UnresolvedFilePath,
-      os.homedir() as HomeDir,
-    );
-
-    await driver.addContextFiles("poem.txt");
-    await fileSupervisor.getContextUpdate(PRE_HISTORY);
-
-    await fs.promises.writeFile(
-      absFilePath,
-      "completely different content\nwith several new lines\nadded here\n",
-    );
-
-    await pollUntil(
-      async () => {
-        const content = await driver.getDisplayBufferText();
-        if (!content.match(/- `poem\.txt` \[ \+\d+ \/ -\d+ \]/)) {
-          throw new Error("pending diff entry for poem.txt not yet shown");
-        }
-      },
-      { timeout: 5000 },
     );
   });
 });

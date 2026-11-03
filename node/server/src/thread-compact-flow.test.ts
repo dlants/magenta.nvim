@@ -560,3 +560,97 @@ it("defers a @next @compact until the turn in flight comes to rest", () =>
     await waitCompacting(h, id);
     expect(text(await h.nextStream())).toContain("Now do multiplication");
   }));
+
+it("@compact with a next prompt summarizes on the fast model and continues", () =>
+  withHarness(
+    {
+      files: {
+        "/project/after/context.md": "hierarchy discovered after compaction",
+        "/project/after/leaf.txt": "new leaf contents",
+      },
+      options: { hierarchyContextFileNames: ["context.md"] },
+    },
+    async (h) => {
+      const { id, thread } = await h.createRoot();
+      await exchange(h, thread, "What is 2+2?", "2+2 equals 4.");
+      await exchange(h, thread, "What about 3+3?", "3+3 equals 6.");
+
+      const done = h.send(thread, "@compact Now help me with multiplication");
+      await waitCompacting(h, id);
+      const chunk = await h.nextStream();
+      expect(chunk.params.model).toBe(h.host.getDefaultProfile().fastModel);
+      const chunkText = text(chunk);
+      expect(chunkText).toContain("2+2 equals 4");
+      expect(chunkText).toContain("3+3 equals 6");
+      expect(chunkText).toContain("Now help me with multiplication");
+      await finishChunk(h, chunk, "User asked basic arithmetic: 2+2=4, 3+3=6");
+
+      const after = await h.nextStream();
+      const afterText = text(after);
+      expect(afterText).toContain("User asked basic arithmetic");
+      expect(afterText).toContain("Now help me with multiplication");
+      expect(afterText).not.toContain("What is 2+2?");
+      expect(afterText).not.toContain("What about 3+3?");
+      after.respond({
+        stopReason: "end_turn",
+        text: "Sure!",
+        toolRequests: [],
+      });
+      expect(await done).toMatchObject({ type: "completed" });
+
+      // Hierarchy discovery still works on the replacement core.
+      const next = h.send(thread, "Read @file:/project/after/leaf.txt");
+      const stream = await h.nextStream();
+      expect(JSON.stringify(stream.messages)).toContain("new leaf contents");
+      await pollUntil(() => {
+        expect(Object.keys(thread.contextFiles.files)).toContain(
+          "/project/after/context.md",
+        );
+      });
+      stream.finishResponse("end_turn");
+      await next;
+    },
+  ));
+
+it("spawns one compact child thread per chunk, carrying the summary forward", () =>
+  withHarness({}, async (h) => {
+    const { id, thread } = await h.createRoot();
+    const longText = "x".repeat(60_000);
+    await exchange(h, thread, "First question", `Answer 1: ${longText}`);
+    await exchange(h, thread, "Second question", `Answer 2: ${longText}`);
+
+    const done = h.send(thread, "@compact Continue with next task");
+    await waitCompacting(h, id);
+    const totalChunks = compactorOf(h, id).current!.totalChunks;
+    expect(totalChunks).toBeGreaterThanOrEqual(2);
+
+    const chunk1 = await h.nextStream();
+    expect(text(chunk1)).toContain("chunk 1 of");
+    await finishChunk(h, chunk1, "First chunk processed");
+
+    const chunk2 = await h.nextStream();
+    expect(text(chunk2)).toContain("chunk 2 of");
+    expect(text(chunk2)).toContain("First chunk processed");
+    expect(compactionRunThreadIds(compactorOf(h, id).current!)).toHaveLength(2);
+    await finishChunk(h, chunk2, "Both answers were very long");
+    for (let i = 2; i < totalChunks; i++) {
+      await finishChunk(h, await h.nextStream(), "more");
+    }
+
+    (await h.nextStream()).respond({
+      stopReason: "end_turn",
+      text: "Ready for the next task!",
+      toolRequests: [],
+    });
+    await done;
+
+    const [record] = finishedRuns(h, id);
+    if (record?.type !== "done") throw new Error("expected a completed run");
+    expect(record.threadIds).toHaveLength(totalChunks);
+    expect(record.summary).toContain("Summary");
+    for (const chunkId of record.threadIds) {
+      const chunkRecord = initialized(h, chunkId);
+      expect(chunkRecord.thread.threadType).toBe("compact");
+      expect(chunkRecord.parentThreadId).toBe(id);
+    }
+  }));

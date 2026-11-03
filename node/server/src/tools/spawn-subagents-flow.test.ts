@@ -372,3 +372,34 @@ it("an errored subagent keeps its slot until it recovers and yields", () =>
     expect(result).toContain("Successful: 2");
     expect(result).toContain("Failed: 0");
   }));
+
+it("bypassing the root's sandbox auto-approves a subagent's pending approval", () =>
+  withHarness(
+    {
+      sandbox: { config: { requireApprovalPatterns: ["^cat "] } },
+      shell: { "cat .secret": { stdout: "s3cret" } },
+    },
+    async (h) => {
+      const { id, thread } = await h.createRoot();
+      void h.send(thread, "Spawn a subagent.");
+      spawn(await h.nextStream(), "spawn-1", [
+        { prompt: "Read the .secret file" },
+      ]);
+      const childStream = await h.streamWithText("Read the .secret file");
+      const child = childThread(h, thread);
+      childStream.streamToolUse(
+        "child-bash" as ToolRequestId,
+        "bash_command" as ToolName,
+        { description: "test", command: "cat .secret" },
+      );
+      childStream.finishResponse("tool_use");
+      await pollUntil(() => {
+        if (h.session.getPendingApprovals(child.id).size === 0)
+          throw new Error("no pending approval");
+      });
+      h.session.toggleSandboxBypass(id);
+      const childNext = await h.streamWithText("s3cret");
+      expect(toolResultText(childNext, "child-bash")).toContain("s3cret");
+      expect(h.session.getPendingApprovals(child.id).size).toBe(0);
+    },
+  ));

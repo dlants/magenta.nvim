@@ -3,58 +3,7 @@ import { expect, it } from "vitest";
 import type { Row0Indexed } from "../nvim/window.ts";
 import { leftThread, serverThread } from "../test/left-thread.ts";
 import { withDriver } from "../test/preamble.ts";
-import { delay, pollUntil } from "../utils/async.ts";
-
-it("clears pending file permission checks when aborting", async () => {
-  await withDriver({}, async (driver) => {
-    driver.mockSandbox.setState({ status: "unsupported", reason: "disabled" });
-    await driver.showSidebar();
-    await driver.magenta.command("sandbox-bypass");
-    await driver.inputMagentaText("Run a command");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream();
-    const toolRequestId = "bash-tool" as ToolRequestId;
-
-    // Respond with bash_command tool use - this will block on user approval (sandbox disabled)
-    request1.respond({
-      stopReason: "tool_use",
-      text: "I'll run the command.",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: toolRequestId,
-            toolName: "bash_command" as ToolName,
-            input: { description: "test", command: "cat .secret" },
-          },
-        },
-      ],
-    });
-
-    // Wait for approval dialog to appear
-    await driver.assertDisplayBufferContains("May I run command");
-
-    const thread = leftThread(driver.magenta.chat);
-
-    // Verify we have a pending permission
-    expect(
-      driver.magenta.chat.session.getPendingApprovals(thread.id).length,
-    ).toBe(1);
-
-    // Abort the thread
-    await driver.abort();
-    await delay(0);
-
-    // Verify pending permissions are cleared
-    expect(
-      driver.magenta.chat.session.getPendingApprovals(thread.id).length,
-    ).toBe(0);
-
-    // Verify the approval dialog is no longer displayed
-    await driver.assertDisplayBufferDoesNotContain("May I run command");
-  });
-});
+import { pollUntil } from "../utils/async.ts";
 
 it("clears pending permissions when sending a new message during tool_use", async () => {
   await withDriver({}, async (driver) => {

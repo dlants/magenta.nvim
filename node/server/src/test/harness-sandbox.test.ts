@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import type { ThreadId } from "../chat-types.ts";
+import { created } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
 import { type Harness, submissionResolve, withHarness } from "./harness.ts";
@@ -118,3 +119,54 @@ it("an approved command that fails reports its exit code and stderr", () =>
       expect(request).toContain("rm: command not found");
     },
   ));
+
+it("sandbox bypass and write approvals use the fork owner", () =>
+  withHarness({ sandbox }, async (h) => {
+    h.sandbox.blockWritesTo("/project/fork.txt");
+    const { id, thread } = await h.createRoot();
+    const first = h.send(thread, "hello");
+    (await h.nextStream()).finishResponse("end_turn");
+    await first;
+    const forkId = await created(
+      h.session.forkThread(id, thread.nativeMessageIdx),
+    );
+    const fork = h.thread(forkId);
+    expect(h.session.isSandboxBypassed(forkId)).toBe(false);
+    h.session.toggleSandboxBypass(id);
+    expect(h.session.isSandboxBypassed(forkId)).toBe(false);
+
+    const writeIn = async (text: string) => {
+      const done = h.send(fork, "write it");
+      const stream = await h.nextStream();
+      stream.streamToolUse(`edl-${text}` as ToolRequestId, "edl" as ToolName, {
+        script: `file \`/project/fork.txt\`\nselect bof\nreplace "${text}"`,
+      });
+      stream.finishResponse("tool_use");
+      return { done };
+    };
+
+    await h.fileIO.writeFile("/project/fork.txt", "");
+    const approved = (await writeIn("approved")).done;
+    const approvalId = await pendingApproval(h, forkId);
+    expect(h.session.getPendingApprovals(id).size).toBe(0);
+    h.session.approve(forkId, approvalId);
+    await finish(h, approved);
+    expect(await h.fileIO.readFile("/project/fork.txt")).toBe("approved");
+
+    h.session.toggleSandboxBypass(forkId);
+    await finish(h, (await writeIn("bypassed")).done);
+    expect(await h.fileIO.readFile("/project/fork.txt")).toBe(
+      "bypassedapproved",
+    );
+    expect(h.session.getPendingApprovals(forkId).size).toBe(0);
+  }));
+
+it("aborting the thread clears its pending approvals", () =>
+  withHarness({ sandbox }, async (h) => {
+    const { id, done } = await runBash(h, "rm x");
+    await pendingApproval(h, id);
+    await h.session.abortThread(id);
+    await done;
+    expect(h.session.getPendingApprovals(id).size).toBe(0);
+    expect(h.shell.calls).toEqual([]);
+  }));
