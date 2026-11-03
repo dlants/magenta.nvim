@@ -35,6 +35,7 @@ export class SandboxShell implements Shell {
   private runningProcess: ChildProcess | undefined;
   private violationGracePeriodMs: number;
   private violationPollIntervalMs: number;
+  private inner: Shell | undefined;
 
   constructor(
     private context: {
@@ -50,8 +51,11 @@ export class SandboxShell implements Shell {
     opts?: {
       violationGracePeriodMs?: number;
       violationPollIntervalMs?: number;
+      /** Runs commands unsandboxed in place of spawning bash; lets node-only tests gate a fake shell. */
+      inner?: Shell;
     },
   ) {
+    this.inner = opts?.inner;
     this.violationGracePeriodMs =
       opts?.violationGracePeriodMs ?? VIOLATION_GRACE_PERIOD_MS;
     this.violationPollIntervalMs =
@@ -87,6 +91,10 @@ export class SandboxShell implements Shell {
   };
 
   terminate(): void {
+    if (this.inner) {
+      this.inner.terminate();
+      return;
+    }
     const childProcess = this.runningProcess;
     if (!childProcess) return;
 
@@ -108,6 +116,7 @@ export class SandboxShell implements Shell {
       timeoutMs?: number;
     },
   ): Promise<ShellResult> {
+    if (this.inner) return this.inner.execute(command, opts);
     const logWriter = createLogWriter(
       this.context.threadId,
       opts.toolRequestId,

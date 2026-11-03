@@ -1,4 +1,3 @@
-import * as fs from "node:fs/promises";
 import {
   containsGlobChars,
   globToRegex,
@@ -12,7 +11,7 @@ import {
   resolveFilePath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
-import type { FileIO } from "./file-io.ts";
+import { type FileIO, FsFileIO } from "./file-io.ts";
 
 export class SandboxFileIO implements FileIO {
   constructor(
@@ -26,6 +25,8 @@ export class SandboxFileIO implements FileIO {
     private isBypassed: () => boolean,
     /** Lets an attached editor refresh its view of a file the agent wrote. */
     private onFileWritten?: (absPath: AbsFilePath) => Promise<void>,
+    /** The unsandboxed storage the checks gate; the host filesystem in production. */
+    private inner: FileIO = new FsFileIO(),
   ) {}
 
   private resolvePath(path: string): AbsFilePath {
@@ -69,7 +70,7 @@ export class SandboxFileIO implements FileIO {
       throw new Error(`Sandbox: read access denied for ${path}`);
     }
 
-    return fs.readFile(abs, "utf-8");
+    return this.inner.readFile(abs);
   }
 
   async readBinaryFile(path: string): Promise<Buffer> {
@@ -77,7 +78,7 @@ export class SandboxFileIO implements FileIO {
     if (this.isReadBlocked(abs)) {
       throw new Error(`Sandbox: read access denied for ${path}`);
     }
-    return fs.readFile(abs);
+    return this.inner.readBinaryFile(abs);
   }
 
   isWriteBlocked(absPath: string): boolean {
@@ -100,7 +101,7 @@ export class SandboxFileIO implements FileIO {
       await this.promptForWriteApproval(abs);
     }
 
-    await fs.writeFile(abs, content, "utf-8");
+    await this.inner.writeFile(abs, content);
 
     this.onFileWritten?.(abs).catch((err) => {
       this.context.logger.warn(
@@ -109,44 +110,24 @@ export class SandboxFileIO implements FileIO {
     });
   }
   async fileExists(path: string): Promise<boolean> {
-    const abs = this.resolvePath(path);
-    try {
-      await fs.access(abs);
-      return true;
-    } catch {
-      return false;
-    }
+    return this.inner.fileExists(this.resolvePath(path));
   }
 
   async mkdir(path: string): Promise<void> {
-    const abs = this.resolvePath(path);
-    await fs.mkdir(abs, { recursive: true });
+    await this.inner.mkdir(this.resolvePath(path));
   }
 
   async stat(
     path: string,
   ): Promise<{ mtimeMs: number; size: number } | undefined> {
-    const abs = this.resolvePath(path);
-    try {
-      const stats = await fs.stat(abs);
-      return { mtimeMs: stats.mtimeMs, size: stats.size };
-    } catch {
-      return undefined;
-    }
+    return this.inner.stat(this.resolvePath(path));
   }
 
   async readdir(path: string): Promise<string[]> {
-    const abs = this.resolvePath(path);
-    return fs.readdir(abs);
+    return this.inner.readdir(this.resolvePath(path));
   }
 
   async isDirectory(path: string): Promise<boolean> {
-    const abs = this.resolvePath(path);
-    try {
-      const stats = await fs.stat(abs);
-      return stats.isDirectory();
-    } catch {
-      return false;
-    }
+    return this.inner.isDirectory(this.resolvePath(path));
   }
 }

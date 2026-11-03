@@ -1,7 +1,11 @@
 import type { AgentsMap } from "../agents/agents.ts";
+import type { FileIO } from "../capabilities/file-io.ts";
 import { type GitState, readGitStateAt } from "../capabilities/git-client.ts";
 import type { LspClient } from "../capabilities/lsp-client.ts";
 import type { LuaExecutor } from "../capabilities/lua-executor.ts";
+import { SandboxFileIO } from "../capabilities/sandbox-file-io.ts";
+import { SandboxShell } from "../capabilities/sandbox-shell.ts";
+import type { Shell } from "../capabilities/shell.ts";
 import type { ThreadId } from "../chat-types.ts";
 import {
   autoContextFilesToInitialFiles,
@@ -17,6 +21,10 @@ import {
 } from "../providers/mock-anthropic-client.ts";
 import { createSystemPrompt } from "../providers/system-prompt.ts";
 import { PullRequestMonitor } from "../pull-requests/monitor.ts";
+import {
+  DEFAULT_SANDBOX_CONFIG,
+  type SandboxConfig,
+} from "../sandbox-config.ts";
 import type {
   PreparedThread,
   SessionHost,
@@ -24,12 +32,14 @@ import type {
   ThreadPreparation,
 } from "../session.ts";
 import { Session } from "../session.ts";
+import type { CustomCommand } from "../submission/commands/types.ts";
 import {
   type PendingMessage,
   parseCompact,
   pendingMessage,
   type ResolvedSubmission,
 } from "../submission/index.ts";
+import { resolveSubmission } from "../submission/resolve.ts";
 import {
   awaitNextStream,
   createMockProvider,
@@ -58,6 +68,7 @@ import {
   FakeShell,
   type FakeShellScript,
 } from "./fakes.ts";
+import { MockSandboxManager } from "./mock-sandbox-manager.ts";
 
 export { FakeGitClient, FakeShell, type FakeShellScript } from "./fakes.ts";
 
@@ -70,6 +81,8 @@ export type HarnessThreadOptions = {
   maxConcurrentFastSubagents: number;
   skillsPaths: string[];
   agentsPaths: string[];
+  /** Only expanded by `submissionResolve`. */
+  customCommands: CustomCommand[];
 };
 
 /** The host's resolver: `@compact` plus `@file:` against the thread's
@@ -99,6 +112,9 @@ export type HarnessOptions = {
   pullRequestPollIntervalMs?: number;
   /** Real MCPToolManager over the given (e.g. `type: "mock"`) servers. */
   mcpServers?: MCPServersConfig;
+  /** Gate the fake shell/fileIO behind the real `SandboxShell`/`SandboxFileIO`
+   * over `harness.sandbox`, so approvals surface through the Session APIs. */
+  sandbox?: { config?: Partial<SandboxConfig> };
 };
 
 const FILE_REF = /@file:`([^`]+)`|@file:(\S+)/g;
@@ -128,6 +144,29 @@ export const defaultHarnessResolve: HarnessResolve = async (
   };
   return compact ? { type: "compact", prompt } : { type: "send", prompt };
 };
+
+/** The production resolver (custom commands, `@file`, `@diff`, ...) over the
+ * host's fileIO. Client commands fail: there is no client. */
+export const submissionResolve: HarnessResolve = (
+  message,
+  { host, getContextFiles, canCompact },
+) =>
+  resolveSubmission(
+    message,
+    {
+      projectDir: host.projectDir,
+      homeDir: host.homeDir,
+      fileIO: host.fileIO,
+      logger: noopLogger,
+      customCommands: host.options.customCommands,
+      getContextFiles,
+      canCompact,
+      awaitClient: () => {
+        throw new Error("no client in the harness");
+      },
+    },
+    new Promise(() => {}),
+  );
 
 const stubLsp = {} as LspClient;
 
@@ -165,6 +204,9 @@ export class TestSessionHost implements SessionHost {
     | undefined;
   readonly mcp: MCPToolManager;
   readonly luaExecutor: LuaExecutor | undefined;
+  readonly sandbox = new MockSandboxManager();
+  /** Undefined when threads get the raw fakes (no `sandbox` option). */
+  readonly sandboxConfig: SandboxConfig | undefined;
 
   constructor(opts: HarnessOptions = {}) {
     this.projectDir = opts.projectDir ?? toProjectDir("/project");
@@ -175,6 +217,9 @@ export class TestSessionHost implements SessionHost {
     this.agents = opts.agents ?? {};
     this.resolve = opts.resolve ?? defaultHarnessResolve;
     this.luaExecutor = opts.luaExecutor;
+    this.sandboxConfig = opts.sandbox
+      ? { ...DEFAULT_SANDBOX_CONFIG, ...opts.sandbox.config }
+      : undefined;
     this.mcp = opts.mcpServers
       ? new MCPToolManager(opts.mcpServers, { logger: noopLogger })
       : new MCPToolManager({}, { logger: noopLogger });
@@ -187,7 +232,43 @@ export class TestSessionHost implements SessionHost {
       maxConcurrentFastSubagents: 8,
       skillsPaths: [],
       agentsPaths: [],
+      customCommands: [],
       ...opts.options,
+    };
+  }
+
+  /** Mirrors `createLocalEnvironment`: session-owned approvals and bypass. */
+  private sandboxed(
+    threadId: ThreadId,
+    projectDir: ProjectDir,
+    session: SessionType,
+  ): { fileIO: FileIO; shell: Shell } {
+    const config = this.sandboxConfig;
+    if (!config) return { fileIO: this.fileIO, shell: this.shell };
+    const approvals = session.approvalsFor(threadId);
+    const isBypassed = () => session.isSandboxBypassed(threadId);
+    const { homeDir } = this;
+    return {
+      fileIO: new SandboxFileIO(
+        { logger: noopLogger, projectDir, homeDir },
+        this.sandbox,
+        (absPath) => approvals.promptForWriteApproval(absPath),
+        isBypassed,
+        undefined,
+        this.fileIO,
+      ),
+      shell: new SandboxShell(
+        {
+          projectDir,
+          homeDir,
+          threadId,
+          getSandboxConfig: () => config,
+          isBypassed,
+        },
+        this.sandbox,
+        approvals,
+        { inner: this.shell },
+      ),
     };
   }
 
@@ -224,13 +305,15 @@ export class TestSessionHost implements SessionHost {
       threadType,
       subagentConfig,
     } = request.options;
-    const fileIO = request.options.fileIO ?? this.fileIO;
     const { homeDir } = this;
     const requestedConfig = request.options.environmentConfig;
     const projectDir =
       requestedConfig?.type === "local" && requestedConfig.projectDir
         ? requestedConfig.projectDir
         : this.projectDir;
+    const { fileIO, shell } = request.options.fileIO
+      ? { fileIO: request.options.fileIO, shell: this.shell }
+      : this.sandboxed(id, projectDir, session);
     const autoContextFiles =
       request.options.fileIO || source
         ? []
@@ -303,7 +386,7 @@ export class TestSessionHost implements SessionHost {
         maxConcurrentSubagents: this.options.maxConcurrentSubagents,
         maxConcurrentFastSubagents: this.options.maxConcurrentFastSubagents,
         fileIO,
-        shell: this.shell,
+        shell,
         threadManager: session,
         getScriptRunner,
         getAgents,
@@ -356,6 +439,7 @@ export type Harness = {
   fileIO: InMemoryFileIO;
   git: FakeGitClient;
   shell: FakeShell;
+  sandbox: MockSandboxManager;
   createRoot(): Promise<{ id: ThreadId; thread: Thread }>;
   thread(id: ThreadId): Thread;
   send(thread: Thread, text: string): Promise<SubmissionResult>;
@@ -392,9 +476,14 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     fileIO: host.fileIO,
     git: host.git,
     shell: host.shell,
+    sandbox: host.sandbox,
     async createRoot() {
       const id = await session.createRootThread();
       if (id === ABORTED) throw new Error("root thread creation was aborted");
+      // Roots start bypassed; the `sandbox` option means the test wants it enforced.
+      if (host.sandboxConfig && session.isSandboxBypassed(id)) {
+        session.toggleSandboxBypass(id);
+      }
       return { id, thread: thread(id) };
     },
     thread,
