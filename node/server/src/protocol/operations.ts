@@ -7,6 +7,7 @@ import type {
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import type { SessionId } from "../session.ts";
 import type { Delivery, SubmissionInput } from "../submission/index.ts";
+import type { DeferredDelivery } from "../submission/mailbox.ts";
 import type { ToolRequestId } from "../tool-types.ts";
 import type { AbsFilePath, UnresolvedFilePath } from "../utils/files.ts";
 import type { ProtocolSubmissionResult } from "./state.ts";
@@ -34,6 +35,12 @@ export type Operation =
   | { type: "thread.retry"; threadId: ThreadId }
   | { type: "thread.abort"; threadId: ThreadId }
   | { type: "thread.setTitle"; threadId: ThreadId; title: string }
+  | {
+      type: "thread.removeQueued";
+      threadId: ThreadId;
+      when: DeferredDelivery;
+      index: number;
+    }
   | { type: "thread.recordActivity"; threadId: ThreadId }
   | { type: "thread.markAttended"; threadId: ThreadId }
   | {
@@ -89,6 +96,7 @@ export type OperationSuccessMap = {
   "thread.retry": Submitted;
   "thread.abort": { type: "threadAborted"; unsent: ReadonlyArray<string> };
   "thread.setTitle": Ok;
+  "thread.removeQueued": Ok;
   "thread.recordActivity": Ok;
   "thread.markAttended": Ok;
   "thread.addContextFiles": Ok;

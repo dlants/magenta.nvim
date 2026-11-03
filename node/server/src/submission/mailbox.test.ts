@@ -100,4 +100,33 @@ describe("Mailbox", () => {
     expect(renderPending(raw("@compact"))).toBe("@compact");
     expect(submissionEntries({ type: "resolved", messages: [] })).toEqual([]);
   });
+  describe("remove", () => {
+    it("removes from the queue named by `when`", () => {
+      const mailbox = new Mailbox();
+      mailbox.enqueueAsync([raw("a0"), raw("a1")]);
+      mailbox.enqueueNext([raw("n0"), raw("n1")]);
+      expect(mailbox.remove("next", 0)).toBe(true);
+      expect(mailbox.remove("async", 1)).toBe(true);
+      expect(mailbox.queues).toEqual({ async: [raw("a0")], next: [raw("n1")] });
+    });
+    it.each([-1, 1, 5])("rejects out-of-range index %i", (index) => {
+      const mailbox = new Mailbox();
+      mailbox.enqueueAsync([raw("a0")]);
+      mailbox.enqueueNext([raw("n0")]);
+      expect(mailbox.remove("async", index)).toBe(false);
+      expect(mailbox.remove("next", index)).toBe(false);
+      expect(mailbox.queues).toEqual({ async: [raw("a0")], next: [raw("n0")] });
+    });
+    it("cannot remove checked-out entries, and restore keeps removals", async () => {
+      const mailbox = new Mailbox();
+      mailbox.enqueueAsync([raw("out")]);
+      await mailbox.deliverAsync(async () => {
+        expect(mailbox.remove("async", 0)).toBe(false);
+        mailbox.enqueueAsync([raw("new0"), raw("new1")]);
+        expect(mailbox.remove("async", 0)).toBe(true);
+        return { disposition: { type: "restore" }, value: undefined };
+      });
+      expect(mailbox.queues.async).toEqual([raw("out"), raw("new1")]);
+    });
+  });
 });

@@ -702,6 +702,9 @@ export class Thread implements ThreadCoreView {
   get queued(): Queues {
     return this.mailbox.queues;
   }
+  removeQueued(when: DeferredDelivery, index: number): void {
+    if (this.mailbox.remove(when, index)) this.handleUpdate();
+  }
   private drainQueues(): QueuedMessage[] {
     return this.mailbox.drain();
   }

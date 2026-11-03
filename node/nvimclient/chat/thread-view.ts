@@ -435,6 +435,7 @@ function renderPendingMessage(
   index: number,
   thread: NvimThread,
   dispatch: Dispatch<Msg>,
+  onDelete: () => void,
   label = "# ✉️ queued:\n",
 ): VDOMNode {
   const expanded = thread.state.pendingMessagesExpanded[index] || false;
@@ -464,11 +465,14 @@ function renderPendingMessage(
     }
   }
 
-  return withExtmark(
-    d`${withExtmark(d`${label}`, {
-      hl_group: "@markup.heading.1.markdown",
-    })}${body}${toggle}`,
-    { hl_group: "CursorLine", hl_eol: true },
+  return withBindings(
+    withExtmark(
+      d`${withExtmark(d`${label}`, {
+        hl_group: "@markup.heading.1.markdown",
+      })}${body}${toggle}`,
+      { hl_group: "CursorLine", hl_eol: true },
+    ),
+    { dd: onDelete },
   );
 }
 
@@ -578,7 +582,9 @@ ${contextFilesView(contextFilesData(thread), contextViewCtx(thread), {
   const pendingMessagesView =
     pendingCount > 0
       ? d`\n${pendingAsync.map((q, index) =>
-          renderPendingMessage(renderPending(q), index, thread, dispatch),
+          renderPendingMessage(renderPending(q), index, thread, dispatch, () =>
+            dispatch({ type: "remove-pending-message", when: "async", index }),
+          ),
         )}`
       : d``;
   const pendingNextMessagesView =
@@ -589,6 +595,8 @@ ${contextFilesView(contextFilesData(thread), contextViewCtx(thread), {
             pendingCount + index,
             thread,
             dispatch,
+            () =>
+              dispatch({ type: "remove-pending-message", when: "next", index }),
             "# ⏭️ queued (next stop):\n",
           ),
         )}`

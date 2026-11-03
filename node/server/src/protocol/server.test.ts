@@ -422,3 +422,52 @@ it("markAttended and user submissions record attention; agent updates do not", (
     h.session.markAttended(unknown);
     expect(wakes).toBe(2);
   }));
+it("removes a queued entry so it is never delivered", () =>
+  withHarness({}, async (h) => {
+    const server = createInProcessServer({ session: h.session });
+    const { id, thread } = await h.createRoot();
+    const first = server.execute({
+      type: "thread.submit",
+      threadId: id,
+      input: text("first"),
+    });
+    const stream = await h.nextStream();
+    for (const [t, delivery] of [
+      ["keep-async", "async"],
+      ["drop-async", "async"],
+      ["keep-next", "next"],
+    ] as const) {
+      await server.execute({
+        type: "thread.submit",
+        threadId: id,
+        input: text(t),
+        delivery,
+      });
+    }
+    expect(
+      await server.execute({
+        type: "thread.removeQueued",
+        threadId: id,
+        when: "async",
+        index: 1,
+      }),
+    ).toEqual({ type: "ok" });
+    expect(JSON.stringify(thread.queued)).not.toContain("drop-async");
+    expect(thread.queued.async).toHaveLength(1);
+    expect(thread.queued.next).toHaveLength(1);
+    stream.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
+    (await h.nextStream()).respond({
+      stopReason: "end_turn",
+      text: "ok2",
+      toolRequests: [],
+    });
+    await first;
+    await pollUntil(() => {
+      if (thread.state.type === "running") throw new Error("busy");
+    });
+    const sent = JSON.stringify(thread.getProviderMessages());
+    expect(sent).toContain("keep-async");
+    expect(sent).toContain("keep-next");
+    expect(sent).not.toContain("drop-async");
+    await server.dispose();
+  }));

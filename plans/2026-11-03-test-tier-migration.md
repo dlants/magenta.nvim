@@ -226,3 +226,11 @@ Approvals in tests go through the existing public session APIs (`session.getPend
 
 - `utils/file-summary.test.ts` is the only candidate that never starts nvim.
 - These do start nvim: `tea/highlights`, `tea/on-unhandled-key`, `tea/render`, `tea/update`, `tea/util`, `tea/view`, `nvim/nvim-node/attach`, `nvim/nvim-node/logger`, `bridge-guard`, `utils/pdf-pages`, `chat/commands/file-paste`. Check `pdf-pages` and `file-paste` in stage 2: their nvim usage may be incidental.
+
+## Review follow-ups (queued-message removal)
+
+- The working tree carried an unrelated feature (`Mailbox.remove`, `Thread.removeQueued`, the `thread.removeQueued` operation and `dd` on pending messages). Committed alongside its tests:
+  - `submission/mailbox.test.ts` "remove": queue selection, out-of-range/negative indices, checked-out entries can't be removed and `restore` doesn't resurrect removals.
+  - `protocol/server.test.ts` "removes a queued entry so it is never delivered": covers `Thread.removeQueued` through `execute`.
+  - `chat/thread.test.ts` "dd on a next-queue entry removes only that entry" (tier C, checks the view→queue index mapping).
+- The client `remove-pending-message` msg uses the server's `DeferredDelivery` type.

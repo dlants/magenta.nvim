@@ -47,6 +47,14 @@ export class Mailbox {
   enqueueNext(entries: QueueEntry[]): void {
     this.nextQueue.push(...entries);
   }
+  /** Drop a queued entry. Entries checked out by an in-flight delivery are
+   * not in either queue, so they cannot be removed. */
+  remove(when: DeferredDelivery, index: number): boolean {
+    const queue = when === "async" ? this.asyncQueue : this.nextQueue;
+    if (index < 0 || index >= queue.length) return false;
+    queue.splice(index, 1);
+    return true;
+  }
   /** Take the async queue in full for the duration of `run`, which sees only
    * a `next` cursor and says at the end whether the untouched remainder is
    * spent (`commit`), goes back (`restore`), or moves to the `next` queue.

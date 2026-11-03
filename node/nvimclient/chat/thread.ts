@@ -2,6 +2,7 @@ import type {
   AgentInput,
   CompactionRunId,
   ContextFiles,
+  DeferredDelivery,
   Environment,
   GitState,
   MagentaServer,
@@ -101,6 +102,7 @@ export type Msg =
       type: "toggle-pending-message";
       index: number;
     }
+  | { type: "remove-pending-message"; when: DeferredDelivery; index: number }
   | { type: "toggle-pull-request-expanded"; url: string }
   | { type: "retry-pull-request"; url: string }
   | { type: "untrack-pull-request"; url: string }
@@ -583,6 +585,16 @@ export class NvimThread {
           type: "thread.untrackPullRequest",
           threadId: this.id,
           url: msg.url,
+        });
+        return;
+
+      case "remove-pending-message":
+        this.state.pendingMessagesExpanded = {};
+        void this.execute({
+          type: "thread.removeQueued",
+          threadId: this.id,
+          when: msg.when,
+          index: msg.index,
         });
         return;
 

@@ -151,6 +151,28 @@ it("renders a long pending message trimmed with expand/collapse toggle", async (
   });
 });
 
+it("dd on a next-queue entry removes only that entry", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("Original message");
+    await driver.send();
+    await driver.mockAnthropic.awaitPendingStream();
+    await driver.inputMagentaText("@async queued-async-msg");
+    await driver.send();
+    await driver.inputMagentaText("@next queued-next-msg");
+    await driver.send();
+    const thread = leftThread(driver.magenta.chat);
+    await driver.assertDisplayBufferContains("queued-next-msg");
+    await driver.triggerDisplayBufferKeyOnContent("queued-next-msg", "dd");
+    await pollUntil(() => {
+      if (serverThread(thread).queued.next.length !== 0)
+        throw new Error("next entry not removed");
+    });
+    expect(serverThread(thread).queued.async).toHaveLength(1);
+    await driver.assertDisplayBufferDoesNotContain("queued-next-msg");
+    await driver.assertDisplayBufferContains("queued-async-msg");
+  });
+});
 it("clears pending expand state when the queue drains", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();

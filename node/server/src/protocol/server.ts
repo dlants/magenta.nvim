@@ -326,6 +326,10 @@ export function createInProcessServer({
       readyThread(op.threadId).setTitle(op.title);
       return ok;
     },
+    "thread.removeQueued": (op) => {
+      readyThread(op.threadId).removeQueued(op.when, op.index);
+      return ok;
+    },
     "thread.markAttended": (op) => {
       knownThread(op.threadId);
       session.markAttended(op.threadId);
