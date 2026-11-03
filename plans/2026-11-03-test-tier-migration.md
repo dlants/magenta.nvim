@@ -263,3 +263,4 @@ Approvals in tests go through the existing public session APIs (`session.getPend
   - "shows pending approvals from subagent in parent progress view" kept as the one C render check for subagent approvals; the routing is now asserted in A.
   - "executed only once" left in C for now (tier B candidate).
 - `withDriver(` call sites: 259 → 248. Full suite: only the 3 known pre-existing failures; wall 66.9s. tsc and biome clean.
+- Review follow-up: "an errored subagent keeps its slot" no longer uses a fixed `setTimeout(50)`. After the child fails, it is re-driven to a new request ("retry error_task"), and only then the test asserts that the parent still has exactly one child and no stream has mentioned `success_task`. That anchors the negative check to a later event instead of a timer.

@@ -346,19 +346,22 @@ it("an errored subagent keeps its slot until it recovers and yields", () =>
     await pollUntil(() => {
       if (child.lastResult()?.type !== "failed") throw new Error("not failed");
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    const mentions = (text: string) =>
-      h.mockClient.streams.some((s) =>
-        JSON.stringify(s.messages).includes(text),
-      );
-    expect(mentions("success_task")).toBe(false);
 
     void h.send(child, "retry error_task");
-    yieldResult(
-      await h.streamWithText("retry error_task"),
-      "yield-retry",
-      "Recovered successfully",
-    );
+    const retry = await h.streamWithText("retry error_task");
+    // The failed child has been re-driven through a full submission and a new
+    // request, so any slot release on failure would have spawned the next
+    // child by now.
+    const children = h.session
+      .listThreads()
+      .filter((t) => t.parentThreadId === thread.id);
+    expect(children).toHaveLength(1);
+    expect(
+      h.mockClient.streams.some((s) =>
+        JSON.stringify(s.messages).includes("success_task"),
+      ),
+    ).toBe(false);
+    yieldResult(retry, "yield-retry", "Recovered successfully");
     yieldResult(
       await h.streamWithText("success_task"),
       "yield-success",
