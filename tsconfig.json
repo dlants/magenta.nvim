@@ -21,6 +21,7 @@
   "include": [
     "node/**/*",
     "sdk/**/*",
+    "skills/**/*.ts",
     "package.json",
     "eslint.confing.ms",
     "vitest.config.ts"

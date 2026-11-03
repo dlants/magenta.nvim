@@ -11,7 +11,11 @@ export default defineConfig({
       {
         test: {
           name: "server",
-          include: ["node/server/**/*.test.ts", "sdk/**/*.test.ts"],
+          include: [
+            "node/server/**/*.test.ts",
+            "sdk/**/*.test.ts",
+            "skills/**/*.test.ts",
+          ],
           setupFiles,
           pool: "threads",
         },

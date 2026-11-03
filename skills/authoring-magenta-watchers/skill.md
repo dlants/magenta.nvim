@@ -97,6 +97,15 @@ Guidance:
 - Keep `context` deterministic (stable ordering, no timestamps that change every poll), or every poll pushes.
 - Test with `node --experimental-transform-types index.ts` and the wait CLI below. Logs go to `<socket>.log`.
 
+## Reference: GitHub PR watcher
+
+`reference/github-pr/` (next to this file) is a complete watcher: `manifest.json` (trigger = PR URL), `github.ts` (`gh api --include` client with ETags), `pull-request.ts` (snapshot fetch, normalization, `render`/`summarize`/`isFinished`), `index.ts` (wiring), and tests with a fake `gh`. To adapt it:
+
+- Copy the dir to `~/.magenta/watchers/github-pr/`, symlink `magenta-sdk -> <plugin>/sdk` there and change the `../../../../sdk/watchers/index.ts` imports to `./magenta-sdk/watchers/index.ts`.
+- Filter checks/bot comments in `render` (and `summarize`); filtered-out changes then push nothing.
+- Scope repos by narrowing the trigger pattern, or by returning `unavailable` from `poll` for rejected keys.
+- Rate-limit `Retry-After` is reported as an error and falls back to the sdk's exponential backoff.
+
 ## Waiting from bash
 
 The sdk ships a CLI over `waitFor`:
