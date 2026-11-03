@@ -65,6 +65,7 @@ Client option: `autoReloadBuffers: boolean` in `lua/magenta/options.lua`.
 
 - Goal: with a clean buffer open, an external write (e.g. `fs.writeFile` from the test, and a rename-replace like `sed -i`) updates the buffer within the debounce window.
 - Tests (tier C, `withDriver`):
+  - `autoreload.reload(bufnr, content)` with explicit `content` (no disk read) in `buffer-reload.test.ts` — deferred from stage 1 review, since the watcher is the first caller.
   - Clean buffer, write file from node → buffer content matches disk; one `u` restores old content; an extmark placed below the edited region stays on its line.
   - Rename-replace (write tmp + `rename`) → still reloads, and a second subsequent write also reloads (watcher survives).
   - Modified buffer + external write → buffer content unchanged, `modified` still set.
