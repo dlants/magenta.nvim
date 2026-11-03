@@ -10,6 +10,11 @@ import type { AbsFilePath } from "../utils/files.ts";
 import { type BufNr, type Line, NvimBuffer } from "./buffer.ts";
 import type { Row0Indexed } from "./window.ts";
 
+function defined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("expected value to be defined");
+  return value;
+}
+
 describe("NvimBuffer.reloadFromDisk", () => {
   it("moves extmarks with the text when a line is inserted above", async () => {
     await withNvimClient(async (nvim) => {
@@ -32,8 +37,8 @@ describe("NvimBuffer.reloadFromDisk", () => {
       const mark = await buffer.getExtmarkById(extmarkId);
       expect(mark).toBeDefined();
       const markedLine = await buffer.getLines({
-        start: mark!.startPos.row as Row0Indexed,
-        end: (mark!.startPos.row + 1) as Row0Indexed,
+        start: defined(mark).startPos.row as Row0Indexed,
+        end: (defined(mark).startPos.row + 1) as Row0Indexed,
       });
       expect(markedLine).toEqual(["two"]);
     });
@@ -271,8 +276,8 @@ INS`,
 
         const mark = await buffer.getExtmarkById(extmarkId);
         const markedLine = await buffer.getLines({
-          start: mark!.startPos.row as Row0Indexed,
-          end: (mark!.startPos.row + 1) as Row0Indexed,
+          start: defined(mark).startPos.row as Row0Indexed,
+          end: (defined(mark).startPos.row + 1) as Row0Indexed,
         });
         expect(markedLine).toEqual(["two"]);
         expect(await buffer.getOption("modified")).toBe(false);
@@ -428,7 +433,7 @@ describe("autoreload watcher", () => {
       await fs.writeFile(filePath, "zero\none\ntwo\nthree\n");
       await waitForLines(buffer, ["zero", "one", "two", "three"]);
       const mark = await buffer.getExtmarkById(extmarkId);
-      expect(mark!.startPos.row).toBe(3);
+      expect(defined(mark).startPos.row).toBe(3);
       expect(await buffer.getOption("modified")).toBe(false);
       await lua(
         driver,
@@ -477,7 +482,7 @@ describe("autoreload watcher", () => {
       await pollUntil(async () => {
         const stale = await lua<boolean>(
           driver,
-          `return vim.b[...].magenta_stale == true`,
+          `return vim.b[...].magentaStale == true`,
           [bufnr],
         );
         if (!stale) throw new Error("not stale yet");
@@ -486,7 +491,7 @@ describe("autoreload watcher", () => {
       await driver.nvim.call("nvim_command", [`buffer ${bufnr}`]);
       await waitForLines(buffer, ["changed"]);
       expect(
-        await lua<boolean>(driver, `return vim.b[...].magenta_stale == nil`, [
+        await lua<boolean>(driver, `return vim.b[...].magentaStale == nil`, [
           bufnr,
         ]),
       ).toBe(true);
@@ -499,10 +504,75 @@ describe("autoreload watcher", () => {
         driver,
         path.join(dirs.tmpDir, "test.txt"),
       );
-      const countDirs = `local n = 0 for _ in pairs(require("magenta.autoreload")._dirs) do n = n + 1 end return n`;
       expect(await lua<number>(driver, countDirs)).toBe(1);
       await driver.nvim.call("nvim_command", [`bwipeout! ${bufnr}`]);
       expect(await lua<number>(driver, countDirs)).toBe(0);
+    });
+  });
+
+  const countDirs = `local n = 0 for _ in pairs(require("magenta.autoreload")._dirs) do n = n + 1 end return n`;
+
+  test("buffers sharing a directory are refcounted", async () => {
+    await withDriver(
+      {
+        setupFiles: async (tmpDir) => {
+          await fs.writeFile(path.join(tmpDir, "a.txt"), "a\n");
+          await fs.writeFile(path.join(tmpDir, "b.txt"), "b\n");
+        },
+      },
+      async (driver, dirs) => {
+        const a = await openWatched(driver, path.join(dirs.tmpDir, "a.txt"));
+        await driver.editFile(path.join(dirs.tmpDir, "b.txt"));
+        const bBufnr = (await driver.nvim.call(
+          "nvim_get_current_buf",
+          [],
+        )) as BufNr;
+        const b = new NvimBuffer(bBufnr, driver.nvim);
+        await sleep(50);
+        expect(await lua<number>(driver, countDirs)).toBe(1);
+        await driver.nvim.call("nvim_command", [`bwipeout! ${a.bufnr}`]);
+        expect(await lua<number>(driver, countDirs)).toBe(1);
+        await fs.writeFile(path.join(dirs.tmpDir, "b.txt"), "b2\n");
+        await waitForLines(b, ["b2"]);
+        await driver.nvim.call("nvim_command", [`bwipeout! ${bBufnr}`]);
+        expect(await lua<number>(driver, countDirs)).toBe(0);
+      },
+    );
+  });
+
+  test("renaming the buffer moves its watcher to the new directory", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      const { bufnr, buffer } = await openWatched(
+        driver,
+        path.join(dirs.tmpDir, "test.txt"),
+      );
+      const subDir = path.join(dirs.tmpDir, "sub");
+      await fs.mkdir(subDir);
+      const newPath = path.join(subDir, "moved.txt");
+      await driver.nvim.call("nvim_command", [`saveas ${newPath}`]);
+      await sleep(50);
+      const watched = await lua<string[]>(
+        driver,
+        `local r = {} for d in pairs(require("magenta.autoreload")._dirs) do r[#r + 1] = d end return r`,
+      );
+      expect(watched.map((d) => path.basename(d))).toEqual(["sub"]);
+      expect(
+        (await driver.nvim.call("nvim_get_current_buf", [])) as BufNr,
+      ).toBe(bufnr);
+      await fs.writeFile(newPath, "moved content\n");
+      await waitForLines(buffer, ["moved content"]);
+    });
+  });
+
+  test("deleted file leaves the buffer alone and recreation reloads", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      const filePath = path.join(dirs.tmpDir, "test.txt");
+      const { buffer } = await openWatched(driver, filePath);
+      await fs.rm(filePath);
+      await sleep(400);
+      expect(await allLines(buffer)).toEqual(["one", "two", "three"]);
+      await fs.writeFile(filePath, "recreated\n");
+      await waitForLines(buffer, ["recreated"]);
     });
   });
 

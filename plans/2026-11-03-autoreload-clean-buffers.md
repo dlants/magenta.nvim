@@ -73,6 +73,7 @@ Client option: `autoReloadBuffers: boolean` in `lua/magenta/options.lua`.
   - Buffer wiped → its dir watcher stopped (inspect module state via `nvim_lua`).
   - `:w` from the user does not cause a reload/extra undo entry.
 - [x] Done. Watcher in `lua/magenta/autoreload.lua` (`_dirs`/`_bufs` exposed for tests); 7 tests in `buffer-reload.test.ts` "autoreload watcher". Decisions: `reload` now bails before `write!` when there are no hunks and eol is unchanged, so self-writes and user `:w` terminate even if a stat race slips through. `setup()` calls `autoreload.setup()` unconditionally for now (option gating is stage 3); tests call `require("magenta.autoreload").setup()` explicitly since the test harness does not run `setup()`. Pre-existing flaky tests (spawn-subagents, pull-requests, display-open-target, chat-view-adapter under full-suite load) still flake.
+- Review follow-up: lua locals and the stale flag are camelCase (`vim.b.magentaStale`). Added tests for shared-dir refcounting, `:saveas` re-attach to a new dir, and delete-then-recreate. Skipped testing the post-read `modified` race guard (not deterministically drivable). Kept the generic `lua<T>` test helper cast as-is (test-only).
 
 ## Option + bash end-to-end
 

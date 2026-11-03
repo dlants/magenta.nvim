@@ -55,12 +55,12 @@ M._dirs = {}
 -- bufnr -> { path, dir, name, timer, stat }
 M._bufs = {}
 
-local function stat_key(st)
+local function statKey(st)
   if not st then return nil end
   return st.mtime.sec .. ":" .. st.mtime.nsec .. ":" .. st.size
 end
 
-local function read_async(path, cb)
+local function readAsync(path, cb)
   vim.uv.fs_open(path, "r", 438, function(err, fd)
     if err or not fd then return end
     vim.uv.fs_fstat(fd, function(serr, st)
@@ -77,43 +77,43 @@ local function read_async(path, cb)
   end)
 end
 
-local function record_stat(bufnr)
+local function recordStat(bufnr)
   local entry = M._bufs[bufnr]
   if not entry then return end
   vim.uv.fs_stat(entry.path, function(_, st)
-    if st then entry.stat = stat_key(st) end
+    if st then entry.stat = statKey(st) end
   end)
 end
 
-local function reload_async(bufnr)
+local function reloadAsync(bufnr)
   local entry = M._bufs[bufnr]
   if not entry then return end
-  read_async(entry.path, function(data, st)
+  readAsync(entry.path, function(data, st)
     vim.schedule(function()
       if M._bufs[bufnr] ~= entry then return end
-      entry.stat = stat_key(st)
+      entry.stat = statKey(st)
       if vim.bo[bufnr].modified then return end
       M.reload(bufnr, data)
       -- our own write! changes the mtime; record it so the event is a no-op
-      record_stat(bufnr)
+      recordStat(bufnr)
     end)
   end)
 end
 
-local function on_change(bufnr)
+local function onChange(bufnr)
   local entry = M._bufs[bufnr]
   if not entry then return end
   vim.uv.fs_stat(entry.path, function(err, st)
     -- deleted files are ignored
     if err or not st then return end
-    if stat_key(st) == entry.stat then return end
+    if statKey(st) == entry.stat then return end
     vim.schedule(function()
       if M._bufs[bufnr] ~= entry or not vim.api.nvim_buf_is_loaded(bufnr) then return end
       if vim.bo[bufnr].modified then return end
       if #vim.fn.win_findbuf(bufnr) > 0 then
-        reload_async(bufnr)
+        reloadAsync(bufnr)
       else
-        vim.b[bufnr].magenta_stale = true
+        vim.b[bufnr].magentaStale = true
       end
     end)
   end)
@@ -143,7 +143,7 @@ local function arm(target)
   if not e then return end
   if not e.timer then e.timer = vim.uv.new_timer() end
   e.timer:stop()
-  e.timer:start(DEBOUNCE_MS, 0, function() on_change(target) end)
+  e.timer:start(DEBOUNCE_MS, 0, function() onChange(target) end)
 end
 
 local function attach(bufnr)
@@ -183,7 +183,7 @@ local function attach(bufnr)
   d.files[name] = bufnr
   d.count = d.count + 1
   M._bufs[bufnr] = { path = path, dir = dir, name = name }
-  record_stat(bufnr)
+  recordStat(bufnr)
 end
 
 function M.teardown()
@@ -207,14 +207,14 @@ function M.setup()
   })
   vim.api.nvim_create_autocmd("BufWritePost", {
     group = augroup,
-    callback = function(ev) record_stat(ev.buf) end,
+    callback = function(ev) recordStat(ev.buf) end,
   })
   vim.api.nvim_create_autocmd("BufWinEnter", {
     group = augroup,
     callback = function(ev)
-      if vim.b[ev.buf].magenta_stale then
-        vim.b[ev.buf].magenta_stale = nil
-        reload_async(ev.buf)
+      if vim.b[ev.buf].magentaStale then
+        vim.b[ev.buf].magentaStale = nil
+        reloadAsync(ev.buf)
       end
     end,
   })
