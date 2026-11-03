@@ -283,3 +283,11 @@ Approvals in tests go through the existing public session APIs (`session.getPend
   - "disposing the view leaves the thread alone" (AC) is left for stage 6.
 - `withDriver(` call sites: 248 → 232. Full suite: only the 3 known pre-existing failures (plus a `@staged` flake that passes in isolation). tsc and biome clean.
 - Review follow-up: `thread-compact-flow.test.ts` "spawns one compact child thread per chunk" no longer uses `current!`; it checks the active compaction explicitly (re-read mid-run, since `current` is a state snapshot) and throws a clear error if it is missing.
+
+# Stage 6 results (done)
+
+- [x] `chat/chat-view-adapter.test.ts` → `chat/chat-view-adapter.node.test.ts` (all 7 tests). A `withChat` helper builds a `Chat` over `startInProcessServer` with a tmp project dir, mock profiles (`provider: "mock"` + `withMockClient`), a logger-only `Nvim` stub and `dispatch` wired back to `chat.update`. The rebuilt-adapter test submits through the server `Thread` instead of the input buffer.
+- [x] Script lifecycle AC: "owner shutdown disposes the scripts and the session" is now in `in-process-server.node.test.ts` (spies on both disposals; child termination is covered by `script-manager.node.test.ts` "dispose terminates running invocations"). "a failing script disposal still disposes the session" was already covered by `in-process-server.node.test.ts`. Both C tests deleted.
+- [ ] Fixture copy: not changed. Measured `fs.cp` of the fixtures dir at ~15ms per test (×223 ≈ 3.5s summed, <1s wall at 4 forks), negligible next to the nvim spawn. A shared-per-worker copy would need a reset step that risks cross-test leakage for no measurable gain.
+- "disposing the view leaves the thread alone" (`chat/thread.test.ts`) left in C: it goes through the sidebar/buffer teardown.
+- Final numbers vs baseline: `withDriver(` call sites 259 → 223; nvim summed 201.7s → 157.5s; server 97.6s → 106.7s; node 4.8s → 6.5s; wall 67.8s → 59s. Only the 3 known pre-existing failures. tsc and biome clean.

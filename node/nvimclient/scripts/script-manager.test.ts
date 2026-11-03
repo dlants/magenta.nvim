@@ -49,22 +49,6 @@ registerScript(
 );
 `;
 
-const LONG_LIVED_SCRIPT = `
-import { registerScript } from "./magenta-sdk/index.ts";
-import { spawn } from "node:child_process";
-
-registerScript(
-  "foo",
-  "spawns a long-lived child",
-  { type: "object", properties: {}, required: [] },
-  async (_params, _thread, log) => {
-    const child = spawn("sleep", ["120"], { detached: false });
-    log("child " + child.pid);
-    await new Promise((r) => setTimeout(r, 60000));
-  },
-);
-`;
-
 it("renders running invocations, logs, and spawned threads in the Scripts overview section", async () => {
   await withDriver(
     {
@@ -385,52 +369,4 @@ it("toggling the invocation sandbox approves a spawned thread's pending permissi
       await driver.assertDisplayBufferContains("SANDBOX OFF");
     },
   );
-});
-
-it("owner shutdown disposes the scripts and the session", async () => {
-  await withDriver(
-    {
-      setupFiles: async (tmpDir) => {
-        await setupScript(tmpDir, LONG_LIVED_SCRIPT);
-      },
-    },
-    async (driver) => {
-      const { scripts, session } = driver.magenta.serverInternals.internals;
-      await pollUntil(() => scripts.getCatalog().some((s) => s.name === "foo"));
-      const id = scripts.startScript("foo", {}, { sandboxBypassed: false });
-      await pollUntil(() =>
-        (scripts.invocations.get(id)?.logs ?? []).some((l) =>
-          l.startsWith("child "),
-        ),
-      );
-      const childPid = scripts.childPid(id);
-      expect(session.listThreads().length).toBeGreaterThan(0);
-      driver.magenta.destroy();
-      const childDead = () => {
-        if (childPid === undefined) return true;
-        try {
-          process.kill(childPid, 0);
-          return false;
-        } catch {
-          return true;
-        }
-      };
-      await pollUntil(() => session.listThreads().length === 0 && childDead());
-      await expect(session.createRootThread()).rejects.toThrow("disposed");
-    },
-  );
-});
-it("a failing script disposal still disposes the session", async () => {
-  await withDriver({}, async (driver) => {
-    const { scripts, session } = driver.magenta.serverInternals.internals;
-    const realDispose = scripts.dispose.bind(scripts);
-    scripts.dispose = async () => {
-      await realDispose();
-      throw new Error("script teardown blew up");
-    };
-    expect(session.listThreads().length).toBeGreaterThan(0);
-    driver.magenta.destroy();
-    await pollUntil(() => session.listThreads().length === 0);
-    await expect(session.createRootThread()).rejects.toThrow("disposed");
-  });
 });

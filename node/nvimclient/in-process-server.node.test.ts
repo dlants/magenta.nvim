@@ -27,3 +27,11 @@ it("dispose disposes the session even if script teardown fails", async () => {
   await expect(server.dispose()).rejects.toThrow("scripts failed");
   expect(sessionDispose).toHaveBeenCalledOnce();
 });
+it("owner shutdown disposes the scripts and the session", async () => {
+  const { server, internals } = start();
+  const scriptsDispose = vi.spyOn(internals.scripts, "dispose");
+  const sessionDispose = vi.spyOn(internals.session, "dispose");
+  await server.dispose();
+  expect(scriptsDispose).toHaveBeenCalledOnce();
+  expect(sessionDispose).toHaveBeenCalledOnce();
+});
