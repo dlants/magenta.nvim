@@ -209,6 +209,8 @@ export class PullRequestSupervisor implements ToolLoopSupervisor {
     private readonly monitor: PullRequestMonitor,
     private readonly getLastAttention: () => number,
     private readonly histories: Map<string, ViewEntry[]>,
+    /** Untracked by the user; later mentions must not resubscribe. */
+    private readonly untracked: Set<string> = new Set(),
   ) {
     for (const url of histories.keys()) this.track(url);
   }
@@ -245,11 +247,18 @@ export class PullRequestSupervisor implements ToolLoopSupervisor {
       args.monitor ?? args.source.monitor,
       args.source.getLastAttention,
       histories,
+      new Set(args.source.untracked),
     );
   }
 
   track(url: string): void {
-    if (this.disposed || this.subscriptions.has(url)) return;
+    if (
+      this.disposed ||
+      this.subscriptions.has(url) ||
+      this.untracked.has(url)
+    ) {
+      return;
+    }
     this.subscriptions.set(
       url,
       this.monitor.subscribe(url, {
@@ -259,6 +268,14 @@ export class PullRequestSupervisor implements ToolLoopSupervisor {
     );
   }
 
+  untrack(url: string): void {
+    this.untracked.add(url);
+    const unsubscribe = this.subscriptions.get(url);
+    if (!unsubscribe) return;
+    unsubscribe();
+    this.subscriptions.delete(url);
+    this.callbacks.onChanged?.();
+  }
   get trackedPullRequests(): ReadonlyArray<string> {
     return [...this.subscriptions.keys()];
   }

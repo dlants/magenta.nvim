@@ -35,6 +35,7 @@ import {
   type SystemInfo,
   type SystemPrompt,
 } from "./providers/system-prompt.ts";
+import { isPullRequestRepoAllowed } from "./pull-requests/types.ts";
 import type { SandboxConfig } from "./sandbox-config.ts";
 import type { Sandbox } from "./sandbox-manager.ts";
 import type {
@@ -64,6 +65,7 @@ export type ServerHostOptions = ProviderOptions & {
   sandbox: SandboxConfig;
   autoContext: string[];
   hierarchyContextFileNames: string[];
+  pullRequestRepos?: string[];
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
   autoCompactThreshold: number;
@@ -431,6 +433,8 @@ export class ServerSessionHost implements SessionHost {
               monitor: session.pullRequestMonitor,
               // A deleted thread's supervisor is disposed; treat it as never attended.
               getLastAttention: () => session.getLastAttention(id) ?? 0,
+              isRepoAllowed: (url: string) =>
+                isPullRequestRepoAllowed(url, options.pullRequestRepos ?? []),
             },
           }
         : {}),

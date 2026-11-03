@@ -53,6 +53,26 @@ export type PullRequestSnapshot = {
 };
 
 const PR_URL = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/;
+export function isPullRequestRepoAllowed(
+  url: string,
+  allowedRepos: ReadonlyArray<string>,
+): boolean {
+  const ref = parsePullRequestUrl(url);
+  if (!ref) return false;
+  const owner = ref.owner.toLowerCase();
+  const repo = ref.repo.toLowerCase();
+  return allowedRepos.some((pattern) => {
+    const [allowedOwner, allowedRepo] = pattern
+      .toLowerCase()
+      .replace(/^(https?:\/\/)?(www\.)?github\.com\//, "")
+      .replace(/\/+$/, "")
+      .split("/");
+    return (
+      allowedOwner === owner &&
+      (allowedRepo === undefined || allowedRepo === "*" || allowedRepo === repo)
+    );
+  });
+}
 export function parsePullRequestUrl(url: string): PullRequestRef | undefined {
   const match = PR_URL.exec(url);
   if (!match) return undefined;

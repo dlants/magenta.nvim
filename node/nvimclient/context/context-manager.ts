@@ -247,6 +247,7 @@ export type PullRequestControls = {
   isExpanded: (url: string) => boolean;
   onToggle: (url: string) => void;
   onRetry: (url: string) => void;
+  onUntrack: (url: string) => void;
 };
 export function renderPullRequests(
   pullRequests: ReadonlyArray<PullRequestViewState>,
@@ -312,7 +313,10 @@ export function renderPullRequests(
             : "\uf407";
       return d`${withBindings(
         d`- ${icon} ${title}${pr.url}${state}${counts}${statusText}${errorBadge}`,
-        { "=": () => controls.onToggle(pr.url) },
+        {
+          "=": () => controls.onToggle(pr.url),
+          dd: () => controls.onUntrack(pr.url),
+        },
       )}\n${checkLines}${pendingLine}${statusLine}`;
     },
   )}`;

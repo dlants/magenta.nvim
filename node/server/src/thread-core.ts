@@ -65,6 +65,7 @@ export interface ThreadCoreContext {
   pullRequestTracking?: {
     monitor: PullRequestMonitor;
     getLastAttention: () => number;
+    isRepoAllowed: (url: string) => boolean;
   };
   /** Absent: never count, always proceed. */
   tokenBudget?: TokenBudget;
@@ -314,7 +315,9 @@ export class ThreadCore {
       () => this.manager.log.messages,
       () => {
         for (const url of this.pullRequestScanner.mentionedPullRequests) {
-          this.pullRequestSupervisor?.track(url);
+          if (context.pullRequestTracking?.isRepoAllowed(url)) {
+            this.pullRequestSupervisor?.track(url);
+          }
         }
         callbacks.onUpdate();
       },

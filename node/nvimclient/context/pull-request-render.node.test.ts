@@ -85,6 +85,7 @@ describe("renderPullRequests", () => {
           isExpanded: () => expanded,
           onToggle: () => {},
           onRetry: () => {},
+          onUntrack: () => {},
         },
         NOW,
       ),

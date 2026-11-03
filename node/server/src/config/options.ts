@@ -126,6 +126,11 @@ export type ServerOptions = {
   skillsPaths: string[];
   scriptsPaths: string[];
   suppressProjectSkills: string[];
+  /** GitHub orgs/users ("owner", "owner/*") or repos ("owner/repo"), optionally
+   * prefixed with "github.com/", whose mentioned pull requests are
+   * tracked. PR comments are injected into context, so this is user-level
+   * only: a cloned project must not be able to opt itself in. */
+  pullRequestRepos: string[];
   agentsPaths: string[];
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
@@ -823,6 +828,7 @@ export function parseOptions(
     ],
     scriptsPaths: ["~/.magenta/scripts", ".magenta/scripts"],
     suppressProjectSkills: [],
+    pullRequestRepos: [],
     agentsPaths: [
       BUILTIN_AGENTS_PATH,
       "~/.claude/agents",
@@ -881,6 +887,13 @@ export function parseOptions(
       options.scriptsPaths = parseStringArray(
         inputOptionsObj.scriptsPaths,
         "scriptsPaths",
+      );
+    }
+    if ("pullRequestRepos" in inputOptionsObj) {
+      options.pullRequestRepos = parseStringArray(
+        inputOptionsObj.pullRequestRepos,
+        "pullRequestRepos",
+        logger,
       );
     }
     // Parse suppressProjectSkills

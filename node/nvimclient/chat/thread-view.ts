@@ -832,6 +832,7 @@ ${contentView}`;
     isExpanded: (url) => !!thread.state.pullRequestsExpanded[url],
     onToggle: (url) => dispatch({ type: "toggle-pull-request-expanded", url }),
     onRetry: (url) => dispatch({ type: "retry-pull-request", url }),
+    onUntrack: (url) => dispatch({ type: "untrack-pull-request", url }),
   });
 
   const gitRepos = thread.threadState.trackedGitRepos;

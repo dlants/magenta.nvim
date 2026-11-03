@@ -283,6 +283,7 @@ export class TestSessionHost implements SessionHost {
               monitor: session.pullRequestMonitor,
               // A deleted thread's supervisor is disposed; treat it as never attended.
               getLastAttention: () => session.getLastAttention(id) ?? 0,
+              isRepoAllowed: () => true,
             },
           }
         : {}),

@@ -103,6 +103,7 @@ export type Msg =
     }
   | { type: "toggle-pull-request-expanded"; url: string }
   | { type: "retry-pull-request"; url: string }
+  | { type: "untrack-pull-request"; url: string }
   | {
       type: "toggle-expand-content";
       messageIdx: number;
@@ -576,6 +577,13 @@ export class NvimThread {
 
       case "retry-pull-request":
         void this.execute({ type: "pullRequest.retry", url: msg.url });
+        return;
+      case "untrack-pull-request":
+        void this.execute({
+          type: "thread.untrackPullRequest",
+          threadId: this.id,
+          url: msg.url,
+        });
         return;
 
       case "toggle-pending-message":

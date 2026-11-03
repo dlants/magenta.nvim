@@ -228,6 +228,9 @@ export class Thread implements ThreadCoreView {
   get pullRequests(): PullRequestViewState[] {
     return this.core.pullRequestSupervisor?.getViewState() ?? [];
   }
+  untrackPullRequest(url: string): void {
+    this.core.pullRequestSupervisor?.untrack(url);
+  }
   get trackedPullRequests(): ReadonlyArray<string> {
     return this.core.pullRequestSupervisor?.trackedPullRequests ?? [];
   }

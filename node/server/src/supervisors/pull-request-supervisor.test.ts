@@ -263,6 +263,19 @@ it("deleting the thread unsubscribes from the shared poller", () =>
     expect(pullCalls(h)).toBe(calls);
   }));
 
+it("an untracked pull request stays untracked when mentioned again", () =>
+  withHarness(opts, async (h) => {
+    script(h);
+    const { thread } = await h.createRoot();
+    await mention(h, thread);
+    thread.untrackPullRequest(URL);
+    expect(thread.trackedPullRequests).toEqual([]);
+    expect(h.session.pullRequestMonitor?.getStatus(URL)).toBeUndefined();
+    await exchange(h, thread, `Again: ${URL}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(thread.trackedPullRequests).toEqual([]);
+  }));
+
 it("session attention drives the thread's poll dormancy", () =>
   withHarness(opts, async (h) => {
     script(h);
