@@ -599,13 +599,15 @@ describe("autoreload watcher", () => {
   });
   test("autoReloadBuffers = false disables watching", async () => {
     await withDriver({ setupFiles }, async (driver, dirs) => {
-      await lua(
-        driver,
-        `require("magenta.options").set_options({ autoReloadBuffers = false })`,
-      );
       const { buffer } = await openWatched(
         driver,
         path.join(dirs.tmpDir, "test.txt"),
+      );
+      expect(await lua<number>(driver, countDirs)).toBe(1);
+      await lua(
+        driver,
+        `require("magenta.options").set_options({ autoReloadBuffers = false })
+        require("magenta.autoreload").setup()`,
       );
       expect(await lua<number>(driver, countDirs)).toBe(0);
       await fs.writeFile(path.join(dirs.tmpDir, "test.txt"), "changed\n");
