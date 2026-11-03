@@ -289,13 +289,13 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
 
       // Both root threads should be visible
       await driver.assertDisplayBufferContains(
-        `▶ Thread to delete: ⏳ executing tools (1 subthreads)`,
+        ` Thread to delete: ⏳ executing tools (1 subthreads)`,
       );
       await driver.assertDisplayBufferContains(`Thread to keep:`);
 
       // Press dd on the first root thread to delete it and its subtree
       await driver.triggerDisplayBufferKeyOnContent(
-        `▶ Thread to delete: ⏳ executing tools (1 subthreads)`,
+        ` Thread to delete: ⏳ executing tools (1 subthreads)`,
         "dd",
       );
 
@@ -344,7 +344,7 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
       await driver.awaitChatState({ state: "thread-overview" });
 
       await driver.triggerDisplayBufferKeyOnContent(
-        `▶ Root thread for dd child test: ⏳ executing tools (1 subthreads)`,
+        ` Root thread for dd child test: ⏳ executing tools (1 subthreads)`,
         "=",
       );
 
@@ -358,7 +358,41 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
         "dd",
       );
 
-      // Everything should be gone
+      // The subtree moves to a collapsed Deleted section
+      await driver.assertDisplayBufferContains("No threads yet");
+      await driver.triggerDisplayBufferKeyOnContent(
+        " # Deleted (1 thread, 0 scripts)",
+        "=",
+      );
+      await driver.assertDisplayBufferContains(
+        " # Deleted (1 thread, 0 scripts)",
+      );
+
+      // r restores it to the main section, u undoes the restore
+      await driver.triggerDisplayBufferKeyOnContent(
+        "Root thread for dd child test:",
+        "r",
+      );
+      await driver.assertDisplayBufferDoesNotContain("# Deleted");
+      await driver.triggerDisplayBufferKeyOnContent("# Threads", "u");
+      await driver.assertDisplayBufferContains(
+        " # Deleted (1 thread, 0 scripts)",
+      );
+
+      // u undoes the delete, <C-r> redoes it
+      await driver.triggerDisplayBufferKeyOnContent("# Threads", "u");
+      await driver.assertDisplayBufferDoesNotContain("# Deleted");
+      await driver.triggerDisplayBufferKeyOnContent("# Threads", "<C-r>");
+      await driver.assertDisplayBufferContains(
+        " # Deleted (1 thread, 0 scripts)",
+      );
+
+      // dd in the Deleted section deletes for real
+      await driver.triggerDisplayBufferKeyOnContent(
+        "Root thread for dd child test:",
+        "dd",
+      );
+      await driver.assertDisplayBufferDoesNotContain("# Deleted");
       await driver.assertDisplayBufferContains("No threads yet");
     });
   });

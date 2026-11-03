@@ -94,7 +94,7 @@ import {
 } from "./tea/bindings.ts";
 import type { Dispatch } from "./tea/tea.ts";
 import * as TEA from "./tea/tea.ts";
-import { d } from "./tea/view.ts";
+import { d, withBindings } from "./tea/view.ts";
 import { record as recordTiming } from "./timings.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import type { HomeDir } from "./utils/files.ts";
@@ -417,7 +417,24 @@ export class Magenta {
       nvim: this.nvim,
       initialModel: this.chat,
       View: () =>
-        d`${this.chat.renderThreadOverview()}${this.scriptManager.view()}`,
+        withBindings(
+          d`${this.chat.renderThreadOverview()}${this.scriptManager.view()}${this.chat.renderDeletedSection(
+            (id, bindings) =>
+              this.scriptManager.renderDeletedInvocation(id, bindings),
+          )}`,
+          {
+            u: () =>
+              this.dispatch({
+                type: "chat-msg",
+                msg: { type: "undo-overview" },
+              }),
+            "<C-r>": () =>
+              this.dispatch({
+                type: "chat-msg",
+                msg: { type: "redo-overview" },
+              }),
+          },
+        ),
       onUnhandledKey: (ctx) => this.onUnhandledKey(ctx),
     });
   }

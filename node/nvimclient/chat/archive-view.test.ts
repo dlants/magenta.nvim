@@ -227,7 +227,7 @@ describe("node/nvimclient/chat/archive-view.test.ts", () => {
       await driver.showSidebar();
       await driver.magenta.command("threads-overview");
       await driver.awaitChatState({ state: "thread-overview" });
-      await driver.triggerDisplayBufferKeyOnContent("[archive]", "<CR>");
+      await driver.triggerDisplayBufferKeyOnContent("archive]", "<CR>");
       await pollUntil(
         () => {
           if (chat.state.state !== "archive") throw new Error("not archive");
@@ -356,7 +356,7 @@ describe("node/nvimclient/chat/archive-view.test.ts", () => {
       const chat = driver.magenta.chat;
       await driver.showSidebar();
       await driver.magenta.command("threads-overview");
-      await driver.triggerDisplayBufferKeyOnContent("[archive]", "<CR>");
+      await driver.triggerDisplayBufferKeyOnContent("archive]", "<CR>");
       await pollUntil(() => {
         if (chat.state.state !== "archive") throw new Error("not archive");
         if (!chat.state.threadIds.includes(id)) throw new Error("not listed");
@@ -430,7 +430,7 @@ describe("node/nvimclient/chat/archive-view.test.ts", () => {
       await driver.showSidebar();
       await driver.magenta.command("threads-overview");
       await driver.awaitChatState({ state: "thread-overview" });
-      await driver.triggerDisplayBufferKeyOnContent("[archive]", "<CR>");
+      await driver.triggerDisplayBufferKeyOnContent("archive]", "<CR>");
       await pollUntil(
         () => {
           if (chat.state.state !== "archive") throw new Error("not archive");
@@ -582,9 +582,9 @@ describe("node/nvimclient/chat/archive-view.test.ts", () => {
       await driver.showSidebar();
       await driver.magenta.command("threads-overview");
       await driver.awaitChatState({ state: "thread-overview" });
-      await driver.assertDisplayBufferContains("[archive]");
+      await driver.assertDisplayBufferContains("archive]");
 
-      await driver.triggerDisplayBufferKeyOnContent("[archive]", "<CR>");
+      await driver.triggerDisplayBufferKeyOnContent("archive]", "<CR>");
       await pollUntil(
         () => {
           if (driver.magenta.chat.state.state !== "archive") {

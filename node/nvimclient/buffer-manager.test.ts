@@ -123,7 +123,7 @@ it("archive list has a distinct listed display and shares the overview input", a
     await driver.magenta.command("threads-overview");
     const overview = driver.magenta.bufferManager.getOverviewBuffers();
 
-    await driver.triggerDisplayBufferKeyOnContent("[archive]", "<CR>");
+    await driver.triggerDisplayBufferKeyOnContent("archive]", "<CR>");
     await driver.awaitChatState({ state: "archive" });
 
     const archive = driver.magenta.bufferManager.getArchiveBuffers();

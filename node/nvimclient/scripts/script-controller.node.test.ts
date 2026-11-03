@@ -78,7 +78,10 @@ function setup(initialIds: string[]) {
   };
   const controller = new ScriptController({
     dispatch: (msg) => dispatched.push(msg),
-    chat: {} as Chat,
+    chat: {
+      isScriptDeleted: () => false,
+      dropDeleted: () => {},
+    } as unknown as Chat,
     server: fake.server,
     sessionId: "s" as SessionId,
     nvim: { logger: { error: vi.fn() } } as unknown as Nvim,

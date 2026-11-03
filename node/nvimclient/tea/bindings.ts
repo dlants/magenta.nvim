@@ -13,6 +13,8 @@ export const BINDING_KEYS = [
   "d",
   "a",
   "r",
+  "u",
+  "<C-r>",
 ] as const;
 
 export type BindingKey = (typeof BINDING_KEYS)[number];

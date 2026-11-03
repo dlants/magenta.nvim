@@ -244,112 +244,126 @@ export class ScriptController {
 
   view(): VDOMNode {
     const invocations = [...this.invocations.values()].flatMap((view) =>
-      view.type === "loaded" ? [view.state] : [],
+      view.type === "loaded" &&
+      !this.context.chat.isScriptDeleted(view.state.id)
+        ? [view.state]
+        : [],
     );
     if (invocations.length === 0) {
       return d``;
     }
-
-    const rows: VDOMNode[] = [];
     const sortedInvocations = [...invocations].sort((a, b) =>
       a.id < b.id ? 1 : a.id > b.id ? -1 : 0,
     );
-    for (const inv of sortedInvocations) {
-      const icon =
-        inv.state.type === "running"
-          ? "⏳"
-          : inv.state.type === "done"
-            ? "✅"
-            : inv.state.type === "aborted"
-              ? "⛔"
-              : "❌";
-      const sandboxIndicator = inv.sandboxBypassed
-        ? withError(d` SANDBOX OFF `)
-        : d``;
-      const isExpanded = this.expandedInvocations.has(inv.id);
-      const expandIndicator = isExpanded ? "▼ " : "▶ ";
-      const needsAttention =
-        inv.state.type !== "running" ||
-        inv.entries.some(
-          (e) =>
-            e.type === "thread" &&
-            this.context.chat.scriptSubtreeNeedsAttention(e.threadId),
-        );
-      const bell = needsAttention ? "🔔 " : "";
-
-      const invRows: VDOMNode[] = [];
-      const headerLine = withBindings(
-        d`\n${icon} ${expandIndicator}${bell}${sandboxIndicator}${inv.title ?? inv.scriptName} (${inv.state.type})`,
-        {
-          dd: () => this.myDispatch({ type: "delete-invocation", id: inv.id }),
-          t: () =>
-            this.myDispatch({
-              type: "toggle-invocation-sandbox",
-              id: inv.id,
-            }),
-        },
-      );
-      const fileLine = withBindings(d`\n  ${inv.file}`, {
-        "<CR>": () => this.openScriptFile(inv.file),
-      });
-      invRows.push(headerLine);
-      invRows.push(fileLine);
-
-      if (isExpanded) {
-        invRows.push(d`\n  parameters: ${JSON.stringify(inv.parameters)}`);
-        for (const entry of inv.entries) {
-          if (entry.type === "log") {
-            invRows.push(d`\n  > ${entry.message}`);
-            continue;
-          }
-
-          const threadViews = this.context.chat.renderScriptThreadSubtree(
-            entry.threadId,
-            1,
-          );
-          const threadId = entry.threadId;
-          threadViews.forEach((view, idx) => {
-            if (idx === 0) {
-              invRows.push(
-                d`\n🧵 ${withBindings(view, {
-                  ...view.bindings,
-                  "=": () =>
-                    this.myDispatch({
-                      type: "toggle-thread-yield",
-                      id: threadId,
-                    }),
-                })}`,
-              );
-            } else {
-              invRows.push(d`\n${view}`);
-            }
-          });
-
-          if (this.expandedThreads.has(threadId)) {
-            invRows.push(this.renderThreadYield(inv, threadId));
-          }
-        }
-      } else {
-        for (const entry of inv.entries) {
-          if (entry.type !== "thread") continue;
-          for (const view of this.context.chat.collectScriptSubtreeViolationViews(
-            entry.threadId,
-          )) {
-            invRows.push(d`\n${view}`);
-          }
-        }
-      }
-
-      rows.push(
-        withBindings(d`${invRows}`, {
-          "=": () =>
-            this.myDispatch({ type: "toggle-invocation-expand", id: inv.id }),
-          a: () => this.myDispatch({ type: "abort-invocation", id: inv.id }),
-        }),
-      );
-    }
-
+    const rows = sortedInvocations.map((inv) => this.renderInvocation(inv));
     const hr = "─".repeat(40);
     return d`\n${hr}\n# SCRIPTS\n${hr}\n${rows}`;
+  }
+
+  /** A row in the overview's Deleted section, with its own header bindings. */
+  renderDeletedInvocation(
+    id: ScriptInvocationId,
+    headerBindings: { dd: () => void; r: () => void },
+  ): VDOMNode | undefined {
+    const view = this.invocations.get(id);
+    if (view?.type !== "loaded") return undefined;
+    return this.renderInvocation(view.state, headerBindings);
+  }
+
+  private renderInvocation(
+    inv: ProtocolScriptState,
+    headerBindings?: { dd: () => void; r: () => void },
+  ): VDOMNode {
+    const icon =
+      inv.state.type === "running"
+        ? "⏳"
+        : inv.state.type === "done"
+          ? "✅"
+          : inv.state.type === "aborted"
+            ? "⛔"
+            : "❌";
+    const sandboxIndicator = inv.sandboxBypassed
+      ? withError(d` SANDBOX OFF `)
+      : d``;
+    const isExpanded = this.expandedInvocations.has(inv.id);
+    const expandIndicator = isExpanded ? " " : " ";
+    const needsAttention =
+      inv.state.type !== "running" ||
+      inv.entries.some(
+        (e) =>
+          e.type === "thread" &&
+          this.context.chat.scriptSubtreeNeedsAttention(e.threadId),
+      );
+    const bell = needsAttention ? "🔔 " : "";
+
+    const invRows: VDOMNode[] = [];
+    const headerLine = withBindings(
+      d`\n${icon} ${expandIndicator}${bell}${sandboxIndicator}${inv.title ?? inv.scriptName} (${inv.state.type})`,
+      {
+        dd: () => this.myDispatch({ type: "delete-invocation", id: inv.id }),
+        ...headerBindings,
+        t: () =>
+          this.myDispatch({
+            type: "toggle-invocation-sandbox",
+            id: inv.id,
+          }),
+      },
+    );
+    const fileLine = withBindings(d`\n  ${inv.file}`, {
+      "<CR>": () => this.openScriptFile(inv.file),
+    });
+    invRows.push(headerLine);
+    invRows.push(fileLine);
+
+    if (isExpanded) {
+      invRows.push(d`\n  parameters: ${JSON.stringify(inv.parameters)}`);
+      for (const entry of inv.entries) {
+        if (entry.type === "log") {
+          invRows.push(d`\n  > ${entry.message}`);
+          continue;
+        }
+
+        const threadViews = this.context.chat.renderScriptThreadSubtree(
+          entry.threadId,
+          1,
+        );
+        const threadId = entry.threadId;
+        threadViews.forEach((view, idx) => {
+          if (idx === 0) {
+            invRows.push(
+              d`\n🧵 ${withBindings(view, {
+                ...view.bindings,
+                "=": () =>
+                  this.myDispatch({
+                    type: "toggle-thread-yield",
+                    id: threadId,
+                  }),
+              })}`,
+            );
+          } else {
+            invRows.push(d`\n${view}`);
+          }
+        });
+
+        if (this.expandedThreads.has(threadId)) {
+          invRows.push(this.renderThreadYield(inv, threadId));
+        }
+      }
+    } else {
+      for (const entry of inv.entries) {
+        if (entry.type !== "thread") continue;
+        for (const view of this.context.chat.collectScriptSubtreeViolationViews(
+          entry.threadId,
+        )) {
+          invRows.push(d`\n${view}`);
+        }
+      }
+    }
+
+    return withBindings(d`${invRows}`, {
+      "=": () =>
+        this.myDispatch({ type: "toggle-invocation-expand", id: inv.id }),
+      a: () => this.myDispatch({ type: "abort-invocation", id: inv.id }),
+    });
   }
 }

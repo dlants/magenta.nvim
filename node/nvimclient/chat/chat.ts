@@ -211,6 +211,12 @@ export type Msg =
       type: "delete-thread";
       id: ThreadId;
     }
+  | { type: "soft-delete-script"; id: ScriptInvocationId }
+  | { type: "undo-overview" }
+  | { type: "redo-overview" }
+  | { type: "restore-deleted"; entry: DeletedEntry }
+  | { type: "toggle-deleted-expand" }
+  | { type: "purge-deleted"; entry: DeletedEntry }
   | {
       type: "delete-thread-subtree";
       id: ThreadId;
@@ -280,6 +286,30 @@ export function pickExternalTarget({
   return threadIds.at(-1);
 }
 
+/** An overview row moved to the Deleted section by `dd`. It is only hidden
+ * client-side until purged, so `u` can bring it back. */
+export type DeletedEntry =
+  | { type: "thread"; id: ThreadId }
+  | { type: "script"; id: ScriptInvocationId };
+
+/** An undoable overview action; undoing a delete restores and vice versa. */
+type OverviewAction = { type: "delete" | "restore"; entry: DeletedEntry };
+
+function pluralize(count: number, noun: string): string {
+  return `${count.toString()} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function sameEntry(a: DeletedEntry, b: DeletedEntry): boolean {
+  return a.type === b.type && a.id === b.id;
+}
+
+function invertOverviewAction(action: OverviewAction): OverviewAction {
+  return {
+    type: action.type === "delete" ? "restore" : "delete",
+    entry: action.entry,
+  };
+}
+
 export class Chat {
   state: SidebarState;
   /** The thread whose display/input buffer most recently held the cursor.
@@ -303,6 +333,11 @@ export class Chat {
   private threadViews = new Map<ThreadId, NvimThread>();
   /** View-local: when the user last looked at each thread. */
   private lastViewedTimes = new Map<ThreadId, number>();
+  /** Most recently deleted last, so `u` pops in reverse order. */
+  private deleted: DeletedEntry[] = [];
+  private deletedExpanded = false;
+  private undoStack: OverviewAction[] = [];
+  private redoStack: OverviewAction[] = [];
   private expandedThreads = new Set<ThreadId>();
   /** The reflection under the cursor in the open reflection overview, drawn
    * with `MagentaReflectActive` in its source thread. Supplied by Magenta,
@@ -462,11 +497,84 @@ export class Chat {
     thread.onThreadUpdate();
   };
 
+  isThreadDeleted(id: ThreadId): boolean {
+    return this.deleted.some((e) => e.type === "thread" && e.id === id);
+  }
+
+  isScriptDeleted(id: ScriptInvocationId): boolean {
+    return this.deleted.some((e) => e.type === "script" && e.id === id);
+  }
+
+  private performOverviewAction(action: OverviewAction): void {
+    if (!this.applyOverviewAction(action)) return;
+    this.undoStack.push(action);
+    this.redoStack = [];
+  }
+
+  /** Returns false when the action is a no-op. */
+  private applyOverviewAction(action: OverviewAction): boolean {
+    const isDeleted = this.deleted.some((e) => sameEntry(e, action.entry));
+    if (action.type === "delete") {
+      if (isDeleted) return false;
+      this.deleted.push(action.entry);
+    } else {
+      if (!isDeleted) return false;
+      this.deleted = this.deleted.filter((e) => !sameEntry(e, action.entry));
+    }
+    return true;
+  }
+
+  /** Forget an entry entirely (purged or gone server-side); history that
+   * mentions it can no longer be replayed. */
+  dropDeleted(entry: DeletedEntry): void {
+    this.deleted = this.deleted.filter((e) => !sameEntry(e, entry));
+    this.undoStack = this.undoStack.filter((a) => !sameEntry(a.entry, entry));
+    this.redoStack = this.redoStack.filter((a) => !sameEntry(a.entry, entry));
+  }
+
+  /** `renderScript` renders an invocation row whose `dd` purges it, or
+   * undefined if the invocation is gone. */
+  renderDeletedSection(
+    renderScript: (
+      id: ScriptInvocationId,
+      bindings: { dd: () => void; r: () => void },
+    ) => VDOMNode | undefined,
+  ): VDOMNode {
+    if (this.deleted.length === 0) return d``;
+    const threadCount = this.deleted.filter((e) => e.type === "thread").length;
+    const header = withBindings(
+      d`${this.deletedExpanded ? "" : ""} # Deleted (${pluralize(threadCount, "thread")}, ${pluralize(this.deleted.length - threadCount, "script")})`,
+      { "=": () => this.myDispatch({ type: "toggle-deleted-expand" }) },
+    );
+    const rows: VDOMNode[] = [];
+    if (this.deletedExpanded) {
+      for (const entry of [...this.deleted].reverse()) {
+        const bindings = {
+          dd: () => this.myDispatch({ type: "purge-deleted", entry }),
+          r: () => this.myDispatch({ type: "restore-deleted", entry }),
+        };
+        if (entry.type === "thread") {
+          if (!this.wrapper(entry.id)) continue;
+          const view = this.renderThread(entry.id, 0, this.state.left);
+          rows.push(
+            d`\n${withBindings(view, { ...view.bindings, ...bindings })}`,
+          );
+        } else {
+          const view = renderScript(entry.id, bindings);
+          if (view) rows.push(view);
+        }
+      }
+    }
+    const hr = "─".repeat(40);
+    return d`\n${hr}\n${header}${rows}`;
+  }
+
   private removeThreadView = (id: ThreadId): void => {
     this.threadViews.get(id)?.dispose();
     this.threadViews.delete(id);
     this.lastViewedTimes.delete(id);
     this.expandedThreads.delete(id);
+    this.dropDeleted({ type: "thread", id });
     if (this.cursorThreadId === id) this.cursorThreadId = undefined;
     this.context.removeThreadBuffers?.([id]);
     if (this.state.left === id) {
@@ -620,8 +728,50 @@ export class Chat {
         };
         return;
 
-      case "delete-thread":
-        void this.deleteThread(this.session.getRootAncestorId(msg.id));
+      case "delete-thread": {
+        const id = this.session.getRootAncestorId(msg.id);
+        this.performOverviewAction({
+          type: "delete",
+          entry: { type: "thread", id },
+        });
+        return;
+      }
+      case "soft-delete-script":
+        this.performOverviewAction({
+          type: "delete",
+          entry: { type: "script", id: msg.id },
+        });
+        return;
+      case "restore-deleted":
+        this.performOverviewAction({ type: "restore", entry: msg.entry });
+        return;
+      case "undo-overview": {
+        const action = this.undoStack.pop();
+        if (!action) return;
+        this.applyOverviewAction(invertOverviewAction(action));
+        this.redoStack.push(action);
+        return;
+      }
+      case "redo-overview": {
+        const action = this.redoStack.pop();
+        if (!action) return;
+        this.applyOverviewAction(action);
+        this.undoStack.push(action);
+        return;
+      }
+      case "toggle-deleted-expand":
+        this.deletedExpanded = !this.deletedExpanded;
+        return;
+      case "purge-deleted":
+        this.dropDeleted(msg.entry);
+        if (msg.entry.type === "thread") {
+          void this.deleteThread(msg.entry.id);
+        } else {
+          void this.server.execute({
+            type: "script.delete",
+            invocationId: msg.entry.id,
+          });
+        }
         return;
 
       case "delete-thread-subtree":
@@ -1056,8 +1206,8 @@ export class Chat {
 
     const expandIndicator = options?.hasChildren
       ? options.isExpanded
-        ? "▼ "
-        : "▶ "
+        ? " "
+        : " "
       : "";
     const childCountSuffix = options?.hasChildren
       ? ` (${options.childCount} subthreads)`
@@ -1138,15 +1288,9 @@ export class Chat {
   }
 
   renderThreadOverview() {
-    const archiveLink = withBindings(d`[archive]`, {
+    const archiveLink = withBindings(d`[ archive]`, {
       "<CR>": () => this.myDispatch({ type: "archive-open" }),
     });
-
-    if (this.session.listThreads().length === 0) {
-      return d`# Threads ${archiveLink}
-
-No threads yet`;
-    }
 
     const childrenMap = this.buildChildrenMap();
     const threadViews: VDOMNode[] = [];
@@ -1158,7 +1302,8 @@ No threads yet`;
       if (
         record.parentThreadId === undefined &&
         record.scriptInvocationId === undefined &&
-        record.origin?.type !== "reflect"
+        record.origin?.type !== "reflect" &&
+        !this.isThreadDeleted(record.id)
       ) {
         rootThreads.push({ id: record.id });
       }
@@ -1167,6 +1312,11 @@ No threads yet`;
     // ThreadIds are uuidv7 (time-ordered), so sorting by id descending yields
     // most-recently-created first. This order is stable regardless of activity.
     rootThreads.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+    if (rootThreads.length === 0) {
+      return d`# Threads ${archiveLink}
+
+No threads yet`;
+    }
 
     for (const { id } of rootThreads) {
       const hasChildren = (childrenMap.get(id)?.length ?? 0) > 0;
