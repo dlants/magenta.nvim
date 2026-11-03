@@ -64,7 +64,7 @@ export async function pollUntil<T>(
       lastError = e as Error;
     }
 
-    await delay(100);
+    await delay(25);
   }
 }
 

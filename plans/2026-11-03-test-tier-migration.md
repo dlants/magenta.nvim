@@ -234,3 +234,12 @@ Approvals in tests go through the existing public session APIs (`session.getPend
   - `protocol/server.test.ts` "removes a queued entry so it is never delivered": covers `Thread.removeQueued` through `execute`.
   - `chat/thread.test.ts` "dd on a next-queue entry removes only that entry" (tier C, checks the view→queue index mapping).
 - The client `remove-pending-message` msg uses the server's `DeferredDelivery` type.
+
+# Stage 2 results (done)
+
+- [x] Renamed `utils/file-summary.test.ts` to `file-summary.node.test.ts`. `pdf-pages`/`file-paste` still start nvim; left as-is.
+- [x] `pollUntil` interval 100ms → 25ms. 10ms was tried: it added load-related flakes (fork-keybinding, bashCommand, buf-enter, two-column) under the 4-fork pool, so 25ms was kept.
+- [x] `thread-logger.test.ts` now uses a pid+timestamp unique tmp dir. `archive.test.ts` already used a `uuidv7` suffix.
+- [ ] Fixed delays: not replaced. `attention.test.ts`'s `delay(1100)` waits out the 1s throttle that lives in a lua local (`lua/magenta/init.lua` attention autocmd), which can't be reset from the test without a production change. The `reflect-anchor`/`reflections-overview` waits are mostly negative assertions ("nothing happens") with no condition to poll. Deferred; these files are tier C anyway.
+- [x] maxForks measured (with 10ms polling): 4 → 60.7s, 6 → 55.6s, 8 → 59.2s, each with more flaky failures as forks grew. Kept at 4.
+- Result: wall time ~65s against the 68s baseline (25ms polling, 4 forks). Two consecutive full runs had only the 3 known pre-existing failures, plus one `display-open-target` flake in the first run. The real wins have to come from stages 3–6 (fewer nvim spawns).

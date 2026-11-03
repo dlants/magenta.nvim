@@ -12,7 +12,10 @@ import {
   threadMetaPath,
 } from "./utils/files.ts";
 
-const TEST_BASE_DIR = path.join(os.tmpdir(), "magenta-test-thread-logger");
+const TEST_BASE_DIR = path.join(
+  os.tmpdir(),
+  `magenta-test-thread-logger-${process.pid}-${Date.now()}`,
+);
 
 function makeLogger(): { logger: Logger; errors: unknown[][] } {
   const errors: unknown[][] = [];
