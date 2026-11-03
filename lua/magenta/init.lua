@@ -109,6 +109,7 @@ M.setup = function(opts)
   Timings.record("lua: after M.start (node job spawned)")
 
   require("magenta.keymaps").default_keymaps()
+  require("magenta.autoreload").setup()
   Timings.record("lua: setup complete (keymaps registered)")
 end
 

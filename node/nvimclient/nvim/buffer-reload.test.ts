@@ -369,3 +369,162 @@ replace "TWO"`,
     );
   });
 });
+describe("autoreload watcher", () => {
+  async function lua<T>(
+    driver: NvimDriver,
+    code: string,
+    args: unknown[] = [],
+  ) {
+    return (await driver.nvim.call("nvim_exec_lua", [code, args])) as T;
+  }
+  async function openWatched(driver: NvimDriver, filePath: string) {
+    await lua(driver, `require("magenta.autoreload").setup()`);
+    await driver.editFile(filePath);
+    const bufnr = (await driver.nvim.call("nvim_get_current_buf", [])) as BufNr;
+    // let the initial async stat settle so it doesn't race test writes
+    await new Promise((r) => setTimeout(r, 50));
+    return { bufnr, buffer: new NvimBuffer(bufnr, driver.nvim) };
+  }
+  async function allLines(buffer: NvimBuffer) {
+    return buffer.getLines({ start: 0 as Row0Indexed, end: -1 as Row0Indexed });
+  }
+  async function waitForLines(buffer: NvimBuffer, expected: string[]) {
+    await pollUntil(async () => {
+      const lines = await allLines(buffer);
+      if (JSON.stringify(lines) !== JSON.stringify(expected)) {
+        throw new Error(`buffer: ${JSON.stringify(lines)}`);
+      }
+    });
+  }
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const setupFiles = async (tmpDir: string) => {
+    await fs.writeFile(path.join(tmpDir, "test.txt"), "one\ntwo\nthree\n");
+  };
+
+  test("reload applies explicit content without reading disk", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      const { bufnr, buffer } = await openWatched(
+        driver,
+        path.join(dirs.tmpDir, "test.txt"),
+      );
+      await lua(driver, `require("magenta.autoreload").teardown()`);
+      await lua(driver, `require("magenta.autoreload").reload(...)`, [
+        bufnr,
+        "one\nTWO\nthree\n",
+      ]);
+      expect(await allLines(buffer)).toEqual(["one", "TWO", "three"]);
+    });
+  });
+
+  test("external write reloads a clean buffer, undoable, keeping extmarks", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      const filePath = path.join(dirs.tmpDir, "test.txt");
+      const { bufnr, buffer } = await openWatched(driver, filePath);
+      const extmarkId = await buffer.setExtmark({
+        startPos: pos(2, 0),
+        endPos: pos(2, 5),
+        options: { hl_group: "ErrorMsg" },
+      });
+      await fs.writeFile(filePath, "zero\none\ntwo\nthree\n");
+      await waitForLines(buffer, ["zero", "one", "two", "three"]);
+      const mark = await buffer.getExtmarkById(extmarkId);
+      expect(mark!.startPos.row).toBe(3);
+      expect(await buffer.getOption("modified")).toBe(false);
+      await lua(
+        driver,
+        `vim.api.nvim_buf_call(..., function() vim.cmd("undo") end)`,
+        [bufnr],
+      );
+      expect(await allLines(buffer)).toEqual(["one", "two", "three"]);
+    });
+  });
+
+  test("rename-replace reloads and the watcher survives", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      const filePath = path.join(dirs.tmpDir, "test.txt");
+      const { buffer } = await openWatched(driver, filePath);
+      const tmp = path.join(dirs.tmpDir, "test.txt.tmp");
+      await fs.writeFile(tmp, "renamed\n");
+      await fs.rename(tmp, filePath);
+      await waitForLines(buffer, ["renamed"]);
+      await fs.writeFile(filePath, "again\n");
+      await waitForLines(buffer, ["again"]);
+    });
+  });
+
+  test("modified buffer is left untouched", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      const filePath = path.join(dirs.tmpDir, "test.txt");
+      const { buffer } = await openWatched(driver, filePath);
+      await buffer.setLines({
+        start: 0 as Row0Indexed,
+        end: -1 as Row0Indexed,
+        lines: ["user edit"] as Line[],
+      });
+      await fs.writeFile(filePath, "from disk\n");
+      await sleep(400);
+      expect(await allLines(buffer)).toEqual(["user edit"]);
+      expect(await buffer.getOption("modified")).toBe(true);
+    });
+  });
+
+  test("hidden buffer is marked stale and reloads when shown", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      const filePath = path.join(dirs.tmpDir, "test.txt");
+      const { bufnr, buffer } = await openWatched(driver, filePath);
+      await driver.nvim.call("nvim_command", ["set hidden | enew"]);
+      await fs.writeFile(filePath, "changed\n");
+      await pollUntil(async () => {
+        const stale = await lua<boolean>(
+          driver,
+          `return vim.b[...].magenta_stale == true`,
+          [bufnr],
+        );
+        if (!stale) throw new Error("not stale yet");
+      });
+      expect(await allLines(buffer)).toEqual(["one", "two", "three"]);
+      await driver.nvim.call("nvim_command", [`buffer ${bufnr}`]);
+      await waitForLines(buffer, ["changed"]);
+      expect(
+        await lua<boolean>(driver, `return vim.b[...].magenta_stale == nil`, [
+          bufnr,
+        ]),
+      ).toBe(true);
+    });
+  });
+
+  test("wiping the buffer releases its directory watcher", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      const { bufnr } = await openWatched(
+        driver,
+        path.join(dirs.tmpDir, "test.txt"),
+      );
+      const countDirs = `local n = 0 for _ in pairs(require("magenta.autoreload")._dirs) do n = n + 1 end return n`;
+      expect(await lua<number>(driver, countDirs)).toBe(1);
+      await driver.nvim.call("nvim_command", [`bwipeout! ${bufnr}`]);
+      expect(await lua<number>(driver, countDirs)).toBe(0);
+    });
+  });
+
+  test("user :w does not add a reload undo entry", async () => {
+    await withDriver({ setupFiles }, async (driver, dirs) => {
+      const filePath = path.join(dirs.tmpDir, "test.txt");
+      const { bufnr, buffer } = await openWatched(driver, filePath);
+      await buffer.setLines({
+        start: 0 as Row0Indexed,
+        end: 1 as Row0Indexed,
+        lines: ["ONE"] as Line[],
+      });
+      const seq = `return vim.api.nvim_buf_call(..., function() return vim.fn.undotree().seq_last end)`;
+      await lua(
+        driver,
+        `vim.api.nvim_buf_call(..., function() vim.cmd("write") end)`,
+        [bufnr],
+      );
+      const before = await lua<number>(driver, seq, [bufnr]);
+      await sleep(400);
+      expect(await lua<number>(driver, seq, [bufnr])).toBe(before);
+      expect(await allLines(buffer)).toEqual(["ONE", "two", "three"]);
+    });
+  });
+});
