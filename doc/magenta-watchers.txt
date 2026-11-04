@@ -1,0 +1,124 @@
+*magenta-watchers.txt*       External Watchers              *magenta-watchers*
+
+                          MAGENTA.NVIM WATCHERS
+
+==============================================================================
+CONTENTS                                           *magenta-watchers-contents*
+
+    1. Introduction ......................... |magenta-watchers-introduction|
+    2. Configuration ........................ |magenta-watchers-config|
+    3. Lifecycle ............................ |magenta-watchers-lifecycle|
+    4. Tracking resources ................... |magenta-watchers-tracking|
+    5. Waiting from bash .................... |magenta-watchers-wait|
+    6. Authoring watchers ................... |magenta-watchers-authoring|
+
+==============================================================================
+INTRODUCTION                                   *magenta-watchers-introduction*
+
+A watcher is an independent, user-installed process that polls one domain
+(GitHub pull requests, a local git repo, CI builds, terraform runs, ...) and
+pushes the current state of each resource to its clients. It serves
+newline-delimited JSON-RPC 2.0 on a unix socket.
+
+Two kinds of clients share the same watcher, and therefore the same poller:
+
+  - magenta, which attaches resources mentioned in a thread and injects
+    their state (first in full, then as line diffs) into the agent's context.
+  - bash wait scripts, which subscribe to a resource and exit when a
+    predicate over its state holds (e.g. "all checks green").
+
+Filtering and rendering (ignoring a check, suppressing a bot's comments)
+live in the watcher code, so customizing what the agent sees is an edit to
+your watcher, not to magenta.
+
+==============================================================================
+CONFIGURATION                                        *magenta-watchers-config*
+
+Watchers are registered by manifest path in `~/.magenta/options.json`. This
+option is user-level only: a project's `.magenta/options.json` cannot add
+watchers, since they are arbitrary commands. See |magenta-watchers-option|.
+>json
+    { "watchers": ["~/.magenta/watchers/github-pr/manifest.json"] }
+<
+Each watcher directory contains a `manifest.json`:
+>json
+    {
+      "name": "github-pr",
+      "protocolVersion": 1,
+      "command": ["node", "--experimental-transform-types", "./index.ts"],
+      "socket": "~/.magenta/watchers/github-pr.sock"
+    }
+<
+  - `command` runs with cwd = the manifest's directory.
+  - `socket` defaults to `~/.magenta/watchers/<name>.sock`.
+
+The deprecated `pullRequestRepos` option is ignored; use a GitHub PR
+watcher instead (scope it to your owners/repos in its `scan`).
+
+==============================================================================
+LIFECYCLE                                         *magenta-watchers-lifecycle*
+
+Watchers start lazily. Any client (magenta, a wait script) connects to the
+socket and, if nothing is listening, spawns the manifest `command` detached,
+logging to `<socket>.log`. The socket bind acts as a lock, so concurrent
+spawns converge on a single process. A watcher exits after an idle period
+with no connections (60s by default) and unlinks its socket.
+
+Subscriptions belong to a connection, so a crashed client never leaves a
+poller running. An unreachable or failing watcher shows the resource as
+`unavailable`/`failing` in the sidebar; it never fails a submission.
+
+==============================================================================
+TRACKING RESOURCES                                 *magenta-watchers-tracking*
+
+Magenta sends the text of new thread messages (user and assistant text,
+tool inputs and results) to every configured watcher's `scan` method. The
+watcher returns canonical keys found in the text (e.g. a PR URL, or the
+worktree root for any path inside a repo), and magenta subscribes to them.
+Injected context, thinking, web search results and images are never
+scanned, so watcher output cannot cascade into more tracking.
+
+Tracked resources appear in the `# watched:` section at the bottom of the
+thread, showing the watcher, status and one-line summary.
+
+  `=`   Toggle the resource's details.
+  `dd`  Untrack the resource. Later mentions do not re-track it.
+
+Threads that have not been attended for 5 minutes unsubscribe (shown as
+`paused`); on attention they resubscribe and any change made meanwhile is
+delivered as one diff. Forks and compaction keep track of what the agent has
+already seen, so nothing is re-delivered.
+
+==============================================================================
+WAITING FROM BASH                                      *magenta-watchers-wait*
+
+Instead of `sleep` polling loops, the agent can block on a watcher. The SDK
+ships a generic CLI:
+>bash
+    node --experimental-transform-types <plugin>/sdk/watchers/wait.ts <key> \
+      --manifest ~/.magenta/watchers/github-pr/manifest.json \
+      --field status --match '^finished$' --timeout 600
+<
+Without `--match` it waits for the resource to become `finished`. Exit
+codes: 0 matched (prints the state), 2 timeout, 1 error/unavailable. For
+richer conditions, write your own script on `connectWatcher`/`waitFor` from
+the SDK plus a skill telling the agent to use it.
+
+==============================================================================
+AUTHORING WATCHERS                               *magenta-watchers-authoring*
+
+The built-in `authoring-magenta-watchers` skill documents the protocol and
+the `sdk/watchers` library (`serveWatcher`, `regexScan`, `connectWatcher`,
+`waitFor`). It includes reference watchers to copy and adapt:
+
+  - `reference/github-pr`: GitHub pull request state, checks and comments
+    via `gh api` with ETags.
+  - `reference/git-repo`: branch, upstream ahead/behind, dirty files and
+    in-progress operations for local repos and worktrees under configured
+    roots.
+
+Copy one to `~/.magenta/watchers/<name>/`, symlink `magenta-sdk` to the
+plugin's `sdk/` directory, and register its manifest. Or just ask the agent
+to write one.
+
+ vim:tw=78:ts=8:ft=help:norl:

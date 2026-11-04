@@ -21,6 +21,7 @@ For the security model, see |magenta-security.txt|
 For sandbox permissions, see |magenta-permissions.txt|
 For creating skills, see |magenta-skills.txt|
 For authoring scripts, see |magenta-scripts.txt|
+For external watchers (PRs, repos, CI), see |magenta-watchers.txt|
 
 
 ==============================================================================

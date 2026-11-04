@@ -61,6 +61,8 @@ I haven't actually used other neovim AI plugins in a while, so take this with a 
 
 # Updates
 
+## Nov 2026
+- External watchers replace built-in PR tracking. A watcher is a separate process (configured via `watchers` in `~/.magenta/options.json`) that polls something and pushes state; magenta asks it to find keys in thread text, tracks them, and injects diffs. The same watcher serves bash wait scripts. `pullRequestRepos` is removed. See `:help magenta-watchers` and the `authoring-magenta-watchers` skill.
 ## Sep 2026
 
 - Reflections: select a passage within one content block in the display buffer and press `r` to open a side thread that discusses just that passage, without touching the original thread. Reflections open in a right-hand column, are highlighted in the source thread (`]r`/`[r` to jump), and can be browsed in a reflection overview (`R` from any display buffer). In the thread overview they are nested under their source thread with a 💭 icon and collapsed by default. See `:help magenta-reflections`.
@@ -227,6 +229,7 @@ For any of the below, you can also just ask magenta to explain.
 - **Skills** — markdown files in `~/.magenta/skills/`, `.magenta/skills/`, `~/.claude/skills/`, or `.claude/skills/` that teach the agent project-specific knowledge. Supports suppressing project-level skills by name when shared configs collide with personal ones. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-skills.txt) · `:help magenta-skills`
 - **Sandbox** — OS-level sandboxing (seatbelt/bubblewrap) with configurable filesystem, network, and approval policies. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-permissions.txt) · `:help magenta-sandbox`
 - **MCP servers** — connect to local or remote MCP servers for additional tools. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-tools.txt) · `:help magenta-mcp`
+- **Watchers** — user-installed processes that poll PRs, repos, CI, etc. Resources mentioned in a thread are tracked automatically and their changes injected into context; the agent can also block on them from bash instead of writing sleep loops. Ships reference GitHub PR and git repo watchers. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-watchers.txt) · `:help magenta-watchers`
 
 # Usage
 

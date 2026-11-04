@@ -187,6 +187,14 @@ scriptsPaths ~
     script via the SDK). Both user-level and project-level directories are
     supported; later paths override earlier ones on name collisions.
 
+                                                   *magenta-watchers-option*
+watchers ~
+    Type: `table`
+    Default: `{}`
+    Manifest paths of external watcher processes (PRs, repos, CI, ...).
+    User-level only: ignored in a project's `.magenta/options.json`.
+    See |magenta-watchers|.
+
                                             *magenta-suppressProjectSkills*
 suppressProjectSkills ~
     Type: `table`

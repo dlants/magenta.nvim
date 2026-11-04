@@ -137,5 +137,15 @@ magenta-subagents.txt	magenta-subagents.txt	/*magenta-subagents.txt*
 magenta-suppressProjectSkills	magenta-config.txt	/*magenta-suppressProjectSkills*
 magenta-tools-contents	magenta-tools.txt	/*magenta-tools-contents*
 magenta-tools.txt	magenta-tools.txt	/*magenta-tools.txt*
+magenta-watchers	magenta-watchers.txt	/*magenta-watchers*
+magenta-watchers-authoring	magenta-watchers.txt	/*magenta-watchers-authoring*
+magenta-watchers-config	magenta-watchers.txt	/*magenta-watchers-config*
+magenta-watchers-contents	magenta-watchers.txt	/*magenta-watchers-contents*
+magenta-watchers-introduction	magenta-watchers.txt	/*magenta-watchers-introduction*
+magenta-watchers-lifecycle	magenta-watchers.txt	/*magenta-watchers-lifecycle*
+magenta-watchers-option	magenta-config.txt	/*magenta-watchers-option*
+magenta-watchers-tracking	magenta-watchers.txt	/*magenta-watchers-tracking*
+magenta-watchers-wait	magenta-watchers.txt	/*magenta-watchers-wait*
+magenta-watchers.txt	magenta-watchers.txt	/*magenta-watchers.txt*
 magenta.nvim	magenta.txt	/*magenta.nvim*
 magenta.txt	magenta.txt	/*magenta.txt*
