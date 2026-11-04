@@ -32,7 +32,6 @@ export type RepoSnapshot = {
   untracked: string[];
   conflicted: string[];
   operation: RepoOperation | undefined;
-  worktrees: string[];
 };
 
 const CHANGE_STATES = new Set<string>(["M", "T", "A", "D", "R", "C", "U"]);
@@ -192,10 +191,9 @@ export async function poll(key: string): Promise<PollResult<RepoSnapshot>> {
   const resolved = await resolveRoot(key);
   if (!resolved.ok) return { kind: "unavailable", error: resolved.error };
   const root = resolved.root;
-  const [status, subject, worktrees, operation] = await Promise.all([
+  const [status, subject, operation] = await Promise.all([
     git(root, ["status", "--porcelain=v2", "--branch"]),
     git(root, ["log", "-1", "--format=%s"]),
-    git(root, ["worktree", "list", "--porcelain"]),
     detectOperation(root),
   ]);
   if (!status.ok) return { kind: "error", error: status.error };
@@ -206,12 +204,6 @@ export async function poll(key: string): Promise<PollResult<RepoSnapshot>> {
       ...parseStatus(status.stdout),
       headSubject: subject.ok ? subject.stdout.trim() || undefined : undefined,
       operation,
-      worktrees: worktrees.ok
-        ? worktrees.stdout
-            .split("\n")
-            .filter((l) => l.startsWith("worktree "))
-            .map((l) => l.slice(9))
-        : [],
     },
   };
 }
@@ -243,8 +235,6 @@ export function render(s: RepoSnapshot): string {
     ),
     ...fileLines("untracked", s.untracked),
   );
-  const others = s.worktrees.filter((w) => w !== s.root);
-  lines.push(...fileLines("other worktrees", others));
   return lines.join("\n");
 }
 

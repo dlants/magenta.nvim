@@ -93,10 +93,11 @@ export interface ThreadCoreCallbacks {
 export type ThreadCoreSeed = {
   initialFiles?: Files;
   initialGitState?: Promise<GitState | undefined>;
-  /** Resources watched by the core this one replaces. */
-  watched?: ReadonlyArray<WatchSeed>;
-  /** Texts scanned once at creation, before any message mentions them. */
-  initialScan?: string[];
+  /** `inherit`: resources watched by the core this one replaces.
+   * `scan`: texts scanned once at creation, before any message mentions them. */
+  watch?:
+    | { type: "inherit"; watched: ReadonlyArray<WatchSeed> }
+    | { type: "scan"; texts: ReadonlyArray<string> };
 };
 
 interface ThreadCoreState {
@@ -172,7 +173,9 @@ export class ThreadCore {
           ? WatchSupervisor.create({
               registry: context.watchTracking.registry,
               getLastAttention: context.watchTracking.getLastAttention,
-              ...(seed.watched ? { track: seed.watched } : {}),
+              ...(seed.watch?.type === "inherit"
+                ? { track: seed.watch.watched }
+                : {}),
             })
           : undefined,
       systemInfoSupervisor:
@@ -196,8 +199,8 @@ export class ThreadCore {
       contextDeliveries: new Map(),
     };
     const core = new ThreadCore(id, context, callbacks, completedTools, state);
-    if (core.watchSupervisor && seed.initialScan) {
-      void core.watchSupervisor.scan(seed.initialScan);
+    if (core.watchSupervisor && seed.watch?.type === "scan") {
+      void core.watchSupervisor.scan([...seed.watch.texts]);
     }
     return core;
   }

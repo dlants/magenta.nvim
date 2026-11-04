@@ -12,8 +12,9 @@ function start() {
     cwd: os.tmpdir() as ProjectDir,
     homeDir: os.homedir() as HomeDir,
     sandbox: new MockSandboxManager(),
-    // Only read for MCP servers here: no thread is created.
-    getBaseOptions: () => ({ mcpServers: {} }) as MagentaOptions,
+    // Only read for MCP servers and watchers here: no thread is created.
+    getBaseOptions: () =>
+      ({ mcpServers: {}, watchers: [] as string[] }) as MagentaOptions,
     getScriptsPaths: () => [],
   });
 }

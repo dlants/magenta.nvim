@@ -99,7 +99,6 @@ describe("git-repo watcher", () => {
     expect(linked.head).toMatchObject({ kind: "branch", name: "other" });
     expect(linked.untracked).toEqual(["only-wt.txt"]);
     expect(main.untracked).toEqual([]);
-    expect(render(main)).toContain(`other worktrees (1):\n  ${wt}`);
   });
 
   it("scan resolves paths under the roots to canonical worktree roots", async () => {

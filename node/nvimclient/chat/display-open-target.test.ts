@@ -41,13 +41,14 @@ describe("node/nvimclient/chat/display-open-target.test.ts", () => {
         request.streamText("Look at ./target.txt for details.");
         request.finishResponse("end_turn");
 
-        const pos = await driver.assertDisplayBufferContains("./target.txt");
-        // Wait a bit for the render to stabilize before triggering the key
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        await driver.triggerDisplayBufferKey(pos, "<CR>");
-
+        // <CR> here is the cursor-text fallback, not a binding, so a re-render
+        // can move the text out from under the cursor. Re-locate and retry.
         const targetBufferName = await pollUntil(
           async () => {
+            const pos =
+              await driver.assertDisplayBufferContains("./target.txt");
+            await driver.triggerDisplayBufferKey(pos, "<CR>");
+            await new Promise((resolve) => setTimeout(resolve, 50));
             const windows = await getAllWindows(driver.nvim);
             for (const w of windows) {
               const isMagenta = await w.getVar("magenta");
@@ -79,15 +80,13 @@ describe("node/nvimclient/chat/display-open-target.test.ts", () => {
       request.streamText("See https://example.com for more info.");
       request.finishResponse("end_turn");
 
-      const pos = await driver.assertDisplayBufferContains(
-        "https://example.com",
-      );
-      // Wait a bit for the render to stabilize before triggering the key
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      await driver.triggerDisplayBufferKey(pos, "<CR>");
-
       await pollUntil(
         async () => {
+          const pos = await driver.assertDisplayBufferContains(
+            "https://example.com",
+          );
+          await driver.triggerDisplayBufferKey(pos, "<CR>");
+          await new Promise((resolve) => setTimeout(resolve, 50));
           const url = (await driver.nvim.call("nvim_get_var", [
             "magenta_test_ui_open",
           ])) as string;
@@ -131,8 +130,7 @@ describe("node/nvimclient/chat/display-open-target.test.ts", () => {
         "magenta_test_ui_open",
       ])) as string;
 
-      const pos = await driver.assertDisplayBufferContains("Untitled");
-      await driver.triggerDisplayBufferKey(pos, "<CR>");
+      await driver.triggerDisplayBufferKeyOnContent("Untitled", "<CR>");
 
       await driver.awaitChatState({ state: "thread-selected" });
 

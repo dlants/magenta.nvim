@@ -79,3 +79,8 @@
 {"timestamp":"2026-09-29T04:23:04Z","query":"client reads session thread list history state -k 10","commit":"98b27ac421d2df20bf9eb4bd43e4ebf7ef9276b7"}
 {"timestamp":"2026-09-29T04:23:04Z","query":"nvim client read thread state rendering","commit":"98b27ac421d2df20bf9eb4bd43e4ebf7ef9276b7"}
 {"timestamp":"2026-10-30T19:21:18Z","query":"pull request tracked in thread display -k 6","commit":"2acb4ea060c747e97c86c27249a6710c2619219b"}
+{"timestamp":"2026-11-03T21:29:41Z","query":"pull request monitor watch url detection in user message -k 4","commit":"5d9668b381b18699f9f0b7a21340df7d0bcce0c6"}
+{"timestamp":"2026-11-03T21:38:17Z","query":"pull request status polling subscription -k 8","commit":"5d9668b381b18699f9f0b7a21340df7d0bcce0c6"}
+{"timestamp":"2026-11-03T21:38:18Z","query":"watch PR status and deliver updates to thread -k 8","commit":"5d9668b381b18699f9f0b7a21340df7d0bcce0c6"}
+{"timestamp":"2026-11-03T21:38:18Z","query":"GitSupervisor git repo watching -k 8","commit":"5d9668b381b18699f9f0b7a21340df7d0bcce0c6"}
+{"timestamp":"2026-11-03T21:38:20Z","query":"user-defined scripts configured discovered run ScriptManager catalog child process IPC -k 8","commit":"5d9668b381b18699f9f0b7a21340df7d0bcce0c6"}

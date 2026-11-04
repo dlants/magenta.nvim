@@ -44,7 +44,7 @@ describe("renderWatchedResources", () => {
         pendingUpdate: false,
       },
     ]);
-    expect(text).toContain("- github [loading]: k");
+    expect(text).toContain("- \uf06e \uf110 github [loading]: k");
   });
 
   it("shows paused and the error line for failing/unavailable", () => {
@@ -76,9 +76,9 @@ describe("renderWatchedResources", () => {
         pendingUpdate: false,
       },
     ]);
-    expect(text).toContain("- github [failing, paused]: f s1");
+    expect(text).toContain(" github [failing, paused]: f s1");
     expect(text).toContain("  boom");
-    expect(text).toContain("- github [unavailable]: u");
+    expect(text).toContain(" github [unavailable]: u");
     expect(text).toContain("  gone");
   });
 
@@ -97,7 +97,7 @@ describe("renderWatchedResources", () => {
       pendingUpdate: true,
     };
     const collapsed = render([resource]);
-    expect(collapsed).toContain("- github [active, pending update]: k sum");
+    expect(collapsed).toContain(" github [active, pending update]: k sum");
     expect(collapsed).not.toContain("d1");
     const expanded = render([resource], true);
     expect(expanded).toContain("  d1\n  d2\n");

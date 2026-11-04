@@ -55,8 +55,10 @@ export function diffBlobs(seen: string, latest: string): string {
   return lines.join("\n");
 }
 
+/** Wrapped in `<context_update>` so it is classified as injected context, which
+ * the mention scanner skips: otherwise paths in watcher output would be tracked. */
 export function watchUpdateToText(update: WatchContextUpdate): string {
-  return [
+  const body = [
     "# Watched resource update",
     ...update.resources.map((r) =>
       r.kind === "full"
@@ -64,6 +66,7 @@ export function watchUpdateToText(update: WatchContextUpdate): string {
         : `## ${r.watcher}: ${r.key} (changed lines)\n\n${r.text}`,
     ),
   ].join("\n\n");
+  return `<context_update>\n${body}\n</context_update>`;
 }
 
 export type WatchSupervisorCallbacks = {

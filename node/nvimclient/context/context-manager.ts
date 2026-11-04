@@ -196,13 +196,34 @@ export function renderGitUpdate(
   })}`;
 }
 
+type BuiltinWatcher = "git-repo" | "github-pr";
+const WATCHER_ICONS: Record<BuiltinWatcher, string> = {
+  "git-repo": "\ue725",
+  "github-pr": "\uf407",
+};
+function watcherIcon(watcher: string): string {
+  return watcher in WATCHER_ICONS
+    ? WATCHER_ICONS[watcher as BuiltinWatcher]
+    : "\uf06e";
+}
+const STATUS_ICONS: {
+  [status in
+    | NonNullable<WatchedResourceView["state"]>["status"]
+    | "loading"]: string;
+} = {
+  loading: "\uf110",
+  active: "\uf111",
+  finished: "\uf00c",
+  failing: "\uf00d",
+  unavailable: "\uf05e",
+};
 export function renderWatchUpdate(
   update: WatchContextUpdate | undefined,
 ): VDOMNode {
   if (!update) return d``;
   return d`${update.resources.map(
     (r) =>
-      d`\uf06e ${r.watcher}: ${r.key} ${r.kind === "full" ? "tracked" : "updated"}\n`,
+      d`${watcherIcon(r.watcher)} ${r.watcher}: ${r.key} ${r.kind === "full" ? "tracked" : "updated"}\n`,
   )}`;
 }
 export type WatchedResourceControls = {
@@ -231,7 +252,7 @@ export function renderWatchedResources(
           ? d`${state.details.split("\n").map((line) => d`  ${line}\n`)}`
           : d``;
       return d`${withBindings(
-        d`- ${r.watcher} [${status}${flags}]: ${r.key}${summary}`,
+        d`- ${watcherIcon(r.watcher)} ${STATUS_ICONS[status]} ${r.watcher} [${status}${flags}]: ${r.key}${summary}`,
         {
           "=": () => controls.onToggle(r),
           dd: () => controls.onUntrack(r),

@@ -76,7 +76,7 @@ SystemInfoSupervisor.create(args: { systemInfo: SystemInfo; alreadyInjected: boo
   - creating a thread with a fake git-repo scanner sends `[projectDir]` to `scan` before any user message and tracks the returned key.
   - forking and rewinding don't scan the project dir again; compaction's replacement core keeps the user's untrack (the key isn't re-tracked).
   - compact threads don't scan.
-- Status: done. `ThreadCoreSeed.initialScan` (texts scanned once at creation); `Thread.createFreshCore` passes `[systemInfo.projectDir]` only when there is no `watched` seed (thread-core.ts must not reference project dirs, per `project-dir-boundary.test.ts`). Compact threads have no `WatchSupervisor`, so they never scan. Tests in `supervisors/watch-supervisor.test.ts`. Note: a fork only keeps a resource that has history/baseline, so the fork test pushes state for the repo.
+- Status: done. `ThreadCoreSeed.watch` is a union: `{ type: "inherit", watched }` (replacement core) or `{ type: "scan", texts }` (scanned once at creation); `Thread.createFreshCore` passes `scan` of `[systemInfo.projectDir]` only when there is no inherited `watched` (thread-core.ts must not reference project dirs, per `project-dir-boundary.test.ts`). Compact threads have no `WatchSupervisor`, so they never scan. Tests in `supervisors/watch-supervisor.test.ts`. Review follow-up: `WATCHER_ICONS` is keyed by a `BuiltinWatcher` literal union; the render test asserts a full line (fallback icon + loading icon). The git-repo 'other worktrees' guard was skipped (that test file has no render helper; removal is intentional). Note: a fork only keeps a resource that has history/baseline, so the fork test pushes state for the repo.
 
 ## Remove GitSupervisor
 

@@ -96,6 +96,21 @@ it("delivers the full blob first, then line diffs, then nothing", () =>
     expect(diff).not.toContain("state: open");
   }));
 
+it("watcher output is injected as context and is not scanned", () =>
+  withGh(async (h) => {
+    h.host.watchers.push(
+      "gh",
+      active("related: https://github.com/o/r/pull/99\n"),
+    );
+    const { thread } = await h.createRoot();
+    await mention(h, thread);
+    const stream = await exchange(h, thread, "status?");
+    expect(text(stream)).toContain("<context_update>");
+    await exchange(h, thread, "again");
+    expect(thread.watchedResources.map((r) => r.key)).toEqual([KEY]);
+    expect(JSON.stringify(h.host.watchers.scanCalls)).not.toContain("pull/99");
+  }));
+
 it("a rejected key shows as unavailable and injects nothing", () =>
   withGh(async (h) => {
     h.host.watchers.push("gh", {

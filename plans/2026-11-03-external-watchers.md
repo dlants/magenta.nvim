@@ -309,6 +309,6 @@ Status: DONE.
 
 # Open questions
 
-- Explicit `watch`/`unwatch` agent tool vs. mention-only triggers.
+- Explicit `watch`/`unwatch` agent tool: decided against; mentions only.
 - Can `GitSupervisor` eventually become a watcher? Probably not (needs synchronous consistency with edits), so keep it built in.
-- Docker threads: bind-mount watcher sockets so bash `wait` works inside containers?
+- Manifest regex triggers are superseded by watcher-side scanning: see `plans/2026-11-04-watcher-scan.md`.

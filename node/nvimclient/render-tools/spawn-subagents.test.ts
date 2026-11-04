@@ -470,19 +470,19 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
       // Verify hierarchical display - subtrees are collapsed by default
       await driver.assertDisplayBufferContains("# Threads");
       await driver.assertDisplayBufferContains(
-        `- ▶ This is the parent thread: ⏳ executing tools (1 subthreads)`,
+        `- \uf054 This is the parent thread: ⏳ executing tools (1 subthreads)`,
       );
       await driver.assertDisplayBufferContains(
-        `* ▶ This is another parent thread: ⏳ executing tools (1 subthreads)`,
+        `* \uf054 This is another parent thread: ⏳ executing tools (1 subthreads)`,
       );
 
       // Expand the first root thread to see children
       await driver.triggerDisplayBufferKeyOnContent(
-        `- ▶ This is the parent thread: ⏳ executing tools (1 subthreads)`,
+        `- \uf054 This is the parent thread: ⏳ executing tools (1 subthreads)`,
         "=",
       );
       await driver.assertDisplayBufferContains(
-        `- ▼ This is the parent thread: ⏳ executing tools (1 subthreads)`,
+        `- \uf078 This is the parent thread: ⏳ executing tools (1 subthreads)`,
       );
       await driver.assertDisplayBufferContains(
         `  - This is a child thread task: ⏳ streaming response`,
@@ -595,19 +595,19 @@ describe("node/nvimclient/render-tools/spawn-subagents.test.ts", () => {
 
       // Verify hierarchy shows collapsed root threads with expand indicators
       await driver.assertDisplayBufferContains(
-        `- ▶ Parent with yielding child: ⏳ streaming response (1 subthreads)`,
+        `- \uf054 Parent with yielding child: ⏳ streaming response (1 subthreads)`,
       );
       await driver.assertDisplayBufferContains(
-        `* ▶ Parent with stopping child: ⏳ executing tools (1 subthreads)`,
+        `* \uf054 Parent with stopping child: ⏳ executing tools (1 subthreads)`,
       );
 
       // Expand a root to see child states
       await driver.triggerDisplayBufferKeyOnContent(
-        `* ▶ Parent with stopping child: ⏳ executing tools (1 subthreads)`,
+        `* \uf054 Parent with stopping child: ⏳ executing tools (1 subthreads)`,
         "=",
       );
       await driver.assertDisplayBufferContains(
-        `* ▼ Parent with stopping child: ⏳ executing tools (1 subthreads)`,
+        `* \uf078 Parent with stopping child: ⏳ executing tools (1 subthreads)`,
       );
       await driver.assertDisplayBufferContains(
         `  - Just stop without yielding: ⏳ streaming response`,
