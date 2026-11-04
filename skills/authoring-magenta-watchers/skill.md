@@ -106,6 +106,10 @@ Guidance:
 - Scope repos by narrowing the trigger pattern, or by returning `unavailable` from `poll` for rejected keys.
 - Rate-limit `Retry-After` is reported as an error and falls back to the sdk's exponential backoff.
 
+## Reference: git repo watcher
+
+`reference/git-repo/` watches local repos/worktrees, showing that a non-HTTP watcher fits the same model. Key = any absolute path inside a worktree, normalized to the worktree root (non-repos are `unavailable`). `git-repo.ts` polls `git status --porcelain=v2 --branch`, the HEAD subject, in-progress rebase/merge markers and `git worktree list`; `render` lists branch, HEAD, upstream ahead/behind, conflicted/staged/unstaged/untracked files and other worktrees; `summary` is e.g. `main ↑2 ↓0, 3 dirty`. The manifest trigger (`/Users/<user>/src/<name>`) is the scoping knob: edit it to match your checkout roots. Note distinct paths into the same worktree are distinct keys that share nothing but the rendering.
+
 ## Waiting from bash
 
 The sdk ships a CLI over `waitFor`:

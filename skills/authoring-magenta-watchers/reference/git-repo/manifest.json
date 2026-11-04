@@ -1,0 +1,8 @@
+{
+  "name": "git-repo",
+  "protocolVersion": 1,
+  "command": ["node", "--experimental-transform-types", "./index.ts"],
+  "triggers": [
+    { "pattern": "/Users/[^/\\s]+/src/[A-Za-z0-9._-]+", "keyGroup": 0 }
+  ]
+}
