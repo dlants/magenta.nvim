@@ -2,7 +2,6 @@ import { expect, it } from "vitest";
 import type { GitHubResponse } from "../capabilities/github-client.ts";
 import type { ThreadId } from "../chat-types.ts";
 import type { ThreadCompactor } from "../compaction/compactor.ts";
-import { threadState } from "../protocol/state.ts";
 import type { MockStream } from "../providers/mock-anthropic-client.ts";
 import type { PullRequestSnapshot } from "../pull-requests/types.ts";
 import { type Harness, withHarness } from "../test/harness.ts";
@@ -337,43 +336,3 @@ it("diffs state changes and formats review comments", () => {
   expect(rendered).toContain("a.ts:3");
   expect(rendered).toContain("nit here");
 });
-
-it("protocol thread state reflects snapshot, pending update and status", () =>
-  withHarness(opts, async (h) => {
-    script(h, { runs: [lint("failure")] });
-    const { thread } = await h.createRoot();
-    const pr = () => {
-      const state = threadState(thread, compactorOf(h, thread.id), h.session)
-        .pullRequests[0];
-      if (!state?.loaded) throw new Error("not loaded");
-      return state;
-    };
-    await mention(h, thread);
-    expect(pr().status.type).toBe("ok");
-    expect(pr().snapshot.checks[0]?.status).toBe("failure");
-    expect(pr().pending?.type).toBe("tracked");
-
-    await exchange(h, thread, "status?");
-    expect(pr().pending).toBeUndefined();
-    script(h, { runs: [lint("success")] });
-    await pollUntil(() => {
-      if (!pr().pending) throw new Error("no pending");
-    });
-    expect(pr().pending).toMatchObject({
-      type: "changed",
-      checks: [
-        { check: { name: "lint", status: "success" }, previous: "failure" },
-      ],
-    });
-
-    h.host.github.setResponse("repos/o/r/pulls/12", {
-      type: "error",
-      status: 500,
-      message: "boom",
-      retryAfterMs: undefined,
-    });
-    await pollUntil(() => {
-      if (pr().status.type !== "failing") throw new Error("not failing");
-    });
-    expect(pr().snapshot.checks[0]?.status).toBe("success");
-  }));

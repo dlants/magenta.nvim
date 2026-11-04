@@ -32,8 +32,8 @@ import {
   contextFilesView,
   renderContextUpdate,
   renderGitUpdate,
-  renderPullRequests,
-  renderPullRequestUpdate,
+  renderWatchedResources,
+  renderWatchUpdate,
 } from "../context/context-manager.ts";
 import { notify } from "../nvim/nvim.ts";
 import type {
@@ -68,7 +68,12 @@ import {
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { formatTokens } from "../utils/tokens.ts";
 import { reflectionTree } from "./reflections-overview.ts";
-import type { Msg, NvimThread, ToolViewState } from "./thread.ts";
+import {
+  type Msg,
+  type NvimThread,
+  type ToolViewState,
+  watchedResourceId,
+} from "./thread.ts";
 
 function contextViewCtx(thread: NvimThread): ContextViewContext {
   return {
@@ -782,7 +787,7 @@ ${contextFilesView(contextFilesData(thread), contextViewCtx(thread), {
         )
       : d``;
 
-    const gitUpdateView = d`${renderGitUpdate(delivery?.git)}${renderPullRequestUpdate(delivery?.pullRequests)}`;
+    const gitUpdateView = d`${renderGitUpdate(delivery?.git)}${renderWatchUpdate(delivery?.watched)}`;
 
     // Render content blocks. For user messages we render auto-generated meta
     // blocks (system_reminder, system_info) before the user's own text so the
@@ -836,12 +841,16 @@ ${contentView}`;
     ? d`\n${renderStreamingBlock(thread)}\n`
     : d``;
 
-  const pullRequestsView = renderPullRequests(thread.threadState.pullRequests, {
-    isExpanded: (url) => !!thread.state.pullRequestsExpanded[url],
-    onToggle: (url) => dispatch({ type: "toggle-pull-request-expanded", url }),
-    onRetry: (url) => dispatch({ type: "retry-pull-request", url }),
-    onUntrack: (url) => dispatch({ type: "untrack-pull-request", url }),
-  });
+  const watchedResourcesView = renderWatchedResources(
+    thread.threadState.watchedResources,
+    {
+      isExpanded: (ref) =>
+        !!thread.state.watchedResourcesExpanded[watchedResourceId(ref)],
+      onToggle: (ref) =>
+        dispatch({ type: "toggle-watched-resource-expanded", ref }),
+      onUntrack: (ref) => dispatch({ type: "untrack-watched-resource", ref }),
+    },
+  );
 
   const gitRepos = thread.threadState.trackedGitRepos;
   const trackedGitReposView =
@@ -849,7 +858,7 @@ ${contentView}`;
       ? d`\n${withExtmark(d`# git repos:`, { hl_group: "@markup.heading.1.markdown" })}\n${gitRepos.map((root) => d`- \ue725 ${root}\n`)}`
       : d``;
   const bottomSeparatorView =
-    thread.threadState.pullRequests.length > 0 || gitRepos.length > 0
+    thread.threadState.watchedResources.length > 0 || gitRepos.length > 0
       ? d`\n${withExtmark(d`${"─".repeat(20)}`, { hl_group: "Comment" })}\n`
       : d``;
   const failedSubmit =
@@ -879,7 +888,7 @@ ${sandboxView}\
 ${pendingMessagesView}${pendingNextMessagesView}\
 ${trailingForkedToView}\
 ${editsAt(-1)}
-${statusView}${bottomSeparatorView}${pullRequestsView}${trackedGitReposView}`;
+${statusView}${bottomSeparatorView}${watchedResourcesView}${trackedGitReposView}`;
 };
 
 /** Render a single content block from a message */

@@ -348,12 +348,8 @@ export function createInProcessServer({
       readyThread(op.threadId).contextFiles.removeFileContext(op.file);
       return ok;
     },
-    "thread.untrackPullRequest": (op) => {
-      readyThread(op.threadId).untrackPullRequest(op.url);
-      return ok;
-    },
-    "pullRequest.retry": (op) => {
-      session.pullRequestMonitor?.retry(op.url);
+    "thread.untrackWatchedResource": (op) => {
+      readyThread(op.threadId).untrackWatchedResource(op.ref);
       return ok;
     },
     "tool.abort": (op) => {

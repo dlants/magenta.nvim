@@ -63,6 +63,11 @@ import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { pollUntil, type Task } from "./utils/async.ts";
 import { type ProjectDir, threadConversationLogPath } from "./utils/files.ts";
+import type { WatcherManifest } from "./watchers/protocol.ts";
+import type {
+  WatcherRegistry,
+  WatcherTransport,
+} from "./watchers/watcher-registry.ts";
 export const TEST_ARCHIVE_DIR = path.join(os.tmpdir(), "magenta-test-archive");
 
 export const noopLogger: Logger = {
@@ -618,4 +623,20 @@ export function setGitHubClient(
   client: GitHubClient,
 ): void {
   monitor.setClientForTesting(client);
+}
+
+/** Points the session's watcher registry at a fake transport with these manifests. */
+export function useFakeWatchers(
+  registry: WatcherRegistry,
+  transport: WatcherTransport,
+  manifests: ReadonlyArray<WatcherManifest>,
+): void {
+  registry.setTransportForTesting(transport);
+  registry.setManifests(
+    manifests.map((m) => ({
+      ...m,
+      dir: "/watchers",
+      socketPath: `/watchers/${m.name}.sock`,
+    })),
+  );
 }

@@ -2,11 +2,10 @@ import {
   type FileUpdates,
   formatGitHead,
   type GitContextUpdate,
-  type PullRequestCheck,
-  type PullRequestContextUpdate,
-  type PullRequestUpdate,
-  type PullRequestViewState,
+  type ResourceRef,
   type TrackedContextFile,
+  type WatchContextUpdate,
+  type WatchedResourceView,
 } from "@magenta/server";
 import open from "open";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
@@ -197,127 +196,47 @@ export function renderGitUpdate(
   })}`;
 }
 
-export function renderPullRequestUpdate(
-  update: PullRequestContextUpdate | undefined,
+export function renderWatchUpdate(
+  update: WatchContextUpdate | undefined,
 ): VDOMNode {
   if (!update) return d``;
-  return d`${update.pullRequests.map((pr) => {
-    if (pr.type === "tracked") {
-      const { snapshot } = pr;
-      return d` pr: ${snapshot.ref.url} tracked (${snapshot.state}, ${snapshot.checks.length.toString()} checks, ${snapshot.comments.length.toString()} comments)\n`;
-    }
-    return d` pr: ${pr.ref.url} ${describeUpdate(pr)}\n`;
-  })}`;
+  return d`${update.resources.map(
+    (r) =>
+      d`\uf06e ${r.watcher}: ${r.key} ${r.kind === "full" ? "tracked" : "updated"}\n`,
+  )}`;
 }
-function describeUpdate(update: PullRequestUpdate): string {
-  if (update.type === "tracked") return "tracked";
-  const parts: string[] = [];
-  if (update.stateChange) parts.push(`now ${update.stateChange.to}`);
-  if (update.headChange)
-    parts.push(`new head ${update.headChange.to.slice(0, 7)}`);
-  if (update.checks.length)
-    parts.push(
-      `${update.checks.length.toString()} check${update.checks.length === 1 ? "" : "s"}`,
-    );
-  if (update.comments.length)
-    parts.push(
-      `${update.comments.length.toString()} comment${update.comments.length === 1 ? "" : "s"}`,
-    );
-  return parts.join(", ");
-}
-const MAX_TITLE_LENGTH = 50;
-function truncateTitle(title: string): string {
-  return title.length > MAX_TITLE_LENGTH
-    ? `${title.slice(0, MAX_TITLE_LENGTH - 1)}…`
-    : title;
-}
-function formatAgo(ms: number, now: number): string {
-  return `${Math.max(0, Math.round((now - ms) / 1000)).toString()}s ago`;
-}
-const MAX_COLLAPSED_FAILED_CHECKS = 3;
-const CHECK_LABELS: Record<PullRequestCheck["status"], string> = {
-  pending: "pending",
-  success: "passed",
-  failure: "failed",
-  neutral: "neutral",
-  skipped: "skipped",
+export type WatchedResourceControls = {
+  isExpanded: (ref: ResourceRef) => boolean;
+  onToggle: (ref: ResourceRef) => void;
+  onUntrack: (ref: ResourceRef) => void;
 };
-
-export type PullRequestControls = {
-  isExpanded: (url: string) => boolean;
-  onToggle: (url: string) => void;
-  onRetry: (url: string) => void;
-  onUntrack: (url: string) => void;
-};
-export function renderPullRequests(
-  pullRequests: ReadonlyArray<PullRequestViewState>,
-  controls: PullRequestControls,
-  now: number = Date.now(),
+export function renderWatchedResources(
+  resources: ReadonlyArray<WatchedResourceView>,
+  controls: WatchedResourceControls,
 ): VDOMNode {
-  if (!pullRequests.length) return d``;
-  return d`\n${withExtmark(d`# pull requests:`, { hl_group: "@markup.heading.1.markdown" })}\n${pullRequests.map(
-    (pr) => {
-      const { status } = pr;
-      const snapshot = pr.loaded ? pr.snapshot : undefined;
-      const pending = pr.loaded ? pr.pending : undefined;
-      const failed =
-        snapshot?.checks.filter((c) => c.status === "failure") ?? [];
-      const counts = snapshot
-        ? ` checks: ${snapshot.checks.filter((c) => c.status === "pending").length.toString()} pending, ${snapshot.checks.filter((c) => c.status === "success").length.toString()} passed, ${failed.length.toString()} failed`
-        : "";
-      const statusText =
-        status.type === "ok"
-          ? ` (polled ${formatAgo(status.lastPolledAt, now)})`
-          : status.type === "loading"
-            ? " (loading)"
-            : status.type === "finished"
-              ? " (no longer polling)"
-              : "";
-      const state = snapshot ? ` (${snapshot.state})` : "";
-      const title = snapshot ? `${truncateTitle(snapshot.title)} ` : "";
-      const expanded = controls.isExpanded(pr.url);
-      const checkLine = (c: PullRequestCheck) =>
-        d`  - ${CHECK_LABELS[c.status]}: ${c.name}${c.url ? ` ${c.url}` : ""}\n`;
-      const hiddenFailed = failed.length - MAX_COLLAPSED_FAILED_CHECKS;
-      const checkLines = expanded
-        ? (snapshot?.checks ?? []).map(checkLine)
-        : [
-            ...failed.slice(0, MAX_COLLAPSED_FAILED_CHECKS).map(checkLine),
-            hiddenFailed > 0
-              ? d`  - ... ${hiddenFailed.toString()} more failed\n`
-              : d``,
-          ];
-      const pendingLine = pending
-        ? d`  - [pending update: ${describeUpdate(pending)}]\n`
-        : d``;
-      const errorBadge =
-        status.type === "failing"
-          ? d` ${withExtmark(d` Error`, { hl_group: "ErrorMsg" })}`
+  if (!resources.length) return d``;
+  return d`\n${withExtmark(d`# watched:`, { hl_group: "@markup.heading.1.markdown" })}\n${resources.map(
+    (r) => {
+      const { state } = r;
+      const status = state?.status ?? "loading";
+      const flags = `${r.paused ? ", paused" : ""}${r.pendingUpdate ? ", pending update" : ""}`;
+      const summary = state?.summary ? ` ${state.summary}` : "";
+      const expanded = controls.isExpanded(r);
+      const errorLine =
+        state && (state.status === "failing" || state.status === "unavailable")
+          ? d`  ${withExtmark(d`${state.error}`, { hl_group: "ErrorMsg" })}\n`
           : d``;
-      const statusLine =
-        status.type === "failing"
-          ? expanded
-            ? d`  - poll failed (${status.consecutiveFailures.toString()}x${status.stopped ? ", stopped polling" : ""}): ${status.lastError}\n  ${withBindings(
-                withExtmark(d`[retry]`, { hl_group: "@comment" }),
-                { "<CR>": () => controls.onRetry(pr.url) },
-              )}\n`
-            : d``
-          : status.type === "unavailable"
-            ? d`  - unavailable: ${status.message}\n`
-            : d``;
-      const icon =
-        snapshot?.state === "merged"
-          ? "\uf419"
-          : snapshot?.state === "closed"
-            ? "\uf4dc"
-            : "\uf407";
+      const details =
+        expanded && state?.details
+          ? d`${state.details.split("\n").map((line) => d`  ${line}\n`)}`
+          : d``;
       return d`${withBindings(
-        d`- ${icon} ${title}${pr.url}${state}${counts}${statusText}${errorBadge}`,
+        d`- ${r.watcher} [${status}${flags}]: ${r.key}${summary}`,
         {
-          "=": () => controls.onToggle(pr.url),
-          dd: () => controls.onUntrack(pr.url),
+          "=": () => controls.onToggle(r),
+          dd: () => controls.onUntrack(r),
         },
-      )}\n${checkLines}${pendingLine}${statusLine}`;
+      )}\n${errorLine}${details}`;
     },
   )}`;
 }

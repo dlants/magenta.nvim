@@ -13,6 +13,7 @@ import type {
   ProtocolSubmissionResult,
   ProtocolThreadState,
   ReflectAnchor,
+  ResourceRef,
   ScriptSandboxRoot,
   SubagentConfig,
   Submission,
@@ -103,9 +104,8 @@ export type Msg =
       index: number;
     }
   | { type: "remove-pending-message"; when: DeferredDelivery; index: number }
-  | { type: "toggle-pull-request-expanded"; url: string }
-  | { type: "retry-pull-request"; url: string }
-  | { type: "untrack-pull-request"; url: string }
+  | { type: "toggle-watched-resource-expanded"; ref: ResourceRef }
+  | { type: "untrack-watched-resource"; ref: ResourceRef }
   | {
       type: "toggle-expand-content";
       messageIdx: number;
@@ -242,7 +242,7 @@ export class NvimThread {
     expandedToolDefinitions: { [toolName: string]: boolean };
     contextFilesExpanded: boolean;
     pendingMessagesExpanded: { [index: number]: boolean };
-    pullRequestsExpanded: { [url: string]: boolean };
+    watchedResourcesExpanded: { [refId: string]: boolean };
     editedFilesExpanded: { [key: string]: { patch: string } };
     messageViewState: { [messageIdx: number]: MessageViewState };
     toolViewState: { [toolRequestId: ToolRequestId]: ToolViewState };
@@ -283,7 +283,7 @@ export class NvimThread {
       expandedToolDefinitions: {},
       contextFilesExpanded: false,
       pendingMessagesExpanded: {},
-      pullRequestsExpanded: {},
+      watchedResourcesExpanded: {},
       editedFilesExpanded: {},
       messageViewState: {},
       toolViewState: {},
@@ -572,22 +572,19 @@ export class NvimThread {
         this.state.contextFilesExpanded = !this.state.contextFilesExpanded;
         return;
 
-      case "toggle-pull-request-expanded":
-        this.state.pullRequestsExpanded[msg.url] =
-          !this.state.pullRequestsExpanded[msg.url];
+      case "toggle-watched-resource-expanded": {
+        const id = watchedResourceId(msg.ref);
+        this.state.watchedResourcesExpanded[id] =
+          !this.state.watchedResourcesExpanded[id];
         return;
-
-      case "retry-pull-request":
-        void this.execute({ type: "pullRequest.retry", url: msg.url });
-        return;
-      case "untrack-pull-request":
+      }
+      case "untrack-watched-resource":
         void this.execute({
-          type: "thread.untrackPullRequest",
+          type: "thread.untrackWatchedResource",
           threadId: this.id,
-          url: msg.url,
+          ref: msg.ref,
         });
         return;
-
       case "remove-pending-message":
         this.state.pendingMessagesExpanded = {};
         void this.execute({
@@ -785,4 +782,8 @@ export class NvimThread {
       msg: { type: "append-to-input", threadId: this.id, text },
     });
   }
+}
+
+export function watchedResourceId(ref: ResourceRef): string {
+  return `${ref.watcher}\u0000${ref.key}`;
 }

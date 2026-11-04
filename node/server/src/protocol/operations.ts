@@ -10,6 +10,7 @@ import type { Delivery, SubmissionInput } from "../submission/index.ts";
 import type { DeferredDelivery } from "../submission/mailbox.ts";
 import type { ToolRequestId } from "../tool-types.ts";
 import type { AbsFilePath, UnresolvedFilePath } from "../utils/files.ts";
+import type { ResourceRef } from "../watchers/watcher-registry.ts";
 import type { ProtocolSubmissionResult } from "./state.ts";
 
 export type Operation =
@@ -63,8 +64,11 @@ export type Operation =
       threadId: ThreadId;
     }
   | { type: "sandbox.toggleBypass"; threadId: ThreadId }
-  | { type: "pullRequest.retry"; url: string }
-  | { type: "thread.untrackPullRequest"; threadId: ThreadId; url: string }
+  | {
+      type: "thread.untrackWatchedResource";
+      threadId: ThreadId;
+      ref: ResourceRef;
+    }
   | { type: "session.setActiveProfile"; sessionId: SessionId; name: string }
   | {
       type: "script.run";
@@ -108,8 +112,7 @@ export type OperationSuccessMap = {
   "approval.rejectAll": Ok;
   "approval.approveAllInSubtree": Ok;
   "sandbox.toggleBypass": Ok;
-  "pullRequest.retry": Ok;
-  "thread.untrackPullRequest": Ok;
+  "thread.untrackWatchedResource": Ok;
   "session.setActiveProfile": Ok;
   "script.run": { type: "started"; invocationId: ScriptInvocationId };
   "script.abort": Ok;

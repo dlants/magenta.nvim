@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThreadId } from "../chat-types.ts";
 import type { ThreadCompactor } from "../compaction/compactor.ts";
 import { parseOptions, parseProjectOptions } from "../config/options.ts";
+import { createInProcessServer } from "../protocol/server.ts";
+import type { ProtocolThreadState } from "../protocol/state.ts";
 import type { MockStream } from "../providers/mock-anthropic-client.ts";
 import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import { FakeWatcherTransport } from "../test/fakes.ts";
@@ -354,3 +356,36 @@ describe("WatchSupervisor connection handling", () => {
     supervisor.dispose();
   });
 });
+it("protocol thread state carries watched resources and untracks by ref", () =>
+  withHarness(opts, async (h) => {
+    h.host.watchers.push("gh", active("state: open\n"));
+    const server = createInProcessServer({ session: h.session });
+    const { id, thread } = await h.createRoot();
+    const seen: (ProtocolThreadState | undefined)[] = [];
+    server.subscribe({ type: "thread", threadId: id }, (s) => seen.push(s));
+    await mention(h, thread);
+    await pollUntil(() => {
+      if (seen.at(-1)?.watchedResources.length !== 1)
+        throw new Error("no resource");
+    });
+    expect(seen.at(-1)?.watchedResources).toEqual([
+      {
+        watcher: "gh",
+        key: KEY,
+        state: active("state: open\n"),
+        paused: false,
+        pendingUpdate: true,
+      },
+    ]);
+    await server.execute({
+      type: "thread.untrackWatchedResource",
+      threadId: id,
+      ref: { watcher: "gh" as WatcherName, key: KEY },
+    });
+    await pollUntil(() => {
+      if (seen.at(-1)?.watchedResources.length !== 0)
+        throw new Error("still tracked");
+    });
+    expect(h.host.watchers.subscriberCount("gh", KEY)).toBe(0);
+    await server.dispose();
+  }));

@@ -34,7 +34,7 @@ import type {
 import type { ProfileSelection, Session, SessionId } from "../session.ts";
 import type { Queues } from "../submission/mailbox.ts";
 import type { FileStat, FileUpdates } from "../supervisors/file-supervisor.ts";
-import type { PullRequestViewState } from "../supervisors/pull-request-supervisor.ts";
+import type { WatchedResourceView } from "../supervisors/watch-supervisor.ts";
 import type { EnvironmentConfig, Thread } from "../thread.ts";
 import type { SubmissionResult, YieldValue } from "../thread-api.ts";
 import type { ContextDelivery } from "../thread-core.ts";
@@ -119,7 +119,7 @@ export type ProtocolThreadState = {
   pendingContextUpdates: FileUpdates;
   contextDeliveries: Readonly<Record<NativeMessageIdx, ContextDelivery>>;
   editedFileGroups: ReadonlyArray<EditedFileGroup>;
-  pullRequests: ReadonlyArray<PullRequestViewState>;
+  watchedResources: ReadonlyArray<WatchedResourceView>;
   trackedGitRepos: ReadonlyArray<AbsFilePath>;
   /** The current run, if any, is the last entry with `type: "running"`. */
   compaction: { runs: ReadonlyArray<CompactionRunState> };
@@ -324,7 +324,7 @@ export function threadState(
     pendingContextUpdates: thread.contextFiles.getPendingUpdates(),
     contextDeliveries,
     editedFileGroups: thread.editedFileGroups,
-    pullRequests: thread.pullRequests,
+    watchedResources: thread.watchedResources,
     trackedGitRepos: thread.trackedGitRepos,
     compaction: { runs: compactor?.runs ?? [] },
     derived: {

@@ -50,7 +50,13 @@ export class WatcherRegistry {
       homeDir: HomeDir;
       logger: Logger;
     },
-  ) {}
+  ) {
+    this.transport = opts.transport;
+  }
+  private transport: WatcherTransport;
+  setTransportForTesting(transport: WatcherTransport): void {
+    this.transport = transport;
+  }
 
   /** Replaces the loaded set; an invalid manifest disables only that watcher. */
   async load(manifestPaths: ReadonlyArray<string>): Promise<void> {
@@ -112,6 +118,6 @@ export class WatcherRegistry {
     if (!manifest) {
       return Promise.reject(new Error(`unknown watcher ${watcher}`));
     }
-    return this.opts.transport.connect(manifest);
+    return this.transport.connect(manifest);
   }
 }
