@@ -242,7 +242,7 @@ export class NvimThread {
     expandedToolDefinitions: { [toolName: string]: boolean };
     contextFilesExpanded: boolean;
     pendingMessagesExpanded: { [index: number]: boolean };
-    watchedResourcesExpanded: { [refId: string]: boolean };
+    watchedResourcesExpanded: { [refId: WatchedResourceId]: boolean };
     editedFilesExpanded: { [key: string]: { patch: string } };
     messageViewState: { [messageIdx: number]: MessageViewState };
     toolViewState: { [toolRequestId: ToolRequestId]: ToolViewState };
@@ -784,6 +784,8 @@ export class NvimThread {
   }
 }
 
-export function watchedResourceId(ref: ResourceRef): string {
-  return `${ref.watcher}\u0000${ref.key}`;
+export type WatchedResourceId = string & { __brand: "WatchedResourceId" };
+
+export function watchedResourceId(ref: ResourceRef): WatchedResourceId {
+  return `${ref.watcher}\u0000${ref.key}` as WatchedResourceId;
 }
