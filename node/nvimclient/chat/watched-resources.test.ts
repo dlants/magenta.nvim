@@ -21,7 +21,7 @@ it("renders watched resource summary/details, deliveries and untracks", async ()
         command: ["true"],
       },
     ]);
-    transport.scanners.set("gh", (texts) =>
+    transport.scanners.set("gh" as WatcherName, (texts) =>
       texts.flatMap((t) =>
         [...t.matchAll(/https:\/\/github\.com\/(\S+\/pull\/\d+)/g)].map(
           (m) => m[1] ?? "",

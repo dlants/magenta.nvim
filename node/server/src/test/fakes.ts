@@ -11,7 +11,7 @@ import type {
 import { createClientEffectHandler } from "../protocol/client.ts";
 import { Defer } from "../utils/async.ts";
 import type { AbsFilePath } from "../utils/files.ts";
-import type { ResourceState } from "../watchers/protocol.ts";
+import type { ResourceState, WatcherName } from "../watchers/protocol.ts";
 import type {
   LoadedWatcherManifest,
   WatcherConnection,
@@ -143,7 +143,7 @@ export class FakeClient implements ClientEffectHandler {
 }
 
 type FakeWatcherConn = {
-  watcher: string;
+  watcher: WatcherName;
   keys: Set<string>;
   stateCbs: Array<(s: ResourceState) => void>;
   closeCbs: Array<() => void>;
@@ -161,10 +161,10 @@ export class FakeWatcherTransport implements WatcherTransport {
   holdSubscribes: Promise<void> | undefined;
   /** Per-watcher scan logic; watchers without one find no keys. */
   readonly scanners = new Map<
-    string,
+    WatcherName,
     (texts: string[]) => string[] | Promise<string[]>
   >();
-  readonly scanCalls: Array<{ watcher: string; texts: string[] }> = [];
+  readonly scanCalls: Array<{ watcher: WatcherName; texts: string[] }> = [];
   private id = (watcher: string, key: string) => `${watcher}\0${key}`;
 
   connect(manifest: LoadedWatcherManifest): Promise<WatcherConnection> {

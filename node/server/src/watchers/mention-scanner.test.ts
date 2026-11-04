@@ -87,3 +87,28 @@ it("sends only blocks appended to a scanned message", async () => {
   s.set([{ role: "user", content: [first, text("two", 0)] }]);
   await pollUntil(() => expect(s.scanned).toEqual(["one", "two"]));
 });
+it("batches at 256KB, truncates strings to 64KB, drops empty strings", async () => {
+  const calls: string[][] = [];
+  const scanner = new MentionScanner(
+    () => [
+      {
+        role: "user",
+        content: [
+          text("", 0),
+          ...Array.from({ length: 5 }, (_, i) =>
+            text(String(i).repeat(100 * 1024), 0),
+          ),
+        ],
+      },
+    ],
+    (texts) => {
+      calls.push(texts);
+      return Promise.resolve();
+    },
+  );
+  scanner.schedule();
+  await pollUntil(() => expect(calls.length).toBe(2));
+  const K = 64 * 1024;
+  expect(calls.map((c) => c.map((t) => t.length))).toEqual([[K, K, K, K], [K]]);
+  expect(calls.flat().map((t) => t[0])).toEqual(["0", "1", "2", "3", "4"]);
+});

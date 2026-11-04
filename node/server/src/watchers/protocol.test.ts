@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseJsonRpcLine,
   parseResourceState,
+  parseScanResult,
   parseWatcherManifest,
 } from "./protocol.ts";
 
@@ -66,5 +67,15 @@ describe("parseJsonRpcLine", () => {
   it("rejects garbage", () => {
     expect(parseJsonRpcLine("nope")).toBeUndefined();
     expect(parseJsonRpcLine('{"id":1,"result":1}')).toBeUndefined();
+  });
+});
+describe("parseScanResult", () => {
+  it("accepts a string array of keys", () => {
+    expect(parseScanResult({ keys: ["a", "b"] })).toEqual(["a", "b"]);
+  });
+  it("rejects malformed results", () => {
+    expect(parseScanResult({ keys: "a" })).toBeUndefined();
+    expect(parseScanResult({ keys: ["a", 1] })).toBeUndefined();
+    expect(parseScanResult(["a"])).toBeUndefined();
   });
 });

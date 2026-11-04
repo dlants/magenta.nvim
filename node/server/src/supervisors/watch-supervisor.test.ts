@@ -11,13 +11,14 @@ import { type Harness, withHarness } from "../test/harness.ts";
 import { created, noopLogger, setLastAttentionTime } from "../test-helpers.ts";
 import type { Thread } from "../thread.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
-import { pollUntil } from "../utils/async.ts";
+import { Defer, pollUntil } from "../utils/async.ts";
 import type { HomeDir } from "../utils/files.ts";
 import type { ResourceState, WatcherName } from "../watchers/protocol.ts";
 import { WatcherRegistry } from "../watchers/watcher-registry.ts";
 import { diffBlobs, WatchSupervisor } from "./watch-supervisor.ts";
 
 const KEY = "o/r/pull/12";
+const GH = "gh" as WatcherName;
 const opts = {
   watchers: [
     {
@@ -35,7 +36,7 @@ const ghScan = (texts: string[]) =>
   );
 function withGh(fn: (h: Harness) => Promise<void>) {
   return withHarness(opts, (h) => {
-    h.host.watchers.scanners.set("gh", ghScan);
+    h.host.watchers.scanners.set(GH, ghScan);
     return fn(h);
   });
 }
@@ -132,7 +133,7 @@ it("a failed scan tracks nothing, logs, and submissions succeed", () =>
 
 it("two mentions the watcher canonicalizes to one key track one resource", () =>
   withHarness(opts, async (h) => {
-    h.host.watchers.scanners.set("gh", (texts) =>
+    h.host.watchers.scanners.set(GH, (texts) =>
       texts.some((t) => /\/repo\/\w+\.ts/.test(t)) ? ["/repo"] : [],
     );
     const { thread } = await h.createRoot();
@@ -186,7 +187,12 @@ it("an untracked key stays untracked when a later scan returns it", () =>
     h.host.watchers.push("gh", active("a\n"));
     const { thread } = await h.createRoot();
     await mention(h, thread);
+    expect(h.host.watchers.connections.some((c) => !c.closed)).toBe(true);
     thread.untrackWatchedResource({ watcher: "gh" as WatcherName, key: KEY });
+    await pollUntil(() => {
+      if (h.host.watchers.connections.some((c) => !c.closed))
+        throw new Error("connection still open after untrack");
+    });
     const before = h.host.watchers.scanCalls.length;
     await exchange(h, thread, `again https://github.com/${KEY}`);
     await pollUntil(() => {
@@ -208,6 +214,31 @@ it("closes the connection after a scan that finds nothing", () =>
     });
   }));
 
+it("keeps the connection open while a scan is in flight or a key is subscribed", () =>
+  withGh(async (h) => {
+    const first = new Defer<string[]>();
+    const second = new Defer<string[]>();
+    const pending = [first, second];
+    h.host.watchers.scanners.set(GH, () => {
+      const d = pending.shift();
+      return d ? d.promise : [];
+    });
+    const { thread } = await h.createRoot();
+    await exchange(h, thread, "one");
+    await pollUntil(() => expect(pending).toEqual([]));
+    const conns = h.host.watchers.connections;
+    first.resolve([]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(conns.some((c) => !c.closed)).toBe(true);
+    h.host.watchers.push("gh", active("a\n"));
+    second.resolve([KEY]);
+    await pollUntil(() => {
+      if (thread.watchedResources[0]?.state?.status !== "active")
+        throw new Error("not subscribed yet");
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(conns.some((c) => !c.closed)).toBe(true);
+  }));
 it("forks diff against the blob seen at the fork point", () =>
   withGh(async (h) => {
     h.host.watchers.push("gh", active("v1\n"));

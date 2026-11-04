@@ -144,6 +144,7 @@ node wait-pr.ts <pr-url> --until green|new-failure|new-comment [--timeout S]
   - `MentionScanner` skips fields `type`, `id`, `data`, `citations` (type/id strings are noise), filters empty strings, batches to 256KB, truncates strings to 64KB; scans are fire-and-forget. Unit tests in `mention-scanner.test.ts`; harness tests in `watch-supervisor.test.ts`; `FakeWatcherTransport` gained `scanners`/`scanCalls`.
   - Reference watcher tests that read `triggers` (git-repo, github-pr) now read the raw manifest JSON; Stage 3 replaces them.
   - Scan timeout (5s) not implemented in the socket transport yet; a hung watcher only delays that scan.
+  - Review follow-up: tests for scan batching/truncation/empty filtering, overlapping scans keeping the connection open, connection staying open while a scanned key is subscribed and closing after untrack, and `parseScanResult` rejection; `FakeWatcherTransport` scanners/scanCalls keyed by `WatcherName`.
 
 ## Reference watchers + skill doc
 
