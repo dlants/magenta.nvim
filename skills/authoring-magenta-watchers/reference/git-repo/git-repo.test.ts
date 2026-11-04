@@ -120,6 +120,7 @@ describe("git-repo watcher", () => {
       ]),
     ).toEqual([repo, nested, wt]);
     expect(await makeScan([path.join(tmp, "elsewhere")])([repo])).toEqual([]);
+    expect(await makeScan([repo])([`${repo}/sub/a.txt`])).toEqual([repo]);
   });
 
   it("parseStatus handles renames, conflicts, spaces and headers", () => {

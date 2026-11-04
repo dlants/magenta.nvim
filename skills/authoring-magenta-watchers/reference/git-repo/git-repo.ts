@@ -82,20 +82,20 @@ export function makeScan(
   home: string = os.homedir(),
 ): (texts: string[]) => Promise<string[]> {
   const normRoots = roots.map((r) => path.resolve(expandHome(r, home)));
+  const underRoot = (p: string) =>
+    normRoots.some((r) => p === r || p.startsWith(r + path.sep));
   return async (texts) => {
     const candidates = new Set<string>();
     for (const text of texts) {
       for (const m of text.matchAll(PATH_CANDIDATE)) {
         const p = path.resolve(expandHome(m[0].replace(/[.]+$/, ""), home));
-        if (normRoots.some((r) => p === r || p.startsWith(r + path.sep)))
-          candidates.add(p);
+        if (underRoot(p)) candidates.add(p);
       }
     }
     const keys = new Set<string>();
     for (const c of candidates) {
       const res = await resolveRoot(c);
-      if (res.ok && normRoots.some((r) => res.root.startsWith(r + path.sep)))
-        keys.add(res.root);
+      if (res.ok && underRoot(res.root)) keys.add(res.root);
     }
     return [...keys];
   };

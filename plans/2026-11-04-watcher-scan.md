@@ -154,6 +154,7 @@ node wait-pr.ts <pr-url> --until green|new-failure|new-comment [--timeout S]
   - github-pr: `scanPrUrls` (`regexScan`) exported from `pull-request.ts`; manifests of both references drop `triggers`.
   - git-repo: `makeScan(roots, home?)` in `git-repo.ts`; `ROOTS = ["~/src"]` in `index.ts` is the scoping knob. Candidates use a path regex with a lookbehind (so `repo/sub` and URL paths don't match) whose char class excludes `)`/`:`/`,`, so only trailing `.` needs stripping. Resolved roots must also be under a root.
   - Fix: `resolveRoot` now walks up to an existing *directory* (previously an existing file path made `execFile` fail with ENOTDIR).
+  - Review follow-up: candidate and resolved-root checks share one `underRoot` (root itself or strictly under it), so a repo that is itself a configured root is kept; tested with `makeScan([repo])`.
   - Tests: one tier B scan test in `git-repo.test.ts` (nested repo, linked worktree, file path, missing file `:12`, `(path).`, `~` via injected home, non-repo dir, `/tmp` outside roots, relative and URL paths); github-pr test checks `scanPrUrls` dedupe and that the manifest parses with `parseWatcherManifest`.
   - skill.md documents `scan` in the protocol, `regexScan` in the example, and the reference scans.
 
