@@ -36,6 +36,10 @@ import {
   type Files,
 } from "./supervisors/file-supervisor.ts";
 import type { PullRequestViewState } from "./supervisors/pull-request-supervisor.ts";
+import type {
+  WatchedResourceView,
+  WatchSeed,
+} from "./supervisors/watch-supervisor.ts";
 import {
   ABORTED,
   type Aborted,
@@ -77,6 +81,7 @@ import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
+import type { ResourceRef } from "./watchers/watcher-registry.ts";
 export type { ContextDelivery, ThreadCoreContext, ThreadStatus, YieldState };
 /** What hooks see when no submission is running: nothing can abort them. */
 const RETIRED_CORE_SUPERVISOR: ThreadCoreCallbacks["supervisor"] = {
@@ -231,6 +236,16 @@ export class Thread implements ThreadCoreView {
   untrackPullRequest(url: string): void {
     this.core.pullRequestSupervisor?.untrack(url);
   }
+  get watchedResources(): WatchedResourceView[] {
+    return this.core.watchSupervisor?.getViewState() ?? [];
+  }
+  untrackWatchedResource(ref: ResourceRef): void {
+    this.core.watchSupervisor?.untrack(ref);
+  }
+  /** The user attended the thread: dormant watch subscriptions resume. */
+  noteAttention(): void {
+    this.core.watchSupervisor?.noteAttention();
+  }
   get trackedPullRequests(): ReadonlyArray<string> {
     return this.core.pullRequestSupervisor?.trackedPullRequests ?? [];
   }
@@ -362,6 +377,7 @@ export class Thread implements ThreadCoreView {
       core.editedFilesSupervisor,
       ...(core.gitSupervisor ? [core.gitSupervisor] : []),
       ...(core.pullRequestSupervisor ? [core.pullRequestSupervisor] : []),
+      ...(core.watchSupervisor ? [core.watchSupervisor] : []),
       ...(core.systemReminders ? [core.fileSupervisor] : []),
       ...(core.systemInfoSupervisor ? [core.systemInfoSupervisor] : []),
       ...(core.systemReminders ? [core.systemReminders] : []),
@@ -400,6 +416,7 @@ export class Thread implements ThreadCoreView {
   private createFreshCore(
     initialFiles: Files | undefined = this.context.initialFiles,
     pullRequests?: ReadonlyArray<string>,
+    watched?: ReadonlyArray<WatchSeed>,
   ): ThreadCore {
     const core = ThreadCore.create(
       this.id,
@@ -409,6 +426,7 @@ export class Thread implements ThreadCoreView {
       {
         ...(initialFiles ? { initialFiles } : {}),
         ...(pullRequests ? { pullRequests } : {}),
+        ...(watched ? { watched } : {}),
         ...(this.context.initialGitState
           ? { initialGitState: this.context.initialGitState }
           : {}),
@@ -1037,6 +1055,7 @@ export class Thread implements ThreadCoreView {
         core = this.createFreshCore(
           initialFiles,
           this.core.pullRequestSupervisor?.trackedPullRequests,
+          this.core.watchSupervisor?.seeds,
         );
         this.core.dispose();
       }

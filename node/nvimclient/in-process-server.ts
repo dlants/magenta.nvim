@@ -12,6 +12,8 @@ import {
   ServerSessionHost,
   Session,
   type SessionId,
+  SocketWatcherTransport,
+  WatcherRegistry,
 } from "@magenta/server";
 import type { MagentaOptions } from "./options.ts";
 
@@ -44,7 +46,16 @@ export function startInProcessServer(deps: {
     getClient: () => session.getClient(),
     awaitClient: () => session.awaitClient(),
   });
+  const watcherRegistry = new WatcherRegistry({
+    transport: new SocketWatcherTransport(),
+    homeDir: deps.homeDir,
+    logger: deps.logger,
+  });
+  // Triggers apply once manifests are loaded; earlier mentions are rescanned
+  // only as new messages arrive.
+  void watcherRegistry.load(deps.getBaseOptions().watchers);
   const session: Session = new Session(host, {
+    watcherRegistry,
     pullRequestMonitor: new PullRequestMonitor({
       client: new GhCliGitHubClient(),
       logger: deps.logger,

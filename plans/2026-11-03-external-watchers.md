@@ -257,6 +257,20 @@ Status: DONE.
 
 ## Magenta WatcherRegistry + WatchSupervisor
 
+Status: DONE.
+
+- [x] `watchers: string[]` in `ServerOptions` (parsed by `parseOptions` only, so project options can't add watchers); added to `SERVER_OPTION_KEYS`.
+- [x] `node/server/src/watchers/watcher-registry.ts` (`WatcherRegistry`, `WatcherTransport`, `WatcherConnection`, `LoadedWatcherManifest`, `ResourceRef`), `socket-transport.ts` (`SocketWatcherTransport`, NDJSON client + detached connect-or-spawn, server-side copy of the sdk client), `mention-scanner.ts` (generic `MentionScanner` over registry triggers).
+- [x] `node/server/src/supervisors/watch-supervisor.ts` (`WatchSupervisor`, `diffBlobs`, `watchUpdateToText`); wired in `thread-core.ts` (`watchTracking` context, `watched` seed, `ContextDelivery.watched`), `thread.ts` (`watchedResources`, `untrackWatchedResource`, `noteAttention`, compaction seeds), `session.ts` (`watcherRegistry`, `markAttended` → `thread.noteAttention()`), both hosts, `in-process-server.ts`.
+- [x] `FakeWatcherTransport` in `test/fakes.ts`; harness `watchers` option; `supervisors/watch-supervisor.test.ts` (9 tests).
+- Deviations/decisions:
+  - `WatchSupervisor` runs alongside `PullRequestSupervisor` instead of replacing it, so the existing PR view/protocol keep working until stages 5/6; the PR path is only active via `pullRequestRepos`.
+  - Diff text is changed lines only (`- old` / `+ new`, via the `diff` package), under `## <watcher>: <key> (changed lines)`; first delivery is `## <watcher>: <key>` + full blob. An empty `context` with nothing seen injects nothing (so `unavailable` with no blob is silent).
+  - Compaction replacement seeds the new core with each resource's agent-seen blob (`WatchSeed.seen`, history entry at idx 0), so it is not re-delivered (the old PR path re-delivered the full snapshot).
+  - Dormancy: supervisor checks `now - getLastAttention() >= 5min` every 30s, on `onBeforeRequest`, and on `Session.markAttended`; dormant → unsubscribe all keys, keep the last state, `paused: true` in the view.
+  - Connection drop → reconnect after 1s and resubscribe; connect failure → resources become `unavailable` ("watcher unreachable: ...") with `subscribed=false` (no automatic retry until re-tracked/re-attended).
+  - Registry `load()` is async (fs read); `in-process-server.ts` fires it at startup. Manifests are not re-read on options reload yet. Tests use `setManifests`.
+
 - Goal: `watchers` option parsed (user-level only); `WatcherRegistry` loads manifests and auto-spawns; each `WatchSupervisor` owns one connection per watcher it uses (reconnecting and resubscribing on drop) and caches the latest pushed state; `MentionScanner` uses manifest triggers; `WatchSupervisor` replaces `PullRequestSupervisor` in `thread-core.ts`/`thread.ts`; supervisors unsubscribe after the dormancy timeout and resubscribe on attention. Old PR path still present but unused behind no config.
 - Tests (tier A, fake `WatcherTransport` in `test/fakes.ts`, harness):
   - mentioning a matching key in a user message subscribes once; a key the watcher rejects shows as `unavailable`.

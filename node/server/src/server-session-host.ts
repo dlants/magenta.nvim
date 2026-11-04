@@ -427,6 +427,14 @@ export class ServerSessionHost implements SessionHost {
       getScriptRunner,
       fileIO: env.fileIO,
       gitClient: env.gitClient,
+      ...(session.watcherRegistry
+        ? {
+            watchTracking: {
+              registry: session.watcherRegistry,
+              getLastAttention: () => session.getLastAttention(id) ?? 0,
+            },
+          }
+        : {}),
       ...(session.pullRequestMonitor
         ? {
             pullRequestTracking: {

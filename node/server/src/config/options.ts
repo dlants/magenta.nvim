@@ -131,6 +131,9 @@ export type ServerOptions = {
    * tracked. PR comments are injected into context, so this is user-level
    * only: a cloned project must not be able to opt itself in. */
   pullRequestRepos: string[];
+  /** Watcher manifest paths. Watchers run user commands and feed context, so
+   * this is user-level only (not parsed from project options). */
+  watchers: string[];
   agentsPaths: string[];
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
@@ -829,6 +832,7 @@ export function parseOptions(
     scriptsPaths: ["~/.magenta/scripts", ".magenta/scripts"],
     suppressProjectSkills: [],
     pullRequestRepos: [],
+    watchers: [],
     agentsPaths: [
       BUILTIN_AGENTS_PATH,
       "~/.claude/agents",
@@ -887,6 +891,13 @@ export function parseOptions(
       options.scriptsPaths = parseStringArray(
         inputOptionsObj.scriptsPaths,
         "scriptsPaths",
+      );
+    }
+    if ("watchers" in inputOptionsObj) {
+      options.watchers = parseStringArray(
+        inputOptionsObj.watchers,
+        "watchers",
+        logger,
       );
     }
     if ("pullRequestRepos" in inputOptionsObj) {

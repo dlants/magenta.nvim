@@ -370,6 +370,7 @@ export type {
   PullRequestUpdate,
   PullRequestViewState,
 } from "./supervisors/pull-request-supervisor.ts";
+export * from "./supervisors/watch-supervisor.ts";
 export {
   type CompactThreadContext,
   type ContextFileAccess,
@@ -586,4 +587,7 @@ export {
   type Row0Indexed,
   type StringIdx,
 } from "./utils/string-position.ts";
+export { MentionScanner } from "./watchers/mention-scanner.ts";
 export * from "./watchers/protocol.ts";
+export { SocketWatcherTransport } from "./watchers/socket-transport.ts";
+export * from "./watchers/watcher-registry.ts";

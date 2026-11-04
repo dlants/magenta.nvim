@@ -33,6 +33,11 @@ import {
   type PullRequestContextUpdate,
   PullRequestSupervisor,
 } from "./supervisors/pull-request-supervisor.ts";
+import {
+  type WatchContextUpdate,
+  type WatchSeed,
+  WatchSupervisor,
+} from "./supervisors/watch-supervisor.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
 import type { ToolInvocationState, ToolLoopResult } from "./thread-api.ts";
 import {
@@ -46,6 +51,8 @@ import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
 import type { Task } from "./utils/async.ts";
 import type { AbsFilePath, HomeDir } from "./utils/files.ts";
+import { MentionScanner } from "./watchers/mention-scanner.ts";
+import type { WatcherRegistry } from "./watchers/watcher-registry.ts";
 
 export interface ThreadCoreContext {
   logger: Logger;
@@ -67,6 +74,12 @@ export interface ThreadCoreContext {
     getLastAttention: () => number;
     isRepoAllowed: (url: string) => boolean;
   };
+  /** Absent: watcher triggers are not scanned. `getLastAttention` (ms epoch)
+   * drives dormancy unsubscription. */
+  watchTracking?: {
+    registry: WatcherRegistry;
+    getLastAttention: () => number;
+  };
   /** Absent: never count, always proceed. */
   tokenBudget?: TokenBudget;
   threadToolCreator: ThreadToolCreator;
@@ -78,6 +91,7 @@ export type ContextDelivery = {
   files?: FileUpdates;
   git?: GitContextUpdate;
   pullRequests?: PullRequestContextUpdate;
+  watched?: WatchContextUpdate;
 };
 
 export interface ThreadCoreCallbacks {
@@ -95,6 +109,8 @@ export type ThreadCoreSeed = {
   initialGitState?: Promise<GitState | undefined>;
   /** Pull requests tracked by the core this one replaces. */
   pullRequests?: ReadonlyArray<string>;
+  /** Resources watched by the core this one replaces. */
+  watched?: ReadonlyArray<WatchSeed>;
 };
 
 interface ThreadCoreState {
@@ -103,6 +119,7 @@ interface ThreadCoreState {
   gitSupervisor: GitSupervisor | undefined;
   systemInfoSupervisor: SystemInfoSupervisor | undefined;
   pullRequestSupervisor: PullRequestSupervisor | undefined;
+  watchSupervisor: WatchSupervisor | undefined;
   systemReminders: SystemReminderSupervisor | undefined;
   editedFilesSupervisor: EditedFilesSupervisor;
   edlRegisters: EdlRegisters;
@@ -118,6 +135,7 @@ export class ThreadCore {
   readonly fileSupervisor: FileSupervisor;
   readonly gitSupervisor: GitSupervisor | undefined;
   readonly pullRequestSupervisor: PullRequestSupervisor | undefined;
+  readonly watchSupervisor: WatchSupervisor | undefined;
   readonly systemInfoSupervisor: SystemInfoSupervisor | undefined;
   readonly systemReminders: SystemReminderSupervisor | undefined;
   /** Index of the fork-notification message, on a core created by a fork. */
@@ -129,6 +147,7 @@ export class ThreadCore {
   /** Each core scans its own history from scratch, so after compaction the
    * mentions come from the summary. */
   private readonly pullRequestScanner: PullRequestMentionScanner;
+  private readonly mentionScanner: MentionScanner;
 
   static create(
     id: ThreadId,
@@ -171,6 +190,14 @@ export class ThreadCore {
               monitor: context.pullRequestTracking.monitor,
               getLastAttention: context.pullRequestTracking.getLastAttention,
               ...(seed.pullRequests ? { track: seed.pullRequests } : {}),
+            })
+          : undefined,
+      watchSupervisor:
+        context.watchTracking && context.threadType !== "compact"
+          ? WatchSupervisor.create({
+              registry: context.watchTracking.registry,
+              getLastAttention: context.watchTracking.getLastAttention,
+              ...(seed.watched ? { track: seed.watched } : {}),
             })
           : undefined,
       systemInfoSupervisor:
@@ -265,6 +292,12 @@ export class ThreadCore {
               : {}),
           })
         : undefined,
+      watchSupervisor: source.watchSupervisor
+        ? WatchSupervisor.clone({
+            source: source.watchSupervisor,
+            nativeMessageIdx,
+          })
+        : undefined,
       systemInfoSupervisor: source.systemInfoSupervisor
         ? SystemInfoSupervisor.clone({
             source: source.systemInfoSupervisor,
@@ -305,6 +338,7 @@ export class ThreadCore {
     this.fileSupervisor = state.fileSupervisor;
     this.gitSupervisor = state.gitSupervisor;
     this.pullRequestSupervisor = state.pullRequestSupervisor;
+    this.watchSupervisor = state.watchSupervisor;
     this.systemInfoSupervisor = state.systemInfoSupervisor;
     this.systemReminders = state.systemReminders;
     this.editedFilesSupervisor = state.editedFilesSupervisor;
@@ -323,6 +357,17 @@ export class ThreadCore {
       },
     );
     this.pullRequestScanner.schedule();
+    this.mentionScanner = new MentionScanner(
+      () => this.manager.log.messages,
+      () => context.watchTracking?.registry.triggers() ?? [],
+      () => {
+        for (const ref of this.mentionScanner.mentioned) {
+          this.watchSupervisor?.track(ref);
+        }
+        callbacks.onUpdate();
+      },
+    );
+    if (this.watchSupervisor) this.mentionScanner.schedule();
     this.createTool = context.threadToolCreator({
       contextTracker: this.fileSupervisor,
       edlRegisters: this.edlRegisters,
@@ -349,6 +394,12 @@ export class ThreadCore {
       this.pullRequestSupervisor.callbacks = {
         onSent: (pullRequests, idx) =>
           this.recordDelivery(idx, { pullRequests }),
+        onChanged: () => callbacks.onUpdate(),
+      };
+    }
+    if (this.watchSupervisor) {
+      this.watchSupervisor.callbacks = {
+        onSent: (watched, idx) => this.recordDelivery(idx, { watched }),
         onChanged: () => callbacks.onUpdate(),
       };
     }
@@ -381,6 +432,7 @@ export class ThreadCore {
   private handleUpdate(): void {
     this.callbacks.onUpdate();
     this.pullRequestScanner.schedule();
+    if (this.watchSupervisor) this.mentionScanner.schedule();
   }
 
   /** Releases conversation-local resources. The owner aborts and awaits any
@@ -390,6 +442,8 @@ export class ThreadCore {
     this.pullRequestScanner.dispose();
     if (this.gitSupervisor) this.gitSupervisor.callbacks = {};
     this.pullRequestSupervisor?.dispose();
+    this.mentionScanner.dispose();
+    this.watchSupervisor?.dispose();
   }
 
   private resultMessageIdx: NativeMessageIdx | undefined;

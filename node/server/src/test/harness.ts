@@ -62,11 +62,14 @@ import {
   toProjectDir,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
+import type { WatcherManifest } from "../watchers/protocol.ts";
+import { WatcherRegistry } from "../watchers/watcher-registry.ts";
 import {
   FakeGitClient,
   FakeGitHubClient,
   FakeShell,
   type FakeShellScript,
+  FakeWatcherTransport,
 } from "./fakes.ts";
 import { MockSandboxManager } from "./mock-sandbox-manager.ts";
 
@@ -110,6 +113,8 @@ export type HarnessOptions = {
   luaExecutor?: LuaExecutor;
   /** Poll interval of the session PullRequestMonitor (default 30s). */
   pullRequestPollIntervalMs?: number;
+  /** Enables watcher tracking over `host.watchers` with these manifests. */
+  watchers?: ReadonlyArray<WatcherManifest>;
   /** Real MCPToolManager over the given (e.g. `type: "mock"`) servers. */
   mcpServers?: MCPServersConfig;
   /** Gate the fake shell/fileIO behind the real `SandboxShell`/`SandboxFileIO`
@@ -179,6 +184,7 @@ export class TestSessionHost implements SessionHost {
   readonly fileIO: InMemoryFileIO;
   readonly git: FakeGitClient;
   readonly github = new FakeGitHubClient();
+  readonly watchers = new FakeWatcherTransport();
   readonly shell: FakeShell;
   /** Default projectDir for threads created without an explicit local `projectDir`. Mutable so tests can model the client moving. */
   projectDir: ProjectDir;
@@ -360,6 +366,14 @@ export class TestSessionHost implements SessionHost {
       getScriptRunner,
       fileIO,
       gitClient: this.git,
+      ...(session.watcherRegistry
+        ? {
+            watchTracking: {
+              registry: session.watcherRegistry,
+              getLastAttention: () => session.getLastAttention(id) ?? 0,
+            },
+          }
+        : {}),
       ...(session.pullRequestMonitor
         ? {
             pullRequestTracking: {
@@ -452,7 +466,23 @@ export type Harness = {
 
 export function createHarness(options: HarnessOptions = {}): Harness {
   const host = new TestSessionHost(options);
+  let watcherRegistry: WatcherRegistry | undefined;
+  if (options.watchers) {
+    watcherRegistry = new WatcherRegistry({
+      transport: host.watchers,
+      homeDir: host.homeDir,
+      logger: noopLogger,
+    });
+    watcherRegistry.setManifests(
+      options.watchers.map((m) => ({
+        ...m,
+        dir: "/watchers",
+        socketPath: `/watchers/${m.name}.sock`,
+      })),
+    );
+  }
   const session = new Session(host, {
+    ...(watcherRegistry ? { watcherRegistry } : {}),
     pullRequestMonitor: new PullRequestMonitor({
       client: host.github,
       logger: noopLogger,

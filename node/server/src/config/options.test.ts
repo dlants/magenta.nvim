@@ -37,6 +37,7 @@ function makeBaseOptions(overrides?: Partial<ServerOptions>): ServerOptions {
     scriptsPaths: [],
     suppressProjectSkills: [],
     pullRequestRepos: [],
+    watchers: [],
     agentsPaths: [],
     mcpServers: {},
     customCommands: [],

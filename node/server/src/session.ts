@@ -46,6 +46,7 @@ import type {
   ProjectDir,
   UnresolvedFilePath,
 } from "./utils/files.ts";
+import type { WatcherRegistry } from "./watchers/watcher-registry.ts";
 
 export type SessionId = string & { __sessionId: true };
 
@@ -224,12 +225,17 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
   private selectedProfileName: string | undefined;
   /** Session-lifetime, so every thread tracking a PR shares one poller. */
   readonly pullRequestMonitor: PullRequestMonitor | undefined;
+  readonly watcherRegistry: WatcherRegistry | undefined;
   constructor(
     private host: SessionHost,
-    opts: { pullRequestMonitor?: PullRequestMonitor } = {},
+    opts: {
+      pullRequestMonitor?: PullRequestMonitor;
+      watcherRegistry?: WatcherRegistry;
+    } = {},
   ) {
     super();
     this.pullRequestMonitor = opts.pullRequestMonitor;
+    this.watcherRegistry = opts.watcherRegistry;
   }
 
   /** Applies to threads created afterwards. Kept in memory only. */
@@ -360,6 +366,7 @@ export class Session extends Emitter<SessionEvents> implements ThreadManager {
     if (!record) return;
     record.lastAttentionTime = Date.now();
     this.pullRequestMonitor?.noteAttention();
+    if (record.state === "initialized") record.thread.noteAttention();
   }
   /** A running thread counts as attended now. Undefined for unknown threads. */
   getLastAttention(id: ThreadId): number | undefined {
