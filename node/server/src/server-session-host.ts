@@ -8,7 +8,6 @@ import {
   clientLuaExecutor,
 } from "./capabilities/client.ts";
 import { FsFileIO } from "./capabilities/file-io.ts";
-import { type GitState, readGitStateAt } from "./capabilities/git-client.ts";
 import { NoopLspClient } from "./capabilities/noop-lsp-client.ts";
 import type { SubagentConfig, ThreadId } from "./chat-types.ts";
 import {
@@ -92,8 +91,6 @@ export type PreparedThreadInfo = {
   profile: ProviderProfile;
   environment: Environment;
   initialFiles?: Files;
-  /** Undefined for forks, which inherit the source's git context. */
-  initialGitState: Promise<GitState | undefined> | undefined;
   subagentConfig?: SubagentConfig;
   systemInfo: SystemInfo;
   yieldSchema?: JSONSchemaType;
@@ -327,17 +324,6 @@ export class ServerSessionHost implements SessionHost {
       environment.sandboxViolationHandler = undefined;
     }
 
-    // Not awaited: a git read costs several process spawns, and nothing needs it
-    // until the first request, where the system info and git tracker await it.
-    const initialGitState = source
-      ? undefined
-      : readGitStateAt(environment.gitClient, environment.projectDir).catch(
-          (error: unknown) => {
-            logger.error(`Failed to read initial git state: ${String(error)}`);
-            return undefined;
-          },
-        );
-
     const systemInfo =
       source?.systemInfo ??
       buildSystemInfo({
@@ -368,7 +354,6 @@ export class ServerSessionHost implements SessionHost {
               request.loadedContextFiles,
             )
           : autoContextFilesToInitialFiles(autoContextFiles),
-      initialGitState,
       systemInfo,
       ...(subagentConfig ? { subagentConfig } : {}),
       ...(yieldSchema ? { yieldSchema } : {}),
@@ -414,9 +399,6 @@ export class ServerSessionHost implements SessionHost {
       profile: info.profile,
       homeDir,
       ...(info.initialFiles ? { initialFiles: info.initialFiles } : {}),
-      ...(info.initialGitState
-        ? { initialGitState: info.initialGitState }
-        : {}),
       ...(info.subagentConfig ? { subagentConfig: info.subagentConfig } : {}),
       systemPrompt,
       systemInfo: info.systemInfo,
@@ -424,7 +406,6 @@ export class ServerSessionHost implements SessionHost {
       threadManager: session,
       getScriptRunner,
       fileIO: env.fileIO,
-      gitClient: env.gitClient,
       ...(session.watcherRegistry
         ? {
             watchTracking: {

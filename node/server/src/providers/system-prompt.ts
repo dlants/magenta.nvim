@@ -1,6 +1,5 @@
 import { loadAgents } from "../agents/agents.ts";
 import type { FileIO } from "../capabilities/file-io.ts";
-import { formatGitInfo, type GitState } from "../capabilities/git-client.ts";
 import type { SubagentConfig, ThreadType } from "../chat-types.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderOptions } from "../provider-options.ts";
@@ -18,7 +17,6 @@ export interface SystemInfo {
   platform: string;
   neovimVersion: string;
   projectDir: ProjectDir;
-  git?: GitState | undefined;
 }
 
 export const COMPACT_SYSTEM_PROMPT =
@@ -113,7 +111,7 @@ export async function createSystemPrompt(
   return (basePrompt + skillsText + reminderText) as SystemPrompt;
 }
 
-// The system info (timestamp, projectDir, git state) is volatile and would bust the
+// The system info (timestamp, projectDir) is volatile and would bust the
 // cached system-prompt + tools prefix if included in the system prompt. Instead
 // we prepend it to the first user message of a thread so the system prefix stays
 // byte-identical across threads.
@@ -125,6 +123,5 @@ export function formatSystemInfo(systemInfo: SystemInfo): string {
 - Neovim version: ${systemInfo.neovimVersion}
 - The user started this thread from: ${systemInfo.projectDir}
 - There is no working directory: bash commands start at \`/\` and file tools require absolute paths. Use absolute file paths in all tool calls and when showing paths to the user.
-${formatGitInfo(systemInfo.git)}
 </system-info>`;
 }

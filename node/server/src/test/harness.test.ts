@@ -8,19 +8,9 @@ import {
 } from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
-import type { AbsFilePath, ProjectDir } from "../utils/files.ts";
+import type { ProjectDir } from "../utils/files.ts";
 import { FakeShell, shellResult } from "./fakes.ts";
 import { withHarness } from "./harness.ts";
-
-const git = {
-  repoRoot: "/project" as AbsFilePath,
-  branch: "feature-x",
-  headSha: "abc123",
-  headSubject: "init",
-  stagedCount: 0,
-  unstagedCount: 0,
-  untrackedCount: 0,
-};
 
 it("sends a message and records the response", () =>
   withHarness({}, async (h) => {
@@ -103,14 +93,14 @@ it("resolves @file: against the in-memory fs into context", () =>
     },
   ));
 
-it("puts git state in the first message's system info", () =>
-  withHarness({ git }, async (h) => {
+it("puts the project dir, and no git state, in the first message's system info", () =>
+  withHarness({}, async (h) => {
     const { thread } = await h.createRoot();
     void h.send(thread, "hi");
     await h.nextStream();
-    expect(JSON.stringify(thread.getProviderMessages()[0])).toContain(
-      "feature-x",
-    );
+    const first = JSON.stringify(thread.getProviderMessages()[0]);
+    expect(first).toContain("The user started this thread from: /project");
+    expect(first).not.toContain("Git");
   }));
 
 it("disposal leaves no threads behind", async () => {
@@ -184,21 +174,6 @@ it("terminate settles pending shell commands with SIGTERM", async () => {
   });
   expect(shell.pending).toEqual([]);
 });
-it("forks keep the source's system info rather than re-reading git", () =>
-  withHarness({ git }, async (h) => {
-    const { id, thread } = await h.createRoot();
-    const done = h.send(thread, "hello");
-    const stream = await h.nextStream();
-    stream.finishResponse("end_turn");
-    await done;
-    h.git.set({ ...git, branch: "other-branch" });
-    const forkId = await created(h.session.forkThread(id));
-    const fork = h.thread(forkId);
-
-    const first = JSON.stringify(fork.getProviderMessages()[0]);
-    expect(first).toContain("feature-x");
-    expect(first).not.toContain("other-branch");
-  }));
 it("seeds autoContext files from the in-memory fs", () =>
   withHarness(
     {

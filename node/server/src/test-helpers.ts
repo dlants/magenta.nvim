@@ -278,9 +278,6 @@ function baseTestContext(
       fileExists: async () => false,
       stat: async () => undefined,
     }),
-    gitClient: stub<ThreadContext["gitClient"]>({
-      getState: async () => undefined,
-    }),
     availableCapabilities: new Set(),
     environmentConfig: { type: "local" },
     getAgents: () => ({}),

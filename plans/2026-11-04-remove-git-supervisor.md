@@ -94,3 +94,4 @@ SystemInfoSupervisor.create(args: { systemInfo: SystemInfo; alreadyInjected: boo
   - system info text contains the project dir and no git line (update the existing system-info assertions).
   - `git-clients.test.ts` deleted with the client. Grep shows no remaining `GitClient`/`GitState` references outside the reference watchers.
   - `npx tsc -b`, full `npx vitest run`.
+- Status: done. All three git-client files deleted (`parseRepoRoot` had no other users). `SystemInfoSupervisor` no longer awaits anything. Tests: harness test now asserts the first message has the project dir and no `Git`; `SystemInfoSupervisor` 'waits for git' test replaced by a project-dir/no-git assertion; harness 'forks keep source git' test deleted; `setGit`/`FakeGitClient` removed from `thread-core-context.test.ts`. `context.md` updated.

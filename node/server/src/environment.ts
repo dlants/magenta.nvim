@@ -1,6 +1,4 @@
 import type { FileIO } from "./capabilities/file-io.ts";
-import type { GitClient } from "./capabilities/git-client.ts";
-import { LocalGitClient } from "./capabilities/git-clients.ts";
 import type { LspClient } from "./capabilities/lsp-client.ts";
 import type { LuaExecutor } from "./capabilities/lua-executor.ts";
 import { SandboxFileIO } from "./capabilities/sandbox-file-io.ts";
@@ -23,7 +21,6 @@ export type EnvironmentConfig = { type: "local"; projectDir?: ProjectDir };
 export interface Environment {
   fileIO: FileIO;
   shell: Shell;
-  gitClient: GitClient;
   sandboxViolationHandler?: SandboxViolationHandler | undefined;
   /** Editor-backed; its presence is what offers the lsp tools. */
   lspClient?: LspClient | undefined;
@@ -92,7 +89,6 @@ export function createLocalEnvironment({
   return {
     fileIO: sandboxFileIO,
     shell: sandboxShell,
-    gitClient: new LocalGitClient(),
     sandboxViolationHandler: violationHandler,
     lspClient,
     luaExecutor,

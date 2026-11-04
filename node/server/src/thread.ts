@@ -1,6 +1,5 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import type { AgentsMap } from "./agents/agents.ts";
-import type { GitState } from "./capabilities/git-client.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
@@ -113,7 +112,6 @@ export interface ThreadContextBase
   yieldSchema?: JSONSchemaType;
   getScriptRunner?: () => ScriptRunner | undefined;
   initialFiles?: Files;
-  initialGitState?: Promise<GitState | undefined>;
   readonly resolve: ResolveSubmission;
   readonly submissionSupervisors?: readonly SubmissionSupervisor[];
   readonly toolLoopSupervisors?: readonly ToolLoopSupervisor[];
@@ -414,9 +412,6 @@ export class Thread implements ThreadCoreView {
         watch: watched
           ? { type: "inherit", watched }
           : { type: "scan", texts: [this.context.systemInfo.projectDir] },
-        ...(this.context.initialGitState
-          ? { initialGitState: this.context.initialGitState }
-          : {}),
       },
     );
     return core;

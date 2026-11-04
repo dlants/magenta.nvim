@@ -1,6 +1,5 @@
 import type { AgentsMap } from "../agents/agents.ts";
 import type { FileIO } from "../capabilities/file-io.ts";
-import { type GitState, readGitStateAt } from "../capabilities/git-client.ts";
 import type { LspClient } from "../capabilities/lsp-client.ts";
 import type { LuaExecutor } from "../capabilities/lua-executor.ts";
 import { SandboxFileIO } from "../capabilities/sandbox-file-io.ts";
@@ -64,14 +63,13 @@ import {
 import type { WatcherManifest } from "../watchers/protocol.ts";
 import { WatcherRegistry } from "../watchers/watcher-registry.ts";
 import {
-  FakeGitClient,
   FakeShell,
   type FakeShellScript,
   FakeWatcherTransport,
 } from "./fakes.ts";
 import { MockSandboxManager } from "./mock-sandbox-manager.ts";
 
-export { FakeGitClient, FakeShell, type FakeShellScript } from "./fakes.ts";
+export { FakeShell, type FakeShellScript } from "./fakes.ts";
 
 export type HarnessThreadOptions = {
   autoCompactThreshold?: number;
@@ -102,7 +100,6 @@ export type HarnessOptions = {
   files?: Record<string, string>;
   projectDir?: ProjectDir;
   homeDir?: string;
-  git?: GitState | GitState[];
   shell?: FakeShellScript;
   agents?: AgentsMap;
   options?: Partial<HarnessThreadOptions>;
@@ -178,7 +175,6 @@ export class TestSessionHost implements SessionHost {
   readonly mockClient = new MockAnthropicClient();
   readonly provider = createMockProvider(this.mockClient);
   readonly fileIO: InMemoryFileIO;
-  readonly git: FakeGitClient;
   readonly watchers = new FakeWatcherTransport();
   readonly shell: FakeShell;
   /** Default projectDir for threads created without an explicit local `projectDir`. Mutable so tests can model the client moving. */
@@ -213,7 +209,6 @@ export class TestSessionHost implements SessionHost {
     this.projectDir = opts.projectDir ?? toProjectDir("/project");
     this.homeDir = (opts.homeDir ?? "/home") as HomeDir;
     this.fileIO = new InMemoryFileIO(opts.files ?? {});
-    this.git = new FakeGitClient(opts.git);
     this.shell = new FakeShell(opts.shell);
     this.agents = opts.agents ?? {};
     this.resolve = opts.resolve ?? defaultHarnessResolve;
@@ -325,9 +320,6 @@ export class TestSessionHost implements SessionHost {
             homeDir,
             globs: this.options.autoContext,
           });
-    const initialGitState = source
-      ? undefined
-      : readGitStateAt(this.git, projectDir);
     const systemInfo =
       source?.systemInfo ??
       buildSystemInfo({
@@ -352,7 +344,6 @@ export class TestSessionHost implements SessionHost {
       profile,
       homeDir,
       initialFiles: autoContextFilesToInitialFiles(autoContextFiles),
-      ...(initialGitState ? { initialGitState } : {}),
       ...(subagentConfig ? { subagentConfig } : {}),
       systemPrompt,
       systemInfo,
@@ -360,7 +351,6 @@ export class TestSessionHost implements SessionHost {
       threadManager: session,
       getScriptRunner,
       fileIO,
-      gitClient: this.git,
       ...(session.watcherRegistry
         ? {
             watchTracking: {
@@ -436,7 +426,6 @@ export type Harness = {
   host: TestSessionHost;
   mockClient: MockAnthropicClient;
   fileIO: InMemoryFileIO;
-  git: FakeGitClient;
   shell: FakeShell;
   sandbox: MockSandboxManager;
   createRoot(): Promise<{ id: ThreadId; thread: Thread }>;
@@ -482,7 +471,6 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     host,
     mockClient: host.mockClient,
     fileIO: host.fileIO,
-    git: host.git,
     shell: host.shell,
     sandbox: host.sandbox,
     async createRoot() {

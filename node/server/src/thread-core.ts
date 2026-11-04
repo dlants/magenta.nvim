@@ -1,5 +1,4 @@
 import type { FileIO } from "./capabilities/file-io.ts";
-import type { GitClient, GitState } from "./capabilities/git-client.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
 import type { BudgetDecision, TokenBudget } from "./compaction/token-budget.ts";
 import type { EdlRegisters } from "./edl/index.ts";
@@ -55,7 +54,6 @@ export interface ThreadCoreContext {
   systemPrompt: SystemPrompt;
   systemInfo: SystemInfo;
   fileIO: FileIO;
-  gitClient: GitClient;
   discoverHierarchy?: HierarchyDiscovery;
   /** Absent: messages are not scanned for watched resources. `getLastAttention` (ms epoch)
    * drives dormancy unsubscription. */
@@ -87,7 +85,6 @@ export interface ThreadCoreCallbacks {
 
 export type ThreadCoreSeed = {
   initialFiles?: Files;
-  initialGitState?: Promise<GitState | undefined>;
   /** `inherit`: resources watched by the core this one replaces.
    * `scan`: texts scanned once at creation, before any message mentions them. */
   watch?:
@@ -168,7 +165,6 @@ export class ThreadCore {
         context.threadType !== "compact"
           ? SystemInfoSupervisor.create({
               systemInfo: context.systemInfo,
-              ...(seed.initialGitState ? { git: seed.initialGitState } : {}),
               alreadyInjected: manager.log.messages.length > 0,
             })
           : undefined,

@@ -28,15 +28,6 @@ export type {
 } from "./capabilities/context-tracker.ts";
 export type { FileIO } from "./capabilities/file-io.ts";
 export { FsFileIO } from "./capabilities/file-io.ts";
-export {
-  formatGitHead,
-  formatGitInfo,
-  type GitClient,
-  type GitCommandRunner,
-  type GitState,
-  parseGitState,
-} from "./capabilities/git-client.ts";
-export { LocalGitClient } from "./capabilities/git-clients.ts";
 export type {
   LspClient,
   LspDefinitionResponse,

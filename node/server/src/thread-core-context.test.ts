@@ -1,14 +1,12 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: White-box lifecycle tests deliberately access private implementation state.
 import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { GitState } from "./capabilities/git-client.ts";
 import { TokenBudget } from "./compaction/token-budget.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import { pendingMessage } from "./submission/index.ts";
 import { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import { PRE_HISTORY } from "./supervisors/history.ts";
-import { FakeGitClient } from "./test/fakes.ts";
 import {
   awaitNextStream,
   cleanupArchive,
@@ -39,23 +37,11 @@ async function fixture(overrides: TestContextOverrides = {}) {
   const homeDir = projectDir as unknown as HomeDir;
   const file = path.join(projectDir, "tracked.txt") as AbsFilePath;
   const fileIO = new InMemoryFileIO({ [file]: "original tracked content\n" });
-  const git: GitState = {
-    repoRoot: projectDir,
-    branch: "initial-branch",
-    headSha: "111111111",
-    headSubject: "initial commit",
-    stagedCount: 0,
-    unstagedCount: 0,
-    untrackedCount: 0,
-  };
-  const gitClient = new FakeGitClient(git);
   const create = vi.spyOn(FileSupervisor, "create");
   const { core: thread, mockClient } = createAgentWithMock(
     {
       homeDir,
       fileIO,
-      initialGitState: Promise.resolve(git),
-      gitClient,
       ...overrides,
     },
     uniqueThreadId("core-context"),
@@ -104,13 +90,6 @@ async function fixture(overrides: TestContextOverrides = {}) {
     fileDeliveries: () =>
       getContextDeliveries(thread).filter((delivery) => delivery.files).length,
     request,
-    setGit: () => {
-      gitClient.set({
-        ...git,
-        branch: "replacement-branch",
-        headSha: "222222222",
-      });
-    },
     async cleanup() {
       await thread.destroy();
       await flushArchive(thread);
@@ -151,10 +130,6 @@ describe("Thread-owned context delivery", () => {
     try {
       await f.request();
       const fileIO = new InMemoryFileIO({ [f.file]: "destination content" });
-      const gitClient = {
-        findRepoRoot: vi.fn(async () => undefined),
-        getState: vi.fn(async () => undefined),
-      };
       fork = await cloneThread({
         sourceThread: f.thread,
         newId: uniqueThreadId("destination"),
@@ -162,7 +137,6 @@ describe("Thread-owned context delivery", () => {
         context: {
           ...f.thread["context"],
           fileIO,
-          gitClient,
         },
         callbacks: { onUpdate: () => {} },
       });
@@ -243,7 +217,6 @@ describe("Thread-owned context delivery", () => {
       expect(first).toContain("original tracked content");
       expect(first).toContain("<system-info>");
       const oldCore = f.thread["core"];
-      f.setGit();
       await f.fileIO.writeFile(f.file, "replacement tracked content\n");
       let replacement: string;
       if (operation === "reset") {
@@ -355,7 +328,6 @@ describe("Thread-owned context delivery", () => {
     const f = await fixture();
     try {
       await f.request();
-      f.setGit();
       const text = await f.request(f.thread, "after git change");
       expect(text).toContain("tracked content");
       expect(text).not.toContain("Git status update");
@@ -494,7 +466,6 @@ describe("Thread-owned context delivery", () => {
       },
     });
     try {
-      f.setGit();
       f.mockClient.mockInputTokenCountOnce = 200;
       const sent = f.thread.submit({
         type: "resolved",

@@ -74,9 +74,6 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
       writeFile: async () => {},
       fileExists: async () => false,
     } as unknown as ThreadContext["fileIO"],
-    gitClient: {
-      getState: async () => undefined,
-    } as unknown as ThreadContext["gitClient"],
     availableCapabilities: new Set(),
     environmentConfig: { type: "local" },
     clientToolCreator: clientToolCreator({

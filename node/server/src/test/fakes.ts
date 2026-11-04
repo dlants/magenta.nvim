@@ -1,4 +1,3 @@
-import type { GitClient, GitState } from "../capabilities/git-client.ts";
 import type { OutputLine, Shell, ShellResult } from "../capabilities/shell.ts";
 import type {
   ClientEffectHandler,
@@ -10,39 +9,12 @@ import type {
 } from "../protocol/client.ts";
 import { createClientEffectHandler } from "../protocol/client.ts";
 import { Defer } from "../utils/async.ts";
-import type { AbsFilePath } from "../utils/files.ts";
 import type { ResourceState, WatcherName } from "../watchers/protocol.ts";
 import type {
   LoadedWatcherManifest,
   WatcherConnection,
   WatcherTransport,
 } from "../watchers/watcher-registry.ts";
-
-/** A git client whose state the test sets directly, e.g. to simulate a branch
- * switch between turns. */
-export class FakeGitClient implements GitClient {
-  private repos = new Map<AbsFilePath, GitState>();
-  constructor(states?: GitState | GitState[]) {
-    for (const state of [states ?? []].flat()) this.set(state);
-  }
-  /** Adds or replaces the repo at `state.repoRoot`. */
-  set(state: GitState): void {
-    this.repos.set(state.repoRoot, { ...state });
-  }
-  remove(repoRoot: AbsFilePath): void {
-    this.repos.delete(repoRoot);
-  }
-  findRepoRoot(path: AbsFilePath): Promise<AbsFilePath | undefined> {
-    const roots = [...this.repos.keys()]
-      .filter((root) => path === root || path.startsWith(`${root}/`))
-      .sort((a, b) => b.length - a.length);
-    return Promise.resolve(roots.at(0));
-  }
-  getState(repoRoot: AbsFilePath): Promise<GitState | undefined> {
-    const state = this.repos.get(repoRoot);
-    return Promise.resolve(state && { ...state });
-  }
-}
 
 export type FakeShellResponse = {
   exitCode?: number;
