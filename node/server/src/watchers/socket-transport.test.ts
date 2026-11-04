@@ -47,7 +47,6 @@ it("subscribes, receives pushed states and reports close over a real socket", as
       name: "w" as WatcherName,
       protocolVersion: 1,
       command: ["false"],
-      triggers: [],
       dir,
       socketPath,
     });
@@ -79,7 +78,6 @@ it("fails to connect when nothing listens and the command cannot start one", asy
       name: "w" as WatcherName,
       protocolVersion: 1,
       command: ["true"],
-      triggers: [],
       dir,
       socketPath: path.join(dir, "none.sock"),
     }),

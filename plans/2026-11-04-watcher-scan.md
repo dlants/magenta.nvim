@@ -138,6 +138,12 @@ node wait-pr.ts <pr-url> --until green|new-failure|new-comment [--timeout S]
   - scan failure: submission succeeds, nothing tracked, error logged.
   - untracked key returned by a later scan stays untracked.
   - after scanning with no keys, the supervisor's connection to that watcher is closed.
+- Status: done.
+  - `triggers` removed from magenta `WatcherManifest`/parser and the sdk test manifest; registry gained `names()` and `logError()`.
+  - `WatchSupervisor.scan` counts in-flight scans per watcher; `closeIfUnused` runs after each scan and on `untrack`. An unreachable watcher during scan is logged as a scan failure (not shown as an unavailable resource, since nothing is tracked).
+  - `MentionScanner` skips fields `type`, `id`, `data`, `citations` (type/id strings are noise), filters empty strings, batches to 256KB, truncates strings to 64KB; scans are fire-and-forget. Unit tests in `mention-scanner.test.ts`; harness tests in `watch-supervisor.test.ts`; `FakeWatcherTransport` gained `scanners`/`scanCalls`.
+  - Reference watcher tests that read `triggers` (git-repo, github-pr) now read the raw manifest JSON; Stage 3 replaces them.
+  - Scan timeout (5s) not implemented in the socket transport yet; a hung watcher only delays that scan.
 
 ## Reference watchers + skill doc
 

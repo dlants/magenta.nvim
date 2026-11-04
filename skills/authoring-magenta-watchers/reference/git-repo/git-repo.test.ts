@@ -10,7 +10,6 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parseWatcherManifest } from "../../../../node/server/src/watchers/protocol.ts";
 import {
   parseStatus,
   poll,
@@ -104,13 +103,10 @@ describe("git-repo watcher", () => {
   });
 
   it("trigger matches absolute paths under the configured root only", () => {
-    const manifest = parseWatcherManifest(
-      JSON.parse(
-        readFileSync(new URL("./manifest.json", import.meta.url), "utf8"),
-      ),
-    );
-    if (manifest.status !== "ok") throw new Error("bad manifest");
-    const trigger = manifest.value.triggers[0];
+    const raw = JSON.parse(
+      readFileSync(new URL("./manifest.json", import.meta.url), "utf8"),
+    ) as { triggers: Array<{ pattern: string; flags?: string }> };
+    const trigger = raw.triggers[0];
     const re = new RegExp(trigger.pattern, trigger.flags);
     expect(re.exec("see /Users/me/src/magenta.nvim/node/x.ts")?.[0]).toBe(
       "/Users/me/src/magenta.nvim",

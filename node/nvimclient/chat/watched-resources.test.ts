@@ -19,11 +19,15 @@ it("renders watched resource summary/details, deliveries and untracks", async ()
         name: "gh" as WatcherName,
         protocolVersion: 1,
         command: ["true"],
-        triggers: [
-          { pattern: "https://github\\.com/(\\S+/pull/\\d+)", keyGroup: 1 },
-        ],
       },
     ]);
+    transport.scanners.set("gh", (texts) =>
+      texts.flatMap((t) =>
+        [...t.matchAll(/https:\/\/github\.com\/(\S+\/pull\/\d+)/g)].map(
+          (m) => m[1] ?? "",
+        ),
+      ),
+    );
     transport.push("gh", {
       key: KEY,
       status: "active",

@@ -4,10 +4,9 @@ import type {
   ProviderMessageContent,
 } from "../providers/provider-types.ts";
 
-import type { ResourceRef, WatcherTriggerMatcher } from "./watcher-registry.ts";
-
-/** Injected context (tracked files, reminders) would surface keys nobody
- * mentioned; images and documents are base64 payloads. */
+/** Injected context (tracked files, reminders, watch updates) would surface
+ * keys nobody mentioned and could cascade; search results and reasoning are
+ * not the user's or agent's references; images and documents are base64. */
 const SKIPPED_BLOCK_TYPES: ReadonlySet<ProviderMessageContent["type"]> =
   new Set([
     "image",
@@ -17,37 +16,59 @@ const SKIPPED_BLOCK_TYPES: ReadonlySet<ProviderMessageContent["type"]> =
     "context_update",
     "thread_context",
     "fork_notification",
+    "server_tool_use",
+    "web_search_tool_result",
+    "thinking",
+    "redacted_thinking",
   ]);
+const SKIPPED_FIELDS: ReadonlySet<string> = new Set([
+  "type",
+  "id",
+  "data",
+  "citations",
+]);
+const MAX_STRING_CHARS = 64 * 1024;
+const MAX_SCAN_CHARS = 256 * 1024;
 
-function collectKeys(
-  value: unknown,
-  matchers: ReadonlyArray<WatcherTriggerMatcher>,
-  into: Map<string, ResourceRef>,
-): void {
+/** String leaves rather than `JSON.stringify`, so newlines stay newlines. */
+function collectStrings(value: unknown, into: string[]): void {
   if (typeof value === "string") {
-    for (const m of matchers) {
-      for (const match of value.matchAll(m.regex)) {
-        const key = match[m.keyGroup];
-        if (key) into.set(`${m.watcher}\0${key}`, { watcher: m.watcher, key });
-      }
-    }
+    into.push(value.slice(0, MAX_STRING_CHARS));
   } else if (Array.isArray(value)) {
-    for (const item of value) collectKeys(item, matchers, into);
+    for (const item of value) collectStrings(item, into);
   } else if (value && typeof value === "object") {
     for (const [key, field] of Object.entries(value)) {
-      if (key !== "data") collectKeys(field, matchers, into);
+      if (!SKIPPED_FIELDS.has(key)) collectStrings(field, into);
     }
   }
 }
 
-/** Scans the thread's messages for watcher trigger matches, off the hot
- * path: one native message per tick, lagging the conversation.
+/** Splits into calls of at most `MAX_SCAN_CHARS` total. */
+function batches(texts: string[]): string[][] {
+  const out: string[][] = [];
+  let current: string[] = [];
+  let size = 0;
+  for (const t of texts) {
+    if (size + t.length > MAX_SCAN_CHARS && current.length) {
+      out.push(current);
+      current = [];
+      size = 0;
+    }
+    current.push(t);
+    size += t.length;
+  }
+  if (current.length) out.push(current);
+  return out;
+}
+
+/** Sends the thread's new message strings to the watchers' `scan`, off the
+ * hot path: one native message per tick, lagging the conversation. Scans are
+ * not awaited; `scan` never throws.
  *
  * Messages only grow by appending blocks (a streaming block lands only once
  * finished, and injections merge into a trailing user message), so per native
  * message we remember how many blocks were already scanned. */
 export class MentionScanner {
-  private readonly refs = new Map<string, ResourceRef>();
   private readonly scannedBlockCounts = new Map<NativeMessageIdx, number>();
   private scanning = false;
   private rescanRequested = false;
@@ -58,13 +79,8 @@ export class MentionScanner {
 
   constructor(
     private readonly getMessages: () => ReadonlyArray<ProviderMessage>,
-    private readonly getMatchers: () => ReadonlyArray<WatcherTriggerMatcher>,
-    private readonly onChanged: () => void,
+    private readonly scan: (texts: string[]) => Promise<void>,
   ) {}
-
-  get mentioned(): ReadonlyArray<ResourceRef> {
-    return [...this.refs.values()];
-  }
 
   schedule(): void {
     if (this.disposed) return;
@@ -95,14 +111,14 @@ export class MentionScanner {
       }
       return;
     }
-    const before = this.refs.size;
-    const matchers = this.getMatchers();
+    const texts: string[] = [];
     for (const block of pending.blocks) {
-      if (!SKIPPED_BLOCK_TYPES.has(block.type))
-        collectKeys(block, matchers, this.refs);
+      if (!SKIPPED_BLOCK_TYPES.has(block.type)) collectStrings(block, texts);
     }
     this.scannedBlockCounts.set(pending.idx, pending.scannedCount);
-    if (this.refs.size !== before) this.onChanged();
+    for (const batch of batches(texts.filter((t) => t.length > 0))) {
+      void this.scan(batch);
+    }
     setImmediate(() => this.scanNextMessage());
   }
 

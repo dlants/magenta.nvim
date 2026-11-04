@@ -4,11 +4,6 @@
  * user code, so their output is validated at the boundary.
  */
 export const WATCHER_PROTOCOL_VERSION = 1;
-export type WatcherTrigger = {
-  pattern: string;
-  flags?: string;
-  keyGroup?: number;
-};
 export type ScanParams = { texts: string[] };
 export type ScanResult = { keys: string[] };
 export function parseScanResult(raw: unknown): string[] | undefined {
@@ -21,7 +16,6 @@ export type WatcherManifest = {
   protocolVersion: 1;
   command: string[];
   socket?: string;
-  triggers: WatcherTrigger[];
 };
 export type ResourceStatus =
   | "loading"
@@ -94,33 +88,10 @@ export function parseWatcherManifest(
   if (raw.socket !== undefined && typeof raw.socket !== "string") {
     return fail("socket must be a string");
   }
-  if (!Array.isArray(raw.triggers)) return fail("triggers must be an array");
-  const triggers: WatcherTrigger[] = [];
-  for (const t of raw.triggers) {
-    if (!isPlainObject(t) || typeof t.pattern !== "string") {
-      return fail("each trigger needs a string pattern");
-    }
-    if (t.flags !== undefined && typeof t.flags !== "string") {
-      return fail("trigger flags must be a string");
-    }
-    if (t.keyGroup !== undefined && !Number.isInteger(t.keyGroup)) {
-      return fail("trigger keyGroup must be an integer");
-    }
-    try {
-      new RegExp(t.pattern, typeof t.flags === "string" ? t.flags : "");
-    } catch (e) {
-      return fail(`invalid trigger pattern: ${(e as Error).message}`);
-    }
-    const trigger: WatcherTrigger = { pattern: t.pattern };
-    if (typeof t.flags === "string") trigger.flags = t.flags;
-    if (typeof t.keyGroup === "number") trigger.keyGroup = t.keyGroup;
-    triggers.push(trigger);
-  }
   const manifest: WatcherManifest = {
     name: raw.name as WatcherName,
     protocolVersion: WATCHER_PROTOCOL_VERSION,
     command: raw.command,
-    triggers,
   };
   if (typeof raw.socket === "string") manifest.socket = raw.socket;
   return { status: "ok", value: manifest };

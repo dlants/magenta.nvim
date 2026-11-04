@@ -2,7 +2,11 @@ import { spawn } from "node:child_process";
 import { mkdirSync, openSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import { parseJsonRpcLine, parseResourceState } from "./protocol.ts";
+import {
+  parseJsonRpcLine,
+  parseResourceState,
+  parseScanResult,
+} from "./protocol.ts";
 import type {
   LoadedWatcherManifest,
   WatcherConnection,
@@ -104,6 +108,11 @@ class SocketConnection implements WatcherConnection {
     const state = parseResourceState(raw);
     if (!state) throw new Error("watcher sent an invalid ResourceState");
     return state;
+  }
+  async scan(texts: string[]): Promise<string[]> {
+    const keys = parseScanResult(await this.request("scan", { texts }));
+    if (!keys) throw new Error("watcher sent an invalid scan result");
+    return keys;
   }
   unsubscribe(key: string): void {
     this.request("unsubscribe", { key }).catch(() => {});

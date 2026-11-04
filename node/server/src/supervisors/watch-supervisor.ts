@@ -79,6 +79,7 @@ export class WatchSupervisor implements ToolLoopSupervisor {
   private readonly tracked = new Map<string, Tracked>();
   private readonly connections = new Map<WatcherName, ConnectionSlot>();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+  private readonly scansInFlight = new Map<WatcherName, number>();
   private readonly dormancyTimer: ReturnType<typeof setInterval>;
   private dormant = false;
   private disposed = false;
@@ -164,6 +165,47 @@ export class WatchSupervisor implements ToolLoopSupervisor {
     this.callbacks.onChanged?.();
   }
 
+  /** Scans with every configured watcher and tracks the returned keys. A
+   * connection opened only for the scan is closed afterwards so the watcher
+   * can idle-exit. Never throws. */
+  async scan(texts: string[]): Promise<void> {
+    await Promise.all(
+      this.registry.names().map(async (watcher) => {
+        if (this.disposed) return;
+        this.scansInFlight.set(
+          watcher,
+          (this.scansInFlight.get(watcher) ?? 0) + 1,
+        );
+        try {
+          const connection = await this.connection(watcher);
+          if (!connection) throw new Error("watcher unreachable");
+          const keys = await connection.scan(texts);
+          for (const key of keys) this.track({ watcher, key });
+        } catch (e) {
+          this.registry.logError(
+            `watcher ${watcher} scan failed: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        } finally {
+          const remaining = (this.scansInFlight.get(watcher) ?? 1) - 1;
+          if (remaining) this.scansInFlight.set(watcher, remaining);
+          else this.scansInFlight.delete(watcher);
+          this.closeIfUnused(watcher);
+        }
+      }),
+    );
+  }
+
+  private closeIfUnused(watcher: WatcherName): void {
+    if (this.disposed || this.scansInFlight.has(watcher)) return;
+    for (const t of this.tracked.values()) {
+      if (t.watcher === watcher && t.subscribed) return;
+    }
+    const connection = this.openConnection(watcher);
+    if (!connection) return;
+    this.connections.delete(watcher);
+    connection.close();
+  }
+
   untrack(ref: ResourceRef): void {
     const id = refId(ref);
     this.untracked.add(id);
@@ -171,6 +213,7 @@ export class WatchSupervisor implements ToolLoopSupervisor {
     if (!t) return;
     this.tracked.delete(id);
     if (t.subscribed) this.openConnection(t.watcher)?.unsubscribe(t.key);
+    this.closeIfUnused(t.watcher);
     this.callbacks.onChanged?.();
   }
 

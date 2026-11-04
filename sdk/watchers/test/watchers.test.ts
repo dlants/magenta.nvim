@@ -50,7 +50,6 @@ function setup(opts: { idleMs?: number } = {}) {
         String(opts.idleMs ?? 400),
       ],
       socket: "./w.sock",
-      triggers: [{ pattern: "counter:(\\S+)", keyGroup: 1 }],
     }),
   );
   const file = (name: string, content?: string) => {

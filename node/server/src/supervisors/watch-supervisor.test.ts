@@ -24,12 +24,21 @@ const opts = {
       name: "gh" as WatcherName,
       protocolVersion: 1 as const,
       command: ["true"],
-      triggers: [
-        { pattern: "https://github\\.com/(\\S+/pull/\\d+)", keyGroup: 1 },
-      ],
     },
   ],
 };
+const ghScan = (texts: string[]) =>
+  texts.flatMap((t) =>
+    [...t.matchAll(/https:\/\/github\.com\/(\S+\/pull\/\d+)/g)].map(
+      (m) => m[1] ?? "",
+    ),
+  );
+function withGh(fn: (h: Harness) => Promise<void>) {
+  return withHarness(opts, (h) => {
+    h.host.watchers.scanners.set("gh", ghScan);
+    return fn(h);
+  });
+}
 const active = (context: string): ResourceState => ({
   key: KEY,
   status: "active",
@@ -59,7 +68,7 @@ it("diffBlobs reports only changed lines", () => {
 });
 
 it("delivers the full blob first, then line diffs, then nothing", () =>
-  withHarness(opts, async (h) => {
+  withGh(async (h) => {
     h.host.watchers.push("gh", active("state: open\nchecks: pending\n"));
     const { thread } = await h.createRoot();
     await mention(h, thread);
@@ -87,7 +96,7 @@ it("delivers the full blob first, then line diffs, then nothing", () =>
   }));
 
 it("a rejected key shows as unavailable and injects nothing", () =>
-  withHarness(opts, async (h) => {
+  withGh(async (h) => {
     h.host.watchers.push("gh", {
       key: KEY,
       status: "unavailable",
@@ -106,21 +115,101 @@ it("a rejected key shows as unavailable and injects nothing", () =>
     );
   }));
 
-it("an unreachable watcher degrades to unavailable; submissions succeed", () =>
-  withHarness(opts, async (h) => {
+it("a failed scan tracks nothing, logs, and submissions succeed", () =>
+  withGh(async (h) => {
+    const errors = vi.spyOn(noopLogger, "error");
     h.host.watchers.unreachable.add("gh");
     const { thread } = await h.createRoot();
     await exchange(h, thread, `see https://github.com/${KEY}`);
     await pollUntil(() => {
-      const s = thread.watchedResources[0]?.state;
-      if (s?.status !== "unavailable") throw new Error("not yet");
-      expect(s.error).toContain("unreachable");
+      if (!errors.mock.calls.some((c) => String(c[0]).includes("scan failed")))
+        throw new Error("not logged yet");
     });
+    expect(thread.watchedResources).toEqual([]);
     await exchange(h, thread, "still works");
+    errors.mockRestore();
+  }));
+
+it("two mentions the watcher canonicalizes to one key track one resource", () =>
+  withHarness(opts, async (h) => {
+    h.host.watchers.scanners.set("gh", (texts) =>
+      texts.some((t) => /\/repo\/\w+\.ts/.test(t)) ? ["/repo"] : [],
+    );
+    const { thread } = await h.createRoot();
+    await exchange(h, thread, "edit /repo/a.ts and /repo/b.ts");
+    await pollUntil(() =>
+      expect(thread.watchedResources.map((r) => r.key)).toEqual(["/repo"]),
+    );
+  }));
+
+it("scans text, tool input and tool results but not injected context", () =>
+  withGh(async (h) => {
+    const { thread } = await h.createRoot();
+    const done = h.send(thread, "user line1\nline2");
+    const s1 = await h.nextStream();
+    s1.respond({
+      stopReason: "tool_use",
+      text: "assistant text",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "t1" as ToolRequestId,
+            toolName: "get_files" as ToolName,
+            input: { files: [{ filePath: "/tool/input/path" }] },
+          },
+        },
+      ],
+    });
+    const s2 = await h.nextStream();
+    s2.respond({ stopReason: "end_turn", text: "done", toolRequests: [] });
+    await done;
+    const scanned = () => h.host.watchers.scanCalls.flatMap((c) => c.texts);
+    await pollUntil(() => {
+      const all = scanned();
+      expect(all).toContain("user line1\nline2");
+      expect(all).toContain("assistant text");
+      expect(all).toContain("/tool/input/path");
+      expect(
+        all.some(
+          (t) => t.includes("/tool/input/path") && t !== "/tool/input/path",
+        ),
+      ).toBe(true);
+    });
+    expect(scanned().some((t) => t.includes("# System Information"))).toBe(
+      false,
+    );
+  }));
+
+it("an untracked key stays untracked when a later scan returns it", () =>
+  withGh(async (h) => {
+    h.host.watchers.push("gh", active("a\n"));
+    const { thread } = await h.createRoot();
+    await mention(h, thread);
+    thread.untrackWatchedResource({ watcher: "gh" as WatcherName, key: KEY });
+    const before = h.host.watchers.scanCalls.length;
+    await exchange(h, thread, `again https://github.com/${KEY}`);
+    await pollUntil(() => {
+      if (h.host.watchers.scanCalls.length === before)
+        throw new Error("no scan");
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(thread.watchedResources).toEqual([]);
+  }));
+
+it("closes the connection after a scan that finds nothing", () =>
+  withGh(async (h) => {
+    const { thread } = await h.createRoot();
+    await exchange(h, thread, "nothing to watch");
+    await pollUntil(() => {
+      const conns = h.host.watchers.connections;
+      if (!conns.length || conns.some((c) => !c.closed))
+        throw new Error("connection still open");
+    });
   }));
 
 it("forks diff against the blob seen at the fork point", () =>
-  withHarness(opts, async (h) => {
+  withGh(async (h) => {
     h.host.watchers.push("gh", active("v1\n"));
     const { id, thread } = await h.createRoot();
     await mention(h, thread);
@@ -157,7 +246,7 @@ function compactorOf(h: Harness, id: ThreadId): ThreadCompactor {
 }
 
 it("compaction replacement does not re-deliver an already-seen blob", () =>
-  withHarness(opts, async (h) => {
+  withGh(async (h) => {
     h.host.watchers.push("gh", active("seen\n"));
     const { id, thread } = await h.createRoot();
     await mention(h, thread);
@@ -199,7 +288,7 @@ it("compaction replacement does not re-deliver an already-seen blob", () =>
   }));
 
 it("dormancy unsubscribes; attention resubscribes and injects one diff", () =>
-  withHarness(opts, async (h) => {
+  withGh(async (h) => {
     h.host.watchers.push("gh", active("a\n"));
     const { id, thread } = await h.createRoot();
     await mention(h, thread);
@@ -225,7 +314,7 @@ it("dormancy unsubscribes; attention resubscribes and injects one diff", () =>
   }));
 
 it("deleting the thread closes its watcher connection", () =>
-  withHarness(opts, async (h) => {
+  withGh(async (h) => {
     h.host.watchers.push("gh", active("a\n"));
     const { id, thread } = await h.createRoot();
     await mention(h, thread);
@@ -357,7 +446,7 @@ describe("WatchSupervisor connection handling", () => {
   });
 });
 it("protocol thread state carries watched resources and untracks by ref", () =>
-  withHarness(opts, async (h) => {
+  withGh(async (h) => {
     h.host.watchers.push("gh", active("state: open\n"));
     const server = createInProcessServer({ session: h.session });
     const { id, thread } = await h.createRoot();

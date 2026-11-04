@@ -20,6 +20,8 @@ export type ResourceRef = { watcher: WatcherName; key: string };
 export interface WatcherConnection {
   subscribe(key: string, filter?: unknown): Promise<ResourceState>;
   unsubscribe(key: string): void;
+  /** Canonical keys found in `texts`; subscribes to nothing. */
+  scan(texts: string[]): Promise<string[]>;
   onState(cb: (state: ResourceState) => void): void;
   /** Fired once, when the connection drops (including after `close`). */
   onClose(cb: () => void): void;
@@ -31,17 +33,10 @@ export interface WatcherTransport {
   connect(manifest: LoadedWatcherManifest): Promise<WatcherConnection>;
 }
 
-export type WatcherTriggerMatcher = {
-  watcher: WatcherName;
-  regex: RegExp;
-  keyGroup: number;
-};
-
 /** Session-owned: loads manifests from the user-level `watchers` option and
  * hands out connections. Subscriptions belong to the connections' owners. */
 export class WatcherRegistry {
   private manifests = new Map<WatcherName, LoadedWatcherManifest>();
-  private matchers: WatcherTriggerMatcher[] = [];
 
   constructor(
     private readonly opts: {
@@ -97,20 +92,14 @@ export class WatcherRegistry {
 
   setManifests(manifests: ReadonlyArray<LoadedWatcherManifest>): void {
     this.manifests = new Map(manifests.map((m) => [m.name, m]));
-    this.matchers = manifests.flatMap((m) =>
-      m.triggers.map((t) => ({
-        watcher: m.name,
-        regex: new RegExp(
-          t.pattern,
-          (t.flags ?? "").includes("g") ? t.flags : `${t.flags ?? ""}g`,
-        ),
-        keyGroup: t.keyGroup ?? 0,
-      })),
-    );
   }
 
-  triggers(): ReadonlyArray<WatcherTriggerMatcher> {
-    return this.matchers;
+  names(): ReadonlyArray<WatcherName> {
+    return [...this.manifests.keys()];
+  }
+
+  logError(message: string): void {
+    this.opts.logger.error(message);
   }
 
   connect(watcher: WatcherName): Promise<WatcherConnection> {

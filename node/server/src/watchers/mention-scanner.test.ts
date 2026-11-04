@@ -6,72 +6,84 @@ import type {
 } from "../providers/provider-types.ts";
 import { pollUntil } from "../utils/async.ts";
 import { MentionScanner } from "./mention-scanner.ts";
-import type { WatcherName } from "./protocol.ts";
-import type { WatcherTriggerMatcher } from "./watcher-registry.ts";
 
-const W = "w" as WatcherName;
-const matchers: WatcherTriggerMatcher[] = [
-  { watcher: W, regex: /key-(\d+)/g, keyGroup: 1 },
-];
 const idx = (n: number) => n as NativeMessageIdx;
 const text = (t: string, n: number): ProviderMessageContent => ({
   type: "text",
   text: t,
   nativeMessageIdx: idx(n),
 });
-
 function scannerOver(initial: ProviderMessage[]) {
   let messages = initial;
+  const scanned: string[] = [];
   const scanner = new MentionScanner(
     () => messages,
-    () => matchers,
-    () => {},
+    (texts) => {
+      scanned.push(...texts);
+      return Promise.resolve();
+    },
   );
   return {
-    scanner,
     set(next: ProviderMessage[]) {
       messages = next;
       scanner.schedule();
     },
-    keys: () => scanner.mentioned.map((r) => r.key).sort(),
+    scanned,
   };
 }
-const settle = (s: { keys: () => string[] }, expected: string[]) =>
-  pollUntil(() => expect(s.keys()).toEqual(expected));
-
-it("finds keys in user and assistant text, several per string", async () => {
+it("sends user and assistant text, newlines intact", async () => {
   const s = scannerOver([]);
   s.set([
-    { role: "user", content: [text("see key-1 and key-2", 0)] },
-    { role: "assistant", content: [text("also key-3", 1)] },
+    { role: "user", content: [text("see a\nb", 0)] },
+    { role: "assistant", content: [text("also c", 1)] },
   ]);
-  await settle(s, ["1", "2", "3"]);
+  await pollUntil(() => expect(s.scanned).toEqual(["see a\nb", "also c"]));
 });
-
-it("ignores keys that only appear in injected blocks", async () => {
+it("skips injected, reasoning and search blocks and citations", async () => {
   const s = scannerOver([]);
   s.set([
     {
       role: "user",
       content: [
-        { type: "context_update", text: "key-8", nativeMessageIdx: idx(0) },
-        { type: "system_reminder", text: "key-9", nativeMessageIdx: idx(0) },
-        text("key-1", 0),
+        { type: "context_update", text: "ctx", nativeMessageIdx: idx(0) },
+        { type: "system_reminder", text: "rem", nativeMessageIdx: idx(0) },
+        text("keep", 0),
+      ],
+    },
+    {
+      role: "assistant",
+      content: [
+        {
+          type: "thinking",
+          thinking: "think",
+          nativeMessageIdx: idx(1),
+        },
+        {
+          type: "text",
+          text: "cited",
+          citations: [
+            {
+              type: "web_search_citation",
+              cited_text: "cite",
+              encrypted_index: "",
+              title: "t",
+              url: "u",
+            },
+          ],
+          nativeMessageIdx: idx(1),
+        } as ProviderMessageContent,
       ],
     },
   ]);
-  await settle(s, ["1"]);
+  await pollUntil(() => expect(s.scanned).toEqual(["keep", "cited"]));
   await new Promise((r) => setTimeout(r, 10));
-  expect(s.keys()).toEqual(["1"]);
+  expect(s.scanned).toEqual(["keep", "cited"]);
 });
-
-it("picks up blocks appended to a scanned message without rescanning it", async () => {
-  const first = text("key-1", 0);
+it("sends only blocks appended to a scanned message", async () => {
+  const first = text("one", 0);
   const s = scannerOver([]);
   s.set([{ role: "user", content: [first] }]);
-  await settle(s, ["1"]);
-  // Mutating an already-scanned block is invisible: only new blocks are read.
-  (first as { text: string }).text = "key-5";
-  s.set([{ role: "user", content: [first, text("key-2", 0)] }]);
-  await settle(s, ["1", "2"]);
+  await pollUntil(() => expect(s.scanned).toEqual(["one"]));
+  s.set([{ role: "user", content: [first, text("two", 0)] }]);
+  await pollUntil(() => expect(s.scanned).toEqual(["one", "two"]));
 });

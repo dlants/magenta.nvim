@@ -9,7 +9,6 @@ const manifest = {
   name: "gh",
   protocolVersion: 1,
   command: ["node", "index.ts"],
-  triggers: [{ pattern: "x(\\d+)", keyGroup: 1 }],
 };
 
 describe("parseWatcherManifest", () => {
@@ -24,12 +23,6 @@ describe("parseWatcherManifest", () => {
     ["wrong protocolVersion", { protocolVersion: 2 }, /protocolVersion/],
     ["empty command", { command: [] }, /command/],
     ["non-string command", { command: ["node", 1] }, /command/],
-    ["invalid regex", { triggers: [{ pattern: "(" }] }, /invalid trigger/],
-    [
-      "non-integer keyGroup",
-      { triggers: [{ pattern: "x", keyGroup: 1.5 }] },
-      /keyGroup/,
-    ],
   ])("rejects %s", (_, patch, msg) => {
     const r = parseWatcherManifest({ ...manifest, ...patch });
     expect(r.status).toBe("error");

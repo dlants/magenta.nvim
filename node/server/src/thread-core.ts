@@ -61,7 +61,7 @@ export interface ThreadCoreContext {
   fileIO: FileIO;
   gitClient: GitClient;
   discoverHierarchy?: HierarchyDiscovery;
-  /** Absent: watcher triggers are not scanned. `getLastAttention` (ms epoch)
+  /** Absent: messages are not scanned for watched resources. `getLastAttention` (ms epoch)
    * drives dormancy unsubscription. */
   watchTracking?: {
     registry: WatcherRegistry;
@@ -310,13 +310,7 @@ export class ThreadCore {
     this.forkSeamIdx = state.forkSeamIdx;
     this.mentionScanner = new MentionScanner(
       () => this.manager.log.messages,
-      () => context.watchTracking?.registry.triggers() ?? [],
-      () => {
-        for (const ref of this.mentionScanner.mentioned) {
-          this.watchSupervisor?.track(ref);
-        }
-        callbacks.onUpdate();
-      },
+      (texts) => this.watchSupervisor?.scan(texts) ?? Promise.resolve(),
     );
     if (this.watchSupervisor) this.mentionScanner.schedule();
     this.createTool = context.threadToolCreator({

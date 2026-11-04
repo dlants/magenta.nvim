@@ -159,6 +159,12 @@ export class FakeWatcherTransport implements WatcherTransport {
   readonly rejectSubscribe = new Set<string>();
   /** When set, subscribes wait for this promise before answering. */
   holdSubscribes: Promise<void> | undefined;
+  /** Per-watcher scan logic; watchers without one find no keys. */
+  readonly scanners = new Map<
+    string,
+    (texts: string[]) => string[] | Promise<string[]>
+  >();
+  readonly scanCalls: Array<{ watcher: string; texts: string[] }> = [];
   private id = (watcher: string, key: string) => `${watcher}\0${key}`;
 
   connect(manifest: LoadedWatcherManifest): Promise<WatcherConnection> {
@@ -191,6 +197,10 @@ export class FakeWatcherTransport implements WatcherTransport {
             summary: "loading",
           }
         );
+      },
+      scan: async (texts) => {
+        this.scanCalls.push({ watcher: conn.watcher, texts });
+        return (await this.scanners.get(conn.watcher)?.(texts)) ?? [];
       },
       unsubscribe: (key) => conn.keys.delete(key),
       onState: (cb) => conn.stateCbs.push(cb),
