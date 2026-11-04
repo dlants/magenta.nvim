@@ -199,14 +199,31 @@ const STATUS_ICONS: {
   failing: "\uf00d",
   unavailable: "\uf05e",
 };
+/** Key in `MessageViewState.expandedUpdates`; cannot collide with absolute file paths. */
+export function watchUpdateExpandKey(r: ResourceRef): string {
+  return `watch:${r.watcher}:${r.key}`;
+}
 export function renderWatchUpdate(
   update: WatchContextUpdate | undefined,
+  view: {
+    expandedUpdates: { [key: string]: boolean };
+    onToggle: (key: string) => void;
+  },
 ): VDOMNode {
-  if (!update) return d``;
-  return d`${update.resources.map(
-    (r) =>
-      d`${watcherIcon(r.watcher)} ${r.watcher}: ${r.key} ${r.kind === "full" ? "tracked" : "updated"}\n`,
-  )}`;
+  if (!update?.resources.length) return d``;
+  return d`Watcher Updates:\n${update.resources.map((r) => {
+    const expandKey = watchUpdateExpandKey(r);
+    const expanded = view.expandedUpdates[expandKey];
+    const lineCount = r.text.split("\n").length;
+    const line = withBindings(
+      d`- ${expanded ? "▼" : "▶"} ${watcherIcon(r.watcher)} ${r.watcher}: ${r.key} [ ${r.kind === "full" ? "tracked" : "updated"}, ${lineCount.toString()} line${lineCount === 1 ? "" : "s"} ]\n`,
+      { "=": () => view.onToggle(expandKey) },
+    );
+    const body = expanded
+      ? d`${r.text.split("\n").map((l) => d`  ${l}\n`)}`
+      : d``;
+    return d`${line}${body}`;
+  })}`;
 }
 export type WatchedResourceControls = {
   isExpanded: (ref: ResourceRef) => boolean;

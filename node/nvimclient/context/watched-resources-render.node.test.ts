@@ -4,6 +4,7 @@ import { renderToString } from "../tea/view.ts";
 import {
   renderWatchedResources,
   renderWatchUpdate,
+  watchUpdateExpandKey,
 } from "./context-manager.ts";
 
 const watcher = "github" as WatcherName;
@@ -19,17 +20,29 @@ function render(resources: WatchedResourceView[], expanded = false): string {
 }
 
 describe("renderWatchUpdate", () => {
-  it("describes full and diff deliveries", () => {
-    const text = renderToString(
-      renderWatchUpdate({
-        resources: [
-          { watcher, key: "a", kind: "full", text: "x" },
-          { watcher, key: "b", kind: "diff", text: "y" },
-        ],
-      }),
+  it("labels deliveries and expands to the full update text", () => {
+    const update = {
+      resources: [
+        { watcher, key: "a", kind: "full" as const, text: "x1\nx2" },
+        { watcher, key: "b", kind: "diff" as const, text: "y" },
+      ],
+    };
+    const text = (expandedUpdates: { [key: string]: boolean }) =>
+      renderToString(
+        renderWatchUpdate(update, { expandedUpdates, onToggle: () => {} }),
+      );
+    const collapsed = text({});
+    expect(collapsed).toContain("Watcher Updates:\n");
+    expect(collapsed).toContain("▶ \uf06e github: a [ tracked, 2 lines ]");
+    expect(collapsed).toContain("▶ \uf06e github: b [ updated, 1 line ]");
+    expect(collapsed).not.toContain("x1");
+    const expanded = text({
+      [watchUpdateExpandKey({ watcher, key: "a" })]: true,
+    });
+    expect(expanded).toContain(
+      "▼ \uf06e github: a [ tracked, 2 lines ]\n  x1\n  x2\n",
     );
-    expect(text).toContain("github: a tracked");
-    expect(text).toContain("github: b updated");
+    expect(expanded).not.toContain("  y\n");
   });
 });
 

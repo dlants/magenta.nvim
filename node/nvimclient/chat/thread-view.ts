@@ -786,7 +786,11 @@ ${contextFilesView(contextFilesData(thread), contextViewCtx(thread), {
         )
       : d``;
 
-    const gitUpdateView = d`${renderWatchUpdate(delivery?.watched)}`;
+    const gitUpdateView = renderWatchUpdate(delivery?.watched, {
+      expandedUpdates: viewState?.expandedUpdates ?? {},
+      onToggle: (filePath) =>
+        dispatch({ type: "toggle-expand-update", messageIdx, filePath }),
+    });
 
     // Render content blocks. For user messages we render auto-generated meta
     // blocks (system_reminder, system_info) before the user's own text so the
