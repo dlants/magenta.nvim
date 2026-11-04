@@ -85,6 +85,7 @@ SystemInfoSupervisor.create(args: { systemInfo: SystemInfo; alreadyInjected: boo
   - reading a file in a repo produces no `# Git status update` in the request (tier A).
   - sidebar render of a thread with watched repos shows `# watched:` and no `# git repos:` (update affected snapshots in `node/nvimclient/chat/thread.test.ts`).
   - `npx tsc -b`, `npx biome check .`, full `npx vitest run`.
+- Status: done. The no-injection test lives in `thread-core-context.test.ts` (replaced the git rewind test; git-branch assertions dropped from the reset/compaction/budget tests). Sidebar snapshots in `thread.test.ts.snap` updated. `initialGitState`/`gitClient` remain in core context/seed for the system-info line until stage 3. `spawn-subagents.test.ts` "toggles yielded text" now waits for "All done." before pressing `=` (it raced the final render once the git section's re-render was gone).
 
 ## Remove GitClient and system-info git
 

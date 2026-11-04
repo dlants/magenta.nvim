@@ -167,6 +167,8 @@ describe("per-agent expansion", () => {
           toolRequests: [],
         });
 
+        await driver.assertDisplayBufferContains("All done.");
+
         // Press = on first agent to expand it
         await driver.triggerDisplayBufferKeyOnContent(
           "prompt: (~4 tok) First task agent",

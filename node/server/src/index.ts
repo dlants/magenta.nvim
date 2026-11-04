@@ -345,12 +345,6 @@ export {
   type Patch,
   type WholeFileUpdate,
 } from "./supervisors/file-supervisor.ts";
-export {
-  type GitContextUpdate,
-  GitSupervisor,
-  GitTracker,
-  gitUpdateToText,
-} from "./supervisors/git-supervisor.ts";
 export { type HistoryIdx, PRE_HISTORY } from "./supervisors/history.ts";
 export * from "./supervisors/watch-supervisor.ts";
 export {

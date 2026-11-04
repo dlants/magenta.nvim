@@ -24,10 +24,6 @@ import {
   type HierarchyDiscovery,
 } from "./supervisors/file-supervisor.ts";
 import {
-  type GitContextUpdate,
-  GitSupervisor,
-} from "./supervisors/git-supervisor.ts";
-import {
   type WatchContextUpdate,
   type WatchSeed,
   WatchSupervisor,
@@ -44,7 +40,7 @@ import { runToolLoop, type ToolLoop, type ToolOutcome } from "./tool-loop.ts";
 import type { CompletedToolInfo, ToolRequestId } from "./tool-types.ts";
 import type { CreateTool, ThreadToolCreator } from "./tools/create-tool.ts";
 import type { Task } from "./utils/async.ts";
-import type { AbsFilePath, HomeDir } from "./utils/files.ts";
+import type { HomeDir } from "./utils/files.ts";
 import { MentionScanner } from "./watchers/mention-scanner.ts";
 import type { WatcherRegistry } from "./watchers/watcher-registry.ts";
 
@@ -76,7 +72,6 @@ export interface ThreadCoreContext {
  * the view can render it from history instead of observing delivery. */
 export type ContextDelivery = {
   files?: FileUpdates;
-  git?: GitContextUpdate;
   watched?: WatchContextUpdate;
 };
 
@@ -103,7 +98,6 @@ export type ThreadCoreSeed = {
 interface ThreadCoreState {
   manager: NativeInferenceManager;
   fileSupervisor: FileSupervisor;
-  gitSupervisor: GitSupervisor | undefined;
   systemInfoSupervisor: SystemInfoSupervisor | undefined;
   watchSupervisor: WatchSupervisor | undefined;
   systemReminders: SystemReminderSupervisor | undefined;
@@ -119,7 +113,6 @@ export class ThreadCore {
   readonly manager: NativeInferenceManager;
   readonly toolSpecs: ProviderToolSpec[];
   readonly fileSupervisor: FileSupervisor;
-  readonly gitSupervisor: GitSupervisor | undefined;
   readonly watchSupervisor: WatchSupervisor | undefined;
   readonly systemInfoSupervisor: SystemInfoSupervisor | undefined;
   readonly systemReminders: SystemReminderSupervisor | undefined;
@@ -148,14 +141,8 @@ export class ThreadCore {
         ? { effortOverride: context.subagentConfig.effort }
         : {}),
     });
-    const gitSupervisor = GitSupervisor.create({
-      gitClient: context.gitClient,
-      initialGitState: seed.initialGitState,
-      logger: context.logger,
-    });
     const fileSupervisor = FileSupervisor.create({
       logger: context.logger,
-      registerGitPath: (path) => void gitSupervisor.registerPath(path),
       fileIO: context.fileIO,
       homeDir: context.homeDir,
       ...(context.discoverHierarchy
@@ -167,7 +154,6 @@ export class ThreadCore {
       manager,
       fileSupervisor,
       editedFilesSupervisor: EditedFilesSupervisor.create(),
-      gitSupervisor,
       watchSupervisor:
         context.watchTracking && context.threadType !== "compact"
           ? WatchSupervisor.create({
@@ -236,26 +222,10 @@ export class ThreadCore {
       ]);
       forkSeamIdx = manager.getNativeMessageIdx();
     }
-    const gitSupervisor = source.gitSupervisor
-      ? GitSupervisor.clone({
-          source: source.gitSupervisor,
-          gitClient: context.gitClient,
-          logger: context.logger,
-          nativeMessageIdx,
-        })
-      : undefined;
     const fileSupervisor = FileSupervisor.clone({
       source: source.fileSupervisor,
       history: { type: "truncate", nativeMessageIdx },
-      deps: {
-        ...context,
-        ...(gitSupervisor
-          ? {
-              registerGitPath: (path: AbsFilePath) =>
-                void gitSupervisor.registerPath(path),
-            }
-          : {}),
-      },
+      deps: context,
     });
     const state: ThreadCoreState = {
       manager,
@@ -264,7 +234,6 @@ export class ThreadCore {
         source: source.editedFilesSupervisor,
         nativeMessageIdx,
       }),
-      gitSupervisor,
       watchSupervisor: source.watchSupervisor
         ? WatchSupervisor.clone({
             source: source.watchSupervisor,
@@ -309,7 +278,6 @@ export class ThreadCore {
     this.toolSpecs = context.toolSpecs;
     this.manager = state.manager;
     this.fileSupervisor = state.fileSupervisor;
-    this.gitSupervisor = state.gitSupervisor;
     this.watchSupervisor = state.watchSupervisor;
     this.systemInfoSupervisor = state.systemInfoSupervisor;
     this.systemReminders = state.systemReminders;
@@ -339,11 +307,6 @@ export class ThreadCore {
       onPendingUpdatesChanged: () => this.handleUpdate(),
       onSent: (files, idx) => this.recordDelivery(idx, { files }),
     };
-    if (this.gitSupervisor) {
-      this.gitSupervisor.callbacks = {
-        onSent: (git, idx) => this.recordDelivery(idx, { git }),
-      };
-    }
     if (this.watchSupervisor) {
       this.watchSupervisor.callbacks = {
         onSent: (watched, idx) => this.recordDelivery(idx, { watched }),
@@ -372,10 +335,6 @@ export class ThreadCore {
     return this.contextDeliveries;
   }
 
-  get trackedGitRepos(): ReadonlyArray<AbsFilePath> {
-    return this.gitSupervisor?.gitTracker.trackedRepoRoots ?? [];
-  }
-
   private handleUpdate(): void {
     this.callbacks.onUpdate();
     if (this.watchSupervisor) this.mentionScanner.schedule();
@@ -385,7 +344,6 @@ export class ThreadCore {
    * running tool loop first. */
   dispose(): void {
     this.fileSupervisor.destroy();
-    if (this.gitSupervisor) this.gitSupervisor.callbacks = {};
     this.mentionScanner.dispose();
     this.watchSupervisor?.dispose();
   }

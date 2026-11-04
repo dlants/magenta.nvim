@@ -147,8 +147,6 @@ export type FileSupervisorDeps = {
   fileIO: FileIO;
   homeDir: HomeDir;
   discoverHierarchy?: HierarchyDiscovery;
-  /** Lets git context follow the files the agent tracks. */
-  registerGitPath?: (absFilePath: AbsFilePath) => void;
   pollIntervalMs?: number;
 };
 
@@ -297,7 +295,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
     private fileIO: FileIO,
     private homeDir: HomeDir,
     private discoverHierarchy: HierarchyDiscovery | undefined,
-    private registerGitPath: ((absFilePath: AbsFilePath) => void) | undefined,
     files: Files,
     pollIntervalMs: number,
   ) {
@@ -313,7 +310,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
     fileIO,
     homeDir,
     discoverHierarchy,
-    registerGitPath,
     initialFiles = {},
     pollIntervalMs = 1000,
   }: FileSupervisorDeps & { initialFiles?: Files }): FileSupervisor {
@@ -322,7 +318,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
       fileIO,
       homeDir,
       discoverHierarchy,
-      registerGitPath,
       Object.fromEntries(
         Object.entries(initialFiles).map(([path, file]) => [
           path,
@@ -335,7 +330,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
     // context has to be discovered here.
     for (const path of Object.keys(supervisor.files) as AbsFilePath[]) {
       supervisor.runHierarchyDiscovery(path);
-      registerGitPath?.(path);
     }
     return supervisor;
   }
@@ -360,7 +354,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
       deps?.fileIO ?? source.fileIO,
       deps?.homeDir ?? source.homeDir,
       deps ? deps.discoverHierarchy : source.discoverHierarchy,
-      deps ? deps.registerGitPath : source.registerGitPath,
       files,
       source.pollIntervalMs,
     );
@@ -562,7 +555,6 @@ export class FileSupervisor implements ContextTracker, ToolLoopSupervisor {
 
   private noteFileAdded(absFilePath: AbsFilePath): void {
     this.callbacks.onFileAdded?.(absFilePath);
-    this.registerGitPath?.(absFilePath);
     this.runHierarchyDiscovery(absFilePath);
   }
 

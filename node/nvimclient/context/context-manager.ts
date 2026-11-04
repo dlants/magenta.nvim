@@ -1,11 +1,9 @@
-import {
-  type FileUpdates,
-  formatGitHead,
-  type GitContextUpdate,
-  type ResourceRef,
-  type TrackedContextFile,
-  type WatchContextUpdate,
-  type WatchedResourceView,
+import type {
+  FileUpdates,
+  ResourceRef,
+  TrackedContextFile,
+  WatchContextUpdate,
+  WatchedResourceView,
 } from "@magenta/server";
 import open from "open";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
@@ -178,22 +176,6 @@ export function contextFilesView(
 
   const otherLines = otherPaths.map((p) => renderFileLine(p, ""));
   return d`${pendingLines}${toggleLine}${otherLines}`;
-}
-
-export function renderGitUpdate(
-  gitUpdate: GitContextUpdate | undefined,
-): VDOMNode {
-  if (!gitUpdate) {
-    return d``;
-  }
-  return d`${gitUpdate.repos.map((update) => {
-    if (update.type === "gone") {
-      return d`󰊢 git: ${update.repoRoot} is no longer a git repository\n`;
-    }
-    const { current } = update;
-    const branch = current.branch ?? "(detached HEAD)";
-    return d`󰊢 git: ${branch} @ ${formatGitHead(current)} (${update.repoRoot})\n`;
-  })}`;
 }
 
 type BuiltinWatcher = "git-repo" | "github-pr";

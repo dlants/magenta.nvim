@@ -145,7 +145,7 @@ describe("Thread-owned context delivery", () => {
     }
   });
 
-  it("fork history uses destination file and git collaborators after the source is destroyed", async () => {
+  it("fork history uses destination file collaborators after the source is destroyed", async () => {
     const f = await fixture();
     let fork: Thread | undefined;
     try {
@@ -168,7 +168,6 @@ describe("Thread-owned context delivery", () => {
       });
       await f.thread.destroy();
       expect(await f.request(fork)).toContain("destination content");
-      expect(gitClient.getState).toHaveBeenCalled();
       expect(await f.fileIO.readFile(f.file)).toBe(
         "original tracked content\n",
       );
@@ -277,9 +276,7 @@ describe("Thread-owned context delivery", () => {
       expect(replacement).toContain("replacement tracked content");
       expect(replacement).not.toContain("original tracked content");
       expect(replacement).not.toContain("```diff");
-      expect(replacement).toContain("replacement-branch");
       expect(replacement).toContain("<system-info>");
-      expect(replacement).toContain("replacement-branch");
       expect(f.fileDeliveries()).toBe(1);
       f.changed.mockClear();
       await f.fileIO.writeFile(f.file, "a later tracked edit\n");
@@ -354,32 +351,16 @@ describe("Thread-owned context delivery", () => {
       await f.cleanup();
     }
   });
-  it("rewinding before a git update makes the clone deliver it again", async () => {
+  it("a git change in a tracked file's repo injects no git status update", async () => {
     const f = await fixture();
-    let fork: Thread | undefined;
     try {
       await f.request();
-      const forkPoint = f.thread["core"].manager.getNativeMessageIdx();
       f.setGit();
-      expect(await f.request(f.thread, "observe changed git")).toContain(
-        "replacement-branch",
-      );
-      fork = await cloneThread({
-        sourceThread: f.thread,
-        newId: uniqueThreadId("git-rewind"),
-        nativeMessageIdx: forkPoint,
-        context: f.thread["context"],
-        callbacks: { onUpdate: () => {} },
-      });
-      expect(await f.request(fork, "continue before git update")).toContain(
-        "replacement-branch",
-      );
+      const text = await f.request(f.thread, "after git change");
+      expect(text).toContain("tracked content");
+      expect(text).not.toContain("Git status update");
+      expect(text).not.toContain("replacement-branch");
     } finally {
-      if (fork) {
-        await fork.destroy();
-        await flushArchive(fork);
-        await cleanupArchive(fork.id);
-      }
       await f.cleanup();
     }
   });
@@ -528,7 +509,6 @@ describe("Thread-owned context delivery", () => {
       const text = JSON.stringify(stream.messages);
       expect(text).toContain("SUMMARY TEXT");
       expect(text).toContain("original tracked content");
-      expect(text).toContain("replacement-branch");
       expect(text).toContain("<system-info>");
       stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
       expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });

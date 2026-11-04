@@ -31,7 +31,6 @@ import {
   type ContextViewContext,
   contextFilesView,
   renderContextUpdate,
-  renderGitUpdate,
   renderWatchedResources,
   renderWatchUpdate,
 } from "../context/context-manager.ts";
@@ -787,7 +786,7 @@ ${contextFilesView(contextFilesData(thread), contextViewCtx(thread), {
         )
       : d``;
 
-    const gitUpdateView = d`${renderGitUpdate(delivery?.git)}${renderWatchUpdate(delivery?.watched)}`;
+    const gitUpdateView = d`${renderWatchUpdate(delivery?.watched)}`;
 
     // Render content blocks. For user messages we render auto-generated meta
     // blocks (system_reminder, system_info) before the user's own text so the
@@ -852,13 +851,8 @@ ${contentView}`;
     },
   );
 
-  const gitRepos = thread.threadState.trackedGitRepos;
-  const trackedGitReposView =
-    gitRepos.length > 0
-      ? d`\n${withExtmark(d`# git repos:`, { hl_group: "@markup.heading.1.markdown" })}\n${gitRepos.map((root) => d`- \ue725 ${root}\n`)}`
-      : d``;
   const bottomSeparatorView =
-    thread.threadState.watchedResources.length > 0 || gitRepos.length > 0
+    thread.threadState.watchedResources.length > 0
       ? d`\n${withExtmark(d`${"─".repeat(20)}`, { hl_group: "Comment" })}\n`
       : d``;
   const failedSubmit =
@@ -888,7 +882,7 @@ ${sandboxView}\
 ${pendingMessagesView}${pendingNextMessagesView}\
 ${trailingForkedToView}\
 ${editsAt(-1)}
-${statusView}${bottomSeparatorView}${watchedResourcesView}${trackedGitReposView}`;
+${statusView}${bottomSeparatorView}${watchedResourcesView}`;
 };
 
 /** Render a single content block from a message */

@@ -4,7 +4,6 @@ import type {
   ContextFiles,
   DeferredDelivery,
   Environment,
-  GitState,
   MagentaServer,
   MCPToolManagerImpl,
   NativeMessageIdx,
