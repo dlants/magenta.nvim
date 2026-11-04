@@ -79,6 +79,19 @@ export class WatcherClient {
     }
     return { name: r.name, protocolVersion: 1 };
   }
+  async scan(texts: string[]): Promise<string[]> {
+    const r = await this.request("scan", { texts });
+    if (
+      typeof r !== "object" ||
+      r === null ||
+      !("keys" in r) ||
+      !Array.isArray(r.keys) ||
+      !r.keys.every((k: unknown) => typeof k === "string")
+    ) {
+      throw new Error("invalid scan result");
+    }
+    return r.keys;
+  }
   async subscribe(key: string, filter?: unknown): Promise<ResourceState> {
     return expectState(
       await this.request(

@@ -115,6 +115,19 @@ describe("watcher sdk", () => {
     expect(await c.hello()).toEqual({ name: "counter", protocolVersion: 1 });
   });
 
+  it("scan returns deduped keys without starting a poller", async () => {
+    const t = setup();
+    const key = t.file("a", "1");
+    const c = await t.connect();
+    const keys = await c.scan([
+      `see counter:${key} and\ncounter:${key}`,
+      `counter:${key} plus counter:other`,
+    ]);
+    expect(keys).toEqual([key, "other"]);
+    await sleep(200);
+    expect(t.polls(key)).toBe(0);
+    expect(await c.list()).toEqual([]);
+  });
   it("refcounts pollers per key and stops on last unsubscribe", async () => {
     const t = setup();
     const key = t.file("a", "1");

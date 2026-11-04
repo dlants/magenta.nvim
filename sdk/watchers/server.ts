@@ -21,6 +21,9 @@ export type WatcherSpec<S, F = unknown> = {
     key: string,
     ctx: { previous: S | undefined; signal: AbortSignal },
   ): Promise<PollResult<S>>;
+  /** Canonical keys mentioned in `texts` (exactly what `subscribe` will get).
+   * Pure: must not subscribe or poll. */
+  scan(texts: string[]): string[] | Promise<string[]>;
   isFinished?(s: S): boolean;
   summarize(s: S): { summary: string; details?: string };
   /** The agent-facing context blob. */
@@ -31,6 +34,28 @@ export type WatcherSpec<S, F = unknown> = {
   idleExitMs?: number;
   log?(msg: string): void;
 };
+
+/** A `WatcherSpec.scan` that matches each pattern globally and dedupes.
+ * The key is `keyGroup` (default: the whole match). */
+export function regexScan(
+  patterns: Array<{ pattern: RegExp; keyGroup?: number }>,
+): (texts: string[]) => string[] {
+  return (texts) => {
+    const keys = new Set<string>();
+    for (const text of texts) {
+      for (const { pattern, keyGroup } of patterns) {
+        const flags = pattern.flags.includes("g")
+          ? pattern.flags
+          : `${pattern.flags}g`;
+        for (const m of text.matchAll(new RegExp(pattern.source, flags))) {
+          const key = m[keyGroup ?? 0];
+          if (key) keys.add(key);
+        }
+      }
+    }
+    return [...keys];
+  };
+}
 
 /** `pending` until the subscribe response (which carries the state) is sent. */
 type Sub<F> = {
@@ -182,6 +207,16 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
     switch (req.method) {
       case "hello":
         return { name: manifest.name, protocolVersion: PROTOCOL_VERSION };
+      case "scan": {
+        const texts = params.texts;
+        if (
+          !Array.isArray(texts) ||
+          !texts.every((t): t is string => typeof t === "string")
+        ) {
+          throw new Error("texts must be a string array");
+        }
+        return { keys: [...new Set(await spec.scan(texts))] };
+      }
       case "subscribe": {
         const p = getPoller(key());
         const sub: Sub<F> = {

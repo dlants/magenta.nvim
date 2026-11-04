@@ -10,6 +10,8 @@ import {
 
 serveWatcher<PollState>({
   manifest: new URL("./manifest.json", import.meta.url).pathname,
+  // TODO(watcher-scan stage 3): real scan.
+  scan: () => [],
   intervalMs: 30_000,
   poll: makePoll(new GhCliGitHubClient()),
   isFinished,

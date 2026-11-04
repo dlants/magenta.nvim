@@ -4,7 +4,7 @@
  * `node/server/src/watchers/protocol.ts` mirrors these with runtime parsers.
  *
  * Framing: one JSON-RPC 2.0 message per line over a unix socket.
- * Requests: hello, subscribe, unsubscribe, get, list.
+ * Requests: hello, scan, subscribe, unsubscribe, get, list.
  * Notification watcher -> client: state(ResourceState).
  */
 import { readFileSync } from "node:fs";
@@ -13,8 +13,6 @@ import path from "node:path";
 
 export const PROTOCOL_VERSION = 1;
 
-export type Trigger = { pattern: string; flags?: string; keyGroup?: number };
-
 export type Manifest = {
   name: string;
   protocolVersion: 1;
@@ -22,13 +20,15 @@ export type Manifest = {
   command: string[];
   /** Defaults to ~/.magenta/watchers/<name>.sock */
   socket?: string;
-  triggers: Trigger[];
 };
 
 export type HelloResult = { name: string; protocolVersion: 1 };
 export type SubscribeParams = { key: string; filter?: unknown };
 export type UnsubscribeParams = { key: string };
 export type GetParams = { key: string; filter?: unknown };
+/** Pure: returns the canonical keys found in `texts`; starts no polling. */
+export type ScanParams = { texts: string[] };
+export type ScanResult = { keys: string[] };
 
 export function expandHome(p: string): string {
   return p === "~" || p.startsWith("~/")
@@ -138,33 +138,10 @@ export function parseManifestObject(
   if (raw.socket !== undefined && typeof raw.socket !== "string") {
     return fail("socket must be a string");
   }
-  if (!Array.isArray(raw.triggers)) return fail("triggers must be an array");
-  const triggers: Trigger[] = [];
-  for (const t of raw.triggers) {
-    if (!isPlainObject(t) || typeof t.pattern !== "string") {
-      return fail("each trigger needs a string pattern");
-    }
-    if (t.flags !== undefined && typeof t.flags !== "string") {
-      return fail("trigger flags must be a string");
-    }
-    if (t.keyGroup !== undefined && !Number.isInteger(t.keyGroup)) {
-      return fail("trigger keyGroup must be an integer");
-    }
-    try {
-      new RegExp(t.pattern, typeof t.flags === "string" ? t.flags : "");
-    } catch (e) {
-      return fail(`invalid trigger pattern: ${(e as Error).message}`);
-    }
-    const trigger: Trigger = { pattern: t.pattern };
-    if (typeof t.flags === "string") trigger.flags = t.flags;
-    if (typeof t.keyGroup === "number") trigger.keyGroup = t.keyGroup;
-    triggers.push(trigger);
-  }
   const manifest: Manifest = {
     name: raw.name,
     protocolVersion: PROTOCOL_VERSION,
     command: raw.command,
-    triggers,
   };
   if (typeof raw.socket === "string") manifest.socket = raw.socket;
   return { status: "ok", value: manifest };

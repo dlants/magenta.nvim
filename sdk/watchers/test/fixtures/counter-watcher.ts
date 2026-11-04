@@ -3,10 +3,11 @@
  * Extra lines are a "note" hidden from both render and summarize. Missing
  * file → unavailable; "ERR" → poll error; "DONE" → finished. Each poll appends
  * a line to `<key>.polls` so tests can count pollers.
+ * Scan: `counter:<path>` mentions yield `<path>`.
  * argv: --interval <ms> --idle <ms>
  */
 import { appendFileSync, readFileSync } from "node:fs";
-import { serveWatcher } from "../../server.ts";
+import { regexScan, serveWatcher } from "../../server.ts";
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(name);
@@ -34,6 +35,7 @@ serveWatcher<Snapshot, { prefix?: string }>({
     if (count === "ERR") return { kind: "error", error: "bad counter" };
     return { kind: "ok", snapshot: { count, note: rest.join("\n") } };
   },
+  scan: regexScan([{ pattern: /counter:(\S+)/, keyGroup: 1 }]),
   isFinished: (s) => s.count === "DONE",
   summarize: (s) => ({ summary: `count ${s.count}` }),
   render: (s, filter) => `${filter?.prefix ?? "count"}: ${s.count}`,

@@ -9,6 +9,12 @@ export type WatcherTrigger = {
   flags?: string;
   keyGroup?: number;
 };
+export type ScanParams = { texts: string[] };
+export type ScanResult = { keys: string[] };
+export function parseScanResult(raw: unknown): string[] | undefined {
+  if (!isPlainObject(raw) || !isStringArray(raw.keys)) return undefined;
+  return raw.keys;
+}
 export type WatcherName = string & { __watcherName: true };
 export type WatcherManifest = {
   name: WatcherName;
