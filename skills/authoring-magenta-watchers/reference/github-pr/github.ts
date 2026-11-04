@@ -147,7 +147,7 @@ export function parseGhApiOutput(
   };
 }
 
-function rateLimitDelayMs(
+export function rateLimitDelayMs(
   status: number,
   headers: Map<string, string>,
   now: number,

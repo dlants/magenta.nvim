@@ -61,10 +61,7 @@ export type PullRequestSnapshot = {
 };
 
 /** Per-path ETag plus the body it validates, so a 304 reuses the body. */
-export type EtagCache = Record<
-  string,
-  { etag: string | undefined; body: unknown }
->;
+export type EtagCache = Record<string, { etag: string; body: unknown }>;
 /** The poller's snapshot: carrying the ETag cache here keeps it per key and
  * lets the sdk drop it with the poller. It never reaches render output. */
 export type PollState = { pr: PullRequestSnapshot; cache: EtagCache };
@@ -136,7 +133,10 @@ export async function fetchSnapshot(
       fetched[path] = cached;
       return { type: "ok", body: cached.body };
     }
-    fetched[path] = { etag: response.etag, body: response.body };
+    // Without an ETag the body can never be revalidated, so don't cache it.
+    if (response.etag !== undefined) {
+      fetched[path] = { etag: response.etag, body: response.body };
+    }
     return { type: "ok", body: response.body };
   };
 

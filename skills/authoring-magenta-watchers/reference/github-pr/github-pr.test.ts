@@ -1,5 +1,12 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { type ExecFileFn, GhCliGitHubClient } from "./github.ts";
+import { parseWatcherManifest } from "../../../../node/server/src/watchers/protocol.ts";
+import {
+  type ExecFileFn,
+  GhCliGitHubClient,
+  parseGhApiOutput,
+  rateLimitDelayMs,
+} from "./github.ts";
 import {
   isFinished,
   makePoll,
@@ -299,10 +306,6 @@ describe("github-pr watcher", () => {
   });
 
   it("manifest trigger matches PR URLs and parses with the server parser", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { parseWatcherManifest } = await import(
-      "../../../../node/server/src/watchers/protocol.ts"
-    );
     const raw = JSON.parse(
       readFileSync(
         new globalThis.URL("./manifest.json", import.meta.url),
@@ -317,5 +320,75 @@ describe("github-pr watcher", () => {
       "https://github.com/a/b/pull/7",
     ]);
     expect(parseWatcherManifest).toBeTypeOf("function");
+  });
+});
+
+describe("parseGhApiOutput", () => {
+  const out = (stdout: string, stderr = "", exitCode = 0) =>
+    parseGhApiOutput({ stdout, stderr, exitCode }, 0);
+  it.each([
+    [
+      "missing status line falls back to stderr",
+      out("", "boom", 1),
+      {
+        type: "error",
+        status: undefined,
+        message: "boom",
+        retryAfterMs: undefined,
+      },
+    ],
+    ["304", out("HTTP/2.0 304 Not Modified\r\n\r\n"), { type: "not-modified" }],
+    [
+      "2xx empty body",
+      out('HTTP/2.0 200 OK\r\nEtag: "e"\r\n\r\n'),
+      { type: "ok", body: undefined, etag: '"e"' },
+    ],
+    [
+      "2xx json body with CRLF headers",
+      out('HTTP/2.0 200 OK\r\nETag: "x"\r\nA: b\r\n\r\n{"a":1}'),
+      { type: "ok", body: { a: 1 }, etag: '"x"' },
+    ],
+    [
+      "error with json message",
+      out('HTTP/2.0 404 Not Found\n\n{"message":"Not Found"}'),
+      {
+        type: "error",
+        status: 404,
+        message: "GitHub API returned 404: Not Found",
+        retryAfterMs: undefined,
+      },
+    ],
+  ])("%s", (_name, actual, expected) => {
+    expect(actual).toEqual(expected);
+  });
+  it("2xx with bad json is a parse error", () => {
+    const r = out("HTTP/2.0 200 OK\n\n{nope");
+    expect(r.type).toBe("error");
+    if (r.type === "error") {
+      expect(r.status).toBe(200);
+      expect(r.message).toMatch(/Failed to parse/);
+    }
+  });
+});
+
+describe("rateLimitDelayMs", () => {
+  const h = (o: Record<string, string>) => new Map(Object.entries(o));
+  it("429 with retry-after", () => {
+    expect(rateLimitDelayMs(429, h({ "retry-after": "7" }), 0)).toBe(7000);
+  });
+  it("403 with remaining=0 and reset", () => {
+    expect(
+      rateLimitDelayMs(
+        403,
+        h({ "x-ratelimit-remaining": "0", "x-ratelimit-reset": "100" }),
+        40_000,
+      ),
+    ).toBe(60_000);
+  });
+  it("403 without rate-limit headers", () => {
+    expect(rateLimitDelayMs(403, h({}), 0)).toBeUndefined();
+  });
+  it("non-rate-limit status ignores headers", () => {
+    expect(rateLimitDelayMs(500, h({ "retry-after": "7" }), 0)).toBeUndefined();
   });
 });
