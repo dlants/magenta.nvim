@@ -84,3 +84,4 @@
 {"timestamp":"2026-11-03T21:38:18Z","query":"watch PR status and deliver updates to thread -k 8","commit":"5d9668b381b18699f9f0b7a21340df7d0bcce0c6"}
 {"timestamp":"2026-11-03T21:38:18Z","query":"GitSupervisor git repo watching -k 8","commit":"5d9668b381b18699f9f0b7a21340df7d0bcce0c6"}
 {"timestamp":"2026-11-03T21:38:20Z","query":"user-defined scripts configured discovered run ScriptManager catalog child process IPC -k 8","commit":"5d9668b381b18699f9f0b7a21340df7d0bcce0c6"}
+{"timestamp":"2026-11-04T21:00:40Z","query":"thread overview buffer rendering list of threads -k 5","commit":"a9fc50170433832830d69a09713e95b396bc98e6"}

@@ -126,14 +126,14 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
 
       await driver.assertDisplayBufferContains("# Threads");
       await driver.assertDisplayBufferContains(
-        `- First Thread: ⏹️ stopped (end_turn)`,
+        `First Thread: ⏹️ stopped (end_turn)`,
       );
       await driver.assertDisplayBufferContains(
-        `* Second Thread: ⏹️ stopped (end_turn)`,
+        `Second Thread: ⏹️ stopped (end_turn)`,
       );
 
       await driver.triggerDisplayBufferKeyOnContent(
-        `- First Thread: ⏹️ stopped (end_turn)`,
+        `First Thread: ⏹️ stopped (end_turn)`,
         "<CR>",
       );
       await driver.awaitChatState({
@@ -349,12 +349,12 @@ describe("node/nvimclient/chat/chat.test.ts", () => {
       );
 
       await driver.assertDisplayBufferContains(
-        `  - Child thread for dd test: ⏳ streaming response`,
+        `  Child thread for dd test: ⏳ streaming response`,
       );
 
       // Press dd on the child - should delete the entire root subtree
       await driver.triggerDisplayBufferKeyOnContent(
-        `  - Child thread for dd test: ⏳ streaming response`,
+        `  Child thread for dd test: ⏳ streaming response`,
         "dd",
       );
 

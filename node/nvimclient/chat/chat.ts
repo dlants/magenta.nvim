@@ -32,7 +32,13 @@ import type { MagentaOptions } from "../options.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
-import { d, type VDOMNode, withBindings, withError } from "../tea/view.ts";
+import {
+  d,
+  type VDOMNode,
+  withBindings,
+  withError,
+  withExtmark,
+} from "../tea/view.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import { shortenPath } from "../utils/files.ts";
@@ -1180,14 +1186,15 @@ export class Chat {
       childCount: number;
     },
   ): VDOMNode {
-    const displayName = this.getThreadDisplayName(threadId);
-    const status = this.formatThreadStatus(threadId);
-    const marker = threadId === left ? "*" : "-";
+    // Each thread must occupy exactly one overview line.
+    const toOneLine = (text: string) => text.replace(/\s*\n\s*/g, " ");
+    const displayName = toOneLine(this.getThreadDisplayName(threadId));
+    const status = toOneLine(this.formatThreadStatus(threadId));
     const indent = "  ".repeat(depth);
     const threadWrapper = this.wrapper(threadId);
     const originType = this.session.getOrigin(threadId)?.type;
-    const icon =
-      originType === "reflect" ? "💭 " : originType === "fork" ? "↰ " : "";
+    const forkIcon = originType === "fork" ? "↰ " : "";
+    const icon = originType === "reflect" ? "💭 " : "";
 
     const isSandboxBypassed =
       threadWrapper?.state === "initialized"
@@ -1217,7 +1224,11 @@ export class Chat {
       }
     }
 
-    const displayLine = d`${indent}${marker} ${bell}${expandIndicator}${icon}${sandboxIndicator}${displayName}: ${status}${childCountSuffix}${tokenSuffix}`;
+    const content = d`${indent}${forkIcon}${icon}${bell}${expandIndicator}${sandboxIndicator}${displayName}: ${status}${childCountSuffix}${tokenSuffix}`;
+    const displayLine =
+      threadId === left
+        ? withExtmark(content, { hl_group: "CursorLine", hl_eol: true })
+        : content;
 
     const bindings: Record<string, () => void> = {
       "<CR>": () =>
