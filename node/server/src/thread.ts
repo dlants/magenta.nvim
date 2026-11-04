@@ -413,7 +413,12 @@ export class Thread implements ThreadCoreView {
       this.resultArchive,
       {
         ...(initialFiles ? { initialFiles } : {}),
-        ...(watched ? { watched } : {}),
+        // A replacement core inherits its predecessor's tracking (including
+        // the user's untracks), so only a brand-new conversation scans the
+        // project dir.
+        ...(watched
+          ? { watched }
+          : { initialScan: [this.context.systemInfo.projectDir] }),
         ...(this.context.initialGitState
           ? { initialGitState: this.context.initialGitState }
           : {}),

@@ -95,6 +95,8 @@ export type ThreadCoreSeed = {
   initialGitState?: Promise<GitState | undefined>;
   /** Resources watched by the core this one replaces. */
   watched?: ReadonlyArray<WatchSeed>;
+  /** Texts scanned once at creation, before any message mentions them. */
+  initialScan?: string[];
 };
 
 interface ThreadCoreState {
@@ -193,7 +195,11 @@ export class ThreadCore {
       edlRegisters: { registers: new Map(), nextSavedId: 0 },
       contextDeliveries: new Map(),
     };
-    return new ThreadCore(id, context, callbacks, completedTools, state);
+    const core = new ThreadCore(id, context, callbacks, completedTools, state);
+    if (core.watchSupervisor && seed.initialScan) {
+      void core.watchSupervisor.scan(seed.initialScan);
+    }
+    return core;
   }
 
   static clone(

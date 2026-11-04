@@ -318,6 +318,87 @@ it("compaction replacement does not re-deliver an already-seen blob", () =>
     expect(thread.watchedResources.map((r) => r.key)).toEqual([KEY]);
   }));
 
+const REPO = "/project";
+function withRepoScan(fn: (h: Harness) => Promise<void>) {
+  return withHarness(opts, (h) => {
+    h.host.watchers.scanners.set(GH, (texts) =>
+      texts.includes(REPO) ? [REPO] : [],
+    );
+    h.host.watchers.push("gh", { ...active("repo\n"), key: REPO });
+    return fn(h);
+  });
+}
+const projectScans = (h: Harness) =>
+  h.host.watchers.scanCalls.filter(
+    (c) => c.texts.length === 1 && c.texts[0] === REPO,
+  ).length;
+
+it("a fresh thread scans its project dir before any message", () =>
+  withRepoScan(async (h) => {
+    const { thread } = await h.createRoot();
+    await pollUntil(() =>
+      expect(thread.watchedResources.map((r) => r.key)).toEqual([REPO]),
+    );
+    expect(projectScans(h)).toBe(1);
+  }));
+
+it("forks and rewinds don't rescan the project dir", () =>
+  withRepoScan(async (h) => {
+    const { id, thread } = await h.createRoot();
+    await pollUntil(() => expect(projectScans(h)).toBe(1));
+    await exchange(h, thread, "hi");
+    const fork = h.thread(
+      await created(h.session.forkThread(id, thread.nativeMessageIdx)),
+    );
+    await pollUntil(() =>
+      expect(fork.watchedResources.map((r) => r.key)).toEqual([REPO]),
+    );
+    await thread.rewind(1 as NativeMessageIdx);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(projectScans(h)).toBe(1);
+  }));
+
+it("compaction keeps an untracked project repo untracked", () =>
+  withRepoScan(async (h) => {
+    const { id, thread } = await h.createRoot();
+    await pollUntil(() =>
+      expect(thread.watchedResources.map((r) => r.key)).toEqual([REPO]),
+    );
+    thread.untrackWatchedResource({ watcher: GH, key: REPO });
+    await exchange(h, thread, "hi");
+    const done = h.send(thread, "@compact");
+    await pollUntil(() => {
+      if (!compactorOf(h, id).current) throw new Error("not compacting");
+    });
+    const tool = (id: string, toolName: string, input: unknown) => ({
+      status: "ok" as const,
+      value: { id: id as ToolRequestId, toolName: toolName as ToolName, input },
+    });
+    (await h.nextStream()).respond({
+      stopReason: "tool_use",
+      text: "Compacting.",
+      toolRequests: [
+        tool("edl_1", "edl", {
+          script:
+            "file `/summary.md`\nselect bof-eof\nreplace <<S\n# Summary\nnothing\nS",
+        }),
+      ],
+    });
+    (await h.nextStream()).respond({
+      stopReason: "tool_use",
+      text: "Done.",
+      toolRequests: [
+        tool("yield_1", "yield_to_parent", { result: "wrote /summary.md" }),
+      ],
+    });
+    const after = await h.nextStream();
+    after.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
+    await done;
+    await new Promise((r) => setTimeout(r, 20));
+    expect(projectScans(h)).toBe(1);
+    expect(thread.watchedResources).toEqual([]);
+  }));
+
 it("dormancy unsubscribes; attention resubscribes and injects one diff", () =>
   withGh(async (h) => {
     h.host.watchers.push("gh", active("a\n"));
