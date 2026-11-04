@@ -11,6 +11,7 @@ import { parseResourceState, parseWatcherManifest } from "@magenta/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { connectWatcher, type WatcherClient } from "../client.ts";
 import type { ResourceState } from "../protocol.ts";
+import { regexScan } from "../server.ts";
 
 const FIXTURE = path.join(
   import.meta.dirname,
@@ -127,6 +128,26 @@ describe("watcher sdk", () => {
     await sleep(200);
     expect(t.polls(key)).toBe(0);
     expect(await c.list()).toEqual([]);
+  });
+  it("rejects a scan whose texts are not a string array", async () => {
+    const t = setup();
+    const c = await t.connect();
+    await expect(c.request("scan", { texts: [1] })).rejects.toThrow(
+      /texts must be a string array/,
+    );
+    await expect(c.request("scan", {})).rejects.toThrow();
+  });
+  it("regexScan: whole-match default, existing g flag, empty groups skipped", () => {
+    const scan = regexScan([
+      { pattern: /pr-\d+/g },
+      { pattern: /repo:(\w*)/, keyGroup: 1 },
+    ]);
+    expect(scan(["pr-1 pr-2 pr-1", "repo:x repo: repo:x"])).toEqual([
+      "pr-1",
+      "pr-2",
+      "x",
+    ]);
+    expect(scan(["pr-3"])).toEqual(["pr-3"]);
   });
   it("refcounts pollers per key and stops on last unsubscribe", async () => {
     const t = setup();

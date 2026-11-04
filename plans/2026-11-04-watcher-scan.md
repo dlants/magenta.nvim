@@ -126,6 +126,7 @@ node wait-pr.ts <pr-url> --until green|new-failure|new-comment [--timeout S]
   - sdk: `scan` request + `ScanParams`/`ScanResult`, `triggers` dropped from sdk `Manifest`/parser (extra fields ignored), `WatcherSpec.scan` (server dedupes results), `regexScan`, `WatcherClient.scan`; counter fixture scans `counter:<path>`; test in `sdk/watchers/test/watchers.test.ts`.
   - Deviation: magenta-side `protocol.ts` only gained `ScanParams`/`ScanResult`/`parseScanResult`; its `triggers` field stays until Stage 2 removes `registry.triggers()`, so the tree keeps working between stages (the sdk test manifest still carries `triggers` for that reason; drop it in Stage 2).
   - Reference watchers got placeholder `scan: () => []` (TODO for Stage 3) to typecheck.
+  - Review follow-up: added tests for a malformed `scan` request (JSON-RPC error) and a pure `regexScan` unit test (default whole match, pre-existing `g`, empty groups). `parseScanResult` rejection tests are deferred to Stage 2, when it gets a caller.
   - Pre-existing failures unrelated to this stage: 3 snapshot mismatches in `node/nvimclient/chat/thread.test.ts` (fail on the stashed tree too).
 
 ## Magenta scanning
