@@ -184,38 +184,88 @@ export async function connectWatcher(
 export class WaitTimeoutError extends Error {}
 
 /**
- * Subscribes to `key` and resolves with the first state (including the
- * initial one) satisfying `predicate`. Rejects on timeout or if the resource
- * becomes `unavailable` without matching.
+ * Subscribes to `key` and resolves with the first non-undefined `check`
+ * result (the initial state included); a throwing `check` rejects. If the
+ * watcher drops (killed, crashed), reconnects after a jittered ~1s delay,
+ * respawning it if needed, and resubscribes; `check` then sees the current
+ * state again. Rejects on timeout or if a reconnect fails.
  */
-export async function waitFor(
+export function watchUntil<T>(
+  manifestPath: string,
+  key: string,
+  check: (s: ResourceState) => T | undefined,
+  opts: { timeoutMs?: number; filter?: unknown } = {},
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let done = false;
+    let client: WatcherClient | undefined;
+    let timer: NodeJS.Timeout | undefined;
+    const finish = (settle: () => void) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      client?.close();
+      settle();
+    };
+    const onState = (s: ResourceState) => {
+      if (done || s.key !== key) return;
+      try {
+        const result = check(s);
+        if (result !== undefined) finish(() => resolve(result));
+      } catch (e) {
+        finish(() => reject(e));
+      }
+    };
+    const fail = (e: unknown) => finish(() => reject(e));
+    const attach = async () => {
+      const c = await connectWatcher(manifestPath);
+      if (done) return c.close();
+      client = c;
+      c.onState(onState);
+      c.onClose(() => {
+        if (done || client !== c) return;
+        client = undefined;
+        const delay = 1_000 * (0.5 + Math.random());
+        setTimeout(() => attach().catch(fail), delay);
+      });
+      try {
+        onState(await c.subscribe(key, opts.filter));
+      } catch (e) {
+        // A subscribe cut off by a drop is retried by the close handler.
+        if (client === c) throw e;
+      }
+    };
+    if (opts.timeoutMs !== undefined) {
+      timer = setTimeout(
+        () => fail(new WaitTimeoutError(`timed out waiting for ${key}`)),
+        opts.timeoutMs,
+      );
+      timer.unref();
+    }
+    attach().catch(fail);
+  });
+}
+
+/**
+ * Resolves with the first state satisfying `predicate`. Rejects on timeout or
+ * if the resource becomes `unavailable` without matching. Survives watcher
+ * restarts (see `watchUntil`).
+ */
+export function waitFor(
   manifestPath: string,
   key: string,
   predicate: (s: ResourceState) => boolean,
   opts: { timeoutMs?: number; filter?: unknown } = {},
 ): Promise<ResourceState> {
-  const client = await connectWatcher(manifestPath);
-  try {
-    return await new Promise<ResourceState>((resolve, reject) => {
-      const check = (s: ResourceState) => {
-        if (predicate(s)) resolve(s);
-        else if (s.status === "unavailable") {
-          reject(new Error(`${key} is unavailable: ${s.error}`));
-        }
-      };
-      if (opts.timeoutMs !== undefined) {
-        setTimeout(
-          () => reject(new WaitTimeoutError(`timed out waiting for ${key}`)),
-          opts.timeoutMs,
-        ).unref();
-      }
-      client.onState((s) => {
-        if (s.key === key) check(s);
-      });
-      client.onClose(() => reject(new Error("watcher connection closed")));
-      client.subscribe(key, opts.filter).then(check, reject);
-    });
-  } finally {
-    client.close();
-  }
+  return watchUntil(
+    manifestPath,
+    key,
+    (s) => {
+      if (predicate(s)) return s;
+      if (s.status === "unavailable")
+        throw new Error(`${key} is unavailable: ${s.error}`);
+      return undefined;
+    },
+    opts,
+  );
 }

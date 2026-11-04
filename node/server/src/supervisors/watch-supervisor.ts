@@ -15,6 +15,8 @@ import type {
 
 export const WATCH_DORMANT_AFTER_MS = 5 * 60_000;
 const DORMANCY_CHECK_MS = 30_000;
+/** Jittered (0.5x–1.5x) so magenta processes sharing a killed watcher don't
+ * all respawn it at once. */
 const RECONNECT_DELAY_MS = 1_000;
 
 /** What a replaced core's agent had already seen for a resource. Native
@@ -352,13 +354,16 @@ export class WatchSupervisor implements ToolLoopSupervisor {
   ): void {
     if (this.disposed || this.openConnection(watcher) !== connection) return;
     this.connections.delete(watcher);
-    const timer = setTimeout(() => {
-      this.timers.delete(timer);
-      if (this.disposed || this.dormant) return;
-      for (const [id, t] of this.tracked) {
-        if (t.watcher === watcher && t.subscribed) this.subscribe(id);
-      }
-    }, RECONNECT_DELAY_MS);
+    const timer = setTimeout(
+      () => {
+        this.timers.delete(timer);
+        if (this.disposed || this.dormant) return;
+        for (const [id, t] of this.tracked) {
+          if (t.watcher === watcher && t.subscribed) this.subscribe(id);
+        }
+      },
+      RECONNECT_DELAY_MS * (0.5 + Math.random()),
+    );
     this.timers.add(timer);
   }
 

@@ -9,7 +9,7 @@ import {
 import path from "node:path";
 import { parseResourceState, parseWatcherManifest } from "@magenta/server";
 import { afterEach, describe, expect, it } from "vitest";
-import { connectWatcher, type WatcherClient } from "../client.ts";
+import { connectWatcher, type WatcherClient, watchUntil } from "../client.ts";
 import type { ResourceState } from "../protocol.ts";
 import { regexScan } from "../server.ts";
 
@@ -255,6 +255,25 @@ describe("watcher sdk", () => {
 
     const done = t.file("done", "DONE");
     expect(await c.subscribe(done)).toMatchObject({ status: "finished" });
+  });
+
+  it("watchUntil survives the watcher being killed and respawns it", async () => {
+    const t = setup({ idleMs: 2000 });
+    const key = t.file("a", "1");
+    const pidFile = path.join(t.dir, "pid");
+    const seen: string[] = [];
+    const waiting = watchUntil(t.manifest, key, (s) => {
+      seen.push(s.context);
+      return s.context === "count: 3" ? s.context : undefined;
+    });
+    await until(() => seen.includes("count: 1") && existsSync(pidFile));
+    const firstPid = Number(readFileSync(pidFile, "utf8"));
+    process.kill(firstPid, "SIGKILL");
+    t.file("a", "2");
+    await until(() => Number(readFileSync(pidFile, "utf8")) !== firstPid, 5000);
+    await until(() => seen.includes("count: 2"), 5000);
+    t.file("a", "3");
+    expect(await waiting).toBe("count: 3");
   });
 
   it("wait.ts returns on a matching pushed state and fails on timeout", async () => {

@@ -4,15 +4,18 @@
  * file → unavailable; "ERR" → poll error; "DONE" → finished. Each poll appends
  * a line to `<key>.polls` so tests can count pollers.
  * Scan: `counter:<path>` mentions yield `<path>`.
+ * Writes its pid to `./pid` so tests can kill it.
  * argv: --interval <ms> --idle <ms>
  */
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { regexScan, serveWatcher } from "../../server.ts";
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(name);
   return i === -1 ? fallback : Number(process.argv[i + 1]);
 }
+
+writeFileSync("./pid", String(process.pid));
 
 type Snapshot = { count: string; note: string };
 

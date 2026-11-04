@@ -96,7 +96,7 @@ Guidance:
 - Put suppression (noisy bots, irrelevant checks) in `render`, so it never reaches the agent and never triggers a push.
 - Make wait conditions greppable: render stable lines such as `checks: 3 pending, 1 failed` or `status: merged`.
 - Keep `context` deterministic (stable ordering, no timestamps that change every poll), or every poll pushes.
-- Test with `node --experimental-transform-types index.ts` and the wait CLI below. Logs go to `<socket>.log`.
+- Test with `node --experimental-transform-types index.ts` and the wait CLI below. Logs go to `<socket>.log`: the sdk logs lifecycle, subscribes, scan hits, each poll (status transition, error, duration, next delay) and failed requests; pass `log` in the spec to redirect.
 
 ## Reference: GitHub PR watcher
 

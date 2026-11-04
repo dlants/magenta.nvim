@@ -95,7 +95,9 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
     ? Number(process.env.MAGENTA_WATCHER_IDLE_MS)
     : (spec.idleExitMs ?? 60_000);
   const log =
-    spec.log ?? ((m: string) => console.error(`[${manifest.name}] ${m}`));
+    spec.log ??
+    ((m: string) =>
+      console.error(`${new Date().toISOString()} [${manifest.name}] ${m}`));
 
   const pollers = new Map<string, Poller<S, F>>();
   const connections = new Set<net.Socket>();
@@ -134,6 +136,7 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
 
   async function runPoll(p: Poller<S, F>): Promise<void> {
     let result: PollResult<S>;
+    const started = Date.now();
     try {
       result = await spec.poll(p.key, {
         previous: p.snapshot,
@@ -143,6 +146,7 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
       result = { kind: "error", error: (e as Error).message };
     }
     if (p.abort.signal.aborted) return;
+    const previousStatus = p.phase.status;
     let delay: number | undefined = intervalMs;
     if (result.kind === "ok") {
       p.snapshot = result.snapshot;
@@ -161,6 +165,14 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
       p.failures++;
       delay = Math.min(intervalMs * 2 ** p.failures, maxBackoffMs);
     }
+    const error = "error" in p.phase ? `: ${p.phase.error}` : "";
+    const transition =
+      previousStatus === p.phase.status
+        ? p.phase.status
+        : `${previousStatus} -> ${p.phase.status}`;
+    log(
+      `poll ${p.key} ${transition}${error} (${Date.now() - started}ms, next ${delay === undefined ? "never" : `${delay}ms`})`,
+    );
     push(p);
     if (delay !== undefined) {
       p.timer = setTimeout(() => void runPoll(p), delay);
@@ -190,6 +202,7 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
   function release(p: Poller<S, F>, socket: net.Socket) {
     p.subs.delete(socket);
     if (p.subs.size > 0) return;
+    log(`stop polling ${p.key}`);
     p.abort.abort();
     clearTimeout(p.timer);
     pollers.delete(p.key);
@@ -215,9 +228,12 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
         ) {
           throw new Error("texts must be a string array");
         }
-        return { keys: [...new Set(await spec.scan(texts))] };
+        const keys = [...new Set(await spec.scan(texts))];
+        if (keys.length) log(`scan found ${keys.join(", ")}`);
+        return { keys };
       }
       case "subscribe": {
+        log(`subscribe ${key()}`);
         const p = getPoller(key());
         const sub: Sub<F> = {
           filter: filter,
@@ -305,7 +321,8 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
               id: req.id,
               result: result ?? null,
             }),
-          (e: Error & { code?: number }) =>
+          (e: Error & { code?: number }) => {
+            log(`${msg.method} failed: ${e.message}`);
             send(socket, {
               jsonrpc: "2.0",
               id: req.id,
@@ -313,7 +330,8 @@ export function serveWatcher<S, F = unknown>(spec: WatcherSpec<S, F>): void {
                 code: typeof e.code === "number" ? e.code : -32000,
                 message: e.message,
               },
-            }),
+            });
+          },
         );
       }),
     );

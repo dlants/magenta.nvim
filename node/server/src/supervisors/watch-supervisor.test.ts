@@ -500,7 +500,7 @@ describe("WatchSupervisor connection handling", () => {
 
     transport.dropConnections(GH);
     expect(transport.subscriberCount(GH, KEY)).toBe(0);
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(1_500);
     expect(transport.subscriberCount(GH, KEY)).toBe(1);
     expect(transport.connections.filter((c) => !c.closed)).toHaveLength(1);
 
@@ -518,7 +518,7 @@ describe("WatchSupervisor connection handling", () => {
     await vi.waitFor(() => expect(transport.subscriberCount(GH, KEY)).toBe(1));
     transport.dropConnections(GH);
     supervisor.dispose();
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(1_500);
     expect(transport.connections).toHaveLength(1);
   });
 
@@ -532,7 +532,7 @@ describe("WatchSupervisor connection handling", () => {
     );
     transport.rejectSubscribe.add(KEY);
     transport.dropConnections(GH);
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(1_500);
     const state = supervisor.getViewState()[0]?.state;
     expect(state).toMatchObject({
       status: "unavailable",
