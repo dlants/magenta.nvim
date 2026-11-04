@@ -6,7 +6,7 @@ import type {
   ToolLoopSupervisor,
 } from "../thread-supervisor.ts";
 import { injectText } from "../thread-supervisor.ts";
-import type { ResourceState } from "../watchers/protocol.ts";
+import type { ResourceState, WatcherName } from "../watchers/protocol.ts";
 import type {
   ResourceRef,
   WatcherConnection,
@@ -17,7 +17,11 @@ export const WATCH_DORMANT_AFTER_MS = 5 * 60_000;
 const DORMANCY_CHECK_MS = 30_000;
 const RECONNECT_DELAY_MS = 1_000;
 
-export type WatchSeed = ResourceRef & { seen?: string };
+/** What a replaced core's agent had already seen for a resource. Native
+ * indices do not carry over to the replacement, so a seen blob is a baseline
+ * rather than a history entry. */
+export type WatchSeed = ResourceRef &
+  ({ seen: "never" } | { seen: "blob"; context: string });
 export type WatchUpdate = ResourceRef & { kind: "full" | "diff"; text: string };
 export type WatchContextUpdate = { resources: WatchUpdate[] };
 export type WatchedResourceView = ResourceRef & {
@@ -73,7 +77,7 @@ export type WatchSupervisorCallbacks = {
 export class WatchSupervisor implements ToolLoopSupervisor {
   callbacks: WatchSupervisorCallbacks = {};
   private readonly tracked = new Map<string, Tracked>();
-  private readonly connections = new Map<string, ConnectionSlot>();
+  private readonly connections = new Map<WatcherName, ConnectionSlot>();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly dormancyTimer: ReturnType<typeof setInterval>;
   private dormant = false;
@@ -83,6 +87,8 @@ export class WatchSupervisor implements ToolLoopSupervisor {
     private readonly registry: WatcherRegistry,
     private readonly getLastAttention: () => number,
     private readonly histories: Map<string, ViewEntry[]>,
+    /** Seeded from a replaced core; superseded by any history entry. */
+    private readonly baselines: Map<string, string>,
     private readonly untracked: Set<string>,
     private readonly now: () => number,
   ) {
@@ -102,18 +108,15 @@ export class WatchSupervisor implements ToolLoopSupervisor {
     track?: ReadonlyArray<WatchSeed>;
     now?: () => number;
   }): WatchSupervisor {
-    const histories = new Map<string, ViewEntry[]>();
+    const baselines = new Map<string, string>();
     for (const r of args.track ?? []) {
-      if (r.seen !== undefined) {
-        histories.set(refId(r), [
-          { nativeMessageIdx: 0 as NativeMessageIdx, context: r.seen },
-        ]);
-      }
+      if (r.seen === "blob") baselines.set(refId(r), r.context);
     }
     const s = new WatchSupervisor(
       args.registry,
       args.getLastAttention ?? Date.now,
-      histories,
+      new Map(),
+      baselines,
       new Set(),
       args.now ?? Date.now,
     );
@@ -137,11 +140,13 @@ export class WatchSupervisor implements ToolLoopSupervisor {
       args.source.registry,
       args.source.getLastAttention,
       histories,
+      new Map(args.source.baselines),
       new Set(args.source.untracked),
       args.source.now,
     );
     for (const t of args.source.tracked.values()) {
-      if (histories.has(refId(t))) s.track(t);
+      const id = refId(t);
+      if (histories.has(id) || s.baselines.has(id)) s.track(t);
     }
     return s;
   }
@@ -178,8 +183,10 @@ export class WatchSupervisor implements ToolLoopSupervisor {
   /** Seed for a replacement core. */
   get seeds(): ReadonlyArray<WatchSeed> {
     return this.trackedResources.map((r) => {
-      const seen = this.getAgentView(r);
-      return seen !== undefined ? { ...r, seen } : r;
+      const context = this.getAgentView(r);
+      return context !== undefined
+        ? { ...r, seen: "blob" as const, context }
+        : { ...r, seen: "never" as const };
     });
   }
 
@@ -201,30 +208,33 @@ export class WatchSupervisor implements ToolLoopSupervisor {
   }
 
   getViewState(): WatchedResourceView[] {
-    return [...this.tracked.entries()].map(([id, t]) => ({
+    return [...this.tracked.values()].map((t) => ({
       watcher: t.watcher,
       key: t.key,
       state: t.latest,
       paused: this.dormant,
-      pendingUpdate: this.pendingFor(id, t) !== undefined,
+      pendingUpdate: this.pendingFor(t) !== undefined,
     }));
   }
 
   /** The blob the agent last saw for `ref`. */
   getAgentView(ref: ResourceRef): string | undefined {
-    return this.histories.get(refId(ref))?.at(-1)?.context;
+    const id = refId(ref);
+    return this.histories.get(id)?.at(-1)?.context ?? this.baselines.get(id);
   }
 
   private isDormantNow(): boolean {
     return this.now() - this.getLastAttention() >= WATCH_DORMANT_AFTER_MS;
   }
 
-  private openConnection(watcher: string): WatcherConnection | undefined {
+  private openConnection(watcher: WatcherName): WatcherConnection | undefined {
     const slot = this.connections.get(watcher);
     return slot?.type === "open" ? slot.connection : undefined;
   }
 
-  private connection(watcher: string): Promise<WatcherConnection | undefined> {
+  private connection(
+    watcher: WatcherName,
+  ): Promise<WatcherConnection | undefined> {
     const slot = this.connections.get(watcher);
     if (slot?.type === "open") return Promise.resolve(slot.connection);
     if (slot) return slot.promise;
@@ -275,7 +285,7 @@ export class WatchSupervisor implements ToolLoopSupervisor {
     });
   }
 
-  private markUnavailable(watcher: string, error: string): void {
+  private markUnavailable(watcher: WatcherName, error: string): void {
     for (const t of this.tracked.values()) {
       if (t.watcher !== watcher || !t.subscribed) continue;
       t.subscribed = false;
@@ -290,7 +300,10 @@ export class WatchSupervisor implements ToolLoopSupervisor {
     this.callbacks.onChanged?.();
   }
 
-  private handleClose(watcher: string, connection: WatcherConnection): void {
+  private handleClose(
+    watcher: WatcherName,
+    connection: WatcherConnection,
+  ): void {
     if (this.disposed || this.openConnection(watcher) !== connection) return;
     this.connections.delete(watcher);
     const timer = setTimeout(() => {
@@ -303,17 +316,17 @@ export class WatchSupervisor implements ToolLoopSupervisor {
     this.timers.add(timer);
   }
 
-  private applyState(watcher: string, state: ResourceState): void {
+  private applyState(watcher: WatcherName, state: ResourceState): void {
     const t = this.tracked.get(refId({ watcher, key: state.key }));
     if (!t?.subscribed) return;
     t.latest = state;
     this.callbacks.onChanged?.();
   }
 
-  private pendingFor(id: string, t: Tracked): WatchUpdate | undefined {
+  private pendingFor(t: Tracked): WatchUpdate | undefined {
     const latest = t.latest?.context;
     if (latest === undefined) return undefined;
-    const seen = this.histories.get(id)?.at(-1)?.context;
+    const seen = this.getAgentView(t);
     if (seen === latest) return undefined;
     if (seen === undefined) {
       return latest
@@ -334,7 +347,7 @@ export class WatchSupervisor implements ToolLoopSupervisor {
     update: WatchUpdate;
   }> {
     return [...this.tracked.entries()].flatMap(([id, t]) => {
-      const update = this.pendingFor(id, t);
+      const update = this.pendingFor(t);
       return update && t.latest
         ? [{ id, context: t.latest.context, update }]
         : [];

@@ -189,6 +189,10 @@ export class FakeWatcherTransport implements WatcherTransport {
   readonly states = new Map<string, ResourceState>();
   readonly connections: FakeWatcherConn[] = [];
   readonly unreachable = new Set<string>();
+  /** Keys whose subscribe rejects, like a watcher refusing the key. */
+  readonly rejectSubscribe = new Set<string>();
+  /** When set, subscribes wait for this promise before answering. */
+  holdSubscribes: Promise<void> | undefined;
   private id = (watcher: string, key: string) => `${watcher}\0${key}`;
 
   connect(manifest: LoadedWatcherManifest): Promise<WatcherConnection> {
@@ -209,15 +213,17 @@ export class FakeWatcherTransport implements WatcherTransport {
       for (const cb of conn.closeCbs) cb();
     };
     return Promise.resolve({
-      subscribe: (key) => {
+      subscribe: async (key) => {
+        if (this.holdSubscribes) await this.holdSubscribes;
+        if (this.rejectSubscribe.has(key)) throw new Error(`rejected ${key}`);
         conn.keys.add(key);
-        return Promise.resolve(
+        return (
           this.states.get(this.id(conn.watcher, key)) ?? {
             key,
             status: "loading",
             context: "",
             summary: "loading",
-          },
+          }
         );
       },
       unsubscribe: (key) => conn.keys.delete(key),
@@ -233,6 +239,15 @@ export class FakeWatcherTransport implements WatcherTransport {
       if (!c.closed && c.watcher === watcher && c.keys.has(state.key)) {
         for (const cb of c.stateCbs) cb(state);
       }
+    }
+  }
+
+  /** Simulates the watcher going away: closes every open connection. */
+  dropConnections(watcher: string): void {
+    for (const c of this.connections) {
+      if (c.closed || c.watcher !== watcher) continue;
+      c.closed = true;
+      for (const cb of c.closeCbs) cb();
     }
   }
 

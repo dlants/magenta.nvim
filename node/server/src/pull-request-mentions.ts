@@ -104,9 +104,7 @@ export class PullRequestMentionScanner {
     const byIdx = new Map<NativeMessageIdx, ProviderMessageContent[]>();
     for (const message of this.getMessages()) {
       for (const block of message.content) {
-        const idx = (block as { nativeMessageIdx?: NativeMessageIdx })
-          .nativeMessageIdx;
-        if (idx === undefined) continue;
+        const idx = block.nativeMessageIdx;
         let blocks = byIdx.get(idx);
         if (!blocks) {
           blocks = [];

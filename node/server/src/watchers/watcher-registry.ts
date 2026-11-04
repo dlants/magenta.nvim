@@ -6,6 +6,7 @@ import {
   parseWatcherManifest,
   type ResourceState,
   type WatcherManifest,
+  type WatcherName,
 } from "./protocol.ts";
 
 export type LoadedWatcherManifest = WatcherManifest & {
@@ -14,7 +15,7 @@ export type LoadedWatcherManifest = WatcherManifest & {
   socketPath: string;
 };
 
-export type ResourceRef = { watcher: string; key: string };
+export type ResourceRef = { watcher: WatcherName; key: string };
 
 export interface WatcherConnection {
   subscribe(key: string, filter?: unknown): Promise<ResourceState>;
@@ -31,7 +32,7 @@ export interface WatcherTransport {
 }
 
 export type WatcherTriggerMatcher = {
-  watcher: string;
+  watcher: WatcherName;
   regex: RegExp;
   keyGroup: number;
 };
@@ -39,7 +40,7 @@ export type WatcherTriggerMatcher = {
 /** Session-owned: loads manifests from the user-level `watchers` option and
  * hands out connections. Subscriptions belong to the connections' owners. */
 export class WatcherRegistry {
-  private manifests = new Map<string, LoadedWatcherManifest>();
+  private manifests = new Map<WatcherName, LoadedWatcherManifest>();
   private matchers: WatcherTriggerMatcher[] = [];
 
   constructor(
@@ -53,7 +54,7 @@ export class WatcherRegistry {
 
   /** Replaces the loaded set; an invalid manifest disables only that watcher. */
   async load(manifestPaths: ReadonlyArray<string>): Promise<void> {
-    const manifests = new Map<string, LoadedWatcherManifest>();
+    const manifests = new Map<WatcherName, LoadedWatcherManifest>();
     for (const p of manifestPaths) {
       const absPath = path.resolve(expandTilde(p, this.opts.homeDir));
       try {
@@ -106,7 +107,7 @@ export class WatcherRegistry {
     return this.matchers;
   }
 
-  connect(watcher: string): Promise<WatcherConnection> {
+  connect(watcher: WatcherName): Promise<WatcherConnection> {
     const manifest = this.manifests.get(watcher);
     if (!manifest) {
       return Promise.reject(new Error(`unknown watcher ${watcher}`));

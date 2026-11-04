@@ -1,21 +1,25 @@
-import { expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThreadId } from "../chat-types.ts";
 import type { ThreadCompactor } from "../compaction/compactor.ts";
 import { parseOptions, parseProjectOptions } from "../config/options.ts";
 import type { MockStream } from "../providers/mock-anthropic-client.ts";
+import type { NativeMessageIdx } from "../providers/provider-types.ts";
+import { FakeWatcherTransport } from "../test/fakes.ts";
 import { type Harness, withHarness } from "../test/harness.ts";
-import { created, setLastAttentionTime } from "../test-helpers.ts";
+import { created, noopLogger, setLastAttentionTime } from "../test-helpers.ts";
 import type { Thread } from "../thread.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
-import type { ResourceState } from "../watchers/protocol.ts";
-import { diffBlobs } from "./watch-supervisor.ts";
+import type { HomeDir } from "../utils/files.ts";
+import type { ResourceState, WatcherName } from "../watchers/protocol.ts";
+import { WatcherRegistry } from "../watchers/watcher-registry.ts";
+import { diffBlobs, WatchSupervisor } from "./watch-supervisor.ts";
 
 const KEY = "o/r/pull/12";
 const opts = {
   watchers: [
     {
-      name: "gh",
+      name: "gh" as WatcherName,
       protocolVersion: 1 as const,
       command: ["true"],
       triggers: [
@@ -238,4 +242,115 @@ it("watchers is a user-level option only", () => {
   expect(
     "watchers" in parseProjectOptions({ watchers: ["/evil.json"] }, logger),
   ).toBe(false);
+});
+
+describe("WatchSupervisor connection handling", () => {
+  const GH = "gh" as WatcherName;
+  const ref = { watcher: GH, key: KEY };
+  const idx = (n: number) => ({
+    outputTokenCount: 0,
+    nativeMessageIdx: n as NativeMessageIdx,
+  });
+  function setup() {
+    const transport = new FakeWatcherTransport();
+    const registry = new WatcherRegistry({
+      transport,
+      homeDir: "/home" as HomeDir,
+      logger: noopLogger,
+    });
+    registry.setManifests([
+      { ...opts.watchers[0], dir: "/w", socketPath: "/w/gh.sock" },
+    ]);
+    const supervisor = WatchSupervisor.create({ registry });
+    return { transport, supervisor };
+  }
+  const injected = async (s: WatchSupervisor, n: number) => {
+    const action = await s.onBeforeRequest(idx(n));
+    return action.type === "inject" ? JSON.stringify(action.content) : "";
+  };
+  afterEach(() => vi.useRealTimers());
+
+  it("resubscribes after the connection drops and diffs the next change", async () => {
+    vi.useFakeTimers();
+    const { transport, supervisor } = setup();
+    transport.push(GH, active("v1\n"));
+    supervisor.track(ref);
+    await vi.waitFor(() =>
+      expect(supervisor.getViewState()[0]?.state?.context).toBe("v1\n"),
+    );
+    expect(await injected(supervisor, 1)).toContain("v1");
+
+    transport.dropConnections(GH);
+    expect(transport.subscriberCount(GH, KEY)).toBe(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(transport.subscriberCount(GH, KEY)).toBe(1);
+    expect(transport.connections.filter((c) => !c.closed)).toHaveLength(1);
+
+    transport.push(GH, active("v2\n"));
+    const diff = await injected(supervisor, 3);
+    expect(diff).toContain("- v1");
+    expect(diff).toContain("+ v2");
+    supervisor.dispose();
+  });
+
+  it("does not resubscribe after dispose", async () => {
+    vi.useFakeTimers();
+    const { transport, supervisor } = setup();
+    supervisor.track(ref);
+    await vi.waitFor(() => expect(transport.subscriberCount(GH, KEY)).toBe(1));
+    transport.dropConnections(GH);
+    supervisor.dispose();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(transport.connections).toHaveLength(1);
+  });
+
+  it("a rejected resubscribe keeps the last context and summary", async () => {
+    vi.useFakeTimers();
+    const { transport, supervisor } = setup();
+    transport.push(GH, active("v1\n"));
+    supervisor.track(ref);
+    await vi.waitFor(() =>
+      expect(supervisor.getViewState()[0]?.state?.status).toBe("active"),
+    );
+    transport.rejectSubscribe.add(KEY);
+    transport.dropConnections(GH);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const state = supervisor.getViewState()[0]?.state;
+    expect(state).toMatchObject({
+      status: "unavailable",
+      context: "v1\n",
+      summary: "open",
+    });
+    supervisor.dispose();
+  });
+
+  it("ignores a subscribe result that lands after going dormant", async () => {
+    let attention = Date.now();
+    const transport = new FakeWatcherTransport();
+    const registry = new WatcherRegistry({
+      transport,
+      homeDir: "/home" as HomeDir,
+      logger: noopLogger,
+    });
+    registry.setManifests([
+      { ...opts.watchers[0], dir: "/w", socketPath: "/w/gh.sock" },
+    ]);
+    const supervisor = WatchSupervisor.create({
+      registry,
+      getLastAttention: () => attention,
+    });
+    let release = () => {};
+    transport.holdSubscribes = new Promise((r) => {
+      release = r;
+    });
+    transport.push(GH, active("v1\n"));
+    supervisor.track(ref);
+    attention = 0;
+    supervisor.noteAttention();
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(supervisor.getViewState()[0]?.state).toBeUndefined();
+    expect(supervisor.getViewState()[0]?.paused).toBe(true);
+    supervisor.dispose();
+  });
 });

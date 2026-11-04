@@ -9,8 +9,9 @@ export type WatcherTrigger = {
   flags?: string;
   keyGroup?: number;
 };
+export type WatcherName = string & { __watcherName: true };
 export type WatcherManifest = {
-  name: string;
+  name: WatcherName;
   protocolVersion: 1;
   command: string[];
   socket?: string;
@@ -110,7 +111,7 @@ export function parseWatcherManifest(
     triggers.push(trigger);
   }
   const manifest: WatcherManifest = {
-    name: raw.name,
+    name: raw.name as WatcherName,
     protocolVersion: WATCHER_PROTOCOL_VERSION,
     command: raw.command,
     triggers,
