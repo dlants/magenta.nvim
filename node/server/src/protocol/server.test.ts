@@ -381,11 +381,10 @@ it("markAttended and user submissions record attention; agent updates do not", (
   withHarness({}, async (h) => {
     const server = createInProcessServer({ session: h.session });
     const { id } = await h.createRoot();
-    const monitor = h.session.pullRequestMonitor;
-    if (!monitor) throw new Error("expected a monitor");
+    const thread = h.thread(id);
     let wakes = 0;
-    const original = monitor.noteAttention.bind(monitor);
-    monitor.noteAttention = () => {
+    const original = thread.noteAttention.bind(thread);
+    thread.noteAttention = () => {
       wakes++;
       original();
     };

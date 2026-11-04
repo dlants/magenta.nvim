@@ -1,11 +1,9 @@
 import {
   createInProcessServer,
-  GhCliGitHubClient,
   type HomeDir,
   type Logger,
   type MagentaServer,
   type ProjectDir,
-  PullRequestMonitor,
   type Sandbox,
   ScriptManager,
   type ScriptRunner,
@@ -56,10 +54,6 @@ export function startInProcessServer(deps: {
   void watcherRegistry.load(deps.getBaseOptions().watchers);
   const session: Session = new Session(host, {
     watcherRegistry,
-    pullRequestMonitor: new PullRequestMonitor({
-      client: new GhCliGitHubClient(),
-      logger: deps.logger,
-    }),
   });
   const scripts = new ScriptManager({
     session,

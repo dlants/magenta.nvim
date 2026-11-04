@@ -36,7 +36,6 @@ function makeBaseOptions(overrides?: Partial<ServerOptions>): ServerOptions {
     skillsPaths: [],
     scriptsPaths: [],
     suppressProjectSkills: [],
-    pullRequestRepos: [],
     watchers: [],
     agentsPaths: [],
     mcpServers: {},
@@ -601,5 +600,16 @@ describe("autoCompact options", () => {
     });
     expect(merged.autoCompactThreshold).toBe(200000);
     expect(merged.autoCompactPrompt).toBe("project prompt");
+  });
+});
+
+describe("pullRequestRepos", () => {
+  it("is rejected with an error pointing to watchers", () => {
+    const errors: string[] = [];
+    const logger = { warn: () => {}, error: (m: string) => errors.push(m) };
+    const result = parseOptions({ pullRequestRepos: ["owner"] }, logger);
+    expect("pullRequestRepos" in result).toBe(false);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("watchers");
   });
 });

@@ -296,6 +296,14 @@ Status: DONE.
 
 ## Remove built-in PR tracking
 
+Status: DONE.
+
+- [x] Deleted `pull-requests/`, `supervisors/pull-request-supervisor.ts`, `pull-request-mentions.ts`, `capabilities/github-client.ts` (+ tests), `FakeGitHubClient`, `setGitHubClient`, and wiring in thread-core/thread/session/server-session-host/harness/in-process-server/index.
+- [x] `pullRequestRepos` logs an error pointing to `watchers` and is ignored (test in `config/options.test.ts`); removed from `SERVER_OPTION_KEYS`.
+- [x] `protocol/server.test.ts` attention test now spies on `thread.noteAttention`.
+- [x] Dotfiles (`~/src/dotfiles`, commit b7d7475): `magenta-watchers/{github-pr,git-repo}` copied from the references (tests omitted, imports via `./magenta-sdk`, gitignored symlinks created by the `linkMagentaSdk` activation), `~/.magenta/watchers` symlink in `nix/common.nix`, options use `watchers`. The github-pr trigger is scoped to `dlants|benchling` (replacing the old allowlist); git-repo trigger matches `/Users` or `/home`.
+- Checks: tsc -b and biome clean; vitest green except the 3 pre-existing `thread.test.ts` failures.
+
 - Goal: delete `PullRequestMonitor`, `PullRequestSupervisor`, `pullRequestRepos` (parse error message pointing to the `watchers` option), and their wiring in `in-process-server.ts`/`session.ts`/`server-session-host.ts`. Update dotfiles options to the `watchers` shape and copy both reference watchers there.
 - Tests: full `npx vitest run`, `npx tsc -b`, `npx biome check .`.
 

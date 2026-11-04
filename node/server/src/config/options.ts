@@ -126,11 +126,6 @@ export type ServerOptions = {
   skillsPaths: string[];
   scriptsPaths: string[];
   suppressProjectSkills: string[];
-  /** GitHub orgs/users ("owner", "owner/*") or repos ("owner/repo"), optionally
-   * prefixed with "github.com/", whose mentioned pull requests are
-   * tracked. PR comments are injected into context, so this is user-level
-   * only: a cloned project must not be able to opt itself in. */
-  pullRequestRepos: string[];
   /** Watcher manifest paths. Watchers run user commands and feed context, so
    * this is user-level only (not parsed from project options). */
   watchers: string[];
@@ -831,7 +826,6 @@ export function parseOptions(
     ],
     scriptsPaths: ["~/.magenta/scripts", ".magenta/scripts"],
     suppressProjectSkills: [],
-    pullRequestRepos: [],
     watchers: [],
     agentsPaths: [
       BUILTIN_AGENTS_PATH,
@@ -901,10 +895,8 @@ export function parseOptions(
       );
     }
     if ("pullRequestRepos" in inputOptionsObj) {
-      options.pullRequestRepos = parseStringArray(
-        inputOptionsObj.pullRequestRepos,
-        "pullRequestRepos",
-        logger,
+      logger.error(
+        "pullRequestRepos is no longer supported: pull requests are tracked by an external watcher. List its manifest in the `watchers` option (see the authoring-magenta-watchers skill).",
       );
     }
     // Parse suppressProjectSkills

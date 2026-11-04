@@ -35,7 +35,6 @@ import {
   type FileSupervisor,
   type Files,
 } from "./supervisors/file-supervisor.ts";
-import type { PullRequestViewState } from "./supervisors/pull-request-supervisor.ts";
 import type {
   WatchedResourceView,
   WatchSeed,
@@ -230,12 +229,6 @@ export class Thread implements ThreadCoreView {
   get trackedGitRepos(): ReadonlyArray<AbsFilePath> {
     return this.core.trackedGitRepos;
   }
-  get pullRequests(): PullRequestViewState[] {
-    return this.core.pullRequestSupervisor?.getViewState() ?? [];
-  }
-  untrackPullRequest(url: string): void {
-    this.core.pullRequestSupervisor?.untrack(url);
-  }
   get watchedResources(): WatchedResourceView[] {
     return this.core.watchSupervisor?.getViewState() ?? [];
   }
@@ -245,9 +238,6 @@ export class Thread implements ThreadCoreView {
   /** The user attended the thread: dormant watch subscriptions resume. */
   noteAttention(): void {
     this.core.watchSupervisor?.noteAttention();
-  }
-  get trackedPullRequests(): ReadonlyArray<string> {
-    return this.core.pullRequestSupervisor?.trackedPullRequests ?? [];
   }
   get editedFileGroups(): EditedFileGroup[] {
     return this.core.editedFilesSupervisor.groups;
@@ -376,7 +366,6 @@ export class Thread implements ThreadCoreView {
     return [
       core.editedFilesSupervisor,
       ...(core.gitSupervisor ? [core.gitSupervisor] : []),
-      ...(core.pullRequestSupervisor ? [core.pullRequestSupervisor] : []),
       ...(core.watchSupervisor ? [core.watchSupervisor] : []),
       ...(core.systemReminders ? [core.fileSupervisor] : []),
       ...(core.systemInfoSupervisor ? [core.systemInfoSupervisor] : []),
@@ -415,7 +404,6 @@ export class Thread implements ThreadCoreView {
 
   private createFreshCore(
     initialFiles: Files | undefined = this.context.initialFiles,
-    pullRequests?: ReadonlyArray<string>,
     watched?: ReadonlyArray<WatchSeed>,
   ): ThreadCore {
     const core = ThreadCore.create(
@@ -425,7 +413,6 @@ export class Thread implements ThreadCoreView {
       this.resultArchive,
       {
         ...(initialFiles ? { initialFiles } : {}),
-        ...(pullRequests ? { pullRequests } : {}),
         ...(watched ? { watched } : {}),
         ...(this.context.initialGitState
           ? { initialGitState: this.context.initialGitState }
@@ -1050,11 +1037,10 @@ export class Thread implements ThreadCoreView {
         this.core.dispose();
       } else {
         const initialFiles = buildClonedFiles(this.contextFiles.files);
-        // Created before the old core is disposed so shared PR pollers keep
-        // a subscriber across the replacement and stay warm.
+        // Created before the old core is disposed so watcher subscriptions
+        // overlap the replacement.
         core = this.createFreshCore(
           initialFiles,
-          this.core.pullRequestSupervisor?.trackedPullRequests,
           this.core.watchSupervisor?.seeds,
         );
         this.core.dispose();

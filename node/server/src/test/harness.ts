@@ -20,7 +20,6 @@ import {
   type MockStream,
 } from "../providers/mock-anthropic-client.ts";
 import { createSystemPrompt } from "../providers/system-prompt.ts";
-import { PullRequestMonitor } from "../pull-requests/monitor.ts";
 import {
   DEFAULT_SANDBOX_CONFIG,
   type SandboxConfig,
@@ -66,7 +65,6 @@ import type { WatcherManifest } from "../watchers/protocol.ts";
 import { WatcherRegistry } from "../watchers/watcher-registry.ts";
 import {
   FakeGitClient,
-  FakeGitHubClient,
   FakeShell,
   type FakeShellScript,
   FakeWatcherTransport,
@@ -111,8 +109,6 @@ export type HarnessOptions = {
   resolve?: HarnessResolve;
   /** Enables `nvim_lua` (and the "nvim" capability) with a stub executor. */
   luaExecutor?: LuaExecutor;
-  /** Poll interval of the session PullRequestMonitor (default 30s). */
-  pullRequestPollIntervalMs?: number;
   /** Enables watcher tracking over `host.watchers` with these manifests. */
   watchers?: ReadonlyArray<WatcherManifest>;
   /** Real MCPToolManager over the given (e.g. `type: "mock"`) servers. */
@@ -183,7 +179,6 @@ export class TestSessionHost implements SessionHost {
   readonly provider = createMockProvider(this.mockClient);
   readonly fileIO: InMemoryFileIO;
   readonly git: FakeGitClient;
-  readonly github = new FakeGitHubClient();
   readonly watchers = new FakeWatcherTransport();
   readonly shell: FakeShell;
   /** Default projectDir for threads created without an explicit local `projectDir`. Mutable so tests can model the client moving. */
@@ -374,16 +369,6 @@ export class TestSessionHost implements SessionHost {
             },
           }
         : {}),
-      ...(session.pullRequestMonitor
-        ? {
-            pullRequestTracking: {
-              monitor: session.pullRequestMonitor,
-              // A deleted thread's supervisor is disposed; treat it as never attended.
-              getLastAttention: () => session.getLastAttention(id) ?? 0,
-              isRepoAllowed: () => true,
-            },
-          }
-        : {}),
       discoverHierarchy: (absFilePath) =>
         discoverHierarchyContext(absFilePath, {
           fileIO,
@@ -483,13 +468,6 @@ export function createHarness(options: HarnessOptions = {}): Harness {
   }
   const session = new Session(host, {
     ...(watcherRegistry ? { watcherRegistry } : {}),
-    pullRequestMonitor: new PullRequestMonitor({
-      client: host.github,
-      logger: noopLogger,
-      ...(options.pullRequestPollIntervalMs !== undefined
-        ? { intervalMs: options.pullRequestPollIntervalMs }
-        : {}),
-    }),
   });
   let last: MockStream | undefined;
   const thread = (id: ThreadId): Thread => {

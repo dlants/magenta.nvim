@@ -17,8 +17,6 @@ import type {
   TokenCount,
 } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
-import { PullRequestMentionScanner } from "./pull-request-mentions.ts";
-import type { PullRequestMonitor } from "./pull-requests/monitor.ts";
 import {
   FileSupervisor,
   type Files,
@@ -29,10 +27,6 @@ import {
   type GitContextUpdate,
   GitSupervisor,
 } from "./supervisors/git-supervisor.ts";
-import {
-  type PullRequestContextUpdate,
-  PullRequestSupervisor,
-} from "./supervisors/pull-request-supervisor.ts";
 import {
   type WatchContextUpdate,
   type WatchSeed,
@@ -67,13 +61,6 @@ export interface ThreadCoreContext {
   fileIO: FileIO;
   gitClient: GitClient;
   discoverHierarchy?: HierarchyDiscovery;
-  /** Absent: mentioned pull requests are not tracked. `getLastAttention`
-   * (ms epoch) drives poll dormancy. */
-  pullRequestTracking?: {
-    monitor: PullRequestMonitor;
-    getLastAttention: () => number;
-    isRepoAllowed: (url: string) => boolean;
-  };
   /** Absent: watcher triggers are not scanned. `getLastAttention` (ms epoch)
    * drives dormancy unsubscription. */
   watchTracking?: {
@@ -90,7 +77,6 @@ export interface ThreadCoreContext {
 export type ContextDelivery = {
   files?: FileUpdates;
   git?: GitContextUpdate;
-  pullRequests?: PullRequestContextUpdate;
   watched?: WatchContextUpdate;
 };
 
@@ -107,8 +93,6 @@ export interface ThreadCoreCallbacks {
 export type ThreadCoreSeed = {
   initialFiles?: Files;
   initialGitState?: Promise<GitState | undefined>;
-  /** Pull requests tracked by the core this one replaces. */
-  pullRequests?: ReadonlyArray<string>;
   /** Resources watched by the core this one replaces. */
   watched?: ReadonlyArray<WatchSeed>;
 };
@@ -118,7 +102,6 @@ interface ThreadCoreState {
   fileSupervisor: FileSupervisor;
   gitSupervisor: GitSupervisor | undefined;
   systemInfoSupervisor: SystemInfoSupervisor | undefined;
-  pullRequestSupervisor: PullRequestSupervisor | undefined;
   watchSupervisor: WatchSupervisor | undefined;
   systemReminders: SystemReminderSupervisor | undefined;
   editedFilesSupervisor: EditedFilesSupervisor;
@@ -134,7 +117,6 @@ export class ThreadCore {
   readonly toolSpecs: ProviderToolSpec[];
   readonly fileSupervisor: FileSupervisor;
   readonly gitSupervisor: GitSupervisor | undefined;
-  readonly pullRequestSupervisor: PullRequestSupervisor | undefined;
   readonly watchSupervisor: WatchSupervisor | undefined;
   readonly systemInfoSupervisor: SystemInfoSupervisor | undefined;
   readonly systemReminders: SystemReminderSupervisor | undefined;
@@ -146,7 +128,6 @@ export class ThreadCore {
   private readonly createTool: CreateTool;
   /** Each core scans its own history from scratch, so after compaction the
    * mentions come from the summary. */
-  private readonly pullRequestScanner: PullRequestMentionScanner;
   private readonly mentionScanner: MentionScanner;
 
   static create(
@@ -184,14 +165,6 @@ export class ThreadCore {
       fileSupervisor,
       editedFilesSupervisor: EditedFilesSupervisor.create(),
       gitSupervisor,
-      pullRequestSupervisor:
-        context.pullRequestTracking && context.threadType !== "compact"
-          ? PullRequestSupervisor.create({
-              monitor: context.pullRequestTracking.monitor,
-              getLastAttention: context.pullRequestTracking.getLastAttention,
-              ...(seed.pullRequests ? { track: seed.pullRequests } : {}),
-            })
-          : undefined,
       watchSupervisor:
         context.watchTracking && context.threadType !== "compact"
           ? WatchSupervisor.create({
@@ -283,15 +256,6 @@ export class ThreadCore {
         nativeMessageIdx,
       }),
       gitSupervisor,
-      pullRequestSupervisor: source.pullRequestSupervisor
-        ? PullRequestSupervisor.clone({
-            source: source.pullRequestSupervisor,
-            nativeMessageIdx,
-            ...(context.pullRequestTracking
-              ? { monitor: context.pullRequestTracking.monitor }
-              : {}),
-          })
-        : undefined,
       watchSupervisor: source.watchSupervisor
         ? WatchSupervisor.clone({
             source: source.watchSupervisor,
@@ -337,7 +301,6 @@ export class ThreadCore {
     this.manager = state.manager;
     this.fileSupervisor = state.fileSupervisor;
     this.gitSupervisor = state.gitSupervisor;
-    this.pullRequestSupervisor = state.pullRequestSupervisor;
     this.watchSupervisor = state.watchSupervisor;
     this.systemInfoSupervisor = state.systemInfoSupervisor;
     this.systemReminders = state.systemReminders;
@@ -345,18 +308,6 @@ export class ThreadCore {
     this.edlRegisters = state.edlRegisters;
     this.contextDeliveries = state.contextDeliveries;
     this.forkSeamIdx = state.forkSeamIdx;
-    this.pullRequestScanner = new PullRequestMentionScanner(
-      () => this.manager.log.messages,
-      () => {
-        for (const url of this.pullRequestScanner.mentionedPullRequests) {
-          if (context.pullRequestTracking?.isRepoAllowed(url)) {
-            this.pullRequestSupervisor?.track(url);
-          }
-        }
-        callbacks.onUpdate();
-      },
-    );
-    this.pullRequestScanner.schedule();
     this.mentionScanner = new MentionScanner(
       () => this.manager.log.messages,
       () => context.watchTracking?.registry.triggers() ?? [],
@@ -388,13 +339,6 @@ export class ThreadCore {
     if (this.gitSupervisor) {
       this.gitSupervisor.callbacks = {
         onSent: (git, idx) => this.recordDelivery(idx, { git }),
-      };
-    }
-    if (this.pullRequestSupervisor) {
-      this.pullRequestSupervisor.callbacks = {
-        onSent: (pullRequests, idx) =>
-          this.recordDelivery(idx, { pullRequests }),
-        onChanged: () => callbacks.onUpdate(),
       };
     }
     if (this.watchSupervisor) {
@@ -431,7 +375,6 @@ export class ThreadCore {
 
   private handleUpdate(): void {
     this.callbacks.onUpdate();
-    this.pullRequestScanner.schedule();
     if (this.watchSupervisor) this.mentionScanner.schedule();
   }
 
@@ -439,9 +382,7 @@ export class ThreadCore {
    * running tool loop first. */
   dispose(): void {
     this.fileSupervisor.destroy();
-    this.pullRequestScanner.dispose();
     if (this.gitSupervisor) this.gitSupervisor.callbacks = {};
-    this.pullRequestSupervisor?.dispose();
     this.mentionScanner.dispose();
     this.watchSupervisor?.dispose();
   }

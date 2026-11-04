@@ -209,7 +209,6 @@ export const SERVER_OPTION_KEYS = [
   "autoCompactPrompt",
   "mcpServers",
   "customCommands",
-  "pullRequestRepos",
   "watchers",
 ] as const satisfies readonly (keyof ServerOptions)[];
 
