@@ -1,8 +1,5 @@
 {
   "name": "github-pr",
   "protocolVersion": 1,
-  "command": ["node", "--experimental-transform-types", "./index.ts"],
-  "triggers": [
-    { "pattern": "https://github\\.com/[^/\\s]+/[^/\\s]+/pull/\\d+", "keyGroup": 0 }
-  ]
+  "command": ["node", "--experimental-transform-types", "./index.ts"]
 }

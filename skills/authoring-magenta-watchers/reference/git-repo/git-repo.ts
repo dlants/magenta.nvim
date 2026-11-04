@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { PollResult } from "../../../../sdk/watchers/index.ts";
 
@@ -63,7 +64,7 @@ export async function resolveRoot(
   if (!path.isAbsolute(key))
     return { ok: false, error: "key must be absolute" };
   let dir = key;
-  while (!existsSync(dir)) {
+  while (!isDir(dir)) {
     const parent = path.dirname(dir);
     if (parent === dir) return { ok: false, error: "path does not exist" };
     dir = parent;
@@ -71,6 +72,41 @@ export async function resolveRoot(
   const res = await git(dir, ["rev-parse", "--show-toplevel"]);
   if (!res.ok) return { ok: false, error: `not a git repo: ${res.error}` };
   return { ok: true, root: res.stdout.trim() };
+}
+
+const PATH_CANDIDATE = /(?<![\w.~/-])(?:~\/|\/)[\w.@+\-/]+/g;
+
+/** Resolves absolute or `~` paths under `roots` to deduped worktree roots; non-repos are dropped. */
+export function makeScan(
+  roots: string[],
+  home: string = os.homedir(),
+): (texts: string[]) => Promise<string[]> {
+  const normRoots = roots.map((r) => path.resolve(expandHome(r, home)));
+  return async (texts) => {
+    const candidates = new Set<string>();
+    for (const text of texts) {
+      for (const m of text.matchAll(PATH_CANDIDATE)) {
+        const p = path.resolve(expandHome(m[0].replace(/[.]+$/, ""), home));
+        if (normRoots.some((r) => p === r || p.startsWith(r + path.sep)))
+          candidates.add(p);
+      }
+    }
+    const keys = new Set<string>();
+    for (const c of candidates) {
+      const res = await resolveRoot(c);
+      if (res.ok && normRoots.some((r) => res.root.startsWith(r + path.sep)))
+        keys.add(res.root);
+    }
+    return [...keys];
+  };
+}
+
+function expandHome(p: string, home: string): string {
+  return p === "~" || p.startsWith("~/") ? path.join(home, p.slice(1)) : p;
+}
+
+function isDir(p: string): boolean {
+  return statSync(p, { throwIfNoEntry: false })?.isDirectory() ?? false;
 }
 
 export type ParsedStatus = Pick<

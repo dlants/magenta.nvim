@@ -12,6 +12,7 @@ import {
   makePoll,
   type PollState,
   render,
+  scanPrUrls,
   summarize,
 } from "./pull-request.ts";
 
@@ -305,21 +306,16 @@ describe("github-pr watcher", () => {
     expect(isFinished(await ok(gh.run(pending)))).toBe(true);
   });
 
-  it("manifest trigger matches PR URLs and parses with the server parser", async () => {
-    const raw = JSON.parse(
+  it("scan finds PR URLs and the manifest parses with the server parser", () => {
+    const text = `see ${URL} and https://github.com/a/b/issues/3 and https://github.com/a/b/pull/7. ${URL}`;
+    expect(scanPrUrls([text])).toEqual([URL, "https://github.com/a/b/pull/7"]);
+    const raw: unknown = JSON.parse(
       readFileSync(
         new globalThis.URL("./manifest.json", import.meta.url),
         "utf8",
       ),
     );
-    const trigger = raw.triggers[0];
-    const re = new RegExp(trigger.pattern, "g");
-    const text = `see ${URL} and https://github.com/a/b/issues/3 and https://github.com/a/b/pull/7.`;
-    expect([...text.matchAll(re)].map((m) => m[trigger.keyGroup])).toEqual([
-      URL,
-      "https://github.com/a/b/pull/7",
-    ]);
-    expect(parseWatcherManifest).toBeTypeOf("function");
+    expect(parseWatcherManifest(raw).status).toBe("ok");
   });
 });
 

@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -11,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  makeScan,
   parseStatus,
   poll,
   type RepoSnapshot,
@@ -102,17 +102,24 @@ describe("git-repo watcher", () => {
     expect(render(main)).toContain(`other worktrees (1):\n  ${wt}`);
   });
 
-  it("trigger matches absolute paths under the configured root only", () => {
-    const raw = JSON.parse(
-      readFileSync(new URL("./manifest.json", import.meta.url), "utf8"),
-    ) as { triggers: Array<{ pattern: string; flags?: string }> };
-    const trigger = raw.triggers[0];
-    const re = new RegExp(trigger.pattern, trigger.flags);
-    expect(re.exec("see /Users/me/src/magenta.nvim/node/x.ts")?.[0]).toBe(
-      "/Users/me/src/magenta.nvim",
-    );
-    expect(re.exec("/tmp/src/foo")).toBeNull();
-    expect(re.exec("/Users/me/Documents/foo")).toBeNull();
+  it("scan resolves paths under the roots to canonical worktree roots", async () => {
+    const nested = path.join(repo, "nested");
+    mkdirSync(nested);
+    git(nested, "init", "-q", "-b", "main");
+    const wt = path.join(tmp, "wt");
+    git(repo, "worktree", "add", "-q", "-b", "other", wt);
+    const plain = path.join(tmp, "plain");
+    mkdirSync(plain);
+    const scan = makeScan(["~"], tmp);
+    expect(
+      await scan([
+        `edit ${repo}/sub/a.txt and ${repo}/sub/missing.ts:12`,
+        `(${repo}/sub). also ~/repo/sub, ${nested}/x.ts`,
+        `wt: ${wt}. plain: ${plain}/f.txt outside: /tmp`,
+        `relative repo/sub and url https://example.com${repo}`,
+      ]),
+    ).toEqual([repo, nested, wt]);
+    expect(await makeScan([path.join(tmp, "elsewhere")])([repo])).toEqual([]);
   });
 
   it("parseStatus handles renames, conflicts, spaces and headers", () => {

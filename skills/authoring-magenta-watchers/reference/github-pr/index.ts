@@ -5,13 +5,13 @@ import {
   makePoll,
   type PollState,
   render,
+  scanPrUrls,
   summarize,
 } from "./pull-request.ts";
 
 serveWatcher<PollState>({
   manifest: new URL("./manifest.json", import.meta.url).pathname,
-  // TODO(watcher-scan stage 3): real scan.
-  scan: () => [],
+  scan: scanPrUrls,
   intervalMs: 30_000,
   poll: makePoll(new GhCliGitHubClient()),
   isFinished,

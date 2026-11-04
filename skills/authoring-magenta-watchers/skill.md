@@ -28,14 +28,13 @@ Register it in `~/.magenta/options.json` (user level only; project options canno
   "name": "github",
   "protocolVersion": 1,
   "command": ["node", "--experimental-transform-types", "./index.ts"],
-  "socket": "~/.magenta/watchers/github.sock",
-  "triggers": [{ "pattern": "https://github\\.com/[^/\\s]+/[^/\\s]+/pull/\\d+", "keyGroup": 0 }]
+  "socket": "~/.magenta/watchers/github.sock"
 }
 ```
 
 - `command` runs with cwd = the manifest's directory.
 - `socket` defaults to `~/.magenta/watchers/<name>.sock`; relative paths resolve against the manifest dir. The spawner also passes it as `MAGENTA_WATCHER_SOCKET`.
-- `triggers`: regexes (optional `flags`, `keyGroup` default 0) matched against thread text (never against injected watcher output). The match/group is the resource key. Scope what gets tracked (repos, owners, roots) here, or reject keys by returning `unavailable` from `poll`.
+- Key extraction is not in the manifest: the watcher answers `scan` (below), so it decides what counts as a key.
 
 ## Protocol
 
@@ -46,6 +45,7 @@ One JSON object per line, JSON-RPC 2.0. Requests (client → watcher):
 - `unsubscribe({ key })` → `null`
 - `get({ key, filter? })` → `ResourceState` (one-off; does not keep polling)
 - `list()` → `ResourceState[]` of currently polled keys
+- `scan({ texts })` → `{ keys }`: canonical keys mentioned in thread text (never injected context, thinking or web search results). Pure: no subscription, no polling. Magenta then `subscribe`s each returned key, so return exactly the key `subscribe` expects; two mentions of one resource must yield the same key. Use `regexScan` from the sdk, or any logic (fs, `git rev-parse`). This is the scoping knob (owners, roots); `poll` can still reject keys with `unavailable`. Every configured watcher is scanned for each new thread message, so keep it cheap.
 
 Notification (watcher → client): `{"jsonrpc":"2.0","method":"state","params":ResourceState}` — the full state, sent only when the rendered state of a key this connection subscribed to changes.
 
@@ -74,12 +74,13 @@ type ResourceState = {
 ## Writing a watcher
 
 ```ts
-import { serveWatcher } from "./magenta-sdk/watchers/index.ts";
+import { regexScan, serveWatcher } from "./magenta-sdk/watchers/index.ts";
 
 type Snapshot = { state: string; failing: string[] };
 
 serveWatcher<Snapshot, { ignoreChecks?: string[] }>({
   manifest: "./manifest.json",
+  scan: regexScan([{ pattern: /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+/ }]),
   intervalMs: 30_000,
   async poll(key, { previous, signal }) {
     // fetch; return { kind: "ok", snapshot } | { kind: "unavailable", error? } | { kind: "error", error }
@@ -99,16 +100,16 @@ Guidance:
 
 ## Reference: GitHub PR watcher
 
-`reference/github-pr/` (next to this file) is a complete watcher: `manifest.json` (trigger = PR URL), `github.ts` (`gh api --include` client with ETags), `pull-request.ts` (snapshot fetch, normalization, `render`/`summarize`/`isFinished`), `index.ts` (wiring), and tests with a fake `gh`. To adapt it:
+`reference/github-pr/` (next to this file) is a complete watcher: `manifest.json`, `github.ts` (`gh api --include` client with ETags), `pull-request.ts` (`scanPrUrls`, snapshot fetch, normalization, `render`/`summarize`/`isFinished`), `index.ts` (wiring), and tests with a fake `gh`. To adapt it:
 
 - Copy the dir to `~/.magenta/watchers/github-pr/`, symlink `magenta-sdk -> <plugin>/sdk` there and change the `../../../../sdk/watchers/index.ts` imports to `./magenta-sdk/watchers/index.ts`.
 - Filter checks/bot comments in `render` (and `summarize`); filtered-out changes then push nothing.
-- Scope repos by narrowing the trigger pattern, or by returning `unavailable` from `poll` for rejected keys.
+- Scope repos by narrowing the `scanPrUrls` pattern, or by returning `unavailable` from `poll` for rejected keys.
 - Rate-limit `Retry-After` is reported as an error and falls back to the sdk's exponential backoff.
 
 ## Reference: git repo watcher
 
-`reference/git-repo/` watches local repos/worktrees, showing that a non-HTTP watcher fits the same model. Key = any absolute path inside a worktree, normalized to the worktree root (non-repos are `unavailable`). `git-repo.ts` polls `git status --porcelain=v2 --branch`, the HEAD subject, in-progress rebase/merge markers and `git worktree list`; `render` lists branch, HEAD, upstream ahead/behind, conflicted/staged/unstaged/untracked files and other worktrees; `summary` is e.g. `main ↑2 ↓0, 3 dirty`. The manifest trigger (`/Users/<user>/src/<name>`) is the scoping knob: edit it to match your checkout roots. Note distinct paths into the same worktree are distinct keys that share nothing but the rendering.
+`reference/git-repo/` watches local repos/worktrees, showing that a non-HTTP watcher fits the same model. Key = any absolute path inside a worktree, normalized to the worktree root (non-repos are `unavailable`). `git-repo.ts` polls `git status --porcelain=v2 --branch`, the HEAD subject, in-progress rebase/merge markers and `git worktree list`; `render` lists branch, HEAD, upstream ahead/behind, conflicted/staged/unstaged/untracked files and other worktrees; `summary` is e.g. `main ↑2 ↓0, 3 dirty`. `makeScan(roots)` is the scan: absolute or `~` paths under `roots` (`ROOTS` in `index.ts`, default `~/src`; edit it to match your checkout roots), trailing `.` stripped, resolved via the nearest existing directory and `git rev-parse --show-toplevel`, deduped; non-repos are dropped. So any file or dir inside a repo, nested repo or linked worktree maps to one key per worktree.
 
 ## Waiting from bash
 

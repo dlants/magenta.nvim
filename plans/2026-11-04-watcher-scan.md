@@ -150,6 +150,12 @@ node wait-pr.ts <pr-url> --until green|new-failure|new-comment [--timeout S]
 
 - Goal: github-pr `scan` via `regexScan`; git-repo `scan` = path candidates (absolute + `~`) under configured roots → expand `~` → strip trailing punctuation → walk up to an existing dir → `git rev-parse --show-toplevel` → dedupe; non-repos dropped. skill.md documents `scan` instead of triggers.
 - Tests (tier B, real tmp repos): nested repo inside a repo, linked worktree, file path inside repo, `~` path, trailing `.`/`)`/`:12`, non-repo path → no key.
+- Status: done.
+  - github-pr: `scanPrUrls` (`regexScan`) exported from `pull-request.ts`; manifests of both references drop `triggers`.
+  - git-repo: `makeScan(roots, home?)` in `git-repo.ts`; `ROOTS = ["~/src"]` in `index.ts` is the scoping knob. Candidates use a path regex with a lookbehind (so `repo/sub` and URL paths don't match) whose char class excludes `)`/`:`/`,`, so only trailing `.` needs stripping. Resolved roots must also be under a root.
+  - Fix: `resolveRoot` now walks up to an existing *directory* (previously an existing file path made `execFile` fail with ENOTDIR).
+  - Tests: one tier B scan test in `git-repo.test.ts` (nested repo, linked worktree, file path, missing file `:12`, `(path).`, `~` via injected home, non-repo dir, `/tmp` outside roots, relative and URL paths); github-pr test checks `scanPrUrls` dedupe and that the manifest parses with `parseWatcherManifest`.
+  - skill.md documents `scan` in the protocol, `regexScan` in the example, and the reference scans.
 
 ## Dotfiles config + PR wait skill
 
