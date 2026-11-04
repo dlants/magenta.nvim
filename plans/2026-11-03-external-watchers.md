@@ -246,6 +246,8 @@ Status: DONE.
 - [x] `skills/authoring-magenta-watchers/reference/git-repo/{manifest.json,index.ts,git-repo.ts,git-repo.test.ts}`; skill.md section.
 - Decisions: keys normalize inside `poll` (the sdk keys pollers by the raw key, so `/repo` and `/repo/sub` are separate pollers with identical rendering; triggers capture the repo-level dir so this rarely matters). A nonexistent path walks up to the nearest existing dir before `rev-parse`. In-progress operations are detected via git-dir markers (rebase-merge/apply, MERGE_HEAD, CHERRY_PICK_HEAD, REVERT_HEAD, BISECT_LOG). Interval 10s. Default trigger `/Users/[^/\s]+/src/<name>`. Tests exercise `poll`/`render` on real tmp repos (socket push semantics are covered by stage 1 sdk tests).
 
+- Review follow-up: snapshot types tightened: `head: HeadState` (`branch` with optional oid for unborn | `detached` with oid), `upstream: { name, ahead, behind } | undefined`, `FileChange.state: ChangeState` literal union, `operation: RepoOperation`. Added tests: pure `parseStatus` fixture (rename w/ origPath, `u` conflict, spaces, `(initial)`/`(detached)`, `branch.ab`), merge conflict in a linked worktree (per-worktree git-dir markers), nonexistent/relative keys, upstream ahead/behind via bare clone, detached HEAD summary.
+
 - Goal: `reference/git-repo/` on `sdk/watchers` as described above.
 - Tests (tier B, real tmp git repos + a linked worktree):
   - subscribing by a subdirectory path normalizes to the worktree root; a non-repo path is `unavailable`.

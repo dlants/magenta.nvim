@@ -3,23 +3,41 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import type { PollResult } from "../../../../sdk/watchers/index.ts";
 
-export type FileChange = { path: string; state: string };
+/** Porcelain v2 XY status letter for one side (index or worktree). */
+export type ChangeState = "M" | "T" | "A" | "D" | "R" | "C" | "U";
+export type FileChange = { path: string; state: ChangeState };
+
+export type RepoOperation =
+  | "rebase"
+  | "merge"
+  | "cherry-pick"
+  | "revert"
+  | "bisect";
+
+/** `oid` is undefined on an unborn branch (no commits yet). */
+export type HeadState =
+  | { kind: "branch"; name: string; oid: string | undefined }
+  | { kind: "detached"; oid: string };
+
+export type Upstream = { name: string; ahead: number; behind: number };
 
 export type RepoSnapshot = {
   root: string;
-  branch: string | undefined;
-  head: string | undefined;
+  head: HeadState;
   headSubject: string | undefined;
-  upstream: string | undefined;
-  ahead: number;
-  behind: number;
+  upstream: Upstream | undefined;
   staged: FileChange[];
   unstaged: FileChange[];
   untracked: string[];
   conflicted: string[];
-  operation: string | undefined;
+  operation: RepoOperation | undefined;
   worktrees: string[];
 };
+
+const CHANGE_STATES = new Set<string>(["M", "T", "A", "D", "R", "C", "U"]);
+function isChangeState(c: string): c is ChangeState {
+  return CHANGE_STATES.has(c);
+}
 
 function git(
   cwd: string,
@@ -55,26 +73,18 @@ export async function resolveRoot(
   return { ok: true, root: res.stdout.trim() };
 }
 
-export function parseStatus(
-  out: string,
-): Pick<
+export type ParsedStatus = Pick<
   RepoSnapshot,
-  | "branch"
-  | "head"
-  | "upstream"
-  | "ahead"
-  | "behind"
-  | "staged"
-  | "unstaged"
-  | "untracked"
-  | "conflicted"
-> {
-  const s: ReturnType<typeof parseStatus> = {
-    branch: undefined,
-    head: undefined,
-    upstream: undefined,
-    ahead: 0,
-    behind: 0,
+  "head" | "upstream" | "staged" | "unstaged" | "untracked" | "conflicted"
+>;
+
+export function parseStatus(out: string): ParsedStatus {
+  let oid: string | undefined;
+  let branch: string | undefined;
+  let upstreamName: string | undefined;
+  let ahead = 0;
+  let behind = 0;
+  const s: Omit<ParsedStatus, "head" | "upstream"> = {
     staged: [],
     unstaged: [],
     untracked: [],
@@ -82,18 +92,18 @@ export function parseStatus(
   };
   for (const line of out.split("\n")) {
     if (line.startsWith("# branch.oid ")) {
-      const oid = line.slice(13);
-      s.head = oid === "(initial)" ? undefined : oid;
+      const o = line.slice(13);
+      oid = o === "(initial)" ? undefined : o;
     } else if (line.startsWith("# branch.head ")) {
       const h = line.slice(14);
-      s.branch = h === "(detached)" ? undefined : h;
+      branch = h === "(detached)" ? undefined : h;
     } else if (line.startsWith("# branch.upstream ")) {
-      s.upstream = line.slice(18);
+      upstreamName = line.slice(18);
     } else if (line.startsWith("# branch.ab ")) {
       const m = /\+(\d+) -(\d+)/.exec(line);
       if (m) {
-        s.ahead = Number(m[1]);
-        s.behind = Number(m[2]);
+        ahead = Number(m[1]);
+        behind = Number(m[2]);
       }
     } else if (line.startsWith("1 ") || line.startsWith("2 ")) {
       const parts = line.split(" ");
@@ -103,22 +113,35 @@ export function parseStatus(
         .slice(line.startsWith("1 ") ? 8 : 9)
         .join(" ")
         .split("\t")[0];
-      if (xy[0] !== ".") s.staged.push({ path: p, state: xy[0] });
-      if (xy[1] !== ".") s.unstaged.push({ path: p, state: xy[1] });
+      if (isChangeState(xy[0])) s.staged.push({ path: p, state: xy[0] });
+      if (isChangeState(xy[1])) s.unstaged.push({ path: p, state: xy[1] });
     } else if (line.startsWith("u ")) {
       s.conflicted.push(line.split(" ").slice(10).join(" "));
     } else if (line.startsWith("? ")) {
       s.untracked.push(line.slice(2));
     }
   }
-  return s;
+  const head: HeadState =
+    branch !== undefined
+      ? { kind: "branch", name: branch, oid }
+      : { kind: "detached", oid: oid ?? "" };
+  return {
+    ...s,
+    head,
+    upstream:
+      upstreamName !== undefined
+        ? { name: upstreamName, ahead, behind }
+        : undefined,
+  };
 }
 
-async function detectOperation(root: string): Promise<string | undefined> {
+async function detectOperation(
+  root: string,
+): Promise<RepoOperation | undefined> {
   const res = await git(root, ["rev-parse", "--git-dir"]);
   if (!res.ok) return undefined;
   const gitDir = path.resolve(root, res.stdout.trim());
-  const markers: [string, string][] = [
+  const markers: [string, RepoOperation][] = [
     ["rebase-merge", "rebase"],
     ["rebase-apply", "rebase"],
     ["MERGE_HEAD", "merge"],
@@ -165,10 +188,10 @@ function fileLines(label: string, files: string[]): string[] {
 export function render(s: RepoSnapshot): string {
   const lines = [
     `repo: ${s.root}`,
-    `branch: ${s.branch ?? "(detached)"}`,
-    `head: ${s.head ? s.head.slice(0, 12) : "(none)"}${s.headSubject ? ` ${s.headSubject}` : ""}`,
+    `branch: ${s.head.kind === "branch" ? s.head.name : "(detached)"}`,
+    `head: ${s.head.oid ? s.head.oid.slice(0, 12) : "(none)"}${s.headSubject ? ` ${s.headSubject}` : ""}`,
     s.upstream
-      ? `upstream: ${s.upstream} ahead ${s.ahead} behind ${s.behind}`
+      ? `upstream: ${s.upstream.name} ahead ${s.upstream.ahead} behind ${s.upstream.behind}`
       : "upstream: (none)",
   ];
   if (s.operation) lines.push(`in progress: ${s.operation}`);
@@ -198,8 +221,12 @@ export function summarize(s: RepoSnapshot): {
     s.unstaged.length +
     s.untracked.length +
     s.conflicted.length;
-  const parts = [s.branch ?? `(detached ${s.head?.slice(0, 7) ?? ""})`];
-  if (s.upstream) parts.push(`↑${s.ahead} ↓${s.behind}`);
+  const parts = [
+    s.head.kind === "branch"
+      ? s.head.name
+      : `(detached ${s.head.oid.slice(0, 7)})`,
+  ];
+  if (s.upstream) parts.push(`↑${s.upstream.ahead} ↓${s.upstream.behind}`);
   let summary = `${parts.join(" ")}, ${dirty === 0 ? "clean" : `${dirty} dirty`}`;
   if (s.operation) summary += `, ${s.operation} in progress`;
   return { summary, details: render(s) };
