@@ -86,7 +86,7 @@ export class MockMCPServer {
   private createZodSchema(inputSchema: {
     [param: string]: MCPMockToolSchemaType;
   }): z.ZodRawShape {
-    const shape: z.ZodRawShape = {};
+    const shape: Record<string, z.ZodType> = {};
 
     for (const [key, type] of Object.entries(inputSchema)) {
       switch (type) {

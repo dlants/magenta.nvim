@@ -11,10 +11,10 @@
     "@types/node": "^22.10.5",
     "@types/play-sound": "^1.1.2",
     "@types/uuid": "^10.0.0",
-    "glob": "^13.0.6",
+    "glob": "^14.0.4",
     "nock": "^14.0.5",
     "typescript": "^7.0.2",
-    "vitest": "^3.2.4",
+    "vitest": "^5.1.0",
     "zx": "^8.8.5"
   },
   "dependencies": {
@@ -37,7 +37,7 @@
     "openai": "^7.25.0",
     "patch-package": "^8.0.1",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^5.3.93",
+    "pdfjs-dist": "^6.5.438",
     "play-sound": "^1.1.6",
     "tsx": "^4.19.2",
     "uuid": "^14.0.0",
@@ -46,7 +46,8 @@
   "overrides": {
     "winston": {
       "async": "3.2.5"
-    }
+    },
+    "zod": "^4.6.7"
   },
   "scripts": {
     "start": "node --experimental-transform-types node/nvimclient/index.ts",

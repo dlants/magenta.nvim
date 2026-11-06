@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import {
   type ApprovalId,
   type SandboxViolation,
@@ -43,7 +43,7 @@ function makeViolation(command = "cat ~/.ssh/id_rsa"): SandboxViolation {
 
 describe("SandboxViolationHandler", () => {
   let handler: SandboxViolationHandler;
-  let onPendingChange: ReturnType<typeof vi.fn>;
+  let onPendingChange: Mock<() => void>;
 
   beforeEach(() => {
     onPendingChange = vi.fn();

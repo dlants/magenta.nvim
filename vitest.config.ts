@@ -1,12 +1,9 @@
-/// <reference types="vitest" />
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 const setupFiles = ["./node/nvimclient/test/setup.ts"];
 
 export default defineConfig({
   test: {
-    // Only the nvim project uses the forks pool, so this caps nvim processes.
-    poolOptions: { forks: { maxForks: 4, minForks: 1 } },
     projects: [
       {
         test: {
@@ -38,7 +35,8 @@ export default defineConfig({
           // Each test file spawns its own nvim process; cap parallelism so we
           // don't exhaust memory by spinning up too many at once.
           pool: "forks",
-          // maxForks is root-only in vitest 3; see test.poolOptions below.
+          maxWorkers: 4,
+          sequence: { groupOrder: 1 },
         },
       },
     ],
