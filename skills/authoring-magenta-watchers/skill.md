@@ -1,6 +1,6 @@
 ---
 name: authoring-magenta-watchers
-description: How to write magenta watchers (independent processes that poll something — PRs, CI, terraform, files, processes — and push state to magenta threads) and bash wait scripts on top of them. Use when the user asks to watch, monitor, or wait on something.
+description: How to write magenta watchers (independent processes that poll something — PRs, CI, terraform, files, processes — and push state to magenta threads) and wait scripts (CLIs that block until a watched resource reaches a condition, e.g. a PR's checks finish). Use when the user asks to watch, monitor, or wait on something, or to write a watcher or wait script.
 ---
 
 # Watchers
@@ -111,6 +111,10 @@ Guidance:
 
 `reference/git-repo/` watches local repos/worktrees, showing that a non-HTTP watcher fits the same model. Key = any absolute path inside a worktree, normalized to the worktree root (non-repos are `unavailable`). `git-repo.ts` polls `git status --porcelain=v2 --branch`, the HEAD subject, in-progress rebase/merge markers; `render` lists branch, HEAD, upstream ahead/behind, conflicted/staged/unstaged/untracked files; `summary` is e.g. `main ↑2 ↓0, 3 dirty`. `makeScan(roots)` is the scan: absolute or `~` paths under `roots` (`ROOTS` in `index.ts`, default `~/src`; edit it to match your checkout roots), trailing `.` stripped, resolved via the nearest existing directory and `git rev-parse --show-toplevel`, deduped; non-repos are dropped. So any file or dir inside a repo, nested repo or linked worktree maps to one key per worktree.
 
+# Wait scripts
+
+A wait script is a CLI that subscribes to a watcher resource and blocks until its state satisfies a condition, then prints the state and exits. Agents run it from bash instead of `sleep` polling loops. It reuses the watcher's poller (connect-or-spawn), so waiting adds no extra polling. Conventions: exit 0 on match (print the matching context), 2 on timeout, 1 on error or `unavailable`; predicates parse the watcher's `render` output, which is why that output should be stable and greppable.
+
 ## Waiting from bash
 
 The sdk ships a CLI over `waitFor`:
@@ -124,5 +128,20 @@ node --experimental-transform-types <plugin>/sdk/watchers/wait.ts <key> \
 It matches against the current state first, then each pushed state; prints the field and exits 0; exits 2 on timeout, 1 on error (including `unavailable`). Without `--match` it waits for `status: finished`.
 
 For richer conditions write a script with `waitFor(manifestPath, key, predicate, { timeoutMs })` or `connectWatcher(manifestPath)` (`subscribe`, `onState`, `get`, `list`).
+
+## Reference: GitHub PR wait script
+
+`reference/github-pr/wait-pr.ts` waits on the github-pr watcher using `watchUntil`:
+
+```bash
+node --experimental-transform-types reference/github-pr/wait-pr.ts <pr-url> \
+  --until checks-done|green|new-failure|new-comment [--timeout SECONDS]
+```
+
+- `checks-done`: every check has finished (none pending), whatever the result.
+- `green`: no check pending or failing.
+- `new-failure` / `new-comment`: compared against the first state seen, which is kept across watcher reconnects.
+
+Copy it next to the watcher with the same import rewrite as above.
 
 Pair a wait script with a small skill telling agents to use it instead of sleep loops, e.g. "To wait for CI on a PR, run `wait-pr-checks <url>`".
