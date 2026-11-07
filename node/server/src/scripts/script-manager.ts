@@ -401,6 +401,9 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
     }
 
     const scripts = await this.captureRegistration(indexFile);
+    // A failed capture (crash, timeout) must not be cached: the manifest is
+    // keyed on source mtimes, so it would stick until a source file changes.
+    if (scripts === undefined) return [];
     try {
       writeFileSync(manifestFile, JSON.stringify({ mtimeMs, scripts }));
     } catch (e) {
@@ -411,12 +414,15 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
     return scripts;
   }
 
-  private captureRegistration(file: string): Promise<ScriptMeta[]> {
+  private captureRegistration(
+    file: string,
+  ): Promise<ScriptMeta[] | undefined> {
     return new Promise((resolve) => {
       const child = this.fork(file);
       const timeout = setTimeout(() => {
         terminateProcess(child);
-        resolve([]);
+        this.context.logger.warn(`Timed out capturing scripts from ${file}`);
+        resolve(undefined);
       }, REGISTRATION_TIMEOUT_MS);
       child.once("message", (raw) => {
         const msg = parseScriptToMagenta(raw);
@@ -424,15 +430,25 @@ export class ScriptManager extends Emitter<ScriptManagerEvents> {
         terminateProcess(child);
         resolve(msg?.type === "register" ? msg.scripts : []);
       });
-      child.once("error", () => {
+      child.once("error", (e) => {
         clearTimeout(timeout);
-        resolve([]);
+        this.context.logger.warn(
+          `Failed to capture scripts from ${file}: ${e.message}`,
+        );
+        resolve(undefined);
       });
       // A file that never registers a script (e.g. a shared library module
       // alongside the scripts) exits without sending a message. Resolve
       // immediately on exit rather than waiting out the registration timeout.
-      child.once("exit", () => {
+      child.once("exit", (code) => {
         clearTimeout(timeout);
+        if (code !== 0) {
+          this.context.logger.warn(
+            `Capturing scripts from ${file} exited with code ${code}`,
+          );
+          resolve(undefined);
+          return;
+        }
         resolve([]);
       });
     });
