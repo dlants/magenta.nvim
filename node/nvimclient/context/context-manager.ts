@@ -214,9 +214,8 @@ export function renderWatchUpdate(
   return d`Watcher Updates:\n${update.resources.map((r) => {
     const expandKey = watchUpdateExpandKey(r);
     const expanded = view.expandedUpdates[expandKey];
-    const lineCount = r.text.split("\n").length;
     const line = withBindings(
-      d`- ${expanded ? "▼" : "▶"} ${watcherIcon(r.watcher)} ${r.watcher}: ${r.key} [ ${r.kind === "full" ? "tracked" : "updated"}, ${lineCount.toString()} line${lineCount === 1 ? "" : "s"} ]\n`,
+      d`- ${expanded ? "▼" : "▶"} ${watcherIcon(r.watcher)} ${r.watcher}: ${r.key} [ ${r.kind === "full" ? "tracked" : "updated"}, ${formatTokens(r.text.length)} ]\n`,
       { "=": () => view.onToggle(expandKey) },
     );
     const body = expanded

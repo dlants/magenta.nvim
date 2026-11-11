@@ -33,14 +33,14 @@ describe("renderWatchUpdate", () => {
       );
     const collapsed = text({});
     expect(collapsed).toContain("Watcher Updates:\n");
-    expect(collapsed).toContain("▶ \uf06e github: a [ tracked, 2 lines ]");
-    expect(collapsed).toContain("▶ \uf06e github: b [ updated, 1 line ]");
+    expect(collapsed).toContain("▶ \uf06e github: a [ tracked, ~2 tok ]");
+    expect(collapsed).toContain("▶ \uf06e github: b [ updated, ~1 tok ]");
     expect(collapsed).not.toContain("x1");
     const expanded = text({
       [watchUpdateExpandKey({ watcher, key: "a" })]: true,
     });
     expect(expanded).toContain(
-      "▼ \uf06e github: a [ tracked, 2 lines ]\n  x1\n  x2\n",
+      "▼ \uf06e github: a [ tracked, ~2 tok ]\n  x1\n  x2\n",
     );
     expect(expanded).not.toContain("  y\n");
   });
